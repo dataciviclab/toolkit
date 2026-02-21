@@ -224,17 +224,3 @@ Toolkit (motore)
 3. SQL sempre esterno
 4. Metadata sempre generato
 5. dataset.yml = contratto del progetto
-
----
-
-# 🏗 Stato maturità
-
-Con questa struttura:
-
-* M1–M3 toolkit = chiari
-* Project-template = replicabile
-* Drive now
-* BigQuery ready
-* Metodo documentabile
-
-Tu adesso vuoi consolidare o stress-testare?

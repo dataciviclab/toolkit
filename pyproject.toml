@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dataciviclab-toolkit"
+version = "0.1.0"
+description = "DataCivicLab Toolkit: RAW → CLEAN → MART with DuckDB"
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+  "pyyaml>=6.0",
+  "pandas>=2.0",
+  "pyarrow>=14.0",
+  "duckdb>=0.10.0",
+  "requests>=2.31",
+  "typer>=0.12.0",
+  "rich>=13.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.3.0"
+]
+
+[project.scripts]
+toolkit = "toolkit.cli.app:app"
+
+[tool.setuptools.packages.find]
+include = ["toolkit*"]
+exclude = ["tests*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

@@ -1,237 +1,216 @@
-# 🧰 DataCivicLab Toolkit
+# 📦 DataCivicLab Toolkit
 
-Motore standardizzato per pipeline dati:
+Framework modulare per costruire pipeline dati **RAW → CLEAN → MART** replicabili, validate e versionate.
 
-```
-RAW → CLEAN → MART
-```
-
-Progettato per:
-
-* 📂 Storage su Drive (fase attuale)
-* 🦆 Trasformazioni con DuckDB SQL
-* 📊 Output Parquet per dashboard
-* ☁️ BigQuery-ready (futuro)
+Progettato per progetti civici, open data e dataset pubblici.
 
 ---
 
-# 🎯 Filosofia
+## 🎯 Obiettivo
 
-Il toolkit **non contiene logica specifica di un dataset**.
+Standardizzare la costruzione di pipeline dati nei progetti DataCivicLab:
 
-Ogni progetto definisce:
+* Ingestione RAW controllata
+* Validazione automatica
+* Trasformazioni SQL riproducibili
+* Profilazione dataset
+* Output MART pronti per dashboard
 
-* `dataset.yml`
-* file SQL (`clean.sql`, `mart_*.sql`)
-* documentazione
-
-Il toolkit esegue in modo coerente e replicabile.
-
----
-
-# 🏗 Architettura
+Il toolkit separa:
 
 ```
-Project Repo
-   │
-   │ dataset.yml + sql
-   ▼
-Toolkit
-   ├── RAW
-   ├── CLEAN
-   ├── MART
-   └── (optional) BigQuery Load
+Progetto = dataset specifico
+Toolkit  = motore standardizzato
 ```
 
 ---
 
-# 📦 Installazione
+## 🧠 Architettura
 
-### Sviluppo locale
+```
+toolkit/
+│
+├── raw/        → estrazione + validazione RAW
+├── clean/      → trasformazioni SQL + validazione CLEAN
+├── mart/       → aggregazioni finali + validazione MART
+├── profile/    → profiling dataset RAW
+├── plugins/    → connettori sorgenti (HTTP, API, HTML, local)
+├── core/       → config, registry, logging, metadata, paths
+├── cli/        → interfaccia a linea di comando
+```
+
+Pipeline standard:
+
+```
+Fonte → RAW → CLEAN → MART
+```
+
+Ogni layer è:
+
+* Validato
+* Testato
+* Riproducibile
+
+---
+
+## ⚙️ Installazione
 
 ```bash
+git clone https://github.com/dataciviclab/toolkit.git
+cd toolkit
 pip install -e .
 ```
 
-### Da GitHub
+Richiede Python 3.10+
+
+---
+
+## 🚀 Uso base (CLI)
+
+### 1️⃣ Eseguire layer RAW
 
 ```bash
-pip install git+https://github.com/dataciviclab/toolkit.git
+toolkit run raw --config dataset.yml
 ```
 
 ---
 
-# 🚀 Esecuzione Pipeline
-
-Dal repo progetto:
+### 2️⃣ Profilare un dataset RAW
 
 ```bash
-toolkit run raw   -c dataset.yml
-toolkit run clean -c dataset.yml
-toolkit run mart  -c dataset.yml
+toolkit profile --config dataset.yml
 ```
 
-Validazione CLEAN:
+Output:
+
+* report colonne
+* suggerimenti tipo dati
+* anomalie
+
+---
+
+### 3️⃣ Eseguire layer CLEAN
 
 ```bash
-toolkit validate clean -c dataset.yml
+toolkit run clean --config dataset.yml
 ```
 
 ---
 
-# 📁 Output Standard
+### 4️⃣ Eseguire layer MART
 
-I dati vengono salvati in:
-
-```
-DataCivicLab/
-  data/
-    raw/<dataset>/<year>/
-    clean/<dataset>/<year>/
-    mart/<dataset>/<year>/
-```
-
-Ogni cartella contiene:
-
-* file dati
-* `metadata.json`
-* checksum
-
----
-
-# 🦆 CLEAN & MART con DuckDB
-
-Il toolkit usa DuckDB per:
-
-* leggere CSV e Parquet
-* eseguire trasformazioni SQL
-* aggregare KPI
-* esportare Parquet
-
-## Regola
-
-Nei file SQL si scrive **solo una SELECT**.
-
-Esempio CLEAN:
-
-```sql
-SELECT
-  CAST("Anno" AS INTEGER) AS anno,
-  "Regione" AS regione
-FROM raw_input;
-```
-
-Esempio MART:
-
-```sql
-SELECT
-  anno,
-  regione,
-  AVG(pct_rd) AS pct_rd_avg
-FROM clean
-GROUP BY 1,2;
-```
-
-Il toolkit si occupa di:
-
-* creare le view (`raw_input`, `clean`)
-* creare le tabelle
-* esportare parquet
-
----
-
-# ⚙️ dataset.yml (contratto progetto)
-
-Esempio minimale:
-
-```yaml
-dataset:
-  name: ispra_catasto_rifiuti
-  years: [2022]
-
-raw:
-  source:
-    type: http_file
-    args:
-      url: "https://...aa={year}"
-  extractor:
-    type: identity
-
-clean:
-  sql: "sql/clean.sql"
-
-mart:
-  tables:
-    - name: mart_regione_anno
-      sql: "sql/mart/mart_regione_anno.sql"
+```bash
+toolkit run mart --config dataset.yml
 ```
 
 ---
 
-# 🔌 Plugin Supportati (RAW)
+### 5️⃣ Validare un layer
 
+```bash
+toolkit validate clean --config dataset.yml
+```
+
+---
+
+## 🗂️ Struttura di un progetto
+
+Vedi `project-example/`
+
+```
+project/
+│
+├── dataset.yml
+├── sql/
+│   ├── clean.sql
+│   └── mart/
+│       ├── mart_regione_anno.sql
+│       └── mart_provincia_anno.sql
+```
+
+Il progetto contiene:
+
+* Config
+* SQL
+* Nessuna logica Python custom
+
+Il motore resta nel toolkit.
+
+---
+
+## 🔌 Plugin sorgenti supportati
+
+Nel modulo `plugins/`:
+
+* `local_file`
 * `http_file`
 * `api_json_paged`
-* `html_table` (estendibile)
+* `html_table`
 
-Nuove fonti si aggiungono come plugin.
-
----
-
-# ☁️ BigQuery (Futuro)
-
-Configurabile in `dataset.yml`:
-
-```yaml
-bq:
-  enabled: true
-  project_id: "dataciviclab"
-  dataset_id: "mart"
-```
-
-Quando attivato, il toolkit carica i parquet MART su BigQuery.
+Estendibili via registry.
 
 ---
 
-# 🧪 Test
+## 🧪 Testing
+
+Test automatici inclusi:
+
+* config
+* registry
+* validazione layer
+* rules
+* profile
+* extractors
+
+Eseguire:
 
 ```bash
 pytest
 ```
 
-CI attiva su PR.
+CI attiva via GitHub Actions (`.github/workflows/ci.yml`).
 
 ---
 
-# 📏 Regole del Toolkit
+## 📐 Filosofia progettuale
 
-1. Nessuna logica dataset-specific nel core
-2. SQL sempre esterno
-3. Metadata sempre generato
-4. Logging coerente
-5. Nessuna duplicazione codice tra progetti
+Il toolkit impone:
 
----
+* RAW intoccabile
+* CLEAN deterministico
+* MART leggibile
+* Config dichiarativa
+* SQL separato dal motore
+* Validazione a ogni layer
 
-# 🎯 Roadmap
-
-* [ ] RAW Engine
-* [ ] CLEAN Engine
-* [ ] MART Engine
-* [ ] BigQuery Loader
-* [ ] Config YAML avanzata
-* [ ] CLI completa (`run all`)
-* [ ] Test coverage 80%
+Obiettivo:
+Costruire pipeline civiche replicabili tra progetti diversi.
 
 ---
 
-# 🧠 Perché esiste
+## 🧩 Come scalare
 
-DataCivicLab vuole:
+Ogni nuovo dataset:
 
-* trasformare open data pubblici in dataset puliti
-* rendere replicabile l’analisi civica
-* evitare notebook caotici
-* costruire una mini data platform open
+1. Creare nuovo repo da `project-template`
+2. Scrivere `dataset.yml`
+3. Scrivere SQL
+4. Usare il toolkit come motore
 
-Questo toolkit è il motore.
+Il toolkit non contiene dataset.
+Contiene metodo.
+
+---
+
+## 🤝 Contribuire
+
+1. Fork
+2. Branch feature
+3. PR con test
+4. Validazione CI obbligatoria
+
+---
+
+## 📜 Licenza
+
+Da definire (MIT consigliata per massima adozione open civic).

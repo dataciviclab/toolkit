@@ -23,6 +23,13 @@ class _NoopLogger:
         return None
 
 
+def _assert_file_can_be_replaced(path: Path) -> None:
+    original = path.read_bytes()
+    path.unlink()
+    path.write_bytes(original)
+    assert path.exists()
+
+
 def _assert_no_absolute_paths_in_json_payload(payload: dict, root: Path) -> None:
     serialized = json.dumps(payload, ensure_ascii=False)
     assert not re.search(r"[A-Za-z]:\\\\", serialized)
@@ -154,3 +161,25 @@ def test_project_example_golden_path(tmp_path: Path, monkeypatch):
     assert int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{mart_regione.as_posix()}')").fetchone()[0]) > 0
     assert int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{mart_provincia.as_posix()}')").fetchone()[0]) > 0
     con.close()
+
+
+def test_project_example_outputs_can_be_replaced_after_run(tmp_path: Path, monkeypatch):
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+
+    monkeypatch.chdir(dst)
+    cfg = load_config(dst / "dataset.yml")
+    year = cfg.years[0]
+    logger = _NoopLogger()
+
+    run_raw(cfg.dataset, year, cfg.root, cfg.raw, logger, base_dir=cfg.base_dir)
+    run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
+    run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
+
+    root = Path(cfg.root)
+    clean_parquet = root / "data" / "clean" / cfg.dataset / str(year) / f"{cfg.dataset}_{year}_clean.parquet"
+    mart_regione = root / "data" / "mart" / cfg.dataset / str(year) / "rd_by_regione.parquet"
+
+    _assert_file_can_be_replaced(clean_parquet)
+    _assert_file_can_be_replaced(mart_regione)

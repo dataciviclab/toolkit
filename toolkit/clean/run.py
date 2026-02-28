@@ -36,13 +36,16 @@ def _run_sql(
     logger=None,
 ) -> tuple[str, dict[str, Any]]:
     con = duckdb.connect(":memory:")
-    read_info = read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
-    con.execute(f"CREATE TABLE clean_out AS {sql_query}")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    con.execute(
-        f"COPY clean_out TO '{sql_path(output_path)}' (FORMAT PARQUET);"
-    )
-    return read_info.source, read_info.params_used
+    try:
+        read_info = read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
+        con.execute(f"CREATE TABLE clean_out AS {sql_query}")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        con.execute(
+            f"COPY clean_out TO '{sql_path(output_path)}' (FORMAT PARQUET);"
+        )
+        return read_info.source, read_info.params_used
+    finally:
+        con.close()
 
 
 def run_clean(

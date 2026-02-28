@@ -34,8 +34,6 @@ Richiede Python 3.10+.
 
 Giro offline completo con il progetto di esempio, eseguibile in pochi minuti su una macchina pulita.
 
-TODO prima della pubblicazione: aggiungere un file `LICENSE` alla root del repository e il metadata corrispondente in `pyproject.toml`.
-
 Windows PowerShell:
 
 ```powershell

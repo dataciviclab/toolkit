@@ -4,6 +4,7 @@ import logging
 import pytest
 
 from toolkit.core.config import ensure_str_list, load_config, parse_bool
+from toolkit.core.config_models import load_config_model
 
 
 def test_load_config_ok(tmp_path: Path):
@@ -426,3 +427,199 @@ bq:
     assert "clean.sql_path is ignored" in caplog.text
     assert "mart.sql_dir is ignored" in caplog.text
     assert "bq is currently ignored" in caplog.text
+
+
+def test_load_config_model_normalizes_legacy_aliases_to_canonical_shape(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw:
+  source:
+    id: src_legacy
+    plugin: local_file
+    args:
+      path: data/raw.csv
+clean:
+  read: auto
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    model = load_config_model(yml)
+
+    assert len(model.raw.sources) == 1
+    assert model.raw.sources[0].name == "src_legacy"
+    assert model.raw.sources[0].type == "local_file"
+    assert model.clean.read is not None
+    assert model.clean.read.source == "auto"
+
+
+@pytest.mark.parametrize(
+    ("yaml_text", "expected"),
+    [
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw:
+  sources: {}
+clean: {}
+mart: {}
+""".strip(),
+            "raw.sources",
+        ),
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw:
+  sources:
+    - type: local_file
+      args: []
+clean: {}
+mart: {}
+""".strip(),
+            "raw.sources.0.args",
+        ),
+        (
+            """
+root: 123
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
+mart: {}
+""".strip(),
+            "root must be a string path or null",
+        ),
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
+mart: {}
+output:
+  artifacts: standard
+  unsupported_flag: true
+""".strip(),
+            "output.unsupported_flag",
+        ),
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
+mart: {}
+validation:
+  fail_on_error: true
+  unknown_flag: false
+""".strip(),
+            "validation.unknown_flag",
+        ),
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean:
+  validate:
+    primary_key: id
+    extra_rule: true
+mart: {}
+""".strip(),
+            "clean.validate.extra_rule",
+        ),
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
+mart:
+  validate:
+    table_rules: {}
+    extra_rule: true
+""".strip(),
+            "mart.validate.extra_rule",
+        ),
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw:
+  sources:
+    - type: http_file
+      primary: maybe
+clean: {}
+mart: {}
+""".strip(),
+            "raw.sources.0.primary",
+        ),
+    ],
+)
+def test_load_config_model_errors_are_explicit(tmp_path: Path, yaml_text: str, expected: str):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(ValueError) as exc:
+        load_config_model(yml)
+
+    assert expected in str(exc.value)
+
+
+def test_load_config_model_accepts_boolean_and_string_list_legacy_inputs(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw:
+  sources:
+    - type: http_file
+      primary: "false"
+clean:
+  required_columns: comune
+  validate:
+    primary_key: id
+    not_null: valore
+mart:
+  required_tables: mart_ok
+  validate:
+    table_rules:
+      mart_ok:
+        required_columns: regione
+        not_null: totale
+        primary_key: key_id
+validation:
+  fail_on_error: "false"
+output:
+  legacy_aliases: "0"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    model = load_config_model(yml)
+
+    assert model.validation.fail_on_error is False
+    assert model.output.legacy_aliases is False
+    assert model.raw.sources[0].primary is False
+    assert model.clean.required_columns == ["comune"]
+    assert model.clean.validate.primary_key == ["id"]
+    assert model.clean.validate.not_null == ["valore"]
+    assert model.mart.required_tables == ["mart_ok"]
+    assert model.mart.validate.table_rules["mart_ok"].required_columns == ["regione"]

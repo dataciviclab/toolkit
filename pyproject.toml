@@ -25,6 +25,7 @@ classifiers = [
 
 dependencies = [
   "pyyaml>=6.0",
+  "pydantic>=2.8.0",
   "pandas>=2.0",
   "pyarrow>=14.0",
   "duckdb>=0.10.0",

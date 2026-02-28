@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from toolkit.core.exceptions import DownloadError
-from toolkit.core.registry import registry
 
 
 class LocalFileSource:
@@ -15,6 +14,3 @@ class LocalFileSource:
         if not p.exists():
             raise DownloadError(f"Local file not found: {p}")
         return p.read_bytes()
-
-
-registry.register("local_file", lambda **client: LocalFileSource())

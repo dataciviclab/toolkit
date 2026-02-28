@@ -1,8 +1,16 @@
 # toolkit/core/registry.py
 from __future__ import annotations
 
+import importlib
+import logging
 from collections.abc import Callable
 from typing import Any
+
+logger = logging.getLogger("toolkit.core.registry")
+
+
+class PluginRegistrationError(RuntimeError):
+    pass
 
 
 class Registry:
@@ -29,5 +37,69 @@ class Registry:
     def list_plugins(self) -> list[str]:
         return sorted(self._plugins.keys())
 
+    def clear(self) -> None:
+        self._plugins.clear()
+
 
 registry = Registry()
+
+_BUILTIN_PLUGINS: tuple[dict[str, Any], ...] = (
+    {
+        "name": "http_file",
+        "module": "toolkit.plugins.http_file",
+        "class_name": "HttpFileSource",
+        "optional": False,
+        "factory": lambda cls: (lambda **client: cls(**client)),
+    },
+    {
+        "name": "local_file",
+        "module": "toolkit.plugins.local_file",
+        "class_name": "LocalFileSource",
+        "optional": False,
+        "factory": lambda cls: (lambda **client: cls()),
+    },
+    {
+        "name": "api_json_paged",
+        "module": "toolkit.plugins.api_json_paged",
+        "class_name": "ApiJsonPagedSource",
+        "optional": True,
+        "factory": lambda cls: (lambda **client: cls(**client)),
+    },
+    {
+        "name": "html_table",
+        "module": "toolkit.plugins.html_table",
+        "class_name": "HtmlTableSource",
+        "optional": True,
+        "factory": lambda cls: (lambda **client: cls(**client)),
+    },
+)
+
+
+def register_builtin_plugins(
+    *,
+    strict: bool = False,
+    registry_obj: Registry | None = None,
+) -> None:
+    target = registry_obj or registry
+
+    for spec in _BUILTIN_PLUGINS:
+        if spec["name"] in target.list_plugins():
+            continue
+
+        try:
+            module = importlib.import_module(spec["module"])
+            plugin_class = getattr(module, spec["class_name"])
+            target.register(spec["name"], spec["factory"](plugin_class))
+        except Exception as exc:
+            if spec["optional"]:
+                message = (
+                    f"DCLPLUGIN001 optional plugin '{spec['name']}' unavailable: {exc}. "
+                    f"Install/repair dependencies or disable the plugin."
+                )
+                logger.warning(message)
+                if strict:
+                    raise PluginRegistrationError(message) from exc
+                continue
+            raise PluginRegistrationError(
+                f"Required built-in plugin '{spec['name']}' failed to register: {exc}"
+            ) from exc

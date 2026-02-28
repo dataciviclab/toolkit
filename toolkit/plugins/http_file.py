@@ -1,7 +1,6 @@
 import requests
 
 from toolkit.core.exceptions import DownloadError
-from toolkit.core.registry import registry
 
 
 class HttpFileSource:
@@ -25,7 +24,3 @@ class HttpFileSource:
                 last_err = e
 
         raise DownloadError(str(last_err) if last_err else f"Failed to fetch {url}")
-
-
-# Register
-registry.register("http_file", lambda **client: HttpFileSource(**client))

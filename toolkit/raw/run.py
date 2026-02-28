@@ -9,9 +9,8 @@ from toolkit.core.manifest import write_manifest as write_raw_manifest
 from toolkit.core.config import parse_bool
 from toolkit.core.metadata import config_hash_for_year, sha256_bytes, write_metadata
 from toolkit.core.paths import layer_year_dir, to_root_relative
-from toolkit.core.registry import registry
+from toolkit.core.registry import register_builtin_plugins, registry
 from toolkit.core.validation import write_validation_json
-from toolkit.plugins import register_plugins
 from toolkit.raw.extractors import get_extractor
 from toolkit.raw.validate import validate_raw_output
 
@@ -141,6 +140,7 @@ def run_raw(
     *,
     base_dir: Path | None = None,
     run_id: str | None = None,
+    strict_plugins: bool = False,
 ):
     """
     Supporta:
@@ -158,7 +158,7 @@ def run_raw(
             extractor: {type, args}  # override per source
     """
 
-    register_plugins()
+    register_builtin_plugins(strict=strict_plugins)
 
     out_dir = layer_year_dir(root, "raw", dataset, year)
     out_dir.mkdir(parents=True, exist_ok=True)

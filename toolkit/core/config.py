@@ -23,6 +23,7 @@ class ToolkitConfig:
     raw: dict[str, Any]
     clean: dict[str, Any]
     mart: dict[str, Any]
+    config: dict[str, Any]
     validation: dict[str, Any]
     output: dict[str, Any]
     bq: dict[str, Any] | None
@@ -81,6 +82,7 @@ def load_config(path: str | Path, *, strict_config: bool = False) -> ToolkitConf
         raw=_compat_raw(model),
         clean=_compat_clean(model),
         mart=_compat_mart(model),
+        config=model.config.model_dump(mode="python"),
         validation=model.validation.model_dump(mode="python"),
         output=model.output.model_dump(mode="python"),
         bq=model.bq,

@@ -7,7 +7,6 @@ from typing import Any
 import requests
 
 from toolkit.core.exceptions import DownloadError
-from toolkit.core.registry import registry
 
 
 class ApiJsonPagedSource:
@@ -113,7 +112,3 @@ class ApiJsonPagedSource:
             lines.append(",".join(esc(row.get(c)) for c in cols))
 
         return ("\n".join(lines) + "\n").encode("utf-8")
-
-
-# Register plugin (so `stype: api_json_paged` works)
-registry.register("api_json_paged", lambda **client: ApiJsonPagedSource(**client))

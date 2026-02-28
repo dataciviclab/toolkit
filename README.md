@@ -383,6 +383,17 @@ Stabilita`:
 - plugin `local_file`, `http_file`: stable
 - plugin `api_json_paged`, `html_table`: experimental
 
+Come aggiungere un plugin:
+
+- definisci una classe plugin in `toolkit/plugins/<nome>.py`
+- contratto minimo:
+  - `__init__(**client)` per ricevere configurazione client
+  - `fetch(...) -> bytes` per restituire il payload RAW
+- registra il plugin in modo esplicito in `toolkit.core.registry.register_builtin_plugins()`
+- se il plugin dipende da librerie opzionali, il fallimento di import deve essere trattato come plugin opzionale non disponibile:
+  - warning `DCLPLUGIN001` in non-strict
+  - errore in strict mode
+
 ## Smoke locale
 
 `project-example/` e` pensato per un giro completo locale, senza rete:

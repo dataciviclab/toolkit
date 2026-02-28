@@ -4,7 +4,6 @@ import pandas as pd
 import requests
 
 from toolkit.core.exceptions import DownloadError
-from toolkit.core.registry import registry
 
 
 class HtmlTableSource:
@@ -32,7 +31,3 @@ class HtmlTableSource:
                 last_err = e
 
         raise DownloadError(str(last_err) if last_err else f"Failed to parse HTML tables from {url}")
-
-
-# Register plugin (so `stype: html_table` works)
-registry.register("html_table", lambda **client: HtmlTableSource(**client))

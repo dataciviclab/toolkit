@@ -6,7 +6,7 @@ from typing import Any
 
 import duckdb
 
-from toolkit.core.config import ensure_str_list
+from toolkit.core.config_models import CleanValidationSpec, RangeRuleConfig
 from toolkit.core.metadata import write_manifest
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.validation import (
@@ -29,7 +29,7 @@ def validate_clean(
     root: str | Path | None = None,
     primary_key: list[str] | None = None,
     not_null: list[str] | None = None,
-    ranges: dict[str, dict[str, float]] | None = None,
+    ranges: dict[str, RangeRuleConfig | dict[str, float]] | None = None,
     max_null_pct: dict[str, float] | None = None,
     min_rows: int | None = None,
 ) -> ValidationResult:
@@ -47,11 +47,25 @@ def validate_clean(
     - max_null_pct: {"col": 0.05} (5% max NULLs)
     - min_rows: minimum row count allowed
     """
-    required = ensure_str_list(required, "clean.required_columns")
-    primary_key = ensure_str_list(primary_key, "clean.validate.primary_key")
-    not_null = ensure_str_list(not_null, "clean.validate.not_null")
-    ranges = dict(ranges or {})
-    max_null_pct = dict(max_null_pct or {})
+    spec = CleanValidationSpec.model_validate(
+        {
+            "required_columns": required,
+            "validate": {
+                "primary_key": primary_key,
+                "not_null": not_null,
+                "ranges": ranges or {},
+                "max_null_pct": max_null_pct or {},
+                "min_rows": min_rows,
+            },
+        }
+    )
+    required = spec.required_columns
+    rules = spec.validate
+    primary_key = rules.primary_key
+    not_null = rules.not_null
+    ranges = rules.ranges
+    max_null_pct = rules.max_null_pct
+    min_rows = rules.min_rows
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -80,7 +94,7 @@ def validate_clean(
     row_count = int(con.execute("SELECT COUNT(*) FROM t").fetchone()[0])
     if row_count == 0:
         errors.append("CLEAN parquet has 0 rows")
-    if min_rows is not None and row_count < int(min_rows):
+    if min_rows is not None and row_count < min_rows:
         errors.append(f"CLEAN row_count too small: {row_count} < {min_rows}")
 
     # Not-null checks
@@ -102,8 +116,8 @@ def validate_clean(
             qc = _q_ident(c)
             nnull = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {qc} IS NULL").fetchone()[0])
             pct = nnull / row_count
-            if pct > float(thr):
-                errors.append(f"Column '{c}' null_pct too high: {pct:.3%} > {float(thr):.3%}")
+            if pct > thr:
+                errors.append(f"Column '{c}' null_pct too high: {pct:.3%} > {thr:.3%}")
 
     # Primary key uniqueness
     if primary_key:
@@ -134,10 +148,10 @@ def validate_clean(
 
         qc = _q_ident(c)
         violations: list[str] = []
-        if "min" in rule:
-            violations.append(f"{qc} < {float(rule['min'])}")
-        if "max" in rule:
-            violations.append(f"{qc} > {float(rule['max'])}")
+        if rule.min is not None:
+            violations.append(f"{qc} < {rule.min}")
+        if rule.max is not None:
+            violations.append(f"{qc} > {rule.max}")
 
         if not violations:
             warnings.append(f"Range rule for '{c}' has no min/max, skipping")
@@ -146,7 +160,10 @@ def validate_clean(
         where = f"{qc} IS NOT NULL AND (" + " OR ".join(violations) + ")"
         bad = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {where}").fetchone()[0])
         if bad > 0:
-            errors.append(f"Range check failed for '{c}': bad_rows={bad} rules={rule}")
+            errors.append(
+                f"Range check failed for '{c}': bad_rows={bad} "
+                f"rules={{'min': {rule.min}, 'max': {rule.max}}}"
+            )
 
     con.close()
 
@@ -161,7 +178,10 @@ def validate_clean(
             "required": required,
             "primary_key": primary_key,
             "not_null": not_null,
-            "ranges": ranges,
+            "ranges": {
+                column: {"min": rule.min, "max": rule.max}
+                for column, rule in ranges.items()
+            },
             "max_null_pct": max_null_pct,
             "min_rows": min_rows,
         },
@@ -173,18 +193,17 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
     parquet = out_dir / f"{cfg.dataset}_{year}_clean.parquet"
 
     clean_cfg: dict[str, Any] = cfg.clean or {}
-    required_cols = clean_cfg.get("required_columns", [])
-    rules: dict[str, Any] = clean_cfg.get("validate") or {}
+    spec = CleanValidationSpec.model_validate(clean_cfg)
 
     result = validate_clean(
         parquet,
-        required=required_cols,
+        required=spec.required_columns,
         root=cfg.root,
-        primary_key=rules.get("primary_key"),
-        not_null=rules.get("not_null"),
-        ranges=rules.get("ranges"),
-        max_null_pct=rules.get("max_null_pct"),
-        min_rows=rules.get("min_rows"),
+        primary_key=spec.validate.primary_key,
+        not_null=spec.validate.not_null,
+        ranges=spec.validate.ranges,
+        max_null_pct=spec.validate.max_null_pct,
+        min_rows=spec.validate.min_rows,
     )
 
     report = write_validation_json(Path(out_dir) / "_validate" / "clean_validation.json", result)

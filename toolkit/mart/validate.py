@@ -6,7 +6,7 @@ from typing import Any
 
 import duckdb
 
-from toolkit.core.config import ensure_str_list
+from toolkit.core.config_models import MartTableRuleConfig, MartValidationSpec
 from toolkit.core.metadata import write_manifest
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.validation import (
@@ -27,7 +27,7 @@ def validate_mart(
     required_tables: list[str] | None = None,
     *,
     root: str | Path | None = None,
-    table_rules: dict[str, dict[str, Any]] | None = None,
+    table_rules: dict[str, MartTableRuleConfig | dict[str, Any]] | None = None,
 ) -> ValidationResult:
     """
     Validate MART folder with optional per-table rules.
@@ -44,8 +44,16 @@ def validate_mart(
         ranges:
           col: {min: 0, max: 100}
     """
-    required_tables = ensure_str_list(required_tables, "mart.required_tables")
-    table_rules = dict(table_rules or {})
+    spec = MartValidationSpec.model_validate(
+        {
+            "required_tables": required_tables,
+            "validate": {
+                "table_rules": table_rules or {},
+            },
+        }
+    )
+    required_tables = spec.required_tables
+    table_rules = spec.validate.table_rules
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -77,30 +85,24 @@ def validate_mart(
             warnings.append(f"Could not count rows for {p.name}: {e}")
             continue
 
-        rules = table_rules.get(name, {})
+        rules = table_rules.get(name)
         if not rules:
             continue
 
-        min_rows = rules.get("min_rows")
-        if min_rows is not None and rc < int(min_rows):
-            errors.append(f"[{name}] row_count too small: {rc} < {int(min_rows)}")
+        min_rows = rules.min_rows
+        if min_rows is not None and rc < min_rows:
+            errors.append(f"[{name}] row_count too small: {rc} < {min_rows}")
 
         con.execute(f"CREATE OR REPLACE VIEW t AS SELECT * FROM read_parquet('{p.as_posix()}')")
         cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
 
         # required columns
-        req_cols = ensure_str_list(
-            rules.get("required_columns"),
-            f"mart.validate.table_rules.{name}.required_columns",
-        )
+        req_cols = rules.required_columns
         required_result = required_columns_check(cols, req_cols)
         errors.extend([f"[{name}] {error}" for error in required_result.errors])
 
         # not null
-        for c in ensure_str_list(
-            rules.get("not_null"),
-            f"mart.validate.table_rules.{name}.not_null",
-        ):
+        for c in rules.not_null:
             if c not in cols:
                 warnings.append(f"[{name}] Not-null rule column missing: '{c}'")
                 continue
@@ -110,10 +112,7 @@ def validate_mart(
                 errors.append(f"[{name}] Column '{c}' has NULLs: {nnull}")
 
         # primary key duplicates
-        pk = ensure_str_list(
-            rules.get("primary_key"),
-            f"mart.validate.table_rules.{name}.primary_key",
-        )
+        pk = rules.primary_key
         if pk:
             if not all(c in cols for c in pk):
                 warnings.append(f"[{name}] Primary key columns not all present: {pk}")
@@ -135,17 +134,17 @@ def validate_mart(
                     errors.append(f"[{name}] PK duplicates for {pk}: groups={dup_groups}")
 
         # ranges (violation = below min OR above max)
-        for c, rule in (rules.get("ranges") or {}).items():
+        for c, rule in rules.ranges.items():
             if c not in cols:
                 warnings.append(f"[{name}] Range rule column missing: '{c}'")
                 continue
 
             qc = _q_ident(c)
             violations: list[str] = []
-            if "min" in rule:
-                violations.append(f"{qc} < {float(rule['min'])}")
-            if "max" in rule:
-                violations.append(f"{qc} > {float(rule['max'])}")
+            if rule.min is not None:
+                violations.append(f"{qc} < {rule.min}")
+            if rule.max is not None:
+                violations.append(f"{qc} > {rule.max}")
 
             if not violations:
                 warnings.append(f"[{name}] Range rule for '{c}' has no min/max, skipping")
@@ -154,9 +153,24 @@ def validate_mart(
             where = f"{qc} IS NOT NULL AND (" + " OR ".join(violations) + ")"
             bad = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {where}").fetchone()[0])
             if bad > 0:
-                errors.append(f"[{name}] Range check failed for '{c}': bad_rows={bad} rules={rule}")
+                errors.append(
+                    f"[{name}] Range check failed for '{c}': bad_rows={bad} "
+                    f"rules={{'min': {rule.min}, 'max': {rule.max}}}"
+                )
 
-        per_table[name] = {"columns": cols, "rules": rules}
+        per_table[name] = {
+            "columns": cols,
+            "rules": {
+                "required_columns": rules.required_columns,
+                "not_null": rules.not_null,
+                "primary_key": rules.primary_key,
+                "ranges": {
+                    column: {"min": range_rule.min, "max": range_rule.max}
+                    for column, range_rule in rules.ranges.items()
+                },
+                "min_rows": rules.min_rows,
+            },
+        }
 
     con.close()
 
@@ -169,7 +183,19 @@ def validate_mart(
             "tables": existing_tables,
             "required_tables": required_tables,
             "row_counts": row_counts,
-            "table_rules": table_rules,
+            "table_rules": {
+                table: {
+                    "required_columns": rule.required_columns,
+                    "not_null": rule.not_null,
+                    "primary_key": rule.primary_key,
+                    "ranges": {
+                        column: {"min": range_rule.min, "max": range_rule.max}
+                        for column, range_rule in rule.ranges.items()
+                    },
+                    "min_rows": rule.min_rows,
+                }
+                for table, rule in table_rules.items()
+            },
             "per_table": per_table,
         },
     )
@@ -179,14 +205,13 @@ def run_mart_validation(cfg, year: int, logger) -> dict[str, Any]:
     mart_dir = layer_year_dir(cfg.root, "mart", cfg.dataset, year)
 
     mart_cfg: dict[str, Any] = cfg.mart or {}
-    required_tables = mart_cfg.get("required_tables", [])
-    rules: dict[str, Any] = (mart_cfg.get("validate") or {}).get("table_rules") or {}
+    spec = MartValidationSpec.model_validate(mart_cfg)
 
     result = validate_mart(
         mart_dir,
-        required_tables=required_tables,
+        required_tables=spec.required_tables,
         root=cfg.root,
-        table_rules=rules,
+        table_rules=spec.validate.table_rules,
     )
 
     report = write_validation_json(Path(mart_dir) / "_validate" / "mart_validation.json", result)

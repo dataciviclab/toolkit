@@ -143,12 +143,19 @@ class CleanReadConfig(BaseModel):
         return ensure_str_list(value, "clean.read.include")
 
 
+class RangeRuleConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min: float | None = None
+    max: float | None = None
+
+
 class CleanValidateConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     primary_key: list[str] = Field(default_factory=list)
     not_null: list[str] = Field(default_factory=list)
-    ranges: dict[str, dict[str, float]] = Field(default_factory=dict)
+    ranges: dict[str, RangeRuleConfig] = Field(default_factory=dict)
     max_null_pct: dict[str, float] = Field(default_factory=dict)
     min_rows: int | None = None
 
@@ -194,6 +201,25 @@ class CleanConfig(BaseModel):
         return self.validate_config
 
 
+class CleanValidationSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    required_columns: list[str] = Field(default_factory=list)
+    validate_config: CleanValidateConfig = Field(
+        default_factory=CleanValidateConfig,
+        alias="validate",
+    )
+
+    @field_validator("required_columns", mode="before")
+    @classmethod
+    def _normalize_required_columns(cls, value: Any) -> list[str]:
+        return ensure_str_list(value, "clean.required_columns")
+
+    @property
+    def validate(self) -> CleanValidateConfig:
+        return self.validate_config
+
+
 class MartTableConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -207,7 +233,7 @@ class MartTableRuleConfig(BaseModel):
     required_columns: list[str] = Field(default_factory=list)
     not_null: list[str] = Field(default_factory=list)
     primary_key: list[str] = Field(default_factory=list)
-    ranges: dict[str, dict[str, float]] = Field(default_factory=dict)
+    ranges: dict[str, RangeRuleConfig] = Field(default_factory=dict)
     min_rows: int | None = None
 
     @field_validator("required_columns", "not_null", "primary_key", mode="before")
@@ -226,6 +252,25 @@ class MartConfig(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     tables: list[MartTableConfig] = Field(default_factory=list)
+    required_tables: list[str] = Field(default_factory=list)
+    validate_config: MartValidateConfig = Field(
+        default_factory=MartValidateConfig,
+        alias="validate",
+    )
+
+    @field_validator("required_tables", mode="before")
+    @classmethod
+    def _normalize_required_tables(cls, value: Any) -> list[str]:
+        return ensure_str_list(value, "mart.required_tables")
+
+    @property
+    def validate(self) -> MartValidateConfig:
+        return self.validate_config
+
+
+class MartValidationSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
     required_tables: list[str] = Field(default_factory=list)
     validate_config: MartValidateConfig = Field(
         default_factory=MartValidateConfig,

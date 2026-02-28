@@ -16,6 +16,8 @@ jobs:
       - run: pip install ".[dev]"
       - run: ruff check --no-cache .
       - run: pytest -q -p no:cacheprovider
+      - name: Install And CLI Smoke
+        run: python scripts/smoke_install_cli.py
       - name: Offline CLI smoke
         run: |
           tmpdir="$(mktemp -d)"

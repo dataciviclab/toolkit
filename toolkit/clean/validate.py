@@ -193,7 +193,12 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
     parquet = out_dir / f"{cfg.dataset}_{year}_clean.parquet"
 
     clean_cfg: dict[str, Any] = cfg.clean or {}
-    spec = CleanValidationSpec.model_validate(clean_cfg)
+    spec = CleanValidationSpec.model_validate(
+        {
+            "required_columns": clean_cfg.get("required_columns"),
+            "validate": clean_cfg.get("validate"),
+        }
+    )
 
     result = validate_clean(
         parquet,

@@ -205,7 +205,12 @@ def run_mart_validation(cfg, year: int, logger) -> dict[str, Any]:
     mart_dir = layer_year_dir(cfg.root, "mart", cfg.dataset, year)
 
     mart_cfg: dict[str, Any] = cfg.mart or {}
-    spec = MartValidationSpec.model_validate(mart_cfg)
+    spec = MartValidationSpec.model_validate(
+        {
+            "required_tables": mart_cfg.get("required_tables"),
+            "validate": mart_cfg.get("validate"),
+        }
+    )
 
     result = validate_mart(
         mart_dir,

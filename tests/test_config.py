@@ -572,6 +572,177 @@ def test_project_example_config_parses_in_strict_mode():
     assert len(model.raw.sources) == 1
 
 
+def test_load_config_warns_on_unknown_top_level_keys_in_non_strict_mode(tmp_path: Path, caplog):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
+mart: {}
+unknown_top: true
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
+        cfg = load_config(yml)
+
+    assert cfg.dataset == "demo"
+    assert "DCL009" in caplog.text
+    assert "unknown top-level config keys detected: unknown_top" in caplog.text
+
+
+def test_load_config_model_rejects_unknown_top_level_keys_in_strict_mode(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
+mart: {}
+unknown_top: true
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as exc:
+        load_config_model(yml, strict_config=True)
+
+    assert "DCL009" in str(exc.value)
+    assert "unknown_top" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("section", "yaml_text", "code", "extra_key"),
+    [
+        (
+            "raw",
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw:
+  unexpected_flag: true
+clean: {}
+mart: {}
+""".strip(),
+            "DCL010",
+            "unexpected_flag",
+        ),
+        (
+            "clean",
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean:
+  unexpected_flag: true
+mart: {}
+""".strip(),
+            "DCL011",
+            "unexpected_flag",
+        ),
+        (
+            "mart",
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
+mart:
+  unexpected_flag: true
+""".strip(),
+            "DCL012",
+            "unexpected_flag",
+        ),
+    ],
+)
+def test_load_config_warns_on_unknown_section_keys_in_non_strict_mode(
+    tmp_path: Path,
+    caplog,
+    section: str,
+    yaml_text: str,
+    code: str,
+    extra_key: str,
+):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(yaml_text, encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
+        cfg = load_config(yml)
+
+    assert getattr(cfg, section) is not None
+    assert code in caplog.text
+    assert extra_key in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("yaml_text", "code", "extra_key"),
+    [
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw:
+  unexpected_flag: true
+clean: {}
+mart: {}
+""".strip(),
+            "DCL010",
+            "unexpected_flag",
+        ),
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean:
+  unexpected_flag: true
+mart: {}
+""".strip(),
+            "DCL011",
+            "unexpected_flag",
+        ),
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
+mart:
+  unexpected_flag: true
+""".strip(),
+            "DCL012",
+            "unexpected_flag",
+        ),
+    ],
+)
+def test_load_config_model_rejects_unknown_section_keys_in_strict_mode(
+    tmp_path: Path,
+    yaml_text: str,
+    code: str,
+    extra_key: str,
+):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(ValueError) as exc:
+        load_config_model(yml, strict_config=True)
+
+    assert code in str(exc.value)
+    assert extra_key in str(exc.value)
+
+
 @pytest.mark.parametrize(
     ("yaml_text", "expected"),
     [

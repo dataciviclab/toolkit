@@ -82,6 +82,34 @@ _CONFIG_DEPRECATIONS: dict[str, ConfigDeprecation] = {
         status="ignored",
         message="bq is deprecated/ignored, usare remove field",
     ),
+    "unknown.top_level": ConfigDeprecation(
+        code="DCL009",
+        legacy="unknown top-level keys",
+        replacement="remove unsupported keys",
+        status="ignored",
+        message="unknown top-level config keys detected",
+    ),
+    "unknown.raw": ConfigDeprecation(
+        code="DCL010",
+        legacy="raw.* unknown keys",
+        replacement="remove unsupported raw keys",
+        status="ignored",
+        message="unknown raw config keys detected",
+    ),
+    "unknown.clean": ConfigDeprecation(
+        code="DCL011",
+        legacy="clean.* unknown keys",
+        replacement="remove unsupported clean keys",
+        status="ignored",
+        message="unknown clean config keys detected",
+    ),
+    "unknown.mart": ConfigDeprecation(
+        code="DCL012",
+        legacy="mart.* unknown keys",
+        replacement="remove unsupported mart keys",
+        status="ignored",
+        message="unknown mart config keys detected",
+    ),
 }
 
 
@@ -369,7 +397,7 @@ class MartValidationSpec(BaseModel):
 
 
 class ToolkitConfigModel(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     base_dir: Path
     schema_version: int = 1
@@ -576,6 +604,47 @@ def _emit_deprecation_notice(
         raise _err(f"{notice.code} {notice.message}", path=path)
 
 
+def _emit_unknown_keys_notice(
+    key: str,
+    extras: list[str],
+    *,
+    strict_config: bool,
+    path: Path,
+) -> None:
+    notice = _CONFIG_DEPRECATIONS[key]
+    formatted = ", ".join(sorted(extras))
+    message = f"{notice.code} {notice.message}: {formatted}"
+    logger.warning(message)
+    if strict_config:
+        raise _err(message, path=path)
+
+
+def _declared_model_keys(model_cls: type[BaseModel]) -> set[str]:
+    keys: set[str] = set()
+    for field_name, field_info in model_cls.model_fields.items():
+        keys.add(field_name)
+        if field_info.alias:
+            keys.add(str(field_info.alias))
+    return keys
+
+
+_TOP_LEVEL_ALLOWED_KEYS = {
+    "schema_version",
+    "root",
+    "dataset",
+    "raw",
+    "clean",
+    "mart",
+    "config",
+    "validation",
+    "output",
+    "bq",
+}
+_RAW_ALLOWED_KEYS = _declared_model_keys(RawConfig)
+_CLEAN_ALLOWED_KEYS = _declared_model_keys(CleanConfig) | {"sql_path"}
+_MART_ALLOWED_KEYS = _declared_model_keys(MartConfig) | {"sql_dir"}
+
+
 def _normalize_legacy_clean_read(
     clean: dict[str, Any],
     *,
@@ -662,6 +731,45 @@ def _normalize_legacy_payload(
     return normalized
 
 
+def _warn_or_reject_unknown_keys(
+    data: dict[str, Any],
+    *,
+    path: Path,
+    strict_config: bool,
+) -> dict[str, Any]:
+    normalized = dict(data)
+
+    top_level_extras = [key for key in normalized.keys() if key not in _TOP_LEVEL_ALLOWED_KEYS]
+    if top_level_extras:
+        _emit_unknown_keys_notice(
+            "unknown.top_level",
+            top_level_extras,
+            strict_config=strict_config,
+            path=path,
+        )
+        if not strict_config:
+            normalized = {k: v for k, v in normalized.items() if k in _TOP_LEVEL_ALLOWED_KEYS}
+
+    for section_name, allowed_keys, notice_key in (
+        ("raw", _RAW_ALLOWED_KEYS, "unknown.raw"),
+        ("clean", _CLEAN_ALLOWED_KEYS, "unknown.clean"),
+        ("mart", _MART_ALLOWED_KEYS, "unknown.mart"),
+    ):
+        section = normalized.get(section_name)
+        if not isinstance(section, dict):
+            continue
+        extras = [key for key in section.keys() if key not in allowed_keys]
+        if extras:
+            _emit_unknown_keys_notice(
+                notice_key,
+                extras,
+                strict_config=strict_config,
+                path=path,
+            )
+
+    return normalized
+
+
 def _validation_error_to_value_error(exc: ValidationError, *, path: Path) -> ValueError:
     messages: list[str] = []
     for error in exc.errors():
@@ -701,6 +809,7 @@ def load_config_model(path: str | Path, *, strict_config: bool = False) -> Toolk
 
     strict_mode = strict_config or _read_strict_config(data, path=p)
     normalized = _normalize_legacy_payload(data, path=p, strict_config=strict_mode)
+    normalized = _warn_or_reject_unknown_keys(normalized, path=p, strict_config=strict_mode)
     root_path, root_source = _resolve_root(normalized.get("root"), base_dir=base_dir)
 
     raw = normalized.get("raw", {}) or {}

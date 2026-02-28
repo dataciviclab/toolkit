@@ -28,7 +28,9 @@ def test_register_builtin_plugins_registers_present_plugins():
     assert "local_file" in plugins
 
 
-def test_register_builtin_plugins_warns_for_optional_missing_plugin_in_non_strict(monkeypatch, caplog):
+def test_register_builtin_plugins_warns_for_optional_missing_plugin_in_non_strict(
+    monkeypatch, caplog, capsys
+):
     r = Registry()
     real_import = importlib.import_module
 
@@ -42,8 +44,9 @@ def test_register_builtin_plugins_warns_for_optional_missing_plugin_in_non_stric
     with caplog.at_level(logging.WARNING, logger="toolkit.core.registry"):
         register_builtin_plugins(registry_obj=r, strict=False)
 
-    assert "DCLPLUGIN001" in caplog.text
-    assert "html_table" in caplog.text
+    captured = caplog.text + capsys.readouterr().out
+    assert "DCLPLUGIN001" in captured
+    assert "html_table" in captured
     assert "html_table" not in r.list_plugins()
     assert "http_file" in r.list_plugins()
 

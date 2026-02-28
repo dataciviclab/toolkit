@@ -23,7 +23,13 @@ jobs:
       - name: Ruff
         run: python -m ruff check .
       - name: Pytest
-        run: python -m pytest -q -p no:cacheprovider
+        run: python -m pytest -p pytest_cov -q -p no:cacheprovider --cov=toolkit --cov-report=term-missing --cov-report=xml --cov-fail-under=70
+      - name: Upload Coverage Artifact
+        if: always() && hashFiles('coverage.xml') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: coverage.xml
       - name: Install And CLI Smoke
         if: ${{ hashFiles('scripts/smoke_install_cli.py') != '' }}
         run: python scripts/smoke_install_cli.py

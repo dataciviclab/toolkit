@@ -1,0 +1,32 @@
+dataset:
+  name: example_min
+  years: [2024]
+
+raw:
+  sources:
+    - name: local_csv
+      type: local_file
+      args:
+        path: ../project-example/data/raw_sample.csv
+        filename: raw_sample_{year}.csv
+
+clean:
+  sql: ../project-example/sql/clean.sql
+  read_mode: fallback
+  read:
+    mode: explicit
+    include: raw_sample_*.csv
+    delim: ";"
+    encoding: utf-8
+
+mart:
+  tables:
+    - name: rd_by_regione
+      sql: ../project-example/sql/mart/mart_regione_anno.sql
+
+validation:
+  fail_on_error: true
+
+output:
+  artifacts: standard
+  legacy_aliases: true

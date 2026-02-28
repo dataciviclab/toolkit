@@ -52,6 +52,21 @@ python -m toolkit.cli.app run all -c project-example/dataset.yml
 python -m toolkit.cli.app status --dataset project_example --year 2022 --config project-example/dataset.yml
 ```
 
+Validazione rapida della config prima di eseguire la pipeline:
+
+```bash
+toolkit run all --config dataset.yml --dry-run
+```
+
+Interpretazione errori config:
+
+- `Config validation failed: output.<campo>: Extra inputs are not permitted` -> campo non supportato
+- `Config validation failed: raw.sources: Input should be a valid list` -> tipo YAML sbagliato
+- `Config validation failed: clean.validate.primary_key: ... string or a list of strings` -> forma del valore non valida
+- warning di deprecazione -> config ancora accettata, ma in forma legacy da migrare
+
+Schema completo e legacy supportato: [docs/config-schema.md](docs/config-schema.md)
+
 Artefatti attesi:
 
 - `$TOOLKIT_OUTDIR/data/raw/project_example/2022/manifest.json`
@@ -107,6 +122,7 @@ Convenzioni:
 - `dataset.yml` descrive dataset, anni, sorgenti, SQL e validazioni
 - `sql/clean.sql` definisce il layer CLEAN
 - `sql/mart/*.sql` definisce le tabelle MART
+- per esempi pronti, vedi [examples/dataset_min.yml](examples/dataset_min.yml) e [examples/dataset_full.yml](examples/dataset_full.yml)
 
 ## CLI
 

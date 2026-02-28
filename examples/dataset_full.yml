@@ -1,0 +1,92 @@
+root: "./_smoke_out"
+schema_version: 1
+
+dataset:
+  name: example_full
+  years: [2023, 2024]
+
+raw:
+  output_policy: versioned
+  extractor:
+    type: identity
+  sources:
+    - name: local_csv
+      type: local_file
+      client: {}
+      args:
+        path: data/raw_sample.csv
+        filename: input_{year}.csv
+      primary: true
+
+clean:
+  sql: sql/clean.sql
+  read_mode: fallback
+  read:
+    source: auto
+    mode: explicit
+    include:
+      - input_*.csv
+    glob: "*"
+    prefer_from_raw_run: true
+    allow_ambiguous: false
+    delim: ";"
+    header: true
+    encoding: utf-8
+    decimal: ","
+    skip: 0
+    trim_whitespace: true
+    sample_size: -1
+  required_columns:
+    - comune
+    - anno
+  validate:
+    primary_key:
+      - anno
+      - comune
+    not_null:
+      - anno
+    ranges:
+      anno:
+        min: 2000
+        max: 2100
+    max_null_pct:
+      valore: 0.05
+    min_rows: 1
+
+mart:
+  tables:
+    - name: mart_summary
+      sql: sql/mart/mart_summary.sql
+    - name: mart_detail
+      sql: sql/mart/mart_detail.sql
+  required_tables:
+    - mart_summary
+    - mart_detail
+  validate:
+    table_rules:
+      mart_summary:
+        required_columns:
+          - anno
+          - totale
+        not_null:
+          - anno
+        primary_key:
+          - anno
+        ranges:
+          totale:
+            min: 0
+        min_rows: 1
+      mart_detail:
+        required_columns:
+          - anno
+          - comune
+        primary_key:
+          - anno
+          - comune
+
+validation:
+  fail_on_error: true
+
+output:
+  artifacts: debug
+  legacy_aliases: false

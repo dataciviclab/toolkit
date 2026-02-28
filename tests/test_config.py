@@ -3,6 +3,7 @@ from pathlib import Path
 import logging
 import pytest
 
+from toolkit.cli.cmd_run import run as run_cmd
 from toolkit.core.config import ensure_str_list, load_config, parse_bool
 from toolkit.core.config_models import load_config_model
 
@@ -287,8 +288,8 @@ mart: {}
         "columns": {"amount": "DOUBLE"},
         "delim": ";",
     }
-    assert "clean.read.csv.* is deprecated" in caplog.text
-    assert "Migrate to clean.read.source / clean.read.columns" in caplog.text
+    assert "DCL005" in caplog.text
+    assert "deprecated, usare clean.read.*" in caplog.text
 
 
 def test_load_config_canonical_clean_read_has_no_deprecation_warning(tmp_path: Path, caplog):
@@ -424,9 +425,12 @@ bq:
     with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
         load_config(yml)
 
-    assert "clean.sql_path is ignored" in caplog.text
-    assert "mart.sql_dir is ignored" in caplog.text
-    assert "bq is currently ignored" in caplog.text
+    assert "DCL006" in caplog.text
+    assert "DCL007" in caplog.text
+    assert "DCL008" in caplog.text
+    assert "deprecated/ignored, usare clean.sql" in caplog.text
+    assert "deprecated/ignored, usare mart.tables[].sql" in caplog.text
+    assert "deprecated/ignored, usare remove field" in caplog.text
 
 
 def test_load_config_model_normalizes_legacy_aliases_to_canonical_shape(tmp_path: Path):
@@ -456,6 +460,109 @@ mart: {}
     assert model.raw.sources[0].type == "local_file"
     assert model.clean.read is not None
     assert model.clean.read.source == "auto"
+
+
+def test_load_config_logs_deprecation_codes_for_legacy_normalization(tmp_path: Path, caplog):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw:
+  source:
+    id: src_legacy
+    plugin: local_file
+    args:
+      path: data/raw.csv
+clean:
+  read: auto
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
+        load_config(yml)
+
+    assert "DCL001" in caplog.text
+    assert "DCL002" in caplog.text
+    assert "DCL003" in caplog.text
+    assert "DCL004" in caplog.text
+
+
+def test_load_config_model_strict_config_rejects_legacy_normalization(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw:
+  source:
+    type: local_file
+    args:
+      path: data/raw.csv
+clean: {}
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as exc:
+        load_config_model(yml, strict_config=True)
+
+    assert "DCL001" in str(exc.value)
+    assert "raw.source is deprecated, usare raw.sources" in str(exc.value)
+
+
+def test_load_config_model_config_strict_rejects_legacy_normalization(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+config:
+  strict: true
+dataset:
+  name: demo
+  years: [2022]
+clean:
+  read: auto
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as exc:
+        load_config_model(yml)
+
+    assert "DCL004" in str(exc.value)
+    assert "clean.read scalar form is deprecated" in str(exc.value)
+
+
+def test_cli_strict_config_rejects_legacy_config(tmp_path: Path):
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    yml = project_dir / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw:
+  source:
+    type: local_file
+    args:
+      path: data/raw.csv
+clean: {}
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as exc:
+        run_cmd(step="raw", config=str(yml), strict_config=True)
+
+    assert "DCL001" in str(exc.value)
 
 
 @pytest.mark.parametrize(

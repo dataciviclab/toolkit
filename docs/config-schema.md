@@ -14,6 +14,7 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 | `raw` | `object` | no | configurazione acquisizione RAW |
 | `clean` | `object` | no | configurazione CLEAN |
 | `mart` | `object` | no | configurazione MART |
+| `config` | `object` | no | policy parser config |
 | `validation` | `object` | no | solo opzioni globali del validation gate |
 | `output` | `object` | no | policy artefatti |
 | `bq` | `object \| null` | no | accettato ma ignorato, con warning |
@@ -141,6 +142,17 @@ Campi supportati:
 |---|---|---|
 | `validation.fail_on_error` | `bool` | `true` |
 
+## config
+
+Campi supportati:
+
+| Campo | Tipo | Default |
+|---|---|---|
+| `config.strict` | `bool` | `false` |
+
+Se `config.strict: true`, ogni warning legacy `DCLxxx` viene promosso a errore durante il parse.
+Lo stesso comportamento è disponibile da CLI con `--strict-config`.
+
 ## output
 
 Campi supportati:
@@ -152,23 +164,19 @@ Campi supportati:
 
 ## Legacy supportato
 
-I seguenti campi legacy sono ancora accettati, ma generano warning e vengono normalizzati prima del parse:
+I seguenti campi legacy sono ancora accettati, ma generano warning con codice `DCLxxx`.
+Con `config.strict: true` o `--strict-config`, gli stessi casi diventano errori.
 
-| Legacy | Forma canonica | Note |
-|---|---|---|
-| `raw.source` | `raw.sources=[raw.source]` | supporto retrocompatibile per una sola source |
-| `raw.sources[].plugin` | `raw.sources[].type` | alias legacy |
-| `raw.sources[].id` | `raw.sources[].name` | alias legacy |
-| `clean.read: "auto"` | `clean.read.source: auto` | forma scalar deprecata |
-| `clean.read.csv.*` | `clean.read.*` | i campi già presenti in `clean.read` hanno precedenza |
-
-Campi zombie accettati ma ignorati con warning:
-
-| Campo | Stato |
-|---|---|
-| `clean.sql_path` | ignorato |
-| `mart.sql_dir` | ignorato |
-| `bq` | ignorato |
+| Code | Legacy | Replacement | Status |
+|---|---|---|---|
+| `DCL001` | `raw.source` | `raw.sources` | deprecated |
+| `DCL002` | `raw.sources[].plugin` | `raw.sources[].type` | deprecated |
+| `DCL003` | `raw.sources[].id` | `raw.sources[].name` | deprecated |
+| `DCL004` | `clean.read: "auto"` | `clean.read.source: auto` | deprecated |
+| `DCL005` | `clean.read.csv.*` | `clean.read.*` | deprecated |
+| `DCL006` | `clean.sql_path` | `clean.sql` | ignored |
+| `DCL007` | `mart.sql_dir` | `mart.tables[].sql` | ignored |
+| `DCL008` | `bq` | rimuovere il campo | ignored |
 
 ## Esempi minimi
 
@@ -190,7 +198,7 @@ raw:
 
 ### CLEAN only
 
-Presuppone che il layer RAW esista già sotto `root/data/raw/...`.
+Presuppone che il layer RAW esista gia sotto `root/data/raw/...`.
 
 ```yaml
 dataset:
@@ -207,7 +215,7 @@ clean:
 
 ### MART
 
-Presuppone che il layer CLEAN esista già sotto `root/data/clean/...`.
+Presuppone che il layer CLEAN esista gia sotto `root/data/clean/...`.
 
 ```yaml
 dataset:
@@ -234,9 +242,10 @@ Esempi tipici:
 - `Config validation failed: output.unknown_flag: Extra inputs are not permitted`
 - `Config validation failed: raw.sources: Input should be a valid list`
 - `Config validation failed: clean.validate.primary_key: clean.validate.primary_key must be a string or a list of strings`
+- `DCL001 raw.source is deprecated, usare raw.sources`
 
 Regola pratica:
 
-- se il path punta a una sezione nota (`output`, `validation`, `clean.validate`, `mart.validate`), il campo non è supportato
-- se il path punta a un tipo (`raw.sources`, `clean.read.include`, `root`), la forma YAML è sbagliata
-- se compare un warning di legacy, il file è ancora accettato ma va migrato alla forma canonica
+- se il path punta a una sezione nota (`output`, `validation`, `clean.validate`, `mart.validate`, `config`), il campo non e supportato
+- se il path punta a un tipo (`raw.sources`, `clean.read.include`, `root`), la forma YAML e sbagliata
+- se compare un warning `DCLxxx`, il file e ancora accettato ma va migrato alla forma canonica

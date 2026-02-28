@@ -15,6 +15,7 @@ def _raise_on_failed_summary(summary: dict[str, object]) -> None:
 def validate(
     step: str = typer.Argument(..., help="clean | mart | all"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
     """
     Quality gate per CLEAN e MART.
@@ -22,7 +23,8 @@ def validate(
       clean.validate.*
       mart.validate.table_rules.*
     """
-    cfg, logger = load_cfg_and_logger(config)
+    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
+    cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag)
 
     for year in iter_years(cfg, None):
         if step == "all":

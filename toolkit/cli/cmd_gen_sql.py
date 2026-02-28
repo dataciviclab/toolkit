@@ -14,12 +14,14 @@ def gen_sql(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     year: int | None = typer.Option(None, "--year", "-y", help="Anno specifico (se omesso: primo anno in dataset.yml)"),
     out_dir: str | None = typer.Option(None, "--out", help="Root progetto dove creare sql/_generated/clean.sql"),
+    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
     """
     Genera uno skeleton CLEAN SQL da clean.mapping (assist, non pipeline).
     Scrive: <root>/sql/_generated/clean.sql
     """
-    cfg = load_config(config)
+    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
+    cfg = load_config(config, strict_config=strict_config_flag)
     logger = get_logger()
 
     clean_cfg: dict[str, Any] = cfg.clean or {}

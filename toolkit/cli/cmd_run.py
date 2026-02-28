@@ -196,11 +196,13 @@ def run(
     step: str = typer.Argument(..., help="raw | clean | mart | all"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
+    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
     """
     Esegue un singolo step della pipeline.
     """
-    cfg, logger = load_cfg_and_logger(config)
+    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
+    cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag)
     dry_run_flag = dry_run if isinstance(dry_run, bool) else False
 
     if step not in {"raw", "clean", "mart", "all"}:

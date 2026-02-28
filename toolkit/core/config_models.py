@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -13,6 +14,75 @@ from toolkit.core.csv_read import normalize_columns_spec
 
 logger = logging.getLogger("toolkit.core.config")
 _MANAGED_OUTPUT_ROOTS = {"_smoke_out", "_test_out"}
+
+
+@dataclass(frozen=True)
+class ConfigDeprecation:
+    code: str
+    legacy: str
+    replacement: str
+    status: str
+    message: str
+
+
+_CONFIG_DEPRECATIONS: dict[str, ConfigDeprecation] = {
+    "raw.source": ConfigDeprecation(
+        code="DCL001",
+        legacy="raw.source",
+        replacement="raw.sources",
+        status="deprecated",
+        message="raw.source is deprecated, usare raw.sources",
+    ),
+    "raw.sources[].plugin": ConfigDeprecation(
+        code="DCL002",
+        legacy="raw.sources[].plugin",
+        replacement="raw.sources[].type",
+        status="deprecated",
+        message="raw.sources[].plugin is deprecated, usare raw.sources[].type",
+    ),
+    "raw.sources[].id": ConfigDeprecation(
+        code="DCL003",
+        legacy="raw.sources[].id",
+        replacement="raw.sources[].name",
+        status="deprecated",
+        message="raw.sources[].id is deprecated, usare raw.sources[].name",
+    ),
+    "clean.read": ConfigDeprecation(
+        code="DCL004",
+        legacy="clean.read: <string>",
+        replacement="clean.read.source",
+        status="deprecated",
+        message="clean.read scalar form is deprecated, usare clean.read.source",
+    ),
+    "clean.read.csv": ConfigDeprecation(
+        code="DCL005",
+        legacy="clean.read.csv.*",
+        replacement="clean.read.*",
+        status="deprecated",
+        message="clean.read.csv.* is deprecated, usare clean.read.*",
+    ),
+    "clean.sql_path": ConfigDeprecation(
+        code="DCL006",
+        legacy="clean.sql_path",
+        replacement="clean.sql",
+        status="ignored",
+        message="clean.sql_path is deprecated/ignored, usare clean.sql",
+    ),
+    "mart.sql_dir": ConfigDeprecation(
+        code="DCL007",
+        legacy="mart.sql_dir",
+        replacement="mart.tables[].sql",
+        status="ignored",
+        message="mart.sql_dir is deprecated/ignored, usare mart.tables[].sql",
+    ),
+    "bq": ConfigDeprecation(
+        code="DCL008",
+        legacy="bq",
+        replacement="remove field",
+        status="ignored",
+        message="bq is deprecated/ignored, usare remove field",
+    ),
+}
 
 
 def parse_bool(value: Any, field_name: str) -> bool:
@@ -71,6 +141,17 @@ class GlobalValidationConfig(BaseModel):
     @classmethod
     def _parse_fail_on_error(cls, value: Any) -> bool:
         return parse_bool(value, "validation.fail_on_error")
+
+
+class ConfigPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strict: bool = False
+
+    @field_validator("strict", mode="before")
+    @classmethod
+    def _parse_strict(cls, value: Any) -> bool:
+        return parse_bool(value, "config.strict")
 
 
 class ExtractorConfig(BaseModel):
@@ -298,6 +379,7 @@ class ToolkitConfigModel(BaseModel):
     raw: RawConfig = Field(default_factory=RawConfig)
     clean: CleanConfig = Field(default_factory=CleanConfig)
     mart: MartConfig = Field(default_factory=MartConfig)
+    config: ConfigPolicy = Field(default_factory=ConfigPolicy)
     validation: GlobalValidationConfig = Field(default_factory=GlobalValidationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     bq: dict[str, Any] | None = None
@@ -481,12 +563,30 @@ def _normalize_legacy_source(source: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _normalize_legacy_clean_read(clean: dict[str, Any], *, path: Path) -> dict[str, Any]:
+def _emit_deprecation_notice(
+    key: str,
+    *,
+    strict_config: bool,
+    path: Path,
+) -> None:
+    notice = _CONFIG_DEPRECATIONS[key]
+    message = f"{notice.code} {notice.message}"
+    logger.warning(message)
+    if strict_config:
+        raise _err(f"{notice.code} {notice.message}", path=path)
+
+
+def _normalize_legacy_clean_read(
+    clean: dict[str, Any],
+    *,
+    path: Path,
+    strict_config: bool,
+) -> dict[str, Any]:
     normalized = dict(clean)
     read_cfg = normalized.get("read")
 
     if isinstance(read_cfg, str):
-        logger.warning("Deprecated config form: clean.read scalar form is deprecated; use clean.read.source")
+        _emit_deprecation_notice("clean.read", strict_config=strict_config, path=path)
         normalized["read"] = {"source": read_cfg}
         read_cfg = normalized["read"]
 
@@ -504,15 +604,17 @@ def _normalize_legacy_clean_read(clean: dict[str, Any], *, path: Path) -> dict[s
     for key, value in csv_cfg.items():
         merged_read.setdefault(key, value)
 
-    logger.warning(
-        "Deprecated config keys: clean.read.csv.* is deprecated and will be removed in a future release. "
-        "Migrate to clean.read.source / clean.read.columns and move CSV options directly under clean.read."
-    )
+    _emit_deprecation_notice("clean.read.csv", strict_config=strict_config, path=path)
     normalized["read"] = merged_read
     return normalized
 
 
-def _normalize_legacy_payload(data: dict[str, Any], *, path: Path) -> dict[str, Any]:
+def _normalize_legacy_payload(
+    data: dict[str, Any],
+    *,
+    path: Path,
+    strict_config: bool,
+) -> dict[str, Any]:
     normalized = dict(data)
 
     raw = normalized.get("raw")
@@ -523,30 +625,39 @@ def _normalize_legacy_payload(data: dict[str, Any], *, path: Path) -> dict[str, 
             if "sources" in updated_raw:
                 raise _err("Use either raw.source or raw.sources, not both.", path=path)
             updated_raw["sources"] = [source]
-            logger.warning("Deprecated config key: raw.source is deprecated; use raw.sources.")
+            _emit_deprecation_notice("raw.source", strict_config=strict_config, path=path)
         sources = updated_raw.get("sources")
         if isinstance(sources, list):
-            updated_raw["sources"] = [
-                _normalize_legacy_source(source) if isinstance(source, dict) else source
-                for source in sources
-            ]
+            normalized_sources: list[Any] = []
+            for source in sources:
+                if not isinstance(source, dict):
+                    normalized_sources.append(source)
+                    continue
+                original = dict(source)
+                normalized_source = _normalize_legacy_source(source)
+                if "plugin" in original and "type" not in original:
+                    _emit_deprecation_notice("raw.sources[].plugin", strict_config=strict_config, path=path)
+                if "id" in original and "name" not in original:
+                    _emit_deprecation_notice("raw.sources[].id", strict_config=strict_config, path=path)
+                normalized_sources.append(normalized_source)
+            updated_raw["sources"] = normalized_sources
         normalized["raw"] = updated_raw
 
     clean = normalized.get("clean")
     if isinstance(clean, dict):
-        updated_clean = _normalize_legacy_clean_read(clean, path=path)
+        updated_clean = _normalize_legacy_clean_read(clean, path=path, strict_config=strict_config)
         if "sql_path" in updated_clean:
-            logger.warning("Deprecated/unused config field detected: clean.sql_path is ignored.")
+            _emit_deprecation_notice("clean.sql_path", strict_config=strict_config, path=path)
         normalized["clean"] = updated_clean
 
     mart = normalized.get("mart")
     if isinstance(mart, dict):
         if "sql_dir" in mart:
-            logger.warning("Deprecated/unused config field detected: mart.sql_dir is ignored.")
+            _emit_deprecation_notice("mart.sql_dir", strict_config=strict_config, path=path)
         normalized["mart"] = dict(mart)
 
     if "bq" in normalized:
-        logger.warning("Unused config field detected: bq is currently ignored by the toolkit.")
+        _emit_deprecation_notice("bq", strict_config=strict_config, path=path)
 
     return normalized
 
@@ -560,7 +671,17 @@ def _validation_error_to_value_error(exc: ValidationError, *, path: Path) -> Val
     return _err("Config validation failed: " + "; ".join(messages), path=path)
 
 
-def load_config_model(path: str | Path) -> ToolkitConfigModel:
+def _read_strict_config(data: dict[str, Any], *, path: Path) -> bool:
+    raw_config = data.get("config")
+    if raw_config is None:
+        return False
+    if not isinstance(raw_config, dict):
+        raise _err("config must be a mapping.", path=path)
+    strict_value = raw_config.get("strict", False)
+    return parse_bool(strict_value, "config.strict")
+
+
+def load_config_model(path: str | Path, *, strict_config: bool = False) -> ToolkitConfigModel:
     p = Path(path)
     base_dir = p.parent.resolve()
 
@@ -578,7 +699,8 @@ def load_config_model(path: str | Path) -> ToolkitConfigModel:
     if "years" not in dataset_block:
         raise _err("dataset.years deve essere una lista non vuota, es: [2022, 2023].", path=p)
 
-    normalized = _normalize_legacy_payload(data, path=p)
+    strict_mode = strict_config or _read_strict_config(data, path=p)
+    normalized = _normalize_legacy_payload(data, path=p, strict_config=strict_mode)
     root_path, root_source = _resolve_root(normalized.get("root"), base_dir=base_dir)
 
     raw = normalized.get("raw", {}) or {}

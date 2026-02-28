@@ -24,6 +24,7 @@ def resume(
     latest: bool = typer.Option(False, "--latest", help="Resume latest run"),
     compat: bool = typer.Option(False, "--compat", help="Allow resume from non-portable legacy run records"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
     """
     Riprende un run dal primo layer non SUCCESS.
@@ -31,7 +32,8 @@ def resume(
     if run_id and latest:
         raise typer.BadParameter("Use either --run-id or --latest, not both")
 
-    cfg = load_config(config)
+    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
+    cfg = load_config(config, strict_config=strict_config_flag)
     if cfg.dataset != dataset:
         raise typer.BadParameter(f"Config dataset mismatch: expected {dataset}, found {cfg.dataset}")
     if year not in cfg.years:

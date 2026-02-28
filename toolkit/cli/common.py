@@ -9,8 +9,9 @@ def load_cfg_and_logger(
     *,
     verbose: bool = False,
     quiet: bool = False,
+    strict_config: bool = False,
 ):
-    cfg = load_config(config_path)
+    cfg = load_config(config_path, strict_config=strict_config)
     if verbose and quiet:
         raise ValueError("verbose and quiet cannot both be true")
 

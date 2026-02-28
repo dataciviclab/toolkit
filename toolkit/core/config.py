@@ -69,8 +69,8 @@ def _compat_mart(model: ToolkitConfigModel) -> dict[str, Any]:
     )
 
 
-def load_config(path: str | Path) -> ToolkitConfig:
-    model = load_config_model(path)
+def load_config(path: str | Path, *, strict_config: bool = False) -> ToolkitConfig:
+    model = load_config_model(path, strict_config=strict_config)
     return ToolkitConfig(
         base_dir=model.base_dir,
         schema_version=model.schema_version,

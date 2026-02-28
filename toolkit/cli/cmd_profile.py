@@ -143,11 +143,13 @@ def write_suggested_mapping_yml(out_dir: Path, profile: dict[str, Any]) -> Path:
 def profile(
     step: str = typer.Argument(..., help="raw"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
     """
     Profiling (assist) per i layer. Per ora: raw.
     """
-    cfg, logger = load_cfg_and_logger(config)
+    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
+    cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag)
 
     if step != "raw":
         raise typer.BadParameter("step must be: raw")

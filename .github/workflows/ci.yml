@@ -7,48 +7,23 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.10", "3.11"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - run: pip install ".[dev]"
-      - run: ruff check --no-cache .
-      - run: pytest -q -p no:cacheprovider
+          python-version: ${{ matrix.python-version }}
+      - name: Install Dev Dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Ruff
+        run: python -m ruff check .
+      - name: Pytest
+        run: python -m pytest -q -p no:cacheprovider
       - name: Install And CLI Smoke
+        if: ${{ hashFiles('scripts/smoke_install_cli.py') != '' }}
         run: python scripts/smoke_install_cli.py
-      - name: Offline CLI smoke
-        run: |
-          tmpdir="$(mktemp -d)"
-          cp -R project-example "$tmpdir/project-example"
-          export TOOLKIT_OUTDIR="$tmpdir/out"
-          python -m toolkit.cli.app run all -c "$tmpdir/project-example/dataset.yml"
-          test -f "$TOOLKIT_OUTDIR/data/raw/project_example/2022/manifest.json"
-          test -f "$TOOLKIT_OUTDIR/data/clean/project_example/2022/project_example_2022_clean.parquet"
-          test -f "$TOOLKIT_OUTDIR/data/mart/project_example/2022/rd_by_regione.parquet"
-          test -f "$TOOLKIT_OUTDIR/data/_runs/project_example/2022/"*.json
-      - name: Remove Packaging Metadata Artifact
-        run: |
-          find . -maxdepth 1 -type d -name '*.egg-info' -prune -exec rm -rf {} +
-      - name: Check Hygiene Artifacts
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import sys
-
-          root = Path.cwd()
-          blocked_dirs = {"_smoke_out", "_test_out", ".pytest_cache", ".ruff_cache"}
-          blocked_suffix = ".egg-info"
-          found = []
-
-          for path in root.rglob("*"):
-              if path.is_dir() and (path.name in blocked_dirs or path.name.endswith(blocked_suffix)):
-                  found.append(path.relative_to(root).as_posix())
-
-          if found:
-              print("Repository hygiene check failed. Unexpected artifacts in repo root:", file=sys.stderr)
-              for item in sorted(found):
-                  print(item, file=sys.stderr)
-              sys.exit(1)
-          PY

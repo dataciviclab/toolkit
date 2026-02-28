@@ -1,22 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 import json
 
+from toolkit.core.manifest import read_manifest, write_manifest
+from toolkit.core.paths import layer_year_dir
+from toolkit.core.validation import ValidationResult, build_validation_summary, write_validation_json
 
 TEXT_EXT = {".csv", ".txt", ".tsv", ".json", ".xml", ".html"}
 CSV_EXT = {".csv", ".tsv"}
-
-
-@dataclass
-class ValidationResult:
-    ok: bool
-    errors: list[str]
-    warnings: list[str]
-    summary: dict[str, Any]
-
 
 def _looks_like_text(b: bytes) -> bool:
     # Heuristic: bytes mostly printable or whitespace
@@ -106,14 +99,33 @@ def validate_raw_output(out_dir: Path, files_written: list[dict]) -> ValidationR
     return ValidationResult(ok=ok, errors=errors, warnings=warnings, summary=summary)
 
 
-def write_raw_validation(out_dir: Path, result: ValidationResult) -> Path:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / "raw_validation.json"
-    payload = {
-        "ok": result.ok,
-        "errors": result.errors,
-        "warnings": result.warnings,
-        "summary": result.summary,
+def run_raw_validation(root: str | None, dataset: str, year: int, logger) -> dict[str, Any]:
+    out_dir = layer_year_dir(root, "raw", dataset, year)
+    metadata = json.loads((out_dir / "metadata.json").read_text(encoding="utf-8"))
+    files = metadata.get("files") or metadata.get("outputs") or []
+
+    result = validate_raw_output(out_dir, files)
+    report = write_validation_json(out_dir / "raw_validation.json", result)
+    existing_manifest = read_manifest(out_dir) or {
+        "dataset": dataset,
+        "year": year,
+        "run_id": str(metadata.get("run_id") or "unknown"),
+        "created_at": str(metadata.get("timestamp_utc") or ""),
+        "sources": [],
+        "primary_output_file": "",
     }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return path
+    existing_manifest.update(
+        {
+            "metadata": "metadata.json",
+            "validation": report.name,
+            "summary": {
+                "ok": result.ok,
+                "errors_count": len(result.errors),
+                "warnings_count": len(result.warnings),
+            },
+            "outputs": metadata.get("outputs", []),
+        }
+    )
+    write_manifest(out_dir, existing_manifest)
+    logger.info(f"VALIDATE RAW -> {report} (ok={result.ok})")
+    return build_validation_summary(result)

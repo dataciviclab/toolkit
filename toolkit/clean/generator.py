@@ -1,18 +1,85 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Dict, Optional
 
-from toolkit.clean.transforms import (
-    apply_cast,
-    apply_normalize,
-    apply_nullify,
-    apply_parse,
-    apply_replace,
-    sql_ident,
-)
-
 ALLOWED_TYPES = {"int", "integer", "float", "double", "str", "string", "date"}
+
+
+def sql_ident(name: str) -> str:
+    return f'"{name}"'
+
+
+def apply_nullify(expr: str, nullify: Optional[list[str]]) -> str:
+    if not nullify:
+        return expr
+    toks = ", ".join([f"'{t}'" for t in nullify])
+    return f"CASE WHEN TRIM(CAST({expr} AS VARCHAR)) IN ({toks}) THEN NULL ELSE {expr} END"
+
+
+def apply_replace(expr: str, replace: Optional[dict[str, str]]) -> str:
+    if not replace:
+        return expr
+    out = expr
+    for k, v in replace.items():
+        out = f"REPLACE({out}, '{k}', '{v}')"
+    return out
+
+
+def apply_normalize(expr: str, normalize: Optional[list[str]]) -> str:
+    if not normalize:
+        return expr
+    out = expr
+    for op in normalize:
+        if op == "trim":
+            out = f"TRIM({out})"
+        elif op == "upper":
+            out = f"UPPER({out})"
+        elif op == "lower":
+            out = f"LOWER({out})"
+        elif op == "title":
+            out = f"INITCAP({out})"
+        elif op == "collapse_spaces":
+            out = f"REGEXP_REPLACE({out}, '\\s+', ' ')"
+        elif op == "remove_accents":
+            # Placeholder: no-op for now (future: UDF)
+            out = out
+        else:
+            raise ValueError(f"Unknown normalize op: {op}")
+    return out
+
+
+def _parse_number_it(expr: str) -> str:
+    # "1.234,56" -> 1234.56
+    return f"REPLACE(REPLACE({expr}, '.', ''), ',', '.')"
+
+
+def _parse_percent_it(expr: str) -> str:
+    # "12,3%" -> 12.3
+    return _parse_number_it(f"REPLACE({expr}, '%', '')")
+
+
+def apply_parse(expr: str, parse: Optional[dict[str, Any]]) -> str:
+    if not parse:
+        return expr
+    kind = parse.get("kind")
+    if kind == "number_it":
+        return _parse_number_it(expr)
+    if kind == "percent_it":
+        return _parse_percent_it(expr)
+    raise ValueError(f"Unknown parse kind: {kind}")
+
+
+def apply_cast(expr: str, target_type: str) -> str:
+    t = target_type.lower()
+    if t in ("int", "integer"):
+        return f"CAST({expr} AS INTEGER)"
+    if t in ("float", "double"):
+        return f"CAST({expr} AS DOUBLE)"
+    if t in ("str", "string"):
+        return f"CAST({expr} AS VARCHAR)"
+    if t == "date":
+        return f"CAST({expr} AS DATE)"
+    raise ValueError(f"Unknown target type: {target_type}")
 
 
 def _validate_mapping(mapping: Dict[str, Dict[str, Any]]) -> None:
@@ -120,11 +187,3 @@ def generate_clean_sql(
         lines.append("SELECT * FROM mapped")
 
     return "\n".join(lines) + "\n"
-
-
-def write_generated_clean_sql(project_root: Path, sql_text: str) -> Path:
-    out_dir = project_root / "sql" / "_generated"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "clean.sql"
-    out_path.write_text(sql_text, encoding="utf-8")
-    return out_path

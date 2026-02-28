@@ -46,7 +46,7 @@ def gen_sql(
     )
 
     target_path.write_text(sql_text, encoding="utf-8")
-    logger.info(f"GEN-SQL → {target_path}")
+    logger.info(f"GEN-SQL -> {target_path}")
 
 
 def register(app: typer.Typer) -> None:

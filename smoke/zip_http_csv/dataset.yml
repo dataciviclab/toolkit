@@ -1,0 +1,23 @@
+root: "./_smoke_out"
+
+dataset:
+  name: "zip_http_csv"
+  years: [2022]
+
+raw:
+  extractor:
+    type: "unzip_first_csv"
+  source:
+    type: "http_file"
+    args:
+      url: "http://127.0.0.1:8000/fixtures/irpef_http_sample.zip"
+
+clean:
+  sql: "sql/clean.sql"
+  read:
+    source: auto
+
+mart:
+  tables:
+    - name: "mart_ok"
+      sql: "sql/mart/mart_ok.sql"

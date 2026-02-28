@@ -1,31 +1,26 @@
-dataset: "toolkit_ispra_catasto_rifiuti"
-root: "/content/drive/MyDrive/TestLab"
+root: "./_smoke_out"
 
-years: [2022, 2023]
+dataset:
+  name: "project_example"
+  years: [2022]
 
 raw:
-  sources:
-    - plugin: "http_file"
-      url: "https://www.catasto-rifiuti.isprambiente.it/get/getDettaglioComunale.csv.php?&aa={year}"
+  source:
+    type: "local_file"
+    args:
+      path: "data/raw_sample.csv"
       filename: "ispra_dettaglio_comunale_{year}.csv"
 
 clean:
-  # SQL-first: il metodo è nel file SQL versionato nel progetto
   sql: "sql/clean.sql"
-
-  # Opzioni di lettura RAW (DuckDB)
   read:
-    # consigliato per CSV “italiani” (virgole decimali, encoding, ecc.)
-    all_varchar: true
     header: true
     delim: ";"
     quote: "\""
     escape: "\""
     nullstr: ["", "-", "NA", "N/A"]
     encoding: "utf-8"
-    skip: 1
 
-  # Validazioni minime (opzionali ma consigliate)
   required_columns:
     - comune
     - provincia
@@ -39,9 +34,9 @@ clean:
 mart:
   tables:
     - name: "rd_by_regione"
-      sql: "sql/mart_rd_by_regione.sql"
+      sql: "sql/mart/mart_regione_anno.sql"
     - name: "rd_by_provincia"
-      sql: "sql/mart_rd_by_provincia.sql"
+      sql: "sql/mart/mart_provincia_anno.sql"
 
   required_tables: ["rd_by_regione", "rd_by_provincia"]
 

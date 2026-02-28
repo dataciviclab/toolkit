@@ -1,23 +1,48 @@
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
-from toolkit.core.paths import resolve_root, layer_year_dir
+import pytest
 
-
-def test_resolve_root_local_defaults_to_cwd(monkeypatch):
-    # Ensure env var doesn't affect test
-    monkeypatch.delenv("DCL_ROOT", raising=False)
-
-    # Local default should be project root (cwd), not ./data
-    assert resolve_root(None) == Path.cwd()
+from toolkit.core.paths import from_root_relative, layer_year_dir, resolve_root, to_root_relative
 
 
-def test_layer_year_dir_local_layout(monkeypatch):
-    monkeypatch.delenv("DCL_ROOT", raising=False)
+def test_resolve_root_returns_expanded_explicit_path(tmp_path):
+    root = resolve_root(tmp_path / "out")
+    assert root == tmp_path / "out"
 
-    p = layer_year_dir(None, "raw", "demo", 2022)
-    assert p == Path.cwd() / "data" / "raw" / "demo" / "2022"
+
+def test_resolve_root_requires_explicit_value():
+    with pytest.raises(TypeError):
+        resolve_root(None)  # type: ignore[arg-type]
 
 
 def test_layer_year_dir_with_explicit_root(tmp_path):
-    p = layer_year_dir(str(tmp_path), "clean", "x", 2023)
+    p = layer_year_dir(tmp_path, "clean", "x", 2023)
     assert p == tmp_path / "data" / "clean" / "x" / "2023"
+
+
+def test_to_root_relative_uses_forward_slashes_for_posix_paths():
+    root = PurePosixPath("/repo/out")
+    path = PurePosixPath("/repo/out/data/raw/demo/2022/file.csv")
+
+    assert to_root_relative(path, root) == "data/raw/demo/2022/file.csv"
+
+
+def test_to_root_relative_uses_forward_slashes_for_windows_like_paths():
+    root = PureWindowsPath(r"C:\repo\out")
+    path = PureWindowsPath(r"C:\repo\out\data\raw\demo\2022\file.csv")
+
+    assert to_root_relative(path, root) == "data/raw/demo/2022/file.csv"
+
+
+def test_from_root_relative_round_trips_posix_relative_path():
+    root = PurePosixPath("/repo/out")
+    rel = "data/raw/demo/2022/file.csv"
+
+    assert from_root_relative(rel, root) == Path("/repo/out/data/raw/demo/2022/file.csv")
+
+
+def test_from_root_relative_accepts_forward_slashes_for_windows_like_root():
+    root = PureWindowsPath(r"C:\repo\out")
+    rel = "data/raw/demo/2022/file.csv"
+
+    assert str(from_root_relative(rel, root)) == r"C:\repo\out\data\raw\demo\2022\file.csv"

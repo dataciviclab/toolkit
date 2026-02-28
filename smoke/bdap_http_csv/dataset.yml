@@ -1,0 +1,26 @@
+root: "./_smoke_out"
+
+dataset:
+  name: "bdap_http_csv"
+  years: [2022]
+
+raw:
+  source:
+    type: "http_file"
+    args:
+      url: "https://bdap-opendata.rgs.mef.gov.it/export/csv/Rendiconto-Pubblicato---Serie-storica---Saldi.csv"
+      filename: "bdap_rendiconto_saldi_{year}.csv"
+
+clean:
+  sql: "sql/clean.sql"
+  read:
+    delim: ";"
+    decimal: "."
+    encoding: "utf-8"
+    header: true
+    columns: null
+
+mart:
+  tables:
+    - name: "mart_ok"
+      sql: "sql/mart/mart_ok.sql"

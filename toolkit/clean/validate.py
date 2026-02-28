@@ -1,23 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Any
 
 import duckdb
 
-
-@dataclass
-class ValidationResult:
-    ok: bool
-    errors: list[str]
-    warnings: list[str]
-    summary: dict[str, Any]
-
-
-def _missing_required_columns(actual: list[str], required: list[str]) -> list[str]:
-    actual_set = set(actual)
-    return [c for c in required if c not in actual_set]
+from toolkit.core.metadata import write_manifest
+from toolkit.core.paths import layer_year_dir, to_root_relative
+from toolkit.core.validation import (
+    ValidationResult,
+    build_validation_summary,
+    required_columns_check,
+    write_validation_json,
+)
 
 
 def _q_ident(col: str) -> str:
@@ -29,6 +25,7 @@ def validate_clean(
     parquet_path: str | Path,
     required: list[str] | None = None,
     *,
+    root: str | Path | None = None,
     primary_key: list[str] | None = None,
     not_null: list[str] | None = None,
     ranges: dict[str, dict[str, float]] | None = None,
@@ -59,12 +56,13 @@ def validate_clean(
     warnings: list[str] = []
 
     p = Path(parquet_path)
+    path_value = to_root_relative(p, Path(root)) if root is not None else str(p)
     if not p.exists():
         return ValidationResult(
             ok=False,
             errors=[f"Missing CLEAN parquet: {p}"],
             warnings=[],
-            summary={"path": str(p)},
+            summary={"path": path_value},
         )
 
     con = duckdb.connect(":memory:")
@@ -74,9 +72,8 @@ def validate_clean(
     cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
 
     # Required columns
-    missing = _missing_required_columns(cols, required)
-    if missing:
-        errors.append(f"Missing required columns: {missing}")
+    required_result = required_columns_check(cols, required)
+    errors.extend(required_result.errors)
 
     # Row count
     row_count = int(con.execute("SELECT COUNT(*) FROM t").fetchone()[0])
@@ -157,7 +154,7 @@ def validate_clean(
         errors=errors,
         warnings=warnings,
         summary={
-            "path": str(p),
+            "path": path_value,
             "row_count": row_count,
             "columns": cols,
             "required": required,
@@ -168,3 +165,37 @@ def validate_clean(
             "min_rows": min_rows,
         },
     )
+
+
+def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
+    out_dir = layer_year_dir(cfg.root, "clean", cfg.dataset, year)
+    parquet = out_dir / f"{cfg.dataset}_{year}_clean.parquet"
+
+    clean_cfg: dict[str, Any] = cfg.clean or {}
+    required_cols = clean_cfg.get("required_columns", [])
+    rules: dict[str, Any] = clean_cfg.get("validate") or {}
+
+    result = validate_clean(
+        parquet,
+        required=required_cols,
+        root=cfg.root,
+        primary_key=rules.get("primary_key"),
+        not_null=rules.get("not_null"),
+        ranges=rules.get("ranges"),
+        max_null_pct=rules.get("max_null_pct"),
+        min_rows=rules.get("min_rows"),
+    )
+
+    report = write_validation_json(Path(out_dir) / "_validate" / "clean_validation.json", result)
+    metadata = json.loads((out_dir / "metadata.json").read_text(encoding="utf-8"))
+    write_manifest(
+        out_dir,
+        metadata_path="metadata.json",
+        validation_path="_validate/clean_validation.json",
+        outputs=metadata.get("outputs", []),
+        ok=result.ok,
+        errors_count=len(result.errors),
+        warnings_count=len(result.warnings),
+    )
+    logger.info(f"VALIDATE CLEAN -> {report} (ok={result.ok})")
+    return build_validation_summary(result)

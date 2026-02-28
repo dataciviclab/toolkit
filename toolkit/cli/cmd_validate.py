@@ -1,22 +1,19 @@
 from __future__ import annotations
 
-from typing import Any
-
 import typer
 
-from toolkit.core.config import load_config
-from toolkit.core.logging import get_logger
-from toolkit.core.paths import layer_year_dir
+from toolkit.cli.common import iter_years, load_cfg_and_logger
+from toolkit.clean.validate import run_clean_validation
+from toolkit.mart.validate import run_mart_validation
 
-from toolkit.clean.validate import validate_clean
-from toolkit.mart.validate import validate_mart
 
-from toolkit.clean.report import write_clean_validation
-from toolkit.mart.report import write_mart_validation
+def _raise_on_failed_summary(summary: dict[str, object]) -> None:
+    if not bool(summary.get("passed")):
+        raise typer.Exit(code=1)
 
 
 def validate(
-    step: str = typer.Argument(..., help="clean | mart"),
+    step: str = typer.Argument(..., help="clean | mart | all"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
 ):
     """
@@ -25,55 +22,21 @@ def validate(
       clean.validate.*
       mart.validate.table_rules.*
     """
-    cfg = load_config(config)
-    logger = get_logger()
+    cfg, logger = load_cfg_and_logger(config)
 
-    for year in cfg.years:
-        if step == "clean":
-            out_dir = layer_year_dir(cfg.root, "clean", cfg.dataset, year)
-            parquet = out_dir / f"{cfg.dataset}_{year}_clean.parquet"
+    for year in iter_years(cfg, None):
+        if step == "all":
+            _raise_on_failed_summary(run_clean_validation(cfg, year, logger))
+            _raise_on_failed_summary(run_mart_validation(cfg, year, logger))
 
-            clean_cfg: dict[str, Any] = cfg.clean or {}
-            required_cols = clean_cfg.get("required_columns", [])
-            v: dict[str, Any] = (clean_cfg.get("validate") or {})
-
-            res = validate_clean(
-                parquet,
-                required=required_cols,
-                primary_key=v.get("primary_key"),
-                not_null=v.get("not_null"),
-                ranges=v.get("ranges"),
-                max_null_pct=v.get("max_null_pct"),
-                min_rows=v.get("min_rows"),
-            )
-
-            report = write_clean_validation(out_dir, res)
-            logger.info(f"VALIDATE CLEAN → {report} (ok={res.ok})")
-            if not res.ok:
-                raise typer.Exit(code=1)
+        elif step == "clean":
+            _raise_on_failed_summary(run_clean_validation(cfg, year, logger))
 
         elif step == "mart":
-            mart_dir = layer_year_dir(cfg.root, "mart", cfg.dataset, year)
-
-            mart_cfg: dict[str, Any] = cfg.mart or {}
-            required_tables = mart_cfg.get("required_tables", [])
-
-            mv: dict[str, Any] = (mart_cfg.get("validate") or {})
-            table_rules: dict[str, Any] = (mv.get("table_rules") or {})
-
-            res = validate_mart(
-                mart_dir,
-                required_tables=required_tables,
-                table_rules=table_rules,
-            )
-
-            report = write_mart_validation(mart_dir, res)
-            logger.info(f"VALIDATE MART → {report} (ok={res.ok})")
-            if not res.ok:
-                raise typer.Exit(code=1)
+            _raise_on_failed_summary(run_mart_validation(cfg, year, logger))
 
         else:
-            raise typer.BadParameter("step must be one of: clean, mart")
+            raise typer.BadParameter("step must be one of: clean, mart, all")
 
 
 def register(app: typer.Typer) -> None:

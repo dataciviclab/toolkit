@@ -1,0 +1,44 @@
+#!/bin/sh
+
+set -eu
+
+blocked_paths='(^|/)(_smoke_out|_test_out|\.pytest_cache|\.ruff_cache)(/|$)|(^|/)[^/]+\.egg-info(/|$)'
+text_paths='(\.py|\.md|\.toml|\.yml|\.yaml|\.json|\.ini|\.cfg|\.txt|\.sql|\.gitignore|\.editorconfig)$'
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+if [ -z "$staged_files" ]; then
+  exit 0
+fi
+
+blocked_files="$(printf '%s\n' "$staged_files" | grep -E "$blocked_paths" || true)"
+
+if [ -n "$blocked_files" ]; then
+  echo "Commit blocked: generated artifacts must not be committed." >&2
+  echo >&2
+  echo "Remove these paths from the index before committing:" >&2
+  printf '%s\n' "$blocked_files" >&2
+  echo >&2
+  echo "Use: git rm -r --cached <path>" >&2
+  exit 1
+fi
+
+utf8_failed=""
+while IFS= read -r path; do
+  if printf '%s\n' "$path" | grep -Eq "$text_paths"; then
+    if ! git show ":$path" | python -c "import sys; sys.stdin.buffer.read().decode('utf-8')" >/dev/null 2>&1; then
+      utf8_failed="${utf8_failed}${path}\n"
+    fi
+  fi
+done <<EOF
+$staged_files
+EOF
+
+if [ -n "$utf8_failed" ]; then
+  echo "Commit blocked: staged text files must be UTF-8 encoded." >&2
+  echo >&2
+  printf '%b' "$utf8_failed" >&2
+  exit 1
+fi
+
+exit 0

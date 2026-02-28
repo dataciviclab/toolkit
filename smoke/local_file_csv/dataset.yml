@@ -1,0 +1,22 @@
+root: "./_smoke_out"
+
+dataset:
+  name: "local_file_csv"
+  years: [2022]
+
+raw:
+  source:
+    type: "local_file"
+    args:
+      path: "fixtures/local_file_sample.csv"
+      filename: "local_file_sample_{year}.csv"
+
+clean:
+  sql: "sql/clean.sql"
+  read:
+    source: auto
+
+mart:
+  tables:
+    - name: "mart_ok"
+      sql: "sql/mart/mart_ok.sql"

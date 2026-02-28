@@ -1,29 +1,15 @@
-# toolkit/core/validators.py
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterable
+import warnings
 
-from toolkit.core.exceptions import ValidationError
+from toolkit.core.validation import ValidationResult
+from toolkit.core.validation import required_columns_check as required_columns
 
+warnings.warn(
+    "Deprecated import path 'toolkit.core.validators'; use 'toolkit.core.validation' instead; "
+    "will be removed in v0.5.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-@dataclass(frozen=True)
-class ValidationResult:
-    ok: bool
-    code: str
-    details: dict
-
-    def ensure(self) -> "ValidationResult":
-        if not self.ok:
-            raise ValidationError(f"[{self.code}] {self.details}")
-        return self
-
-
-def required_columns(actual: Iterable[str], required: Iterable[str]) -> ValidationResult:
-    actual_set = set(actual)
-    missing = [c for c in required if c not in actual_set]
-    return ValidationResult(
-        ok=(len(missing) == 0),
-        code="required_columns",
-        details={"missing": missing},
-    )
+__all__ = ["ValidationResult", "required_columns"]

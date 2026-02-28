@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import duckdb
+from toolkit.core.csv_read import normalize_read_cfg, robust_preset, sql_str
+from toolkit.core.io import write_json_atomic
 
 COMMON_DELIMS = [";", ",", "\t", "|"]
 COMMON_ENCODINGS = ["utf-8", "latin-1", "windows-1252", "CP1252"]
@@ -66,6 +67,127 @@ def _normalize_colname(c: str) -> str:
     c = c.strip()
     c = re.sub(r"\s+", " ", c)
     return c
+
+
+def suggest_skip(sample_text: str, delim: Optional[str]) -> int:
+    if not delim:
+        return 0
+    lines = [ln for ln in sample_text.splitlines() if ln.strip()][:5]
+    if len(lines) < 2:
+        return 0
+    first_count = lines[0].count(delim)
+    second_count = lines[1].count(delim)
+    if first_count == 0 and second_count > 0:
+        return 1
+    if first_count < second_count and first_count <= 1 and second_count >= 3:
+        return 1
+    return 0
+
+
+def _build_read_csv_opts(read_cfg: Dict[str, Any]) -> str:
+    opts = ["union_by_name=true"]
+
+    sep = read_cfg.get("sep") or read_cfg.get("delim")
+    if sep is not None:
+        opts.append(f"sep='{sql_str(str(sep))}'")
+
+    encoding = read_cfg.get("encoding")
+    if encoding is not None:
+        opts.append(f"encoding='{sql_str(str(encoding))}'")
+
+    decimal_sep = read_cfg.get("decimal")
+    if decimal_sep is not None:
+        opts.append(f"decimal_separator='{sql_str(str(decimal_sep))}'")
+
+    header = read_cfg.get("header", True)
+    opts.append(f"header={'true' if bool(header) else 'false'}")
+
+    skip_n = read_cfg.get("skip")
+    if skip_n is not None:
+        opts.append(f"skip={int(skip_n)}")
+
+    auto_detect = read_cfg.get("auto_detect")
+    if auto_detect is not None:
+        opts.append(f"auto_detect={'true' if bool(auto_detect) else 'false'}")
+
+    strict_mode = read_cfg.get("strict_mode")
+    if strict_mode is not None:
+        opts.append(f"strict_mode={'true' if bool(strict_mode) else 'false'}")
+
+    ignore_errors = read_cfg.get("ignore_errors")
+    if ignore_errors is not None:
+        opts.append(f"ignore_errors={'true' if bool(ignore_errors) else 'false'}")
+
+    null_padding = read_cfg.get("null_padding")
+    if null_padding is not None:
+        opts.append(f"null_padding={'true' if bool(null_padding) else 'false'}")
+
+    max_line_size = read_cfg.get("max_line_size")
+    if max_line_size is not None:
+        opts.append(f"max_line_size={int(max_line_size)}")
+
+    quote = read_cfg.get("quote")
+    if quote is not None:
+        opts.append(f"quote='{sql_str(str(quote))}'")
+
+    escape = read_cfg.get("escape")
+    if escape is not None:
+        opts.append(f"escape='{sql_str(str(escape))}'")
+
+    comment = read_cfg.get("comment")
+    if comment is not None:
+        opts.append(f"comment='{sql_str(str(comment))}'")
+
+    return ", ".join(opts)
+
+
+def build_suggested_read_cfg(
+    profile: "RawProfile | Dict[str, Any]",
+    read_cfg: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    data = profile if isinstance(profile, dict) else asdict(profile)
+    cfg: Dict[str, Any] = {}
+
+    source_cfg = dict(read_cfg or {})
+    for key in (
+        "delim",
+        "header",
+        "encoding",
+        "decimal",
+        "skip",
+        "auto_detect",
+        "quote",
+        "escape",
+        "comment",
+        "ignore_errors",
+        "strict_mode",
+        "null_padding",
+        "nullstr",
+        "columns",
+        "trim_whitespace",
+        "sample_size",
+    ):
+        if key in source_cfg:
+            cfg[key] = source_cfg[key]
+
+    if "delim" not in cfg and data.get("delim_suggested") is not None:
+        cfg["delim"] = data["delim_suggested"]
+    if "decimal" not in cfg and data.get("decimal_suggested") is not None:
+        cfg["decimal"] = data["decimal_suggested"]
+    if "encoding" not in cfg and data.get("encoding_suggested") is not None:
+        cfg["encoding"] = data["encoding_suggested"]
+    if "skip" not in cfg and int(data.get("skip_suggested") or 0) > 0:
+        cfg["skip"] = int(data["skip_suggested"])
+
+    cfg.setdefault("header", True)
+
+    if data.get("robust_read_suggested"):
+        cfg.setdefault("auto_detect", False)
+        cfg.setdefault("strict_mode", False)
+        cfg.setdefault("null_padding", True)
+        cfg.setdefault("ignore_errors", True)
+
+    return normalize_read_cfg(cfg)
 
 
 def _pick_data_file(files: List[Path]) -> Path:
@@ -191,6 +313,8 @@ class RawProfile:
     encoding_suggested: Optional[str]
     delim_suggested: Optional[str]
     decimal_suggested: Optional[str]
+    skip_suggested: int
+    robust_read_suggested: bool
 
     header_line: Optional[str]
     columns_raw: List[str]
@@ -213,14 +337,18 @@ def profile_raw(raw_dir: Path, dataset: str, year: int, read_cfg: Optional[Dict[
     enc, txt = sniff_encoding(file0)
     delim = sniff_delim(txt)
     dec = sniff_decimal(txt)
+    skip = suggest_skip(txt, delim)
 
-    effective_read_cfg = dict(read_cfg or {})
+    effective_read_cfg = dict(read_cfg) if isinstance(read_cfg, dict) else {}
+    effective_read_cfg.pop("source", None)
     if "delim" not in effective_read_cfg and "sep" not in effective_read_cfg and delim:
         effective_read_cfg["delim"] = delim
     if "encoding" not in effective_read_cfg and enc:
         effective_read_cfg["encoding"] = enc
     if "decimal" not in effective_read_cfg and dec:
         effective_read_cfg["decimal"] = dec
+    if "skip" not in effective_read_cfg and skip:
+        effective_read_cfg["skip"] = skip
     effective_read_cfg.setdefault("header", True)
 
     warnings: List[str] = []
@@ -230,6 +358,10 @@ def profile_raw(raw_dir: Path, dataset: str, year: int, read_cfg: Optional[Dict[
     sample_rows: List[Dict[str, Any]] = []
     missingness_top: List[Dict[str, Any]] = []
     mapping_suggestions: Dict[str, Any] = {}
+    robust_read_suggested = False
+
+    if skip:
+        warnings.append("header_preamble_detected: first non-empty line looks like a title row, consider skip: 1")
 
     # header line (respect skip)
     try:
@@ -243,59 +375,21 @@ def profile_raw(raw_dir: Path, dataset: str, year: int, read_cfg: Optional[Dict[
 
     con = duckdb.connect(":memory:")
     try:
-        opts = ["union_by_name=true"]
-
-        sep = effective_read_cfg.get("sep") or effective_read_cfg.get("delim")
-        if sep is not None:
-            opts.append(f"sep='{sep}'")
-
-        encoding = effective_read_cfg.get("encoding")
-        if encoding is not None:
-            opts.append(f"encoding='{encoding}'")
-
-        decimal_sep = effective_read_cfg.get("decimal")
-        if decimal_sep is not None:
-            opts.append(f"decimal_separator='{decimal_sep}'")
-
-        header = effective_read_cfg.get("header", True)
-        opts.append(f"header={'true' if bool(header) else 'false'}")
-
-        skip_n = effective_read_cfg.get("skip")
-        if skip_n is not None:
-            opts.append(f"skip={int(skip_n)}")
-
-        # strict / ignore / null padding / max line size
-        strict_mode = effective_read_cfg.get("strict_mode")
-        if strict_mode is not None:
-            opts.append(f"strict_mode={'true' if bool(strict_mode) else 'false'}")
-
-        ignore_errors = effective_read_cfg.get("ignore_errors")
-        if ignore_errors is not None:
-            opts.append(f"ignore_errors={'true' if bool(ignore_errors) else 'false'}")
-
-        null_padding = effective_read_cfg.get("null_padding")
-        if null_padding is not None:
-            opts.append(f"null_padding={'true' if bool(null_padding) else 'false'}")
-
-        max_line_size = effective_read_cfg.get("max_line_size")
-        if max_line_size is not None:
-            opts.append(f"max_line_size={int(max_line_size)}")
-
-        # quote / escape / comment
-        quote = effective_read_cfg.get("quote")
-        if quote is not None:
-            opts.append(f"quote='{quote}'")
-
-        escape = effective_read_cfg.get("escape")
-        if escape is not None:
-            opts.append(f"escape='{escape}'")
-
-        comment = effective_read_cfg.get("comment")
-        if comment is not None:
-            opts.append(f"comment='{comment}'")
-
-        opt_sql = ", ".join(opts)
-        con.execute(f"CREATE OR REPLACE VIEW v AS SELECT * FROM read_csv_auto('{file0}', {opt_sql});")
+        opt_sql = _build_read_csv_opts(effective_read_cfg)
+        try:
+            con.execute(
+                f"CREATE OR REPLACE VIEW v AS "
+                f"SELECT * FROM read_csv('{sql_str(str(file0))}', {opt_sql});"
+            )
+        except Exception as e:
+            fallback_cfg = robust_preset(effective_read_cfg)
+            robust_read_suggested = True
+            warnings.append(f"profile_read_retry: {type(e).__name__}: {e}")
+            fallback_sql = _build_read_csv_opts(fallback_cfg)
+            con.execute(
+                f"CREATE OR REPLACE VIEW v AS "
+                f"SELECT * FROM read_csv('{sql_str(str(file0))}', {fallback_sql});"
+            )
 
         cols = con.execute("DESCRIBE v").fetchall()
         columns_raw = [r[0] for r in cols]
@@ -322,6 +416,9 @@ def profile_raw(raw_dir: Path, dataset: str, year: int, read_cfg: Optional[Dict[
 
     except Exception as e:
         warnings.append(f"profile_failed: {type(e).__name__}: {e}")
+        warnings.append(
+            "python_fallback_used: suggested_read generated from lightweight sniffing only"
+        )
     finally:
         con.close()
 
@@ -332,6 +429,8 @@ def profile_raw(raw_dir: Path, dataset: str, year: int, read_cfg: Optional[Dict[
         encoding_suggested=enc,
         delim_suggested=delim,
         decimal_suggested=dec,
+        skip_suggested=skip,
+        robust_read_suggested=robust_read_suggested,
         header_line=header_line,
         columns_raw=columns_raw,
         columns_norm=columns_norm,
@@ -342,10 +441,25 @@ def profile_raw(raw_dir: Path, dataset: str, year: int, read_cfg: Optional[Dict[
     )
 
 
-def write_raw_profile(out_dir: Path, profile: RawProfile) -> Dict[str, Path]:
+def write_raw_profile(
+    out_dir: Path,
+    profile: RawProfile,
+    *,
+    write_canonical: bool = True,
+    write_legacy_alias: bool = True,
+) -> Dict[str, Path]:
     _safe_mkdir(out_dir)
 
+    p_raw_json = out_dir / "raw_profile.json"
     p_json = out_dir / "profile.json"
-    p_json.write_text(json.dumps(asdict(profile), ensure_ascii=False, indent=2), encoding="utf-8")
+    payload = asdict(profile)
+    written: Dict[str, Path] = {}
 
-    return {"json": p_json}
+    if write_canonical:
+        write_json_atomic(p_raw_json, payload)
+        written["raw_json"] = p_raw_json
+    if write_legacy_alias:
+        write_json_atomic(p_json, payload)
+        written["json"] = p_json
+
+    return written

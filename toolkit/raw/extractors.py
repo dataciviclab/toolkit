@@ -16,11 +16,19 @@ def _safe_name(name: str) -> str:
 def extract_identity(payload: bytes, args: dict | None = None) -> dict[str, bytes]:
     return {"file.bin": payload}
 
+
+def _open_zip(payload: bytes) -> zipfile.ZipFile:
+    try:
+        return zipfile.ZipFile(io.BytesIO(payload))
+    except (zipfile.BadZipFile, zipfile.LargeZipFile) as e:
+        raise ValueError("Invalid ZIP payload") from e
+
+
 def extract_zip_all(payload: bytes, args: dict | None = None) -> dict[str, bytes]:
     args = args or {}
     only_ext = set(args.get("only_ext", []))  # es: [".csv"]
     out: dict[str, bytes] = {}
-    z = zipfile.ZipFile(io.BytesIO(payload))
+    z = _open_zip(payload)
     for n in z.namelist():
         if n.endswith("/"):
             continue
@@ -31,7 +39,7 @@ def extract_zip_all(payload: bytes, args: dict | None = None) -> dict[str, bytes
     return out
 
 def extract_zip_first(payload: bytes, args: dict | None = None) -> dict[str, bytes]:
-    z = zipfile.ZipFile(io.BytesIO(payload))
+    z = _open_zip(payload)
     names = [n for n in z.namelist() if not n.endswith("/")]
     if not names:
         return {}
@@ -39,7 +47,7 @@ def extract_zip_first(payload: bytes, args: dict | None = None) -> dict[str, byt
     return {_safe_name(n): z.read(n)}
 
 def extract_zip_first_csv(payload: bytes, args: dict | None = None) -> dict[str, bytes]:
-    z = zipfile.ZipFile(io.BytesIO(payload))
+    z = _open_zip(payload)
     names = [n for n in z.namelist() if (not n.endswith("/")) and n.lower().endswith(".csv")]
     if not names:
         return {}

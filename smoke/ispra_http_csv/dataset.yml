@@ -1,0 +1,31 @@
+root: "./_smoke_out"
+
+dataset:
+  name: "ispra_http_csv"
+  years: [2022]
+
+raw:
+  source:
+    type: "http_file"
+    args:
+      url: "https://www.catasto-rifiuti.isprambiente.it/get/getDettaglioComunale.csv.php?&aa={year}"
+      filename: "ispra_http_sample_{year}.csv"
+
+clean:
+  sql: "sql/clean.sql"
+  read:
+    encoding: "utf-8"
+    header: true
+    decimal: ","
+    skip: 1
+    delim: ";"
+    null_padding: true
+    ignore_errors: true
+    auto_detect: false
+    strict_mode: false
+    columns: null
+
+mart:
+  tables:
+    - name: "mart_ok"
+      sql: "sql/mart/mart_ok.sql"

@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Any
 
 import duckdb
 
-
-@dataclass
-class ValidationResult:
-    ok: bool
-    errors: list[str]
-    warnings: list[str]
-    summary: dict[str, Any]
+from toolkit.core.metadata import write_manifest
+from toolkit.core.paths import layer_year_dir, to_root_relative
+from toolkit.core.validation import (
+    ValidationResult,
+    build_validation_summary,
+    required_columns_check,
+    write_validation_json,
+)
 
 
 def _q_ident(col: str) -> str:
@@ -24,6 +25,7 @@ def validate_mart(
     mart_dir: str | Path,
     required_tables: list[str] | None = None,
     *,
+    root: str | Path | None = None,
     table_rules: dict[str, dict[str, Any]] | None = None,
 ) -> ValidationResult:
     """
@@ -48,8 +50,9 @@ def validate_mart(
     warnings: list[str] = []
 
     d = Path(mart_dir)
+    dir_value = to_root_relative(d, Path(root)) if root is not None else str(d)
     if not d.exists():
-        return ValidationResult(ok=False, errors=[f"Missing MART dir: {d}"], warnings=[], summary={"dir": str(d)})
+        return ValidationResult(ok=False, errors=[f"Missing MART dir: {d}"], warnings=[], summary={"dir": dir_value})
 
     existing_files = sorted(d.glob("*.parquet"))
     existing_tables = sorted([p.stem for p in existing_files])
@@ -77,14 +80,17 @@ def validate_mart(
         if not rules:
             continue
 
+        min_rows = rules.get("min_rows")
+        if min_rows is not None and rc < int(min_rows):
+            errors.append(f"[{name}] row_count too small: {rc} < {int(min_rows)}")
+
         con.execute(f"CREATE OR REPLACE VIEW t AS SELECT * FROM read_parquet('{p.as_posix()}')")
         cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
 
         # required columns
         req_cols = list(rules.get("required_columns") or [])
-        miss_cols = [c for c in req_cols if c not in cols]
-        if miss_cols:
-            errors.append(f"[{name}] Missing required columns: {miss_cols}")
+        required_result = required_columns_check(cols, req_cols)
+        errors.extend([f"[{name}] {error}" for error in required_result.errors])
 
         # not null
         for c in (rules.get("not_null") or []):
@@ -149,7 +155,7 @@ def validate_mart(
         errors=errors,
         warnings=warnings,
         summary={
-            "dir": str(d),
+            "dir": dir_value,
             "tables": existing_tables,
             "required_tables": required_tables,
             "row_counts": row_counts,
@@ -157,3 +163,32 @@ def validate_mart(
             "per_table": per_table,
         },
     )
+
+
+def run_mart_validation(cfg, year: int, logger) -> dict[str, Any]:
+    mart_dir = layer_year_dir(cfg.root, "mart", cfg.dataset, year)
+
+    mart_cfg: dict[str, Any] = cfg.mart or {}
+    required_tables = mart_cfg.get("required_tables", [])
+    rules: dict[str, Any] = (mart_cfg.get("validate") or {}).get("table_rules") or {}
+
+    result = validate_mart(
+        mart_dir,
+        required_tables=required_tables,
+        root=cfg.root,
+        table_rules=rules,
+    )
+
+    report = write_validation_json(Path(mart_dir) / "_validate" / "mart_validation.json", result)
+    metadata = json.loads((mart_dir / "metadata.json").read_text(encoding="utf-8"))
+    write_manifest(
+        mart_dir,
+        metadata_path="metadata.json",
+        validation_path="_validate/mart_validation.json",
+        outputs=metadata.get("outputs", []),
+        ok=result.ok,
+        errors_count=len(result.errors),
+        warnings_count=len(result.warnings),
+    )
+    logger.info(f"VALIDATE MART -> {report} (ok={result.ok})")
+    return build_validation_summary(result)

@@ -41,10 +41,21 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 |---|---|---|
 | `name` | `string \| null` | `null` |
 | `type` | `string` | `http_file` |
-| `client` | `object` | `{}` |
+| `client` | `ClientConfig` | `{}` |
 | `args` | `object` | `{}` |
 | `extractor` | `object \| null` | `null` |
 | `primary` | `bool` | `false` |
+
+`ClientConfig` shape minima:
+
+| Campo | Tipo | Default |
+|---|---|---|
+| `timeout` | `int \| null` | `null` |
+| `retries` | `int \| null` | `null` |
+| `user_agent` | `string \| null` | `null` |
+| `headers` | `dict[string,string] \| null` | `null` |
+
+`raw.sources[].args` e `raw.extractor.args` devono essere sempre oggetti YAML, non liste o stringhe.
 
 ## clean
 
@@ -55,7 +66,7 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 | `clean.read_source` | `auto \| config_only \| null` | `null` |
 | `clean.read` | `CleanRead \| null` | `null` |
 | `clean.mapping` | `dict[str, CleanMappingSpec] \| null` | `null` |
-| `clean.derive` | `dict[str, dict[str, str]] \| null` | `null` |
+| `clean.derive` | `dict[str, CleanDeriveFieldConfig] \| null` | `null` |
 | `clean.required_columns` | `list[str]` | `[]` |
 | `clean.validate` | `CleanValidate` | `{}` |
 
@@ -102,6 +113,22 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 |---|---|---|
 | `min` | `float \| null` | `null` |
 | `max` | `float \| null` | `null` |
+
+`CleanMappingSpec.parse` shape minima:
+
+| Campo | Tipo | Default |
+|---|---|---|
+| `kind` | `string \| null` | `null` |
+| `locale` | `string \| null` | `null` |
+| `options` | `dict[string,any] \| null` | `null` |
+
+`clean.derive` shape minima:
+
+| Campo | Tipo | Default |
+|---|---|---|
+| `expr` | `string` | nessuno |
+
+`clean.mapping.*.parse` e `clean.derive.*` devono essere oggetti YAML, non stringhe o liste.
 
 ## mart
 

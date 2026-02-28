@@ -752,6 +752,94 @@ dataset:
   name: demo
   years: [2022]
 raw:
+  sources:
+    - type: http_file
+      client: "bad"
+clean: {}
+mart: {}
+""".strip(),
+            "raw.sources.0.client",
+        ),
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw:
+  extractor:
+    type: identity
+    args: []
+clean: {}
+mart: {}
+""".strip(),
+            "raw.extractor.args",
+        ),
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean:
+  derive: []
+mart: {}
+""".strip(),
+            "clean.derive",
+        ),
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean:
+  derive:
+    total: "value * 2"
+mart: {}
+""".strip(),
+            "clean.derive.total",
+        ),
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean:
+  mapping:
+    totale:
+      from: valore
+      type: float
+      parse: "number_it"
+mart: {}
+""".strip(),
+            "clean.mapping.totale.parse",
+        ),
+    ],
+)
+def test_load_config_model_rejects_wrong_shape_for_typed_subsections(
+    tmp_path: Path,
+    yaml_text: str,
+    expected: str,
+):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(ValueError) as exc:
+        load_config_model(yml, strict_config=True)
+
+    assert expected in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("yaml_text", "expected"),
+    [
+        (
+            """
+dataset:
+  name: demo
+  years: [2022]
+raw:
   sources: {}
 clean: {}
 mart: {}

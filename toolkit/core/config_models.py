@@ -182,11 +182,40 @@ class ConfigPolicy(BaseModel):
         return parse_bool(value, "config.strict")
 
 
+class ClientConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    timeout: int | None = None
+    retries: int | None = None
+    user_agent: str | None = None
+    headers: dict[str, str] | None = None
+
+    @field_validator("headers", mode="before")
+    @classmethod
+    def _validate_headers(cls, value: Any) -> dict[str, str] | None:
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("raw.sources[].client.headers must be a dict")
+        if not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()):
+            raise ValueError("raw.sources[].client.headers must be a dict[str, str]")
+        return dict(value)
+
+
 class ExtractorConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["identity", "unzip_all", "unzip_first", "unzip_first_csv"] = "identity"
     args: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("args", mode="before")
+    @classmethod
+    def _validate_args(cls, value: Any) -> dict[str, Any]:
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            raise ValueError("raw.extractor.args must be a dict")
+        return dict(value)
 
 
 class RawSourceConfig(BaseModel):
@@ -194,7 +223,7 @@ class RawSourceConfig(BaseModel):
 
     name: str | None = None
     type: str = "http_file"
-    client: dict[str, Any] = Field(default_factory=dict)
+    client: ClientConfig = Field(default_factory=ClientConfig)
     args: dict[str, Any] = Field(default_factory=dict)
     extractor: ExtractorConfig | None = None
     primary: bool = False
@@ -203,6 +232,15 @@ class RawSourceConfig(BaseModel):
     @classmethod
     def _parse_primary(cls, value: Any) -> bool:
         return parse_bool(value, "raw.sources[].primary")
+
+    @field_validator("args", mode="before")
+    @classmethod
+    def _validate_args(cls, value: Any) -> dict[str, Any]:
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            raise ValueError("raw.sources[].args must be a dict")
+        return dict(value)
 
 
 class RawConfig(BaseModel):
@@ -282,7 +320,30 @@ class CleanMappingSpec(BaseModel):
     normalize: list[str] | None = None
     nullify: list[str] | None = None
     replace: dict[str, str] | None = None
-    parse: dict[str, Any] | None = None
+    parse: MappingParseConfig | None = None
+
+
+class MappingParseConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    kind: str | None = None
+    locale: str | None = None
+    options: dict[str, Any] | None = None
+
+    @field_validator("options", mode="before")
+    @classmethod
+    def _validate_options(cls, value: Any) -> dict[str, Any] | None:
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("clean.mapping.*.parse.options must be a dict")
+        return dict(value)
+
+
+class CleanDeriveFieldConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expr: str
 
 
 class CleanConfig(BaseModel):
@@ -293,7 +354,7 @@ class CleanConfig(BaseModel):
     read_source: Literal["auto", "config_only"] | None = None
     read: CleanReadConfig | None = None
     mapping: dict[str, CleanMappingSpec] | None = None
-    derive: dict[str, dict[str, str]] | None = None
+    derive: dict[str, CleanDeriveFieldConfig] | None = None
     required_columns: list[str] = Field(default_factory=list)
     validate_config: CleanValidateConfig = Field(
         default_factory=CleanValidateConfig,

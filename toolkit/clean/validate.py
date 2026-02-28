@@ -6,6 +6,7 @@ from typing import Any
 
 import duckdb
 
+from toolkit.core.config import ensure_str_list
 from toolkit.core.metadata import write_manifest
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.validation import (
@@ -46,9 +47,9 @@ def validate_clean(
     - max_null_pct: {"col": 0.05} (5% max NULLs)
     - min_rows: minimum row count allowed
     """
-    required = list(required or [])
-    primary_key = list(primary_key or [])
-    not_null = list(not_null or [])
+    required = ensure_str_list(required, "clean.required_columns")
+    primary_key = ensure_str_list(primary_key, "clean.validate.primary_key")
+    not_null = ensure_str_list(not_null, "clean.validate.not_null")
     ranges = dict(ranges or {})
     max_null_pct = dict(max_null_pct or {})
 

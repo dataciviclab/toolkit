@@ -41,6 +41,34 @@ def _err(msg: str, *, path: Path) -> ValueError:
     return ValueError(f"{msg} (file: {path})")
 
 
+def parse_bool(value: Any, field_name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in {0, 1}:
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y"}:
+            return True
+        if normalized in {"false", "0", "no", "n"}:
+            return False
+    raise ValueError(
+        f"{field_name} must be a boolean-like value: true/false, 1/0, yes/no"
+    )
+
+
+def ensure_str_list(value: Any, field_name: str) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        if not all(isinstance(item, str) for item in value):
+            raise ValueError(f"{field_name} must be a string or a list of strings")
+        return list(value)
+    raise ValueError(f"{field_name} must be a string or a list of strings")
+
+
 def _require_map(data: Mapping[str, Any], key: str, *, path: Path) -> dict[str, Any]:
     val = data.get(key)
     if not isinstance(val, dict):
@@ -201,6 +229,96 @@ def _normalize_clean_read_legacy(clean: dict[str, Any], *, path: Path) -> dict[s
     }
 
 
+def _normalize_raw_booleans(raw: dict[str, Any], *, path: Path) -> dict[str, Any]:
+    normalized = dict(raw)
+
+    def _normalize_primary(container: dict[str, Any], field_name: str) -> dict[str, Any]:
+        updated = dict(container)
+        if "primary" in updated:
+            updated["primary"] = parse_bool(updated["primary"], field_name)
+        return updated
+
+    source = normalized.get("source")
+    if isinstance(source, dict):
+        normalized["source"] = _normalize_primary(source, "raw.source.primary")
+
+    sources = normalized.get("sources")
+    if isinstance(sources, list):
+        updated_sources: list[Any] = []
+        for index, source_entry in enumerate(sources):
+            if isinstance(source_entry, dict):
+                updated_sources.append(
+                    _normalize_primary(source_entry, f"raw.sources[{index}].primary")
+                )
+            else:
+                updated_sources.append(source_entry)
+        normalized["sources"] = updated_sources
+
+    return normalized
+
+
+def _normalize_clean_validation(clean: dict[str, Any], *, path: Path) -> dict[str, Any]:
+    normalized = dict(clean)
+
+    if "sql_path" in normalized:
+        logger.warning("Deprecated/unused config field detected: clean.sql_path is ignored.")
+
+    if "required_columns" in normalized:
+        normalized["required_columns"] = ensure_str_list(
+            normalized.get("required_columns"),
+            "clean.required_columns",
+        )
+
+    validate_cfg = normalized.get("validate")
+    if isinstance(validate_cfg, dict):
+        updated_validate = dict(validate_cfg)
+        for key in ("primary_key", "not_null"):
+            if key in updated_validate:
+                updated_validate[key] = ensure_str_list(
+                    updated_validate.get(key),
+                    f"clean.validate.{key}",
+                )
+        normalized["validate"] = updated_validate
+
+    return normalized
+
+
+def _normalize_mart_validation(mart: dict[str, Any], *, path: Path) -> dict[str, Any]:
+    normalized = dict(mart)
+
+    if "sql_dir" in normalized:
+        logger.warning("Deprecated/unused config field detected: mart.sql_dir is ignored.")
+
+    if "required_tables" in normalized:
+        normalized["required_tables"] = ensure_str_list(
+            normalized.get("required_tables"),
+            "mart.required_tables",
+        )
+
+    validate_cfg = normalized.get("validate")
+    if isinstance(validate_cfg, dict):
+        updated_validate = dict(validate_cfg)
+        table_rules = updated_validate.get("table_rules")
+        if isinstance(table_rules, dict):
+            updated_rules: dict[str, Any] = {}
+            for table_name, rule in table_rules.items():
+                if isinstance(rule, dict):
+                    updated_rule = dict(rule)
+                    for key in ("required_columns", "not_null", "primary_key"):
+                        if key in updated_rule:
+                            updated_rule[key] = ensure_str_list(
+                                updated_rule.get(key),
+                                f"mart.validate.table_rules.{table_name}.{key}",
+                            )
+                    updated_rules[table_name] = updated_rule
+                else:
+                    updated_rules[table_name] = rule
+            updated_validate["table_rules"] = updated_rules
+        normalized["validate"] = updated_validate
+
+    return normalized
+
+
 def _is_managed_output_root(root: str) -> bool:
     raw = root.strip()
     if not raw:
@@ -249,13 +367,29 @@ def load_config(path: str | Path) -> ToolkitConfig:
         raise _err("validation deve essere una mappa YAML (oggetto).", path=p)
     if not isinstance(output, dict):
         raise _err("output deve essere una mappa YAML (oggetto).", path=p)
-    clean = _normalize_clean_read_legacy(clean, path=p)
 
-    validation = {"fail_on_error": validation.get("fail_on_error", True), **validation}
+    if "bq" in data:
+        logger.warning("Unused config field detected: bq is currently ignored by the toolkit.")
+
+    clean = _normalize_clean_read_legacy(clean, path=p)
+    raw = _normalize_raw_booleans(raw, path=p)
+    clean = _normalize_clean_validation(clean, path=p)
+    mart = _normalize_mart_validation(mart, path=p)
+
+    validation = {
+        **validation,
+        "fail_on_error": parse_bool(
+            validation.get("fail_on_error", True),
+            "validation.fail_on_error",
+        ),
+    }
     output = {
-        "artifacts": output.get("artifacts", "standard"),
-        "legacy_aliases": output.get("legacy_aliases", True),
         **output,
+        "artifacts": output.get("artifacts", "standard"),
+        "legacy_aliases": parse_bool(
+            output.get("legacy_aliases", True),
+            "output.legacy_aliases",
+        ),
     }
 
     root = data.get("root")

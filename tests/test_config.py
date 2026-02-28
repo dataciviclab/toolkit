@@ -3,7 +3,7 @@ from pathlib import Path
 import logging
 import pytest
 
-from toolkit.core.config import load_config
+from toolkit.core.config import ensure_str_list, load_config, parse_bool
 
 
 def test_load_config_ok(tmp_path: Path):
@@ -320,3 +320,109 @@ mart: {}
         "delim": ";",
     }
     assert "clean.read.csv.* is deprecated" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (True, True),
+        (False, False),
+        ("true", True),
+        ("false", False),
+        ("1", True),
+        ("0", False),
+        (1, True),
+        (0, False),
+        ("yes", True),
+        ("no", False),
+    ],
+)
+def test_parse_bool_accepts_supported_boolean_like_values(value, expected):
+    assert parse_bool(value, "field") is expected
+
+
+def test_parse_bool_rejects_unsupported_value():
+    with pytest.raises(ValueError):
+        parse_bool("maybe", "field")
+
+
+def test_ensure_str_list_accepts_single_string_and_list():
+    assert ensure_str_list("col_a", "field") == ["col_a"]
+    assert ensure_str_list(["col_a", "col_b"], "field") == ["col_a", "col_b"]
+
+
+def test_ensure_str_list_rejects_non_string_items():
+    with pytest.raises(ValueError):
+        ensure_str_list(["col_a", 2], "field")
+
+
+def test_load_config_normalizes_bool_and_string_list_fields(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw:
+  sources:
+    - type: http_file
+      primary: "false"
+clean:
+  required_columns: comune
+  validate:
+    primary_key: id
+    not_null: valore
+mart:
+  required_tables: mart_ok
+  validate:
+    table_rules:
+      mart_ok:
+        required_columns: regione
+        not_null: totale
+        primary_key: key_id
+validation:
+  fail_on_error: "false"
+output:
+  legacy_aliases: "0"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_config(yml)
+
+    assert cfg.validation["fail_on_error"] is False
+    assert cfg.output["legacy_aliases"] is False
+    assert cfg.raw["sources"][0]["primary"] is False
+    assert cfg.clean["required_columns"] == ["comune"]
+    assert cfg.clean["validate"]["primary_key"] == ["id"]
+    assert cfg.clean["validate"]["not_null"] == ["valore"]
+    assert cfg.mart["required_tables"] == ["mart_ok"]
+    assert cfg.mart["validate"]["table_rules"]["mart_ok"]["required_columns"] == ["regione"]
+    assert cfg.mart["validate"]["table_rules"]["mart_ok"]["not_null"] == ["totale"]
+    assert cfg.mart["validate"]["table_rules"]["mart_ok"]["primary_key"] == ["key_id"]
+
+
+def test_load_config_warns_on_zombie_fields(tmp_path: Path, caplog):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean:
+  sql_path: sql/legacy_clean.sql
+mart:
+  sql_dir: sql/mart
+bq:
+  dataset: ignored
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
+        load_config(yml)
+
+    assert "clean.sql_path is ignored" in caplog.text
+    assert "mart.sql_dir is ignored" in caplog.text
+    assert "bq is currently ignored" in caplog.text

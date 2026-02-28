@@ -6,6 +6,7 @@ from typing import Any
 
 import duckdb
 
+from toolkit.core.config import ensure_str_list
 from toolkit.core.metadata import write_manifest
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.validation import (
@@ -43,7 +44,7 @@ def validate_mart(
         ranges:
           col: {min: 0, max: 100}
     """
-    required_tables = list(required_tables or [])
+    required_tables = ensure_str_list(required_tables, "mart.required_tables")
     table_rules = dict(table_rules or {})
 
     errors: list[str] = []
@@ -88,12 +89,18 @@ def validate_mart(
         cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
 
         # required columns
-        req_cols = list(rules.get("required_columns") or [])
+        req_cols = ensure_str_list(
+            rules.get("required_columns"),
+            f"mart.validate.table_rules.{name}.required_columns",
+        )
         required_result = required_columns_check(cols, req_cols)
         errors.extend([f"[{name}] {error}" for error in required_result.errors])
 
         # not null
-        for c in (rules.get("not_null") or []):
+        for c in ensure_str_list(
+            rules.get("not_null"),
+            f"mart.validate.table_rules.{name}.not_null",
+        ):
             if c not in cols:
                 warnings.append(f"[{name}] Not-null rule column missing: '{c}'")
                 continue
@@ -103,7 +110,10 @@ def validate_mart(
                 errors.append(f"[{name}] Column '{c}' has NULLs: {nnull}")
 
         # primary key duplicates
-        pk = list(rules.get("primary_key") or [])
+        pk = ensure_str_list(
+            rules.get("primary_key"),
+            f"mart.validate.table_rules.{name}.primary_key",
+        )
         if pk:
             if not all(c in cols for c in pk):
                 warnings.append(f"[{name}] Primary key columns not all present: {pk}")

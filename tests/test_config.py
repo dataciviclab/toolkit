@@ -565,6 +565,13 @@ mart: {}
     assert "DCL001" in str(exc.value)
 
 
+def test_project_example_config_parses_in_strict_mode():
+    model = load_config_model(Path("project-example") / "dataset.yml", strict_config=True)
+
+    assert model.dataset.name == "project_example"
+    assert len(model.raw.sources) == 1
+
+
 @pytest.mark.parametrize(
     ("yaml_text", "expected"),
     [

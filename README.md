@@ -86,11 +86,12 @@ dataset:
   years: [2022]
 
 raw:
-  source:
-    type: "local_file"
-    args:
-      path: "data/raw_sample.csv"
-      filename: "ispra_dettaglio_comunale_{year}.csv"
+  sources:
+    - name: "local_csv"
+      type: "local_file"
+      args:
+        path: "data/raw_sample.csv"
+        filename: "ispra_dettaglio_comunale_{year}.csv"
 
 clean:
   sql: "sql/clean.sql"

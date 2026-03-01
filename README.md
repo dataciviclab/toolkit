@@ -30,6 +30,16 @@ pip install -e .[dev]
 
 Richiede Python 3.10+.
 
+## CLI Naming Note
+
+Il comando CLI canonico del progetto e' `toolkit`.
+
+Se nel tuo ambiente c'e' una collisione di nome o il console script non e' nel `PATH`, puoi usare direttamente il modulo Python:
+
+```bash
+python -m toolkit.cli.app run all --config dataset.yml
+```
+
 ## Quickstart
 
 Giro offline completo con il progetto di esempio, eseguibile in pochi minuti su una macchina pulita.

@@ -26,6 +26,15 @@ def _serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | 
     return to_root_relative(path, rel_root)
 
 
+def _resolve_sql_path(sql_ref: str | Path, *, base_dir: Path | None) -> Path:
+    path = Path(sql_ref)
+    if path.is_absolute():
+        return path
+    if base_dir is None:
+        return path
+    return base_dir / path
+
+
 def _run_sql(
     input_files: list[Path],
     sql_query: str,
@@ -78,7 +87,7 @@ def run_clean(
     if not sql_rel:
         raise ValueError("clean.sql missing in dataset.yml (expected: clean: { sql: 'sql/clean.sql' })")
 
-    sql_path_obj = Path(sql_rel)
+    sql_path_obj = _resolve_sql_path(sql_rel, base_dir=base_dir)
     if not sql_path_obj.exists():
         raise FileNotFoundError(f"CLEAN SQL file not found: {sql_path_obj}")
 

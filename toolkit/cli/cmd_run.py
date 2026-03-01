@@ -39,7 +39,10 @@ def _planned_layers(step: str) -> list[str]:
 def _resolve_sql_path(cfg, rel_path: str | None) -> Path:
     if not rel_path:
         raise ValueError("Missing SQL path in dataset.yml")
-    return Path(rel_path)
+    path = Path(rel_path)
+    if path.is_absolute():
+        return path
+    return Path(cfg.base_dir) / path
 
 
 def _validate_execution_plan(cfg, step: str) -> list[str]:

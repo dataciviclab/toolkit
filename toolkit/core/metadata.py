@@ -60,7 +60,7 @@ def write_metadata(folder: Path, data: dict[str, Any], filename: str = "metadata
     return out
 
 
-def write_manifest(
+def write_layer_manifest(
     folder: Path,
     *,
     metadata_path: str,

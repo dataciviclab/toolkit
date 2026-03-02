@@ -13,7 +13,7 @@ from toolkit.clean.duckdb_read import (
 )
 from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
-from toolkit.core.metadata import config_hash_for_year, file_record, write_manifest, write_metadata
+from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, to_root_relative
 from toolkit.core.template import render_template
 
@@ -284,7 +284,7 @@ def run_clean(
         out_dir,
         metadata_payload,
     )
-    write_manifest(
+    write_layer_manifest(
         out_dir,
         metadata_path=metadata_path.name,
         validation_path="_validate/clean_validation.json",

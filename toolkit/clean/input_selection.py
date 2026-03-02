@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from toolkit.core.manifest import read_manifest
+from toolkit.core.manifest import read_raw_manifest
 from toolkit.core.paths import from_root_relative, layer_year_dir, resolve_root
 from toolkit.core.run_context import get_run_dir, list_runs
 
@@ -119,7 +119,7 @@ def list_raw_candidates(
 
 
 def _manifest_primary_input(raw_year_dir: Path) -> tuple[Path | None, str | None]:
-    manifest = read_manifest(raw_year_dir)
+    manifest = read_raw_manifest(raw_year_dir)
     if not manifest:
         return None, "CLEAN RAW manifest missing, using legacy selection."
 

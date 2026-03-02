@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-from toolkit.core.manifest import write_manifest as write_raw_manifest
+from toolkit.core.manifest import write_raw_manifest
 from toolkit.core.config import parse_bool
 from toolkit.core.metadata import config_hash_for_year, sha256_bytes, write_metadata
 from toolkit.core.paths import layer_year_dir, to_root_relative

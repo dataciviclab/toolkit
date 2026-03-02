@@ -19,6 +19,15 @@ def _serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | 
     return to_root_relative(path, rel_root)
 
 
+def _resolve_sql_path(sql_ref: str | Path, *, base_dir: Path | None) -> Path:
+    path = Path(sql_ref)
+    if path.is_absolute():
+        return path
+    if base_dir is None:
+        return path
+    return base_dir / path
+
+
 def run_mart(
     dataset: str,
     year: int,
@@ -78,7 +87,7 @@ def run_mart(
             if not name or not sql_rel:
                 raise ValueError("Each mart.tables entry must include: name, sql")
 
-            sql_path = Path(sql_rel)
+            sql_path = _resolve_sql_path(sql_rel, base_dir=base_dir)
             if not sql_path.exists():
                 raise FileNotFoundError(f"MART SQL file not found: {sql_path}")
 

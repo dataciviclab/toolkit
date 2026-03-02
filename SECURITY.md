@@ -2,23 +2,20 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security issue in this repository, do not open a public issue first.
+If you believe you found a security issue in this repository, please do not open a public issue first.
 
-Report it privately to the maintainers with:
+For shared organizational GitHub policy and community health defaults, see the `dataciviclab/.github` repository. This file only covers the reporting path for this technical repository.
 
-- a clear description of the problem
-- affected versions or commits, if known
-- reproduction steps or a minimal proof of concept
-- suggested mitigations, if available
+Instead:
 
-If no dedicated private channel is available yet, contact the project maintainers through the repository owners and request a private disclosure path before sharing details publicly.
+- contact the maintainers privately, if a private contact path is available
+- or ask the repository owners for a private reporting channel before sharing details publicly
 
-## Response Expectations
+When possible, include:
 
-- We will acknowledge receipt of a report as soon as practical.
-- We will evaluate impact and reproduction details.
-- We will coordinate remediation and disclosure timing when the report is valid.
+- a short description of the issue
+- affected files, versions, or commits
+- steps to reproduce
+- possible impact
 
-## Scope
-
-This policy applies to the source code and release artifacts of this repository.
+There is currently no bug bounty program for this project.

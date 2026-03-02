@@ -2,6 +2,20 @@
 
 Toolkit Python per pipeline dati riproducibili `RAW -> CLEAN -> MART`, con approccio SQL-first, audit degli artefatti e run tracking persistente.
 
+## Ruolo Nell'Ecosistema
+
+Questa repo e' il motore tecnico della pipeline dati di DataCivicLab.
+
+Ruoli delle repo correlate:
+
+- `.github`: policy condivise, community health, template issue/PR, onboarding GitHub
+- `dataciviclab`: hub pubblico e minimale dell'organizzazione
+- `toolkit`: runtime, CLI, contract di config/path/output, documentazione tecnica del motore
+- `project-template`: template operativo dei repo dataset
+- repo dataset: progetti concreti che usano il toolkit
+
+Questa repo non e' l'hub dell'organizzazione e non replica la documentazione org-wide: resta focalizzata sul motore e sul suo contratto tecnico.
+
 ## Obiettivi
 
 - mantenere una struttura progetto semplice: `dataset.yml` + `sql/`
@@ -30,7 +44,24 @@ pip install -e .[dev]
 
 Richiede Python 3.10+.
 
+## CLI Naming Note
+
+Il comando CLI canonico del progetto e' `toolkit`.
+
+Se nel tuo ambiente c'e' una collisione di nome o il console script non e' nel `PATH`, puoi usare direttamente il modulo Python:
+
+```bash
+python -m toolkit.cli.app run all --config dataset.yml
+```
+
 ## Quickstart
+
+Il percorso canonico per i repo dataset clonati dal template e':
+
+1. `toolkit run all --config dataset.yml`
+2. `toolkit validate all --config dataset.yml`
+3. `toolkit status --dataset <dataset> --year <year> --latest --config dataset.yml`
+4. notebook locali che leggono gli output reali sotto `root/data/...`
 
 Giro offline completo con il progetto di esempio, eseguibile in pochi minuti su una macchina pulita.
 
@@ -40,6 +71,7 @@ Windows PowerShell:
 $env:TOOLKIT_OUTDIR = Join-Path $env:TEMP "dataciviclab-toolkit-quickstart"
 py -m pip install -e ".[dev]"
 py -m toolkit.cli.app run all -c project-example/dataset.yml
+py -m toolkit.cli.app validate all -c project-example/dataset.yml
 py -m toolkit.cli.app status --dataset project_example --year 2022 --config project-example/dataset.yml
 ```
 
@@ -49,6 +81,7 @@ Linux/macOS:
 export TOOLKIT_OUTDIR="$(mktemp -d)/dataciviclab-toolkit-quickstart"
 python -m pip install -e ".[dev]"
 python -m toolkit.cli.app run all -c project-example/dataset.yml
+python -m toolkit.cli.app validate all -c project-example/dataset.yml
 python -m toolkit.cli.app status --dataset project_example --year 2022 --config project-example/dataset.yml
 ```
 
@@ -66,6 +99,10 @@ Interpretazione errori config:
 - warning di deprecazione -> config ancora accettata, ma in forma legacy da migrare
 
 Schema completo e legacy supportato: [docs/config-schema.md](docs/config-schema.md)
+Flow avanzati e tooling secondario: [docs/advanced-workflows.md](docs/advanced-workflows.md)
+Matrice di stabilita`: [docs/feature-stability.md](docs/feature-stability.md)
+Contratto notebook/output: [docs/notebook-contract.md](docs/notebook-contract.md)
+Per policy condivise e community health organizzativa, fai riferimento alla repo `.github` dell'organizzazione.
 
 Artefatti attesi:
 
@@ -127,289 +164,76 @@ Convenzioni:
 
 ## CLI
 
-Esecuzione step singolo:
-
-```bash
-toolkit run raw --config dataset.yml
-toolkit run clean --config dataset.yml
-toolkit run mart --config dataset.yml
-```
-
-Esecuzione end-to-end:
+Workflow canonico:
 
 ```bash
 toolkit run all --config dataset.yml
-```
-
-Dry-run:
-
-```bash
-toolkit run all --config dataset.yml --dry-run
-```
-
-Il dry-run:
-
-- valida config e path SQL richiesti
-- stampa l'execution plan per dataset/year
-- crea solo il run record in `data/_runs/...`
-- non scarica RAW, non esegue DuckDB, non scrive artefatti nei layer
-
-Resume:
-
-```bash
-toolkit resume --dataset project_example --year 2022 --config dataset.yml
-toolkit resume --dataset project_example --year 2022 --run-id <old_run_id> --config dataset.yml
-```
-
-`resume`:
-
-- legge un run record esistente
-- trova il primo layer non `SUCCESS`
-- crea un nuovo `run_id`
-- salva `resumed_from=<old_run_id>` nel nuovo record
-
-Status:
-
-```bash
-toolkit status --dataset project_example --year 2022 --latest --config dataset.yml
-toolkit status --dataset project_example --year 2022 --run-id <run_id> --config dataset.yml
-```
-
-Validazione separata:
-
-```bash
-toolkit validate clean --config dataset.yml
-toolkit validate mart --config dataset.yml
 toolkit validate all --config dataset.yml
 ```
 
-Profilazione RAW:
+Per il percorso base:
+
+- `run all` esegue RAW -> CLEAN -> MART
+- `validate all` esegue i quality checks su CLEAN e MART
+- `status` legge il run record e mostra lo stato piu` recente
+- `inspect paths` espone i path stabili per notebook e script locali
+- `--dry-run` valida config e SQL senza eseguire la pipeline
+
+Esempi:
 
 ```bash
-toolkit profile raw --config dataset.yml
+toolkit run all --config dataset.yml --strict-config
+toolkit validate all --config dataset.yml --strict-config
+toolkit status --dataset my_dataset --year 2024 --latest --config dataset.yml
+toolkit inspect paths --config dataset.yml --year 2024 --json
+toolkit run all --config dataset.yml --dry-run --strict-config
 ```
 
-`toolkit profile raw` scrive sempre hint utilizzabili anche se il parsing DuckDB fallisce.
-Tutti gli artefatti di profiling vivono in `raw/<dataset>/<year>/_profile/`.
-Il nome canonico del profilo JSON e` `raw_profile.json`; `profile.json` resta un alias di compatibilita` opzionale.
-Gli output effettivi dipendono dalla policy `output.artifacts`.
-`suggested_read.yml` usa le stesse chiavi che CLEAN passa a `clean.read`, senza mapping extra.
-Se DuckDB non riesce a sniffare il file, il profiler usa un fallback Python leggero per `header`, `delim`, `decimal`, `encoding` e aggiunge warning espliciti.
-L'output resta quindi consumabile da CLEAN anche su CSV sporchi o irregolari.
+`resume`, `profile raw`, `run raw|clean|mart`, `gen-sql` e la policy completa degli artifacts restano disponibili, ma sono tooling avanzato: vedi [docs/advanced-workflows.md](docs/advanced-workflows.md).
 
-Artifacts policy:
+## Notebook locali
 
-```yaml
-output:
-  artifacts: standard   # minimal | standard | debug
-  legacy_aliases: true  # abilita l'alias legacy profile.json
-```
+Nei repo dataset clonati dal template, i notebook dovrebbero leggere gli output reali gia` scritti dal toolkit, non ricostruire logica di path.
 
-`standard` resta il default compatibile. `minimal` tiene solo gli artefatti di pipeline e salta report/debug SQL. `debug` tiene tutto.
+In pratica:
 
-Generazione SQL CLEAN da mapping dichiarativo:
+- RAW: `root/data/raw/<dataset>/<year>/`
+- CLEAN: `root/data/clean/<dataset>/<year>/`
+- MART: `root/data/mart/<dataset>/<year>/`
+- run records: `root/data/_runs/<dataset>/<year>/`
+
+Helper ufficiale per evitare path logic duplicata nei notebook:
 
 ```bash
-toolkit gen-sql --config dataset.yml
+toolkit inspect paths --config dataset.yml --year 2024 --json
 ```
 
-## Run Tracking
+Questo mantiene il contratto semplice tra toolkit e repo dataset:
 
-Ogni comando `toolkit run ...` o `toolkit resume ...` scrive un record JSON in:
+- il toolkit produce artefatti e metadata stabili
+- i notebook li ispezionano localmente
+- `dataset.yml` resta la fonte di verita` per dataset, anni e path relativi
 
-```text
-data/_runs/<dataset>/<year>/<run_id>.json
-```
+## Operative Notes
 
-Il record contiene almeno:
+Run tracking:
 
-- `status`: `RUNNING`, `SUCCESS`, `FAILED`, `SUCCESS_WITH_WARNINGS`, `DRY_RUN`
-- `started_at`, `finished_at`
-- `layers.raw|clean|mart.status`
-- `validations.raw|clean|mart`
-- `error` se presente
-- `resumed_from` se il run deriva da una ripresa
+- ogni `run` e `resume` scrive un record in `data/_runs/<dataset>/<year>/<run_id>.json`
+- `status` legge questi record
+- `inspect paths` espone i path stabili da usare in notebook e script
 
-Questo file e` la fonte per i comandi `status` e `resume`.
+Validation gate:
 
-## Validation Gate
+- `toolkit run ...` valida automaticamente dopo ogni layer completato
+- con `validation.fail_on_error: true` la pipeline si ferma
+- con `validation.fail_on_error: false` il run puo` terminare come `SUCCESS_WITH_WARNINGS`
 
-`toolkit run ...` esegue automaticamente la validazione dopo ogni layer completato con successo.
+Per dettagli completi su layer, validazioni, plugin, artifact policy e flow avanzati, vedi:
 
-Comportamento:
-
-- se la validazione passa, il run prosegue
-- se la validazione fallisce e `validation.fail_on_error: true`, la pipeline si interrompe
-- se la validazione fallisce e `validation.fail_on_error: false`, la pipeline continua e il run termina come `SUCCESS_WITH_WARNINGS`
-
-La CLI `validate` resta disponibile per eseguire i check separatamente.
-
-## CLEAN Input Selection
-
-La selezione degli input RAW per CLEAN e` configurabile via `clean.read`.
-
-Opzioni supportate:
-
-- `mode: explicit`
-- `mode: latest`
-- `mode: largest`
-- `mode: all`
-- `glob: "*"`
-- `include: [...]`
-- `prefer_from_raw_run: true`
-- `allow_ambiguous: false`
-
-Note operative:
-
-- `explicit` richiede `include`
-- `latest` seleziona il file con `mtime` piu` recente
-- `largest` seleziona il file piu` grande
-- `all` passa tutti i candidati a DuckDB in ordine deterministico
-- se `mode` non e` specificato, il toolkit usa il fallback legacy su `largest` e logga un warning di deprecazione
-
-CSV read mode:
-
-- `clean.read_mode: strict` usa solo i parametri dichiarati
-- `clean.read_mode: fallback` prova strict e, se fallisce, riprova con preset robusto loggando il fallback
-- `clean.read_mode: robust` usa direttamente il preset robusto
-- il preset robusto mantiene `delim`/`decimal`/`encoding` noti e aggiunge poche opzioni conservative come `ignore_errors`, `null_padding`, `strict_mode: false`, `sample_size: -1`
-- forma canonica:
-
-```yaml
-clean:
-  read:
-    source: auto  # oppure config_only
-```
-
-- `clean.read.source: auto` usa anche i format hints di `raw/<dataset>/<year>/_profile/suggested_read.yml`; `config_only` li ignora
-- da `suggested_read.yml` vengono applicate solo chiavi di formato come `delim`, `decimal`, `encoding`, `header`, `skip`, `quote`, `escape`, `comment`, `nullstr`, `trim_whitespace`, `columns`
-- le opzioni di robustezza presenti nel file suggerito non cambiano la policy di lettura: restano governate da `clean.read_mode` e dal preset robusto
-- il metadata CLEAN salva anche `read_source_used` (`strict` / `robust` / `parquet`)
-- il metadata CLEAN salva `read_params_used` con i parametri finali effettivamente usati dal reader
-- il metadata CLEAN salva `read_params_source` con le sorgenti del merge (`defaults`, `suggested`, `config_overrides`)
-- ogni `metadata.json` include `metadata_schema_version: 1`
-
-## Layer
-
-### RAW
-
-Responsabilita`:
-
-- legge o scarica il payload da plugin sorgente
-- applica extractor opzionale
-- scrive file normalizzati nel layer RAW
-- produce metadata, manifest e validation report
-
-Output tipici:
-
-- file sorgente normalizzati
-- `metadata.json`
-- `raw_validation.json`
-- `manifest.json`
-
-`manifest.json` nel RAW dichiara sempre il file primario da usare a valle.
-Campi minimi: `dataset`, `year`, `run_id`, `created_at`, `sources`, `primary_output_file`.
-`primary_output_file` e gli `output_file` delle source sono path relativi al RAW year-dir, in formato posix.
-`raw.output_policy` supporta `versioned` (default, suffix `_1/_2`) e `overwrite` (stesso filename sovrascritto).
-Con piu` source, si puo` fissare il primario con `primary: true`; altrimenti il toolkit usa la prima source e logga un warning.
-
-### CLEAN
-
-Responsabilita`:
-
-- seleziona gli input dal RAW year-dir
-- renderizza `clean.sql`
-- esegue SQL in DuckDB
-- esporta un parquet clean
-
-Output tipici:
-
-- `<dataset>_<year>_clean.parquet`
-- `_run/clean_rendered.sql`
-- `metadata.json`
-- `manifest.json`
-- `_validate/clean_validation.json`
-
-### MART
-
-Responsabilita`:
-
-- legge parquet CLEAN
-- renderizza le SQL delle tabelle finali
-- esporta un parquet per tabella
-
-Output tipici:
-
-- `<table>.parquet`
-- `_run/*_rendered.sql`
-- `metadata.json`
-- `manifest.json`
-- `_validate/mart_validation.json`
-
-## Validazioni
-
-### CLEAN
-
-- `required_columns`
-- `min_rows`
-- `not_null`
-- `primary_key`
-- `ranges`
-- `max_null_pct`
-
-### MART
-
-- `min_rows`
-- `required_columns`
-- `not_null`
-- `primary_key`
-- `ranges`
-
-Le validazioni vengono eseguite automaticamente da `toolkit run ...` dopo ogni layer completato con successo.
-La CLI `toolkit validate ...` resta disponibile per eseguirle separatamente.
-
-## Plugin sorgente
-
-Plugin registrati:
-
-- `local_file`
-- `http_file`
-- `api_json_paged`
-- `html_table`
-
-Stabilita`:
-
-- core pipeline `raw`, `clean`, `mart`: stable
-- plugin `local_file`, `http_file`: stable
-- plugin `api_json_paged`, `html_table`: experimental
-
-Come aggiungere un plugin:
-
-- definisci una classe plugin in `toolkit/plugins/<nome>.py`
-- contratto minimo:
-  - `__init__(**client)` per ricevere configurazione client
-  - `fetch(...) -> bytes` per restituire il payload RAW
-- registra il plugin in modo esplicito in `toolkit.core.registry.register_builtin_plugins()`
-- se il plugin dipende da librerie opzionali, il fallimento di import deve essere trattato come plugin opzionale non disponibile:
-  - warning `DCLPLUGIN001` in non-strict
-  - errore in strict mode
-
-## Smoke locale
-
-`project-example/` e` pensato per un giro completo locale, senza rete:
-
-```bash
-cd project-example
-py -m toolkit.cli.app run all --config dataset.yml
-py -m toolkit.cli.app status --dataset project_example --year 2022 --latest --config dataset.yml
-```
-
-Artefatti attesi:
-
-- `project-example/_smoke_out/data/raw/project_example/2022/raw_validation.json`
-- `project-example/_smoke_out/data/clean/project_example/2022/project_example_2022_clean.parquet`
-- `project-example/_smoke_out/data/mart/project_example/2022/rd_by_regione.parquet`
-- `project-example/_smoke_out/data/_runs/project_example/2022/<run_id>.json`
+- [docs/conventions.md](docs/conventions.md)
+- [docs/config-schema.md](docs/config-schema.md)
+- [docs/feature-stability.md](docs/feature-stability.md)
+- [docs/advanced-workflows.md](docs/advanced-workflows.md)
 
 ## Conventions
 
@@ -419,6 +243,7 @@ Vedi [docs/conventions.md](docs/conventions.md) per:
 - policy di selezione input CLEAN
 - precedence del read config
 - metadata, manifest e validation contracts
+- workflow avanzati e tooling secondario: [docs/advanced-workflows.md](docs/advanced-workflows.md)
 
 ## Testing
 

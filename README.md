@@ -16,6 +16,22 @@ Ruoli delle repo correlate:
 
 Questa repo non e' l'hub dell'organizzazione e non replica la documentazione org-wide: resta focalizzata sul motore e sul suo contratto tecnico.
 
+## Confini Del Toolkit
+
+Il toolkit espone un perimetro volutamente stretto:
+
+- core runtime: `raw`, `clean`, `mart`, `run`, `validate`, `status`, `inspect`
+- advanced tooling: `resume`, `profile raw`, run parziali per layer
+- frozen helper: `gen-sql`
+- compatibility only: alias legacy e shim deprecati
+- experimental: alcune sorgenti plugin non centrali nel workflow canonico
+
+Regola pratica:
+
+- nuovi repo dataset: resta nel workflow canonico
+- recovery o diagnostica: usa gli strumenti advanced
+- bootstrap o compatibilita': non trattarli come parte del contratto stabile
+
 ## Obiettivi
 
 - mantenere una struttura progetto semplice: `dataset.yml` + `sql/`
@@ -102,6 +118,7 @@ Schema completo e legacy supportato: [docs/config-schema.md](docs/config-schema.
 Flow avanzati e tooling secondario: [docs/advanced-workflows.md](docs/advanced-workflows.md)
 Matrice di stabilita`: [docs/feature-stability.md](docs/feature-stability.md)
 Contratto notebook/output: [docs/notebook-contract.md](docs/notebook-contract.md)
+Confini runtime e superfici non-core: [docs/runtime-boundaries.md](docs/runtime-boundaries.md)
 Per policy condivise e community health organizzativa, fai riferimento alla repo `.github` dell'organizzazione.
 
 Artefatti attesi:

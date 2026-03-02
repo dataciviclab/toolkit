@@ -9,6 +9,14 @@ Percorso canonico:
 - `toolkit status --dataset <dataset> --year <year> --latest --config dataset.yml`
 - notebook locali che leggono output e metadata sotto `root/data/...`
 
+Questa categoria include anche tooling di supporto che non va confuso con il runtime principale del toolkit:
+
+- `toolkit.profile`
+- `resume`
+- run parziali per layer
+- helper frozen come `gen-sql`
+- plugin periferici o experimental
+
 ## Step singoli
 
 Utili per debug o per ripetere solo una parte della pipeline:
@@ -90,6 +98,16 @@ Stato raccomandato:
 - utile per bootstrap guidato
 - non parte del workflow operativo standard
 - da considerare congelato: bugfix si`, espansioni solo se emerge uso reale
+
+## Plugin periferici
+
+`local_file` e `http_file` sono le sorgenti builtin centrali del toolkit.
+
+Plugin come `api_json_paged` e `html_table` restano disponibili, ma vanno considerati periferici o experimental:
+
+- non sono parte del quickstart
+- non sono il contratto stabile per i repo dataset nuovi
+- non andrebbero usati come base del template senza evidenza reale
 
 ## Compat legacy
 

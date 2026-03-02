@@ -1,3 +1,8 @@
+"""Compatibility shim for deprecated imports.
+
+New code should import from `toolkit.core.validation`.
+"""
+
 from __future__ import annotations
 
 import warnings

@@ -20,6 +20,13 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 | `api_json_paged` | experimental | usare solo con evidenza reale |
 | `html_table` | experimental | usare solo con evidenza reale |
 
+Lettura equivalente a livello package:
+
+- core runtime: `toolkit.raw`, `toolkit.clean`, `toolkit.mart`, `toolkit.cli` (`run`, `validate`, `status`, `inspect`)
+- advanced tooling: `toolkit.profile`, `resume`, run parziali
+- compatibility only: shim legacy in `toolkit.core`
+- experimental / peripheral: plugin non centrali al workflow canonico
+
 Regola pratica:
 
 - se stai creando o clonando un repo dataset nuovo, resta nel percorso canonico

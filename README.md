@@ -2,6 +2,20 @@
 
 Toolkit Python per pipeline dati riproducibili `RAW -> CLEAN -> MART`, con approccio SQL-first, audit degli artefatti e run tracking persistente.
 
+## Ruolo Nell'Ecosistema
+
+Questa repo e' il motore tecnico della pipeline dati di DataCivicLab.
+
+Ruoli delle repo correlate:
+
+- `.github`: policy condivise, community health, template issue/PR, onboarding GitHub
+- `dataciviclab`: hub pubblico e minimale dell'organizzazione
+- `toolkit`: runtime, CLI, contract di config/path/output, documentazione tecnica del motore
+- `project-template`: template operativo dei repo dataset
+- repo dataset: progetti concreti che usano il toolkit
+
+Questa repo non e' l'hub dell'organizzazione e non replica la documentazione org-wide: resta focalizzata sul motore e sul suo contratto tecnico.
+
 ## Obiettivi
 
 - mantenere una struttura progetto semplice: `dataset.yml` + `sql/`
@@ -88,6 +102,7 @@ Schema completo e legacy supportato: [docs/config-schema.md](docs/config-schema.
 Flow avanzati e tooling secondario: [docs/advanced-workflows.md](docs/advanced-workflows.md)
 Matrice di stabilita`: [docs/feature-stability.md](docs/feature-stability.md)
 Contratto notebook/output: [docs/notebook-contract.md](docs/notebook-contract.md)
+Per policy condivise e community health organizzativa, fai riferimento alla repo `.github` dell'organizzazione.
 
 Artefatti attesi:
 

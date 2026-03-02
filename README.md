@@ -223,6 +223,13 @@ Helper ufficiale per evitare path logic duplicata nei notebook:
 toolkit inspect paths --config dataset.yml --year 2024 --json
 ```
 
+Ruoli stabili degli output:
+
+- `metadata.json`: payload ricco del layer
+- `manifest.json`: summary stabile del layer con puntatori a metadata e validation
+- `data/_runs/.../<run_id>.json`: stato del run usato da `status` e `resume`
+- `inspect paths --json`: discovery helper read-only per notebook e script locali
+
 Questo mantiene il contratto semplice tra toolkit e repo dataset:
 
 - il toolkit produce artefatti e metadata stabili

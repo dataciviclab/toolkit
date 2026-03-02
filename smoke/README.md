@@ -8,13 +8,14 @@ Progetti inclusi:
 - `smoke/local_file_csv`: `local_file` completamente offline
 - `smoke/zip_http_csv`: `http_file` + extractor ZIP (`unzip_first_csv`) contro server locale
 - `smoke/bdap_http_csv`: `http_file` contro CSV pubblico BDAP
+- `smoke/finanze_http_zip_2023`: `http_file` contro ZIP pubblico reale, best-effort
 
 Ogni progetto include:
 
 - `dataset.yml` minimo
 - `sql/clean.sql`
 - `sql/mart/mart_ok.sql`
-- `README.md` con i comandi `toolkit run raw/profile/clean/mart/status`
+- `README.md` con i comandi del caso smoke, incluso un `--dry-run --strict-config` iniziale
 
 Prerequisito:
 

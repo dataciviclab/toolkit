@@ -31,12 +31,16 @@ def list_input_files(raw_dir: Path, glob: str = "*") -> list[Path]:
     )
 
 
+def _sorted_unique_paths(paths: list[Path]) -> list[Path]:
+    return sorted(set(paths), key=lambda item: item.name.lower())
+
+
 def _match_patterns(paths: list[Path], patterns: list[str]) -> list[Path]:
     matched: list[Path] = []
     for path in paths:
         if any(path.match(pattern) or path.name == pattern for pattern in patterns):
             matched.append(path)
-    return sorted(set(matched), key=lambda item: item.name.lower())
+    return _sorted_unique_paths(matched)
 
 
 def _metadata_candidates(raw_dir: Path) -> list[Path]:
@@ -54,14 +58,36 @@ def _metadata_candidates(raw_dir: Path) -> list[Path]:
     candidates: list[Path] = []
     for name in file_names:
         candidate = raw_dir / name
-        if (
-            candidate.exists()
-            and candidate.is_file()
-            and is_supported_input_file(candidate)
-            and candidate.stat().st_size > 0
-        ):
+        if _is_usable_input_file(candidate):
             candidates.append(candidate)
-    return sorted(set(candidates), key=lambda item: item.name.lower())
+    return _sorted_unique_paths(candidates)
+
+
+def _is_usable_input_file(path: Path) -> bool:
+    return (
+        path.exists()
+        and path.is_file()
+        and is_supported_input_file(path)
+        and path.stat().st_size > 0
+    )
+
+
+def _run_record_paths(root: str | None, dataset: str, year: int) -> list[Path]:
+    return list_runs(get_run_dir(resolve_root(root), dataset, year))
+
+
+def _raw_layer_succeeded(run_path: Path) -> bool:
+    record = json.loads(run_path.read_text(encoding="utf-8"))
+    raw_layer = (record.get("layers") or {}).get("raw") or {}
+    return raw_layer.get("status") == "SUCCESS"
+
+
+def _latest_raw_success_exists(root: str | None, dataset: str, year: int) -> bool:
+    runs = _run_record_paths(root, dataset, year)
+    for run_path in sorted(runs, key=lambda item: item.stat().st_mtime, reverse=True):
+        if _raw_layer_succeeded(run_path):
+            return True
+    return False
 
 
 def list_raw_candidates(
@@ -81,19 +107,7 @@ def list_raw_candidates(
     if not prefer_from_raw_run:
         return candidates
 
-    runs = list_runs(get_run_dir(resolve_root(root), dataset, year))
-    if not runs:
-        return candidates
-
-    latest_raw_success = False
-    for run_path in sorted(runs, key=lambda item: item.stat().st_mtime, reverse=True):
-        record = json.loads(run_path.read_text(encoding="utf-8"))
-        raw_layer = (record.get("layers") or {}).get("raw") or {}
-        if raw_layer.get("status") == "SUCCESS":
-            latest_raw_success = True
-            break
-
-    if not latest_raw_success:
+    if not _latest_raw_success_exists(root, dataset, year):
         return candidates
 
     metadata_based = _metadata_candidates(raw_dir)
@@ -102,6 +116,26 @@ def list_raw_candidates(
 
     filtered = _match_patterns(metadata_based, [pattern])
     return filtered or candidates
+
+
+def _manifest_primary_input(raw_year_dir: Path) -> tuple[Path | None, str | None]:
+    manifest = read_manifest(raw_year_dir)
+    if not manifest:
+        return None, "CLEAN RAW manifest missing, using legacy selection."
+
+    primary_output_file = manifest.get("primary_output_file")
+    if not isinstance(primary_output_file, str) or not primary_output_file.strip():
+        return None, "CLEAN RAW manifest missing primary_output_file; using legacy selection."
+
+    manifest_path = from_root_relative(primary_output_file, raw_year_dir)
+    if _is_usable_input_file(manifest_path):
+        return manifest_path, None
+
+    return (
+        None,
+        "CLEAN RAW manifest primary_output_file is missing or invalid: "
+        f"{primary_output_file}; using legacy selection.",
+    )
 
 
 def select_raw_input(
@@ -131,28 +165,11 @@ def select_raw_input(
                 prefer_from_raw_run=prefer_from_raw_run,
             )
 
-    manifest = read_manifest(raw_year_dir)
-    if manifest:
-        primary_output_file = manifest.get("primary_output_file")
-        if isinstance(primary_output_file, str) and primary_output_file.strip():
-            manifest_path = from_root_relative(primary_output_file, raw_year_dir)
-            if (
-                manifest_path.exists()
-                and manifest_path.is_file()
-                and is_supported_input_file(manifest_path)
-                and manifest_path.stat().st_size > 0
-            ):
-                return [manifest_path]
-            logger.warning(
-                "CLEAN RAW manifest primary_output_file is missing or invalid: %s; using legacy selection.",
-                primary_output_file,
-            )
-        else:
-            logger.warning(
-                "CLEAN RAW manifest missing primary_output_file; using legacy selection."
-            )
-    else:
-        logger.warning("CLEAN RAW manifest missing, using legacy selection.")
+    manifest_primary, manifest_warning = _manifest_primary_input(raw_year_dir)
+    if manifest_primary is not None:
+        return [manifest_primary]
+    if manifest_warning is not None:
+        logger.warning(manifest_warning)
 
     selected = select_inputs(
         selected_candidates,
@@ -196,12 +213,10 @@ def select_inputs(
         return selected
 
     if mode == "latest":
-        latest = max(candidates, key=lambda item: (item.stat().st_mtime, item.name.lower()))
-        return [latest]
+        return [max(candidates, key=lambda item: (item.stat().st_mtime, item.name.lower()))]
 
     if mode == "largest":
-        largest = max(candidates, key=lambda item: (item.stat().st_size, item.name.lower()))
-        return [largest]
+        return [max(candidates, key=lambda item: (item.stat().st_size, item.name.lower()))]
 
     if mode == "all":
         return candidates

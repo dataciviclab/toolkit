@@ -199,158 +199,26 @@ Questo mantiene il contratto semplice tra toolkit e repo dataset:
 - i notebook li ispezionano localmente
 - `dataset.yml` resta la fonte di verita` per dataset, anni e path relativi
 
-## Run Tracking
+## Operative Notes
 
-Ogni comando `toolkit run ...` o `toolkit resume ...` scrive un record JSON in:
+Run tracking:
 
-```text
-data/_runs/<dataset>/<year>/<run_id>.json
-```
+- ogni `run` e `resume` scrive un record in `data/_runs/<dataset>/<year>/<run_id>.json`
+- `status` legge questi record
+- `inspect paths` espone i path stabili da usare in notebook e script
 
-Il record contiene almeno:
+Validation gate:
 
-- `status`: `RUNNING`, `SUCCESS`, `FAILED`, `SUCCESS_WITH_WARNINGS`, `DRY_RUN`
-- `started_at`, `finished_at`
-- `layers.raw|clean|mart.status`
-- `validations.raw|clean|mart`
-- `error` se presente
-- `resumed_from` se il run deriva da una ripresa
+- `toolkit run ...` valida automaticamente dopo ogni layer completato
+- con `validation.fail_on_error: true` la pipeline si ferma
+- con `validation.fail_on_error: false` il run puo` terminare come `SUCCESS_WITH_WARNINGS`
 
-Questo file e` la fonte per i comandi `status` e `resume`.
+Per dettagli completi su layer, validazioni, plugin, artifact policy e flow avanzati, vedi:
 
-## Validation Gate
-
-`toolkit run ...` esegue automaticamente la validazione dopo ogni layer completato con successo.
-
-Comportamento:
-
-- se la validazione passa, il run prosegue
-- se la validazione fallisce e `validation.fail_on_error: true`, la pipeline si interrompe
-- se la validazione fallisce e `validation.fail_on_error: false`, la pipeline continua e il run termina come `SUCCESS_WITH_WARNINGS`
-
-La CLI `validate` resta disponibile per eseguire i check separatamente.
-
-## Layer
-
-### RAW
-
-Responsabilita`:
-
-- legge o scarica il payload da plugin sorgente
-- applica extractor opzionale
-- scrive file normalizzati nel layer RAW
-- produce metadata, manifest e validation report
-
-Output tipici:
-
-- file sorgente normalizzati
-- `metadata.json`
-- `raw_validation.json`
-- `manifest.json`
-
-`manifest.json` nel RAW dichiara sempre il file primario da usare a valle.
-Campi minimi: `dataset`, `year`, `run_id`, `created_at`, `sources`, `primary_output_file`.
-`primary_output_file` e gli `output_file` delle source sono path relativi al RAW year-dir, in formato posix.
-`raw.output_policy` supporta `versioned` (default, suffix `_1/_2`) e `overwrite` (stesso filename sovrascritto).
-Con piu` source, si puo` fissare il primario con `primary: true`; altrimenti il toolkit usa la prima source e logga un warning.
-
-### CLEAN
-
-Responsabilita`:
-
-- seleziona gli input dal RAW year-dir
-- renderizza `clean.sql`
-- esegue SQL in DuckDB
-- esporta un parquet clean
-
-Output tipici:
-
-- `<dataset>_<year>_clean.parquet`
-- `_run/clean_rendered.sql`
-- `metadata.json`
-- `manifest.json`
-- `_validate/clean_validation.json`
-
-### MART
-
-Responsabilita`:
-
-- legge parquet CLEAN
-- renderizza le SQL delle tabelle finali
-- esporta un parquet per tabella
-
-Output tipici:
-
-- `<table>.parquet`
-- `_run/*_rendered.sql`
-- `metadata.json`
-- `manifest.json`
-- `_validate/mart_validation.json`
-
-## Validazioni
-
-### CLEAN
-
-- `required_columns`
-- `min_rows`
-- `not_null`
-- `primary_key`
-- `ranges`
-- `max_null_pct`
-
-### MART
-
-- `min_rows`
-- `required_columns`
-- `not_null`
-- `primary_key`
-- `ranges`
-
-Le validazioni vengono eseguite automaticamente da `toolkit run ...` dopo ogni layer completato con successo.
-La CLI `toolkit validate ...` resta disponibile per eseguirle separatamente.
-
-## Plugin sorgente
-
-Plugin registrati:
-
-- `local_file`
-- `http_file`
-- `api_json_paged`
-- `html_table`
-
-Stabilita`:
-
-- core pipeline `raw`, `clean`, `mart`: stable
-- plugin `local_file`, `http_file`: stable
-- plugin `api_json_paged`, `html_table`: experimental
-
-Come aggiungere un plugin:
-
-- definisci una classe plugin in `toolkit/plugins/<nome>.py`
-- contratto minimo:
-  - `__init__(**client)` per ricevere configurazione client
-  - `fetch(...) -> bytes` per restituire il payload RAW
-- registra il plugin in modo esplicito in `toolkit.core.registry.register_builtin_plugins()`
-- se il plugin dipende da librerie opzionali, il fallimento di import deve essere trattato come plugin opzionale non disponibile:
-  - warning `DCLPLUGIN001` in non-strict
-  - errore in strict mode
-
-## Smoke locale
-
-`project-example/` e` pensato per un giro completo locale, senza rete:
-
-```bash
-cd project-example
-py -m toolkit.cli.app run all --config dataset.yml
-py -m toolkit.cli.app status --dataset project_example --year 2022 --latest --config dataset.yml
-```
-
-Artefatti attesi:
-
-- `project-example/_smoke_out/data/raw/project_example/2022/raw_validation.json`
-- `project-example/_smoke_out/data/clean/project_example/2022/project_example_2022_clean.parquet`
-- `project-example/_smoke_out/data/mart/project_example/2022/rd_by_regione.parquet`
-- `project-example/_smoke_out/data/_runs/project_example/2022/<run_id>.json`
+- [docs/conventions.md](docs/conventions.md)
+- [docs/config-schema.md](docs/config-schema.md)
+- [docs/feature-stability.md](docs/feature-stability.md)
+- [docs/advanced-workflows.md](docs/advanced-workflows.md)
 
 ## Conventions
 

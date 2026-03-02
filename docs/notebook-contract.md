@@ -19,7 +19,7 @@ Per evitare duplicazione di path logic nei notebook:
 
 - leggi `dataset.yml`
 - usa `toolkit inspect paths --config dataset.yml --year <year> --json`
-- poi apri parquet, metadata e run record dai path restituiti
+- poi apri parquet, metadata, manifest, validation e run record dai path restituiti
 
 Regola pratica:
 

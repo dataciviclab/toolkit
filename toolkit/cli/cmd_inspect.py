@@ -12,19 +12,48 @@ from toolkit.core.paths import layer_year_dir
 from toolkit.core.run_context import get_run_dir, latest_run
 
 
+def _raw_output_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
+    raw_dir = layer_year_dir(root, "raw", dataset, year)
+    return {
+        "dir": str(raw_dir),
+        "manifest": str(raw_dir / "manifest.json"),
+        "metadata": str(raw_dir / "metadata.json"),
+        "validation": str(raw_dir / "raw_validation.json"),
+    }
+
+
 def _clean_output_path(root: Path, dataset: str, year: int) -> Path:
     return layer_year_dir(root, "clean", dataset, year) / f"{dataset}_{year}_clean.parquet"
+
+
+def _clean_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
+    clean_dir = layer_year_dir(root, "clean", dataset, year)
+    return {
+        "dir": str(clean_dir),
+        "output": str(_clean_output_path(root, dataset, year)),
+        "manifest": str(clean_dir / "manifest.json"),
+        "metadata": str(clean_dir / "metadata.json"),
+        "validation": str(clean_dir / "_validate" / "clean_validation.json"),
+    }
 
 
 def _mart_output_paths(root: Path, year_dir: Path, tables: list[dict[str, Any]]) -> list[Path]:
     return [year_dir / f"{table['name']}.parquet" for table in tables if isinstance(table, dict) and table.get("name")]
 
 
+def _mart_paths(root: Path, dataset: str, year: int, tables: list[dict[str, Any]]) -> dict[str, Any]:
+    mart_dir = layer_year_dir(root, "mart", dataset, year)
+    return {
+        "dir": str(mart_dir),
+        "outputs": [str(path) for path in _mart_output_paths(root, mart_dir, tables)],
+        "manifest": str(mart_dir / "manifest.json"),
+        "metadata": str(mart_dir / "metadata.json"),
+        "validation": str(mart_dir / "_validate" / "mart_validation.json"),
+    }
+
+
 def _payload_for_year(cfg, year: int) -> dict[str, Any]:
     root = Path(cfg.root)
-    raw_dir = layer_year_dir(root, "raw", cfg.dataset, year)
-    clean_dir = layer_year_dir(root, "clean", cfg.dataset, year)
-    mart_dir = layer_year_dir(root, "mart", cfg.dataset, year)
     run_dir = get_run_dir(root, cfg.dataset, year)
     mart_tables = cfg.mart.get("tables") or []
 
@@ -46,11 +75,9 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
         "config_path": str(cfg.base_dir / "dataset.yml"),
         "root": str(root),
         "paths": {
-            "raw_dir": str(raw_dir),
-            "clean_dir": str(clean_dir),
-            "clean_output": str(_clean_output_path(root, cfg.dataset, year)),
-            "mart_dir": str(mart_dir),
-            "mart_outputs": [str(path) for path in _mart_output_paths(root, mart_dir, mart_tables)],
+            "raw": _raw_output_paths(root, cfg.dataset, year),
+            "clean": _clean_paths(root, cfg.dataset, year),
+            "mart": _mart_paths(root, cfg.dataset, year, mart_tables),
             "run_dir": str(run_dir),
         },
         "latest_run": latest_payload,
@@ -80,13 +107,22 @@ def paths(
         typer.echo(f"year: {item['year']}")
         typer.echo(f"config_path: {item['config_path']}")
         typer.echo(f"root: {item['root']}")
-        typer.echo(f"raw_dir: {item['paths']['raw_dir']}")
-        typer.echo(f"clean_dir: {item['paths']['clean_dir']}")
-        typer.echo(f"clean_output: {item['paths']['clean_output']}")
-        typer.echo(f"mart_dir: {item['paths']['mart_dir']}")
+        typer.echo(f"raw_dir: {item['paths']['raw']['dir']}")
+        typer.echo(f"raw_manifest: {item['paths']['raw']['manifest']}")
+        typer.echo(f"raw_metadata: {item['paths']['raw']['metadata']}")
+        typer.echo(f"raw_validation: {item['paths']['raw']['validation']}")
+        typer.echo(f"clean_dir: {item['paths']['clean']['dir']}")
+        typer.echo(f"clean_output: {item['paths']['clean']['output']}")
+        typer.echo(f"clean_manifest: {item['paths']['clean']['manifest']}")
+        typer.echo(f"clean_metadata: {item['paths']['clean']['metadata']}")
+        typer.echo(f"clean_validation: {item['paths']['clean']['validation']}")
+        typer.echo(f"mart_dir: {item['paths']['mart']['dir']}")
         typer.echo("mart_outputs:")
-        for output in item["paths"]["mart_outputs"]:
+        for output in item["paths"]["mart"]["outputs"]:
             typer.echo(f"  - {output}")
+        typer.echo(f"mart_manifest: {item['paths']['mart']['manifest']}")
+        typer.echo(f"mart_metadata: {item['paths']['mart']['metadata']}")
+        typer.echo(f"mart_validation: {item['paths']['mart']['validation']}")
         typer.echo(f"run_dir: {item['paths']['run_dir']}")
         latest_info = item.get("latest_run")
         if latest_info is None:

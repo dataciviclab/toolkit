@@ -86,6 +86,8 @@ Interpretazione errori config:
 
 Schema completo e legacy supportato: [docs/config-schema.md](docs/config-schema.md)
 Flow avanzati e tooling secondario: [docs/advanced-workflows.md](docs/advanced-workflows.md)
+Matrice di stabilita`: [docs/feature-stability.md](docs/feature-stability.md)
+Contratto notebook/output: [docs/notebook-contract.md](docs/notebook-contract.md)
 
 Artefatti attesi:
 
@@ -159,6 +161,7 @@ Per il percorso base:
 - `run all` esegue RAW -> CLEAN -> MART
 - `validate all` esegue i quality checks su CLEAN e MART
 - `status` legge il run record e mostra lo stato piu` recente
+- `inspect paths` espone i path stabili per notebook e script locali
 - `--dry-run` valida config e SQL senza eseguire la pipeline
 
 Esempi:
@@ -167,6 +170,7 @@ Esempi:
 toolkit run all --config dataset.yml --strict-config
 toolkit validate all --config dataset.yml --strict-config
 toolkit status --dataset my_dataset --year 2024 --latest --config dataset.yml
+toolkit inspect paths --config dataset.yml --year 2024 --json
 toolkit run all --config dataset.yml --dry-run --strict-config
 ```
 
@@ -182,6 +186,12 @@ In pratica:
 - CLEAN: `root/data/clean/<dataset>/<year>/`
 - MART: `root/data/mart/<dataset>/<year>/`
 - run records: `root/data/_runs/<dataset>/<year>/`
+
+Helper ufficiale per evitare path logic duplicata nei notebook:
+
+```bash
+toolkit inspect paths --config dataset.yml --year 2024 --json
+```
 
 Questo mantiene il contratto semplice tra toolkit e repo dataset:
 

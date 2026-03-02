@@ -1,0 +1,27 @@
+# Feature Stability
+
+Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cosa resta supportato ma secondario, e cosa non va trattato come parte del quickstart dei repo dataset clonati dal template.
+
+| Area | Stato | Uso raccomandato |
+|---|---|---|
+| `run all` | stable | percorso canonico |
+| `validate all` | stable | percorso canonico |
+| `status` | stable | percorso canonico |
+| path contract di `dataset.yml` | stable | percorso canonico |
+| output `raw/clean/mart/_runs` | stable | percorso canonico |
+| `inspect paths` | stable | helper per notebook e repo dataset |
+| `resume` | supported / advanced | debug operativo e recovery |
+| `profile raw` | supported / advanced | diagnostica su RAW sporchi o ambigui |
+| `run raw|clean|mart` | supported / advanced | debug e re-run parziali |
+| artifact policy `minimal|standard|debug` | supported / advanced | tuning operativo |
+| `legacy_aliases` | compatibility only | non promuovere nei repo nuovi |
+| config legacy | compatibility only | usare `--strict-config` nei repo nuovi |
+| `gen-sql` | frozen helper | bootstrap guidato, non workflow standard |
+| `api_json_paged` | experimental | usare solo con evidenza reale |
+| `html_table` | experimental | usare solo con evidenza reale |
+
+Regola pratica:
+
+- se stai creando o clonando un repo dataset nuovo, resta nel percorso canonico
+- se devi fare recovery, diagnostica o bootstrap, usa i comandi advanced
+- non basarti su compat legacy o helper frozen come parte del contratto stabile

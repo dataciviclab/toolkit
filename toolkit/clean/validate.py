@@ -22,6 +22,29 @@ def _q_ident(col: str) -> str:
     return '"' + col.replace('"', '""') + '"'
 
 
+def _clean_validation_spec(
+    *,
+    required: list[str] | None = None,
+    primary_key: list[str] | None = None,
+    not_null: list[str] | None = None,
+    ranges: dict[str, RangeRuleConfig | dict[str, float]] | None = None,
+    max_null_pct: dict[str, float] | None = None,
+    min_rows: int | None = None,
+) -> CleanValidationSpec:
+    return CleanValidationSpec.model_validate(
+        {
+            "required_columns": required,
+            "validate": {
+                "primary_key": primary_key,
+                "not_null": not_null,
+                "ranges": ranges or {},
+                "max_null_pct": max_null_pct or {},
+                "min_rows": min_rows,
+            },
+        }
+    )
+
+
 def validate_clean(
     parquet_path: str | Path,
     required: list[str] | None = None,
@@ -47,17 +70,13 @@ def validate_clean(
     - max_null_pct: {"col": 0.05} (5% max NULLs)
     - min_rows: minimum row count allowed
     """
-    spec = CleanValidationSpec.model_validate(
-        {
-            "required_columns": required,
-            "validate": {
-                "primary_key": primary_key,
-                "not_null": not_null,
-                "ranges": ranges or {},
-                "max_null_pct": max_null_pct or {},
-                "min_rows": min_rows,
-            },
-        }
+    spec = _clean_validation_spec(
+        required=required,
+        primary_key=primary_key,
+        not_null=not_null,
+        ranges=ranges,
+        max_null_pct=max_null_pct,
+        min_rows=min_rows,
     )
     required = spec.required_columns
     rules = spec.validate
@@ -81,91 +100,85 @@ def validate_clean(
         )
 
     con = duckdb.connect(":memory:")
-    con.execute(f"CREATE VIEW t AS SELECT * FROM read_parquet('{p.as_posix()}')")
+    try:
+        con.execute(f"CREATE VIEW t AS SELECT * FROM read_parquet('{p.as_posix()}')")
 
-    # Columns
-    cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
+        cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
 
-    # Required columns
-    required_result = required_columns_check(cols, required)
-    errors.extend(required_result.errors)
+        required_result = required_columns_check(cols, required)
+        errors.extend(required_result.errors)
 
-    # Row count
-    row_count = int(con.execute("SELECT COUNT(*) FROM t").fetchone()[0])
-    if row_count == 0:
-        errors.append("CLEAN parquet has 0 rows")
-    if min_rows is not None and row_count < min_rows:
-        errors.append(f"CLEAN row_count too small: {row_count} < {min_rows}")
+        row_count = int(con.execute("SELECT COUNT(*) FROM t").fetchone()[0])
+        if row_count == 0:
+            errors.append("CLEAN parquet has 0 rows")
+        if min_rows is not None and row_count < min_rows:
+            errors.append(f"CLEAN row_count too small: {row_count} < {min_rows}")
 
-    # Not-null checks
-    for c in not_null:
-        if c not in cols:
-            warnings.append(f"Not-null rule column missing in data: '{c}'")
-            continue
-        qc = _q_ident(c)
-        nnull = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {qc} IS NULL").fetchone()[0])
-        if nnull > 0:
-            errors.append(f"Column '{c}' has NULLs: {nnull}")
-
-    # Null percentage thresholds
-    if row_count > 0:
-        for c, thr in max_null_pct.items():
+        for c in not_null:
             if c not in cols:
-                warnings.append(f"Null-pct rule column missing in data: '{c}'")
+                warnings.append(f"Not-null rule column missing in data: '{c}'")
                 continue
             qc = _q_ident(c)
             nnull = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {qc} IS NULL").fetchone()[0])
-            pct = nnull / row_count
-            if pct > thr:
-                errors.append(f"Column '{c}' null_pct too high: {pct:.3%} > {thr:.3%}")
+            if nnull > 0:
+                errors.append(f"Column '{c}' has NULLs: {nnull}")
 
-    # Primary key uniqueness
-    if primary_key:
-        if not all(c in cols for c in primary_key):
-            warnings.append(f"Primary key columns not all present: {primary_key}")
-        else:
-            key_expr = ", ".join(_q_ident(c) for c in primary_key)
-            dup_groups = int(
-                con.execute(
-                    f"""
-                    SELECT COUNT(*) FROM (
-                      SELECT {key_expr}, COUNT(*) AS n
-                      FROM t
-                      GROUP BY {key_expr}
-                      HAVING COUNT(*) > 1
-                    ) d
-                    """
-                ).fetchone()[0]
-            )
-            if dup_groups > 0:
-                errors.append(f"Primary key duplicates found for {primary_key}: groups={dup_groups}")
+        if row_count > 0:
+            for c, thr in max_null_pct.items():
+                if c not in cols:
+                    warnings.append(f"Null-pct rule column missing in data: '{c}'")
+                    continue
+                qc = _q_ident(c)
+                nnull = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {qc} IS NULL").fetchone()[0])
+                pct = nnull / row_count
+                if pct > thr:
+                    errors.append(f"Column '{c}' null_pct too high: {pct:.3%} > {thr:.3%}")
 
-    # Range checks (violation = below min OR above max)
-    for c, rule in ranges.items():
-        if c not in cols:
-            warnings.append(f"Range rule column missing in data: '{c}'")
-            continue
+        if primary_key:
+            if not all(c in cols for c in primary_key):
+                warnings.append(f"Primary key columns not all present: {primary_key}")
+            else:
+                key_expr = ", ".join(_q_ident(c) for c in primary_key)
+                dup_groups = int(
+                    con.execute(
+                        f"""
+                        SELECT COUNT(*) FROM (
+                          SELECT {key_expr}, COUNT(*) AS n
+                          FROM t
+                          GROUP BY {key_expr}
+                          HAVING COUNT(*) > 1
+                        ) d
+                        """
+                    ).fetchone()[0]
+                )
+                if dup_groups > 0:
+                    errors.append(f"Primary key duplicates found for {primary_key}: groups={dup_groups}")
 
-        qc = _q_ident(c)
-        violations: list[str] = []
-        if rule.min is not None:
-            violations.append(f"{qc} < {rule.min}")
-        if rule.max is not None:
-            violations.append(f"{qc} > {rule.max}")
+        for c, rule in ranges.items():
+            if c not in cols:
+                warnings.append(f"Range rule column missing in data: '{c}'")
+                continue
 
-        if not violations:
-            warnings.append(f"Range rule for '{c}' has no min/max, skipping")
-            continue
+            qc = _q_ident(c)
+            violations: list[str] = []
+            if rule.min is not None:
+                violations.append(f"{qc} < {rule.min}")
+            if rule.max is not None:
+                violations.append(f"{qc} > {rule.max}")
 
-        where = f"{qc} IS NOT NULL AND (" + " OR ".join(violations) + ")"
-        bad = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {where}").fetchone()[0])
-        if bad > 0:
-            errors.append(
-                f"Range check failed for '{c}': bad_rows={bad} "
-                f"rules={{'min': {rule.min}, 'max': {rule.max}}}"
-            )
+            if not violations:
+                warnings.append(f"Range rule for '{c}' has no min/max, skipping")
+                continue
 
-    con.close()
+            where = f"{qc} IS NOT NULL AND (" + " OR ".join(violations) + ")"
+            bad = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {where}").fetchone()[0])
+            if bad > 0:
+                errors.append(
+                    f"Range check failed for '{c}': bad_rows={bad} "
+                    f"rules={{'min': {rule.min}, 'max': {rule.max}}}"
+                )
+    finally:
+        con.close()
 
     return ValidationResult(
         ok=len(errors) == 0,

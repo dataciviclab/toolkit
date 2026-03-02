@@ -16,15 +16,11 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 | artifact policy `minimal|standard|debug` | supported / advanced | tuning operativo |
 | `legacy_aliases` | compatibility only | non promuovere nei repo nuovi |
 | config legacy | compatibility only | usare `--strict-config` nei repo nuovi |
-| `api_json_paged` | experimental | usare solo con evidenza reale |
-| `html_table` | experimental | usare solo con evidenza reale |
-
 Lettura equivalente a livello package:
 
 - core runtime: `toolkit.raw`, `toolkit.clean`, `toolkit.mart`, `toolkit.cli` (`run`, `validate`, `status`, `inspect`)
 - advanced tooling: `toolkit.profile`, `resume`, run parziali
 - compatibility only: config legacy e alias storici
-- experimental / peripheral: plugin non centrali al workflow canonico
 
 Regola pratica:
 

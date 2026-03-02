@@ -14,7 +14,6 @@ Questa categoria include anche tooling di supporto che non va confuso con il run
 - `toolkit.profile`
 - `resume`
 - run parziali per layer
-- plugin periferici o experimental
 
 ## Step singoli
 
@@ -87,15 +86,6 @@ Regola pratica:
 
 `legacy_aliases` resta supportato per compatibilita`, ma non va promosso nei nuovi repo dataset.
 
-## Plugin periferici
-
-`local_file` e `http_file` sono le sorgenti builtin centrali del toolkit.
-
-Plugin come `api_json_paged` e `html_table` restano disponibili, ma vanno considerati periferici o experimental:
-
-- non sono parte del quickstart
-- non sono il contratto stabile per i repo dataset nuovi
-- non andrebbero usati come base del template senza evidenza reale
 
 ## Compat legacy
 

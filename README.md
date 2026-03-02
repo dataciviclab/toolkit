@@ -23,7 +23,6 @@ Il toolkit espone un perimetro volutamente stretto:
 - core runtime: `raw`, `clean`, `mart`, `run`, `validate`, `status`, `inspect`
 - advanced tooling: `resume`, `profile raw`, run parziali per layer
 - compatibility only: alias legacy e shim deprecati
-- experimental: alcune sorgenti plugin non centrali nel workflow canonico
 
 Regola pratica:
 

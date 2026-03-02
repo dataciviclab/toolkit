@@ -58,20 +58,6 @@ _BUILTIN_PLUGINS: tuple[dict[str, Any], ...] = (
         "optional": False,
         "factory": lambda cls: (lambda **client: cls()),
     },
-    {
-        "name": "api_json_paged",
-        "module": "toolkit.plugins.api_json_paged",
-        "class_name": "ApiJsonPagedSource",
-        "optional": True,
-        "factory": lambda cls: (lambda **client: cls(**client)),
-    },
-    {
-        "name": "html_table",
-        "module": "toolkit.plugins.html_table",
-        "class_name": "HtmlTableSource",
-        "optional": True,
-        "factory": lambda cls: (lambda **client: cls(**client)),
-    },
 )
 
 
@@ -91,15 +77,6 @@ def register_builtin_plugins(
             plugin_class = getattr(module, spec["class_name"])
             target.register(spec["name"], spec["factory"](plugin_class))
         except Exception as exc:
-            if spec["optional"]:
-                message = (
-                    f"DCLPLUGIN001 optional plugin '{spec['name']}' unavailable: {exc}. "
-                    f"Install/repair dependencies or disable the plugin."
-                )
-                logger.warning(message)
-                if strict:
-                    raise PluginRegistrationError(message) from exc
-                continue
             raise PluginRegistrationError(
                 f"Required built-in plugin '{spec['name']}' failed to register: {exc}"
             ) from exc

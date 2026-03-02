@@ -31,11 +31,9 @@ La compatibilita' mantenuta dal toolkit riguarda soprattutto config legacy, alia
 
 Non va trattata come parte del contratto stabile per i repo nuovi.
 
-## Experimental / Peripheral Plugins
+## Builtin Sources
 
-Nel package `toolkit.plugins` convivono plugin di importanza diversa:
+Le sorgenti builtin supportate dal runtime canonico sono:
 
-- builtin centrali: `local_file`, `http_file`
-- periferici / experimental: `api_json_paged`, `html_table`
-
-I plugin experimental restano disponibili ma non fanno parte del contratto stabile per i repo dataset clonati dal template.
+- `local_file`
+- `http_file`

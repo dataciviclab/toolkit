@@ -24,7 +24,7 @@ Lettura equivalente a livello package:
 
 - core runtime: `toolkit.raw`, `toolkit.clean`, `toolkit.mart`, `toolkit.cli` (`run`, `validate`, `status`, `inspect`)
 - advanced tooling: `toolkit.profile`, `resume`, run parziali
-- compatibility only: shim legacy in `toolkit.core`
+- compatibility only: config legacy e alias storici
 - experimental / peripheral: plugin non centrali al workflow canonico
 
 Regola pratica:

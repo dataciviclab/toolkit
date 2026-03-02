@@ -36,12 +36,9 @@ Queste superfici sono supportate ma non vanno espanse senza evidenza reale d'uso
 
 ## Compatibility Only
 
-Alcuni moduli esistono solo per compatibilita' con import o config legacy:
+La compatibilita' mantenuta dal toolkit riguarda soprattutto config legacy, alias documentati e alcune superfici CLI storiche.
 
-- `toolkit.core.validators`
-- `toolkit.core.validation_summary`
-
-Sono shim deprecati, non aree da usare nei nuovi repo.
+Non va trattata come parte del contratto stabile per i repo nuovi.
 
 ## Experimental / Peripheral Plugins
 

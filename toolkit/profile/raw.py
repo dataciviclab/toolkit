@@ -84,6 +84,46 @@ def suggest_skip(sample_text: str, delim: Optional[str]) -> int:
     return 0
 
 
+def _preview_columns(header_line: str | None, delim: str | None) -> list[str]:
+    if not header_line or not delim:
+        return []
+    parts = [segment.strip() for segment in header_line.split(delim)]
+    return [_normalize_colname(part) for part in parts if part.strip()]
+
+
+def build_profile_hints(filepath: Path) -> Dict[str, Any]:
+    enc, txt = sniff_encoding(filepath)
+    delim = sniff_delim(txt)
+    dec = sniff_decimal(txt)
+    skip = suggest_skip(txt, delim)
+    warnings: list[str] = []
+
+    if skip:
+        warnings.append(
+            "header_preamble_detected: first non-empty line looks like a title row, consider skip: 1"
+        )
+
+    header_line: str | None = None
+    try:
+        with filepath.open("r", encoding=enc, errors="replace") as f:
+            for _ in range(skip):
+                f.readline()
+            header_line = f.readline().rstrip("\n\r")
+    except Exception as exc:
+        warnings.append(f"header_read_failed: {type(exc).__name__}: {exc}")
+
+    return {
+        "file_used": filepath.name,
+        "encoding_suggested": enc,
+        "delim_suggested": delim,
+        "decimal_suggested": dec,
+        "skip_suggested": skip,
+        "header_line": header_line,
+        "columns_preview": _preview_columns(header_line, delim),
+        "warnings": warnings,
+    }
+
+
 def _build_read_csv_opts(read_cfg: Dict[str, Any]) -> str:
     opts = ["union_by_name=true"]
 

@@ -11,6 +11,7 @@ from toolkit.core.metadata import config_hash_for_year, sha256_bytes, write_meta
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.registry import register_builtin_plugins, registry
 from toolkit.core.validation import write_validation_json
+from toolkit.profile.raw import build_profile_hints
 from toolkit.raw.extractors import get_extractor
 from toolkit.raw.validate import validate_raw_output
 
@@ -245,6 +246,17 @@ def run_raw(
         )
 
     primary_output_file = _choose_primary_output(manifest_sources, logger)
+    primary_output_path = out_dir / primary_output_file
+    profile_hints = None
+    try:
+        if primary_output_path.exists() and primary_output_path.suffix.lower() in {
+            ".csv",
+            ".tsv",
+            ".txt",
+        }:
+            profile_hints = build_profile_hints(primary_output_path)
+    except Exception as exc:
+        logger.warning("RAW profile_hints generation failed: %s: %s", type(exc).__name__, exc)
 
     metadata_path = write_metadata(
         out_dir,
@@ -261,6 +273,7 @@ def run_raw(
                 for f in files_written
             ],
             "files": files_written,
+            "profile_hints": profile_hints,
         },
     )
 

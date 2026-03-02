@@ -105,6 +105,12 @@ def test_project_example_golden_path(tmp_path: Path, monkeypatch):
     assert (raw_dir / raw_manifest["primary_output_file"]).exists()
     assert raw_manifest["sources"]
     assert raw_manifest["outputs"]
+    assert raw_meta["profile_hints"]["file_used"] == raw_manifest["primary_output_file"]
+    assert raw_meta["profile_hints"]["encoding_suggested"] == "utf-8"
+    assert raw_meta["profile_hints"]["delim_suggested"] == ";"
+    assert raw_meta["profile_hints"]["columns_preview"]
+    assert raw_meta["profile_hints"]["columns_preview"][0] == "Regione"
+    assert any("Provincia" in column for column in raw_meta["profile_hints"]["columns_preview"])
     assert clean_meta["input_files"] == [Path(raw_manifest["primary_output_file"]).name]
     assert clean_meta["read_source_used"] in {"strict", "robust", "parquet"}
     assert isinstance(clean_meta["read_params_used"], dict)

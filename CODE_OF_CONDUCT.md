@@ -1,5 +1,7 @@
 # Code of Conduct
 
+This repository follows the shared collaboration baseline of the DataCivicLab organization. For organization-wide community health and default GitHub policy, refer to the `dataciviclab/.github` repository. This file keeps a short local reference for the toolkit repository.
+
 ## Our Pledge
 
 We want this project to be a respectful, constructive, and harassment-free space for everyone involved.

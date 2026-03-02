@@ -4,6 +4,8 @@
 
 If you believe you found a security issue in this repository, please do not open a public issue first.
 
+For shared organizational GitHub policy and community health defaults, see the `dataciviclab/.github` repository. This file only covers the reporting path for this technical repository.
+
 Instead:
 
 - contact the maintainers privately, if a private contact path is available

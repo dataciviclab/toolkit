@@ -16,7 +16,6 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 | artifact policy `minimal|standard|debug` | supported / advanced | tuning operativo |
 | `legacy_aliases` | compatibility only | non promuovere nei repo nuovi |
 | config legacy | compatibility only | usare `--strict-config` nei repo nuovi |
-| `gen-sql` | frozen helper | bootstrap guidato, non workflow standard |
 | `api_json_paged` | experimental | usare solo con evidenza reale |
 | `html_table` | experimental | usare solo con evidenza reale |
 

@@ -22,7 +22,6 @@ Il toolkit espone un perimetro volutamente stretto:
 
 - core runtime: `raw`, `clean`, `mart`, `run`, `validate`, `status`, `inspect`
 - advanced tooling: `resume`, `profile raw`, run parziali per layer
-- frozen helper: `gen-sql`
 - compatibility only: alias legacy e shim deprecati
 - experimental: alcune sorgenti plugin non centrali nel workflow canonico
 
@@ -47,7 +46,7 @@ Il toolkit include:
 - pipeline `raw`, `clean`, `mart`
 - validation gate post-layer integrato in `run`
 - run tracking persistente in `data/_runs/...`
-- comandi CLI `run`, `resume`, `status`, `validate`, `profile`, `gen-sql`
+- comandi CLI `run`, `resume`, `status`, `validate`, `profile`, `inspect`
 - `project-example/` offline per smoke test locale
 
 ## Installazione
@@ -206,7 +205,7 @@ toolkit inspect paths --config dataset.yml --year 2024 --json
 toolkit run all --config dataset.yml --dry-run --strict-config
 ```
 
-`resume`, `profile raw`, `run raw|clean|mart`, `gen-sql` e la policy completa degli artifacts restano disponibili, ma sono tooling avanzato: vedi [docs/advanced-workflows.md](docs/advanced-workflows.md).
+`resume`, `profile raw`, `run raw|clean|mart` e la policy completa degli artifacts restano disponibili, ma sono tooling avanzato: vedi [docs/advanced-workflows.md](docs/advanced-workflows.md).
 
 ## Notebook locali
 

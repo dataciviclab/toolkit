@@ -14,7 +14,6 @@ Questa categoria include anche tooling di supporto che non va confuso con il run
 - `toolkit.profile`
 - `resume`
 - run parziali per layer
-- helper frozen come `gen-sql`
 - plugin periferici o experimental
 
 ## Step singoli
@@ -87,17 +86,6 @@ Regola pratica:
 - `debug`: conserva anche SQL renderizzate e dettagli di debug
 
 `legacy_aliases` resta supportato per compatibilita`, ma non va promosso nei nuovi repo dataset.
-
-## gen-sql
-
-`toolkit gen-sql --config dataset.yml` resta disponibile come bootstrap helper da mapping dichiarativo.
-
-Stato raccomandato:
-
-- supportato
-- utile per bootstrap guidato
-- non parte del workflow operativo standard
-- da considerare congelato: bugfix si`, espansioni solo se emerge uso reale
 
 ## Plugin periferici
 

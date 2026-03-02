@@ -25,15 +25,6 @@ Queste aree restano supportate, ma non fanno parte del percorso canonico:
 
 Servono per recovery, diagnostica e casi sporchi, non come baseline per i repo nuovi.
 
-## Frozen Helper
-
-Queste superfici sono supportate ma non vanno espanse senza evidenza reale d'uso:
-
-- `toolkit.clean.generator`
-- `toolkit.cli.cmd_gen_sql`
-
-`gen-sql` e' un bootstrap helper, non un pezzo del runtime canonico.
-
 ## Compatibility Only
 
 La compatibilita' mantenuta dal toolkit riguarda soprattutto config legacy, alias documentati e alcune superfici CLI storiche.

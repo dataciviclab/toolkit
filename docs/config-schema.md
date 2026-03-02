@@ -65,8 +65,6 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 | `clean.read_mode` | `strict \| fallback \| robust` | `fallback` |
 | `clean.read_source` | `auto \| config_only \| null` | `null` |
 | `clean.read` | `CleanRead \| null` | `null` |
-| `clean.mapping` | `dict[str, CleanMappingSpec] \| null` | `null` |
-| `clean.derive` | `dict[str, CleanDeriveFieldConfig] \| null` | `null` |
 | `clean.required_columns` | `list[str]` | `[]` |
 | `clean.validate` | `CleanValidate` | `{}` |
 
@@ -113,22 +111,6 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 |---|---|---|
 | `min` | `float \| null` | `null` |
 | `max` | `float \| null` | `null` |
-
-`CleanMappingSpec.parse` shape minima:
-
-| Campo | Tipo | Default |
-|---|---|---|
-| `kind` | `string \| null` | `null` |
-| `locale` | `string \| null` | `null` |
-| `options` | `dict[string,any] \| null` | `null` |
-
-`clean.derive` shape minima:
-
-| Campo | Tipo | Default |
-|---|---|---|
-| `expr` | `string` | nessuno |
-
-`clean.mapping.*.parse` e `clean.derive.*` devono essere oggetti YAML, non stringhe o liste.
 
 ## mart
 

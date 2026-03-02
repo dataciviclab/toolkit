@@ -15,11 +15,22 @@ File utili:
 - CLEAN: `<dataset>_<year>_clean.parquet`, `manifest.json`, `metadata.json`
 - MART: `<table>.parquet`, `manifest.json`, `metadata.json`
 
+Ruoli dei file:
+
+- `metadata.json`: payload ricco del layer. Contiene input, output, `config_hash` e campi specifici del layer.
+- `manifest.json`: summary stabile del layer. Punta a metadata e validation e riassume `ok/errors_count/warnings_count`.
+- run record in `data/_runs/...`: stato del run (`run_id`, layer, validations, status), utile per `status` e `resume`.
+- `inspect paths --json`: helper read-only per notebook e script locali; restituisce i path assoluti utili del runtime, incluso `latest_run`.
+
 Per evitare duplicazione di path logic nei notebook:
 
 - leggi `dataset.yml`
 - usa `toolkit inspect paths --config dataset.yml --year <year> --json`
 - poi apri parquet, metadata, manifest, validation e run record dai path restituiti
+
+Nota pratica:
+
+- `inspect paths` restituisce path assoluti della macchina locale: e' pensato per notebook e script nello stesso ambiente, non come formato portabile tra macchine diverse.
 
 Regola pratica:
 

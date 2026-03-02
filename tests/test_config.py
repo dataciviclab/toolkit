@@ -774,47 +774,6 @@ mart: {}
 """.strip(),
             "raw.extractor.args",
         ),
-        (
-            """
-dataset:
-  name: demo
-  years: [2022]
-raw: {}
-clean:
-  derive: []
-mart: {}
-""".strip(),
-            "clean.derive",
-        ),
-        (
-            """
-dataset:
-  name: demo
-  years: [2022]
-raw: {}
-clean:
-  derive:
-    total: "value * 2"
-mart: {}
-""".strip(),
-            "clean.derive.total",
-        ),
-        (
-            """
-dataset:
-  name: demo
-  years: [2022]
-raw: {}
-clean:
-  mapping:
-    totale:
-      from: valore
-      type: float
-      parse: "number_it"
-mart: {}
-""".strip(),
-            "clean.mapping.totale.parse",
-        ),
     ],
 )
 def test_load_config_model_rejects_wrong_shape_for_typed_subsections(

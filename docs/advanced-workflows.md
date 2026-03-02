@@ -9,6 +9,12 @@ Percorso canonico:
 - `toolkit status --dataset <dataset> --year <year> --latest --config dataset.yml`
 - notebook locali che leggono output e metadata sotto `root/data/...`
 
+Questa categoria include anche tooling di supporto che non va confuso con il runtime principale del toolkit:
+
+- `toolkit.profile`
+- `resume`
+- run parziali per layer
+
 ## Step singoli
 
 Utili per debug o per ripetere solo una parte della pipeline:
@@ -80,16 +86,6 @@ Regola pratica:
 
 `legacy_aliases` resta supportato per compatibilita`, ma non va promosso nei nuovi repo dataset.
 
-## gen-sql
-
-`toolkit gen-sql --config dataset.yml` resta disponibile come bootstrap helper da mapping dichiarativo.
-
-Stato raccomandato:
-
-- supportato
-- utile per bootstrap guidato
-- non parte del workflow operativo standard
-- da considerare congelato: bugfix si`, espansioni solo se emerge uso reale
 
 ## Compat legacy
 

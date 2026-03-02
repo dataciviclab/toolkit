@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from toolkit.core.manifest import read_manifest
+from toolkit.core.manifest import read_raw_manifest
 from toolkit.raw.run import _infer_ext, run_raw
 
 
@@ -92,7 +92,7 @@ def test_manifest_created(monkeypatch, tmp_path: Path):
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-123")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    manifest = read_manifest(out_dir)
+    manifest = read_raw_manifest(out_dir)
     assert manifest is not None
     assert manifest["dataset"] == "demo"
     assert manifest["year"] == 2024
@@ -122,7 +122,7 @@ def test_manifest_points_to_latest_in_versioned(monkeypatch, tmp_path: Path):
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-2")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    manifest = read_manifest(out_dir)
+    manifest = read_raw_manifest(out_dir)
     assert manifest is not None
     assert manifest["run_id"] == "run-2"
     assert manifest["primary_output_file"] == "file_1.csv"
@@ -151,7 +151,7 @@ def test_manifest_overwrite_policy(monkeypatch, tmp_path: Path):
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-2")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    manifest = read_manifest(out_dir)
+    manifest = read_raw_manifest(out_dir)
     assert manifest is not None
     assert manifest["run_id"] == "run-2"
     assert manifest["primary_output_file"] == "file.csv"
@@ -184,7 +184,7 @@ def test_multisource_primary_selection(monkeypatch, tmp_path: Path):
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-123")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    manifest = read_manifest(out_dir)
+    manifest = read_raw_manifest(out_dir)
     assert manifest is not None
     assert manifest["sources"] == [
         {"name": "alpha", "output_file": "a.csv"},

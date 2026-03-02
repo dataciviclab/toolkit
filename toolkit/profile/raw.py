@@ -20,6 +20,10 @@ def _safe_mkdir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
 
 
+def _raw_files(raw_dir: Path) -> list[Path]:
+    return sorted([p for p in raw_dir.glob("*") if p.is_file()])
+
+
 def _try_decode(filepath: Path, enc: str) -> Optional[str]:
     try:
         with filepath.open("r", encoding=enc, errors="strict") as f:
@@ -82,6 +86,54 @@ def suggest_skip(sample_text: str, delim: Optional[str]) -> int:
     if first_count < second_count and first_count <= 1 and second_count >= 3:
         return 1
     return 0
+
+
+def _sniff_file_profile(file0: Path) -> tuple[str, str, Optional[str], Optional[str], int]:
+    enc, txt = sniff_encoding(file0)
+    delim = sniff_delim(txt)
+    dec = sniff_decimal(txt)
+    skip = suggest_skip(txt, delim)
+    return enc, txt, delim, dec, skip
+
+
+def _preview_columns(header_line: str | None, delim: str | None) -> list[str]:
+    if not header_line or not delim:
+        return []
+    parts = [segment.strip() for segment in header_line.split(delim)]
+    return [_normalize_colname(part) for part in parts if part.strip()]
+
+
+def build_profile_hints(filepath: Path) -> Dict[str, Any]:
+    enc, txt = sniff_encoding(filepath)
+    delim = sniff_delim(txt)
+    dec = sniff_decimal(txt)
+    skip = suggest_skip(txt, delim)
+    warnings: list[str] = []
+
+    if skip:
+        warnings.append(
+            "header_preamble_detected: first non-empty line looks like a title row, consider skip: 1"
+        )
+
+    header_line: str | None = None
+    try:
+        with filepath.open("r", encoding=enc, errors="replace") as f:
+            for _ in range(skip):
+                f.readline()
+            header_line = f.readline().rstrip("\n\r")
+    except Exception as exc:
+        warnings.append(f"header_read_failed: {type(exc).__name__}: {exc}")
+
+    return {
+        "file_used": filepath.name,
+        "encoding_suggested": enc,
+        "delim_suggested": delim,
+        "decimal_suggested": dec,
+        "skip_suggested": skip,
+        "header_line": header_line,
+        "columns_preview": _preview_columns(header_line, delim),
+        "warnings": warnings,
+    }
 
 
 def _build_read_csv_opts(read_cfg: Dict[str, Any]) -> str:
@@ -202,6 +254,38 @@ def _pick_data_file(files: List[Path]) -> Path:
     return files[0]
 
 
+def _effective_profile_read_cfg(
+    read_cfg: Optional[Dict[str, Any]],
+    *,
+    encoding: str,
+    delim: Optional[str],
+    decimal: Optional[str],
+    skip: int,
+) -> dict[str, Any]:
+    effective_read_cfg = dict(read_cfg) if isinstance(read_cfg, dict) else {}
+    effective_read_cfg.pop("source", None)
+    if "delim" not in effective_read_cfg and "sep" not in effective_read_cfg and delim:
+        effective_read_cfg["delim"] = delim
+    if "encoding" not in effective_read_cfg and encoding:
+        effective_read_cfg["encoding"] = encoding
+    if "decimal" not in effective_read_cfg and decimal:
+        effective_read_cfg["decimal"] = decimal
+    if "skip" not in effective_read_cfg and skip:
+        effective_read_cfg["skip"] = skip
+    effective_read_cfg.setdefault("header", True)
+    return effective_read_cfg
+
+
+def _read_header_line(file0: Path, *, encoding: str, skip_n: int) -> str | None:
+    try:
+        with file0.open("r", encoding=encoding, errors="replace") as f:
+            for _ in range(skip_n):
+                f.readline()
+            return f.readline().rstrip("\n\r")
+    except Exception:
+        return None
+
+
 def _sample_values(sample_rows: List[Dict[str, Any]], col: str, limit: int = 25) -> List[str]:
     vals: List[str] = []
     for r in sample_rows:
@@ -304,6 +388,50 @@ def _build_mapping_suggestions(columns: List[str], sample_rows: List[Dict[str, A
     return out
 
 
+def _profile_view(
+    con: duckdb.DuckDBPyConnection,
+    file0: Path,
+    *,
+    effective_read_cfg: dict[str, Any],
+) -> None:
+    opt_sql = _build_read_csv_opts(effective_read_cfg)
+    con.execute(
+        f"CREATE OR REPLACE VIEW v AS "
+        f"SELECT * FROM read_csv('{sql_str(str(file0))}', {opt_sql});"
+    )
+
+
+def _describe_columns(con: duckdb.DuckDBPyConnection) -> tuple[list[str], list[str]]:
+    cols = con.execute("DESCRIBE v").fetchall()
+    columns_raw = [r[0] for r in cols]
+    columns_norm = [_normalize_colname(c) for c in columns_raw]
+    return columns_raw, columns_norm
+
+
+def _sample_profile_rows(
+    con: duckdb.DuckDBPyConnection,
+    columns_raw: list[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    df = con.execute("SELECT * FROM v LIMIT 50").fetchdf()
+    sample_rows = df.to_dict(orient="records")
+
+    missingness_top: list[dict[str, Any]] = []
+    for c in columns_raw[:200]:
+        n, nmiss = con.execute(
+            f"""
+            SELECT
+              COUNT(*) AS n,
+              SUM(CASE WHEN "{c}" IS NULL OR TRIM(CAST("{c}" AS VARCHAR)) = '' THEN 1 ELSE 0 END) AS n_missing
+            FROM v
+            """
+        ).fetchone()
+        if n:
+            missingness_top.append({"column": c, "missing_pct": float(nmiss) / float(n) * 100.0})
+
+    missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
+    return sample_rows, missingness_top
+
+
 @dataclass
 class RawProfile:
     dataset: str
@@ -328,28 +456,19 @@ class RawProfile:
 
 
 def profile_raw(raw_dir: Path, dataset: str, year: int, read_cfg: Optional[Dict[str, Any]] = None) -> RawProfile:
-    files = sorted([p for p in raw_dir.glob("*") if p.is_file()])
+    files = _raw_files(raw_dir)
     if not files:
         raise FileNotFoundError(f"No RAW files found in {raw_dir}")
 
     file0 = _pick_data_file(files)
-
-    enc, txt = sniff_encoding(file0)
-    delim = sniff_delim(txt)
-    dec = sniff_decimal(txt)
-    skip = suggest_skip(txt, delim)
-
-    effective_read_cfg = dict(read_cfg) if isinstance(read_cfg, dict) else {}
-    effective_read_cfg.pop("source", None)
-    if "delim" not in effective_read_cfg and "sep" not in effective_read_cfg and delim:
-        effective_read_cfg["delim"] = delim
-    if "encoding" not in effective_read_cfg and enc:
-        effective_read_cfg["encoding"] = enc
-    if "decimal" not in effective_read_cfg and dec:
-        effective_read_cfg["decimal"] = dec
-    if "skip" not in effective_read_cfg and skip:
-        effective_read_cfg["skip"] = skip
-    effective_read_cfg.setdefault("header", True)
+    enc, txt, delim, dec, skip = _sniff_file_profile(file0)
+    effective_read_cfg = _effective_profile_read_cfg(
+        read_cfg,
+        encoding=enc,
+        delim=delim,
+        decimal=dec,
+        skip=skip,
+    )
 
     warnings: List[str] = []
     header_line: Optional[str] = None
@@ -363,55 +482,36 @@ def profile_raw(raw_dir: Path, dataset: str, year: int, read_cfg: Optional[Dict[
     if skip:
         warnings.append("header_preamble_detected: first non-empty line looks like a title row, consider skip: 1")
 
-    # header line (respect skip)
-    try:
-        skip_n = int(effective_read_cfg.get("skip") or 0)
-        with file0.open("r", encoding=effective_read_cfg.get("encoding") or enc, errors="replace") as f:
-            for _ in range(skip_n):
-                f.readline()
-            header_line = f.readline().rstrip("\n\r")
-    except Exception as e:
-        warnings.append(f"header_read_failed: {type(e).__name__}: {e}")
+    skip_n = int(effective_read_cfg.get("skip") or 0)
+    header_line = _read_header_line(
+        file0,
+        encoding=effective_read_cfg.get("encoding") or enc,
+        skip_n=skip_n,
+    )
+    if header_line is None:
+        warnings.append("header_read_failed: could not read header line")
 
     con = duckdb.connect(":memory:")
     try:
-        opt_sql = _build_read_csv_opts(effective_read_cfg)
         try:
-            con.execute(
-                f"CREATE OR REPLACE VIEW v AS "
-                f"SELECT * FROM read_csv('{sql_str(str(file0))}', {opt_sql});"
+            _profile_view(
+                con,
+                file0,
+                effective_read_cfg=effective_read_cfg,
             )
         except Exception as e:
-            fallback_cfg = robust_preset(effective_read_cfg)
-            robust_read_suggested = True
             warnings.append(f"profile_read_retry: {type(e).__name__}: {e}")
-            fallback_sql = _build_read_csv_opts(fallback_cfg)
-            con.execute(
-                f"CREATE OR REPLACE VIEW v AS "
-                f"SELECT * FROM read_csv('{sql_str(str(file0))}', {fallback_sql});"
+            robust_read_suggested = True
+            fallback_cfg = robust_preset(effective_read_cfg)
+            fallback_cfg.setdefault("auto_detect", False)
+            _profile_view(
+                con,
+                file0,
+                effective_read_cfg=fallback_cfg,
             )
 
-        cols = con.execute("DESCRIBE v").fetchall()
-        columns_raw = [r[0] for r in cols]
-        columns_norm = [_normalize_colname(c) for c in columns_raw]
-
-        df = con.execute("SELECT * FROM v LIMIT 50").fetchdf()
-        sample_rows = df.to_dict(orient="records")
-
-        for c in columns_raw[:200]:
-            n, nmiss = con.execute(
-                f"""
-                SELECT
-                  COUNT(*) AS n,
-                  SUM(CASE WHEN "{c}" IS NULL OR TRIM(CAST("{c}" AS VARCHAR)) = '' THEN 1 ELSE 0 END) AS n_missing
-                FROM v
-                """
-            ).fetchone()
-            if n:
-                missingness_top.append({"column": c, "missing_pct": float(nmiss) / float(n) * 100.0})
-
-        missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
-
+        columns_raw, columns_norm = _describe_columns(con)
+        sample_rows, missingness_top = _sample_profile_rows(con, columns_raw)
         mapping_suggestions = _build_mapping_suggestions(columns_raw, sample_rows)
 
     except Exception as e:

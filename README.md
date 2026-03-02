@@ -16,6 +16,20 @@ Ruoli delle repo correlate:
 
 Questa repo non e' l'hub dell'organizzazione e non replica la documentazione org-wide: resta focalizzata sul motore e sul suo contratto tecnico.
 
+## Confini Del Toolkit
+
+Il toolkit espone un perimetro volutamente stretto:
+
+- core runtime: `raw`, `clean`, `mart`, `run`, `validate`, `status`, `inspect`
+- advanced tooling: `resume`, `profile raw`, run parziali per layer
+- compatibility only: alias legacy e shim deprecati
+
+Regola pratica:
+
+- nuovi repo dataset: resta nel workflow canonico
+- recovery o diagnostica: usa gli strumenti advanced
+- bootstrap o compatibilita': non trattarli come parte del contratto stabile
+
 ## Obiettivi
 
 - mantenere una struttura progetto semplice: `dataset.yml` + `sql/`
@@ -31,7 +45,7 @@ Il toolkit include:
 - pipeline `raw`, `clean`, `mart`
 - validation gate post-layer integrato in `run`
 - run tracking persistente in `data/_runs/...`
-- comandi CLI `run`, `resume`, `status`, `validate`, `profile`, `gen-sql`
+- comandi CLI `run`, `resume`, `status`, `validate`, `profile`, `inspect`
 - `project-example/` offline per smoke test locale
 
 ## Installazione
@@ -102,6 +116,7 @@ Schema completo e legacy supportato: [docs/config-schema.md](docs/config-schema.
 Flow avanzati e tooling secondario: [docs/advanced-workflows.md](docs/advanced-workflows.md)
 Matrice di stabilita`: [docs/feature-stability.md](docs/feature-stability.md)
 Contratto notebook/output: [docs/notebook-contract.md](docs/notebook-contract.md)
+Confini runtime e superfici non-core: [docs/runtime-boundaries.md](docs/runtime-boundaries.md)
 Per policy condivise e community health organizzativa, fai riferimento alla repo `.github` dell'organizzazione.
 
 Artefatti attesi:
@@ -189,7 +204,7 @@ toolkit inspect paths --config dataset.yml --year 2024 --json
 toolkit run all --config dataset.yml --dry-run --strict-config
 ```
 
-`resume`, `profile raw`, `run raw|clean|mart`, `gen-sql` e la policy completa degli artifacts restano disponibili, ma sono tooling avanzato: vedi [docs/advanced-workflows.md](docs/advanced-workflows.md).
+`resume`, `profile raw`, `run raw|clean|mart` e la policy completa degli artifacts restano disponibili, ma sono tooling avanzato: vedi [docs/advanced-workflows.md](docs/advanced-workflows.md).
 
 ## Notebook locali
 
@@ -207,6 +222,13 @@ Helper ufficiale per evitare path logic duplicata nei notebook:
 ```bash
 toolkit inspect paths --config dataset.yml --year 2024 --json
 ```
+
+Ruoli stabili degli output:
+
+- `metadata.json`: payload ricco del layer
+- `manifest.json`: summary stabile del layer con puntatori a metadata e validation
+- `data/_runs/.../<run_id>.json`: stato del run usato da `status` e `resume`
+- `inspect paths --json`: discovery helper read-only per notebook e script locali
 
 Questo mantiene il contratto semplice tra toolkit e repo dataset:
 

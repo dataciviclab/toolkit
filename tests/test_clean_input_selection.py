@@ -9,7 +9,7 @@ import pytest
 
 from toolkit.clean.input_selection import list_raw_candidates, select_inputs
 from toolkit.clean.run import run_clean
-from toolkit.core.manifest import write_manifest
+from toolkit.core.manifest import write_raw_manifest
 
 
 class _NoopLogger:
@@ -139,7 +139,7 @@ def test_run_clean_uses_manifest_primary(tmp_path: Path, monkeypatch):
     selected_file.write_text("a\n1\n", encoding="utf-8")
     other_file = raw_dir / "other.csv"
     other_file.write_text("a\n2\n", encoding="utf-8")
-    write_manifest(
+    write_raw_manifest(
         raw_dir,
         {
             "dataset": "demo",
@@ -342,7 +342,7 @@ def test_clean_manifest_points_missing_file_falls_back_and_warns(tmp_path: Path,
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     _write_csv(raw_dir / "small.csv", "a\n1\n")
     large_file = _write_csv(raw_dir / "large.csv", "a\n" + ("1\n" * 20))
-    write_manifest(
+    write_raw_manifest(
         raw_dir,
         {
             "dataset": "demo",

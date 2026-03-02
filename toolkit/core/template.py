@@ -5,9 +5,10 @@ from typing import Any
 
 def render_template(text: str, ctx: dict[str, Any]) -> str:
     """
-    Templating MINIMO e deterministico.
-    Supporta placeholder stile: {year}, {dataset}.
-    Non è Jinja: niente logica, niente espressioni.
+    Minimal deterministic templating used by the runtime contract.
+
+    Supports only plain placeholders such as `{year}` and `{dataset}`.
+    This is intentionally not a general templating engine.
     """
     out = text
     for k, v in ctx.items():

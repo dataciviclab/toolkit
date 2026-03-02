@@ -28,6 +28,40 @@ class ReadInfo:
     params_used: dict[str, Any]
 
 
+def _read_source_mode(clean_cfg: dict[str, Any], logger=None) -> tuple[str, dict[str, Any]]:
+    raw_read_cfg = clean_cfg.get("read")
+    read_source = clean_cfg.get("read_source")
+    explicit_cfg: dict[str, Any] = {}
+
+    if raw_read_cfg is None:
+        pass
+    elif isinstance(raw_read_cfg, str):
+        if logger is not None:
+            logger.warning("clean.read scalar form is deprecated; use clean.read.source")
+        read_source = raw_read_cfg
+    elif isinstance(raw_read_cfg, dict):
+        explicit_cfg = dict(raw_read_cfg)
+        nested_source = explicit_cfg.pop("source", None)
+        if nested_source is not None:
+            read_source = nested_source
+    else:
+        raise ValueError("clean.read must be either a mapping (dict) or one of: auto, config_only")
+
+    normalized_source = str(read_source or "auto")
+    if normalized_source not in READ_SOURCE_MODES:
+        raise ValueError("clean.read source must be one of: auto, config_only")
+
+    return normalized_source, explicit_cfg
+
+
+def _split_read_cfg(explicit_cfg: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    selection_cfg = dict(explicit_cfg)
+    relation_overrides = {
+        key: value for key, value in explicit_cfg.items() if key not in READ_SELECTION_KEYS
+    }
+    return selection_cfg, relation_overrides
+
+
 def load_suggested_read(raw_year_dir: Path) -> dict[str, Any] | None:
     suggested_path = raw_year_dir / "_profile" / "suggested_read.yml"
     if not suggested_path.exists():
@@ -57,34 +91,8 @@ def resolve_clean_read_cfg(
     clean_cfg: dict[str, Any],
     logger=None,
 ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
-    raw_read_cfg = clean_cfg.get("read")
-    read_source = clean_cfg.get("read_source")
-    explicit_cfg: dict[str, Any] = {}
-
-    if raw_read_cfg is None:
-        pass
-    elif isinstance(raw_read_cfg, str):
-        if logger is not None:
-            logger.warning(
-                "clean.read scalar form is deprecated; use clean.read.source"
-            )
-        read_source = raw_read_cfg
-    elif isinstance(raw_read_cfg, dict):
-        explicit_cfg = dict(raw_read_cfg)
-        nested_source = explicit_cfg.pop("source", None)
-        if nested_source is not None:
-            read_source = nested_source
-    else:
-        raise ValueError("clean.read must be either a mapping (dict) or one of: auto, config_only")
-
-    normalized_source = str(read_source or "auto")
-    if normalized_source not in READ_SOURCE_MODES:
-        raise ValueError("clean.read source must be one of: auto, config_only")
-
-    selection_cfg = dict(explicit_cfg)
-    relation_overrides = {
-        key: value for key, value in explicit_cfg.items() if key not in READ_SELECTION_KEYS
-    }
+    normalized_source, explicit_cfg = _read_source_mode(clean_cfg, logger)
+    selection_cfg, relation_overrides = _split_read_cfg(explicit_cfg)
 
     suggested_cfg = load_suggested_read(raw_year_dir)
     filtered_suggested = filter_suggested_read(suggested_cfg)
@@ -114,6 +122,8 @@ def sql_path(p: Path) -> str:
 
 def quote_list(paths: list[Path]) -> str:
     return ", ".join([f"'{sql_path(p)}'" for p in paths])
+
+
 def csv_trim_projection(columns: dict[str, str]) -> str:
     exprs: list[str] = []
     for name, dtype in columns.items():
@@ -247,6 +257,114 @@ def _execute_csv_read(
     return params_used
 
 
+def _execute_parquet_read(
+    con: duckdb.DuckDBPyConnection,
+    input_files: list[Path],
+) -> ReadInfo:
+    if len(input_files) == 1:
+        con.execute(
+            f"CREATE VIEW raw_input AS "
+            f"SELECT * FROM read_parquet('{sql_path(input_files[0])}');"
+        )
+    else:
+        paths = quote_list(input_files)
+        con.execute(
+            f"CREATE VIEW raw_input AS "
+            f"SELECT * FROM read_parquet([{paths}]);"
+        )
+    return ReadInfo(source="parquet", params_used={})
+
+
+def _validate_read_mode(mode: str) -> str:
+    normalized_mode = str(mode or "fallback")
+    if normalized_mode not in {"strict", "fallback", "robust"}:
+        raise ValueError("clean.read_mode must be one of: strict, fallback, robust")
+    return normalized_mode
+
+
+def _read_failure_message(
+    *,
+    input_file: Path,
+    read_cfg: dict[str, Any],
+) -> str:
+    return (
+        "Failed to read CLEAN CSV input. "
+        f"selected_input={input_file} "
+        f"read_cfg={json.dumps(read_cfg, ensure_ascii=False, sort_keys=True)}. "
+        "Try setting clean.read.columns or clean.read.source, "
+        "or adjusting quote/escape/comment/ignore_errors"
+    )
+
+
+def _execute_csv_mode(
+    con: duckdb.DuckDBPyConnection,
+    input_files: list[Path],
+    read_cfg: dict[str, Any],
+    *,
+    source: str,
+    logger,
+) -> ReadInfo:
+    params_used = _execute_csv_read(con, input_files, read_cfg)
+    logger.info(
+        "read_csv params used: source=%s params=%s",
+        source,
+        json.dumps(params_used, ensure_ascii=False, sort_keys=True),
+    )
+    return ReadInfo(source=source, params_used=params_used)
+
+
+def _read_csv_relation(
+    con: duckdb.DuckDBPyConnection,
+    input_files: list[Path],
+    read_cfg: dict[str, Any],
+    *,
+    mode: str,
+    logger,
+) -> ReadInfo:
+    if mode == "robust":
+        return _execute_csv_mode(
+            con,
+            input_files,
+            robust_preset(read_cfg),
+            source="robust",
+            logger=logger,
+        )
+
+    try:
+        return _execute_csv_mode(
+            con,
+            input_files,
+            read_cfg,
+            source="strict",
+            logger=logger,
+        )
+    except Exception as exc:
+        if mode == "strict":
+            raise ValueError(
+                _read_failure_message(input_file=input_files[0], read_cfg=read_cfg)
+            ) from exc
+
+        short_msg = f"{type(exc).__name__}: {exc}"
+        logger.warning(
+            "strict read failed, falling back to robust | input=%s exc=%s",
+            input_files[0],
+            short_msg,
+        )
+        robust_cfg = robust_preset(read_cfg)
+        try:
+            return _execute_csv_mode(
+                con,
+                input_files,
+                robust_cfg,
+                source="robust",
+                logger=logger,
+            )
+        except Exception as robust_exc:
+            raise ValueError(
+                _read_failure_message(input_file=input_files[0], read_cfg=robust_cfg)
+            ) from robust_exc
+
+
 def read_raw_to_relation(
     con: duckdb.DuckDBPyConnection,
     input_files: list[Path],
@@ -263,69 +381,15 @@ def read_raw_to_relation(
 
     exts = {p.suffix.lower() for p in input_files}
     if exts <= {".parquet"}:
-        if len(input_files) == 1:
-            con.execute(
-                f"CREATE VIEW raw_input AS "
-                f"SELECT * FROM read_parquet('{sql_path(input_files[0])}');"
-            )
-        else:
-            paths = quote_list(input_files)
-            con.execute(
-                f"CREATE VIEW raw_input AS "
-                f"SELECT * FROM read_parquet([{paths}]);"
-            )
+        info = _execute_parquet_read(con, input_files)
         logger.info("read_csv params used: source=parquet params={}")
-        return ReadInfo(source="parquet", params_used={})
+        return info
 
-    normalized_mode = str(mode or "fallback")
-    if normalized_mode not in {"strict", "fallback", "robust"}:
-        raise ValueError("clean.read_mode must be one of: strict, fallback, robust")
-
-    try:
-        if normalized_mode == "robust":
-            robust_cfg = robust_preset(read_cfg)
-            params_used = _execute_csv_read(con, input_files, robust_cfg)
-            logger.info(
-                "read_csv params used: source=robust params=%s",
-                json.dumps(params_used, ensure_ascii=False, sort_keys=True),
-            )
-            return ReadInfo(source="robust", params_used=params_used)
-
-        params_used = _execute_csv_read(con, input_files, read_cfg)
-        logger.info(
-            "read_csv params used: source=strict params=%s",
-            json.dumps(params_used, ensure_ascii=False, sort_keys=True),
-        )
-        return ReadInfo(source="strict", params_used=params_used)
-    except Exception as exc:
-        if normalized_mode == "strict":
-            raise ValueError(
-                "Failed to read CLEAN CSV input. "
-                f"selected_input={input_files[0]} "
-                f"read_cfg={json.dumps(read_cfg, ensure_ascii=False, sort_keys=True)}. "
-                "Try setting clean.read.columns or clean.read.source, "
-                "or adjusting quote/escape/comment/ignore_errors"
-            ) from exc
-
-        short_msg = f"{type(exc).__name__}: {exc}"
-        logger.warning(
-            "strict read failed, falling back to robust | input=%s exc=%s",
-            input_files[0],
-            short_msg,
-        )
-        robust_cfg = robust_preset(read_cfg)
-        try:
-            params_used = _execute_csv_read(con, input_files, robust_cfg)
-            logger.info(
-                "read_csv params used: source=robust params=%s",
-                json.dumps(params_used, ensure_ascii=False, sort_keys=True),
-            )
-            return ReadInfo(source="robust", params_used=params_used)
-        except Exception as robust_exc:
-            raise ValueError(
-                "Failed to read CLEAN CSV input. "
-                f"selected_input={input_files[0]} "
-                f"read_cfg={json.dumps(robust_cfg, ensure_ascii=False, sort_keys=True)}. "
-                "Try setting clean.read.columns or clean.read.source, "
-                "or adjusting quote/escape/comment/ignore_errors"
-            ) from robust_exc
+    normalized_mode = _validate_read_mode(mode)
+    return _read_csv_relation(
+        con,
+        input_files,
+        read_cfg,
+        mode=normalized_mode,
+        logger=logger,
+    )

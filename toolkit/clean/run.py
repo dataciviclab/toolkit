@@ -13,7 +13,7 @@ from toolkit.clean.duckdb_read import (
 )
 from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
-from toolkit.core.metadata import config_hash_for_year, file_record, write_manifest, write_metadata
+from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, to_root_relative
 from toolkit.core.template import render_template
 
@@ -33,6 +33,151 @@ def _resolve_sql_path(sql_ref: str | Path, *, base_dir: Path | None) -> Path:
     if base_dir is None:
         return path
     return base_dir / path
+
+
+def _load_clean_sql(
+    clean_cfg: dict[str, Any],
+    *,
+    dataset: str,
+    year: int,
+    base_dir: Path | None,
+) -> tuple[Path, str, dict[str, Any]]:
+    sql_ref = clean_cfg.get("sql")
+    if not sql_ref:
+        raise ValueError("clean.sql missing in dataset.yml (expected: clean: { sql: 'sql/clean.sql' })")
+
+    sql_path_obj = _resolve_sql_path(sql_ref, base_dir=base_dir)
+    if not sql_path_obj.exists():
+        raise FileNotFoundError(f"CLEAN SQL file not found: {sql_path_obj}")
+
+    template_ctx = {"year": year, "dataset": dataset}
+    sql = render_template(sql_path_obj.read_text(encoding="utf-8"), template_ctx)
+    return sql_path_obj, sql, template_ctx
+
+
+def _write_rendered_sql(
+    out_dir: Path,
+    sql: str,
+    *,
+    policy: str,
+    output_cfg: dict[str, Any] | None,
+) -> Path | None:
+    if not should_write("clean", "rendered_sql", policy, {"output": output_cfg or {}}):
+        return None
+
+    run_dir = out_dir / "_run"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    rendered_sql_path = run_dir / "clean_rendered.sql"
+    rendered_sql_path.write_text(sql, encoding="utf-8")
+    return rendered_sql_path
+
+
+def _selection_params(read_cfg: dict[str, Any], logger) -> tuple[str, str, bool, bool]:
+    selection_mode = read_cfg.get("mode")
+    glob_pattern = read_cfg.get("glob", "*")
+    prefer_from_raw_run = bool(read_cfg.get("prefer_from_raw_run", True))
+    allow_ambiguous = bool(read_cfg.get("allow_ambiguous", False))
+
+    if selection_mode is None and read_cfg.get("include") is not None:
+        selection_mode = "explicit"
+        allow_ambiguous = True
+    elif selection_mode is None:
+        logger.warning(
+            "CLEAN input selection defaulting to largest file (legacy). "
+            "Set clean.read.mode explicitly to avoid ambiguity."
+        )
+        selection_mode = "largest"
+
+    return str(selection_mode), glob_pattern, prefer_from_raw_run, allow_ambiguous
+
+
+def _select_clean_inputs(
+    raw_dir: Path,
+    *,
+    logger,
+    mode: str,
+    root: str | None,
+    dataset: str,
+    year: int,
+    glob: str,
+    prefer_from_raw_run: bool,
+    include,
+    allow_ambiguous: bool,
+) -> list[Path]:
+    input_files = select_raw_input(
+        raw_dir,
+        logger,
+        mode=mode,
+        root=root,
+        dataset=dataset,
+        year=year,
+        glob=glob,
+        prefer_from_raw_run=prefer_from_raw_run,
+        include=include,
+        allow_ambiguous=allow_ambiguous,
+    )
+    if not input_files:
+        raise FileNotFoundError(
+            f"No usable RAW files found in {raw_dir}. "
+            f"Expected one of: {sorted(SUPPORTED_INPUT_EXTS)}"
+        )
+
+    if len(input_files) > 1 and mode != "all":
+        raise ValueError(
+            "CLEAN input selection returned multiple files for a single-file mode. "
+            "Use clean.read.mode=all to read multiple inputs."
+        )
+
+    if len(input_files) == 1:
+        logger.info("CLEAN selected RAW input -> %s", input_files[0])
+    else:
+        logger.info("CLEAN selected RAW inputs -> %s", [str(path) for path in input_files])
+
+    return input_files
+
+
+def _clean_metadata_payload(
+    *,
+    dataset: str,
+    year: int,
+    base_dir: Path | None,
+    root_dir: Path,
+    clean_cfg: dict[str, Any],
+    sql_path_obj: Path,
+    rendered_sql_path: Path | None,
+    template_ctx: dict[str, Any],
+    read_mode: str,
+    read_params_source: list[str],
+    read_source_used: str,
+    read_params_used: dict[str, Any],
+    input_files: list[Path],
+    outputs: list[dict[str, Any]],
+    policy: str,
+) -> dict[str, Any]:
+    metadata_payload = {
+        "layer": "clean",
+        "dataset": dataset,
+        "year": year,
+        "sql": _serialize_metadata_path(sql_path_obj, base_dir),
+        "sql_rendered": _serialize_metadata_path(rendered_sql_path, root_dir),
+        "template_ctx": template_ctx,
+        "read": clean_cfg.get("read"),
+        "read_mode": read_mode,
+        "read_params_source": read_params_source,
+        "read_source_used": read_source_used,
+        "read_params_used": read_params_used,
+        "config_hash": config_hash_for_year(base_dir, year),
+        "inputs": [file_record(p) for p in input_files],
+        "outputs": outputs,
+        "input_files": [p.name for p in input_files],
+    }
+    if policy == ARTIFACT_POLICY_DEBUG:
+        metadata_payload["debug"] = {
+            "sql_absolute": str(sql_path_obj.resolve()),
+            "sql_rendered_absolute": str(rendered_sql_path.resolve()) if rendered_sql_path else None,
+            "output_root_absolute": str(root_dir.resolve()),
+        }
+    return metadata_payload
 
 
 def _run_sql(
@@ -78,44 +223,26 @@ def run_clean(
 
     read_mode = str(clean_cfg.get("read_mode", "fallback"))
     read_cfg, relation_read_cfg, read_params_source = resolve_clean_read_cfg(raw_dir, clean_cfg, logger)
-    selection_mode = read_cfg.get("mode")
-    glob_pattern = read_cfg.get("glob", "*")
-    prefer_from_raw_run = bool(read_cfg.get("prefer_from_raw_run", True))
-    allow_ambiguous = bool(read_cfg.get("allow_ambiguous", False))
-
-    sql_rel = clean_cfg.get("sql")
-    if not sql_rel:
-        raise ValueError("clean.sql missing in dataset.yml (expected: clean: { sql: 'sql/clean.sql' })")
-
-    sql_path_obj = _resolve_sql_path(sql_rel, base_dir=base_dir)
-    if not sql_path_obj.exists():
-        raise FileNotFoundError(f"CLEAN SQL file not found: {sql_path_obj}")
-
-    sql = sql_path_obj.read_text(encoding="utf-8")
-    template_ctx = {"year": year, "dataset": dataset}
-    sql = render_template(sql, template_ctx)
-
-    rendered_sql_path: Path | None = None
-    if should_write("clean", "rendered_sql", policy, {"output": output_cfg or {}}):
-        run_dir = out_dir / "_run"
-        run_dir.mkdir(parents=True, exist_ok=True)
-        rendered_sql_path = run_dir / "clean_rendered.sql"
-        rendered_sql_path.write_text(sql, encoding="utf-8")
-
-    if selection_mode is None and read_cfg.get("include") is not None:
-        selection_mode = "explicit"
-        allow_ambiguous = True
-    elif selection_mode is None:
-        logger.warning(
-            "CLEAN input selection defaulting to largest file (legacy). "
-            "Set clean.read.mode explicitly to avoid ambiguity."
-        )
-        selection_mode = "largest"
-
-    input_files = select_raw_input(
-        raw_dir,
+    selection_mode, glob_pattern, prefer_from_raw_run, allow_ambiguous = _selection_params(
+        read_cfg,
         logger,
-        mode=str(selection_mode),
+    )
+    sql_path_obj, sql, template_ctx = _load_clean_sql(
+        clean_cfg,
+        dataset=dataset,
+        year=year,
+        base_dir=base_dir,
+    )
+    rendered_sql_path = _write_rendered_sql(
+        out_dir,
+        sql,
+        policy=policy,
+        output_cfg=output_cfg,
+    )
+    input_files = _select_clean_inputs(
+        raw_dir,
+        logger=logger,
+        mode=selection_mode,
         root=root,
         dataset=dataset,
         year=year,
@@ -124,22 +251,6 @@ def run_clean(
         include=read_cfg.get("include"),
         allow_ambiguous=allow_ambiguous,
     )
-    if not input_files:
-        raise FileNotFoundError(
-            f"No usable RAW files found in {raw_dir}. "
-            f"Expected one of: {sorted(SUPPORTED_INPUT_EXTS)}"
-        )
-
-    if len(input_files) > 1 and selection_mode != "all":
-        raise ValueError(
-            "CLEAN input selection returned multiple files for a single-file mode. "
-            "Use clean.read.mode=all to read multiple inputs."
-        )
-
-    if len(input_files) == 1:
-        logger.info(f"CLEAN selected RAW input -> {input_files[0]}")
-    else:
-        logger.info("CLEAN selected RAW inputs -> %s", [str(path) for path in input_files])
 
     output_path = out_dir / f"{dataset}_{year}_clean.parquet"
     read_source_used, read_params_used = _run_sql(
@@ -152,34 +263,28 @@ def run_clean(
     )
 
     outputs = [file_record(output_path)]
-    metadata_payload = {
-        "layer": "clean",
-        "dataset": dataset,
-        "year": year,
-        "sql": _serialize_metadata_path(sql_path_obj, base_dir),
-        "sql_rendered": _serialize_metadata_path(rendered_sql_path, root_dir),
-        "template_ctx": template_ctx,
-        "read": clean_cfg.get("read"),
-        "read_mode": read_mode,
-        "read_params_source": read_params_source,
-        "read_source_used": read_source_used,
-        "read_params_used": read_params_used,
-        "config_hash": config_hash_for_year(base_dir, year),
-        "inputs": [file_record(p) for p in input_files],
-        "outputs": outputs,
-        "input_files": [p.name for p in input_files],
-    }
-    if policy == ARTIFACT_POLICY_DEBUG:
-        metadata_payload["debug"] = {
-            "sql_absolute": str(sql_path_obj.resolve()),
-            "sql_rendered_absolute": str(rendered_sql_path.resolve()) if rendered_sql_path else None,
-            "output_root_absolute": str(root_dir.resolve()),
-        }
+    metadata_payload = _clean_metadata_payload(
+        dataset=dataset,
+        year=year,
+        base_dir=base_dir,
+        root_dir=root_dir,
+        clean_cfg=clean_cfg,
+        sql_path_obj=sql_path_obj,
+        rendered_sql_path=rendered_sql_path,
+        template_ctx=template_ctx,
+        read_mode=read_mode,
+        read_params_source=read_params_source,
+        read_source_used=read_source_used,
+        read_params_used=read_params_used,
+        input_files=input_files,
+        outputs=outputs,
+        policy=policy,
+    )
     metadata_path = write_metadata(
         out_dir,
         metadata_payload,
     )
-    write_manifest(
+    write_layer_manifest(
         out_dir,
         metadata_path=metadata_path.name,
         validation_path="_validate/clean_validation.json",

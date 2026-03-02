@@ -312,40 +312,6 @@ class CleanValidateConfig(BaseModel):
         return ensure_str_list(value, f"clean.validate.{info.field_name}")
 
 
-class CleanMappingSpec(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    from_: str = Field(alias="from")
-    type: Literal["int", "integer", "float", "double", "str", "string", "date"] = "str"
-    normalize: list[str] | None = None
-    nullify: list[str] | None = None
-    replace: dict[str, str] | None = None
-    parse: MappingParseConfig | None = None
-
-
-class MappingParseConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    kind: str | None = None
-    locale: str | None = None
-    options: dict[str, Any] | None = None
-
-    @field_validator("options", mode="before")
-    @classmethod
-    def _validate_options(cls, value: Any) -> dict[str, Any] | None:
-        if value is None:
-            return None
-        if not isinstance(value, dict):
-            raise ValueError("clean.mapping.*.parse.options must be a dict")
-        return dict(value)
-
-
-class CleanDeriveFieldConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    expr: str
-
-
 class CleanConfig(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -353,8 +319,6 @@ class CleanConfig(BaseModel):
     read_mode: Literal["strict", "fallback", "robust"] = "fallback"
     read_source: Literal["auto", "config_only"] | None = None
     read: CleanReadConfig | None = None
-    mapping: dict[str, CleanMappingSpec] | None = None
-    derive: dict[str, CleanDeriveFieldConfig] | None = None
     required_columns: list[str] = Field(default_factory=list)
     validate_config: CleanValidateConfig = Field(
         default_factory=CleanValidateConfig,

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 import json
 
-from toolkit.core.manifest import read_manifest, write_manifest
+from toolkit.core.manifest import read_raw_manifest, write_raw_manifest
 from toolkit.core.paths import layer_year_dir
 from toolkit.core.validation import ValidationResult, build_validation_summary, write_validation_json
 
@@ -106,7 +106,7 @@ def run_raw_validation(root: str | None, dataset: str, year: int, logger) -> dic
 
     result = validate_raw_output(out_dir, files)
     report = write_validation_json(out_dir / "raw_validation.json", result)
-    existing_manifest = read_manifest(out_dir) or {
+    existing_manifest = read_raw_manifest(out_dir) or {
         "dataset": dataset,
         "year": year,
         "run_id": str(metadata.get("run_id") or "unknown"),
@@ -126,6 +126,6 @@ def run_raw_validation(root: str | None, dataset: str, year: int, logger) -> dic
             "outputs": metadata.get("outputs", []),
         }
     )
-    write_manifest(out_dir, existing_manifest)
+    write_raw_manifest(out_dir, existing_manifest)
     logger.info(f"VALIDATE RAW -> {report} (ok={result.ok})")
     return build_validation_summary(result)

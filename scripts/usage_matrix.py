@@ -5,8 +5,6 @@ from pathlib import Path
 
 
 TARGETS = {
-    "toolkit.core.validators": "toolkit.core.validators",
-    "toolkit.core.validation_summary": "toolkit.core.validation_summary",
     "dataset.test.yml": "dataset.test.yml",
     "clean_ispra_test.sql": "clean_ispra_test.sql",
 }

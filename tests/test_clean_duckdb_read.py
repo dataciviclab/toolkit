@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 import duckdb
+import pandas as pd
 import pytest
 import yaml
 
@@ -172,6 +173,67 @@ def test_read_raw_to_relation_handles_no_header_fixed_schema_without_extra_colum
     rows = con.execute("SELECT col0, col1, col2, col3, col4 FROM raw_input ORDER BY col0").fetchall()
     assert info.source == "strict"
     assert rows == [("A", "2024", "1", "123", "45.6"), ("B", "2024", "2", "456", "78.9")]
+    con.close()
+
+
+def test_read_raw_to_relation_reads_xlsx_first_sheet(tmp_path: Path):
+    input_file = tmp_path / "ok.xlsx"
+    pd.DataFrame(
+        [
+            {"Anno": 2022, "Regione": "Lazio", "Domanda": 123.4},
+            {"Anno": 2022, "Regione": "Umbria", "Domanda": 56.7},
+        ]
+    ).to_excel(input_file, index=False)
+
+    con = duckdb.connect(":memory:")
+    logger = logging.getLogger("tests.clean.duckdb_read.xlsx")
+
+    info = duckdb_read.read_raw_to_relation(
+        con,
+        [input_file],
+        {"header": True},
+        "fallback",
+        logger,
+    )
+
+    rows = con.execute('SELECT "Anno", "Regione", "Domanda" FROM raw_input ORDER BY "Regione"').fetchall()
+    assert info.source == "excel"
+    assert info.params_used["sheet_name"] == 0
+    assert rows == [(2022, "Lazio", 123.4), (2022, "Umbria", 56.7)]
+    con.close()
+
+
+def test_read_raw_to_relation_reads_xlsx_with_explicit_sheet_and_columns(tmp_path: Path):
+    input_file = tmp_path / "sheeted.xlsx"
+    with pd.ExcelWriter(input_file, engine="openpyxl") as writer:
+        pd.DataFrame({"skipme": ["ignore"]}).to_excel(writer, sheet_name="Other", index=False)
+        pd.DataFrame([["A", 1], ["B", 2]]).to_excel(
+            writer,
+            sheet_name="Export",
+            header=False,
+            index=False,
+        )
+
+    con = duckdb.connect(":memory:")
+    logger = logging.getLogger("tests.clean.duckdb_read.xlsx_sheet")
+
+    info = duckdb_read.read_raw_to_relation(
+        con,
+        [input_file],
+        {
+            "header": False,
+            "sheet_name": "Export",
+            "columns": {"col0": "VARCHAR", "col1": "VARCHAR"},
+        },
+        "fallback",
+        logger,
+    )
+
+    rows = con.execute("SELECT col0, col1 FROM raw_input ORDER BY col0").fetchall()
+    assert info.source == "excel"
+    assert info.params_used["sheet_name"] == "Export"
+    assert info.params_used["columns"] == {"col0": "VARCHAR", "col1": "VARCHAR"}
+    assert rows == [("A", 1), ("B", 2)]
     con.close()
 
 

@@ -90,11 +90,19 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 | `columns` | `dict[string,string] \| null` | `null` |
 | `trim_whitespace` | `bool` | `true` |
 | `sample_size` | `int \| null` | `null` |
+| `sheet_name` | `string \| int \| null` | `null` |
 | `mode` | `explicit \| latest \| largest \| all \| null` | `null` |
 | `glob` | `string` | `*` |
 | `prefer_from_raw_run` | `bool` | `true` |
 | `allow_ambiguous` | `bool` | `false` |
 | `include` | `list[string] \| null` | `null` |
+
+Note pratiche:
+
+- i file `.xlsx` sono supportati nel layer CLEAN
+- RAW conserva il workbook originale senza convertirlo
+- per `.xlsx`, le opzioni utili sono soprattutto `header`, `skip`, `columns`, `trim_whitespace`, `sheet_name`
+- `sheet_name` usa il primo foglio se omesso
 
 `CleanValidate`:
 

@@ -14,7 +14,7 @@ def is_supported_input_file(path: Path) -> bool:
         return False
     if name.endswith((".csv.gz", ".tsv.gz", ".txt.gz")):
         return True
-    if path.suffix.lower() in {".csv", ".tsv", ".txt", ".parquet"}:
+    if path.suffix.lower() in {".csv", ".tsv", ".txt", ".parquet", ".xlsx"}:
         return True
     return False
 

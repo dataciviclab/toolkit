@@ -16,6 +16,7 @@ ALLOWED_READ_CSV_KEYS = {
     "ignore_errors",
     "strict_mode",
     "null_padding",
+    "parallel",
     "nullstr",
     "mode",
     "glob",
@@ -40,6 +41,7 @@ ALLOWED_NESTED_CSV_KEYS = {
     "ignore_errors",
     "strict_mode",
     "null_padding",
+    "parallel",
     "nullstr",
     "columns",
     "trim_whitespace",
@@ -54,6 +56,7 @@ FORMAT_HINT_KEYS = {
     "escape",
     "comment",
     "nullstr",
+    "parallel",
     "columns",
     "trim_whitespace",
 }

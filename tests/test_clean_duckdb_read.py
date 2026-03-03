@@ -69,6 +69,26 @@ def test_read_raw_to_relation_strict_returns_strict_info(tmp_path: Path):
     con.close()
 
 
+def test_read_raw_to_relation_passes_parallel_flag(tmp_path: Path):
+    input_file = tmp_path / "ok.csv"
+    input_file.write_text("a;b\n1;2\n", encoding="utf-8")
+
+    con = duckdb.connect(":memory:")
+    logger = logging.getLogger("tests.clean.duckdb_read.parallel")
+
+    info = duckdb_read.read_raw_to_relation(
+        con,
+        [input_file],
+        {"delim": ";", "encoding": "utf-8", "header": True, "parallel": False},
+        "strict",
+        logger,
+    )
+
+    assert info.source == "strict"
+    assert info.params_used["parallel"] is False
+    con.close()
+
+
 def test_read_raw_to_relation_strict_error_message_uses_current_config_keys(tmp_path: Path):
     input_file = tmp_path / "bad.csv"
     input_file.write_text("a;b\n1;2;3\n", encoding="utf-8")

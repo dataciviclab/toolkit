@@ -267,6 +267,7 @@ class CleanReadConfig(BaseModel):
     ignore_errors: bool | None = None
     strict_mode: bool | None = None
     null_padding: bool | None = None
+    parallel: bool | None = None
     nullstr: str | list[str] | None = None
     columns: dict[str, str] | None = None
     trim_whitespace: bool = True

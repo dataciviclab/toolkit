@@ -147,6 +147,7 @@ def _csv_read_options(read_cfg: dict[str, Any]) -> tuple[list[str], dict[str, An
     strict_mode = read_cfg.get("strict_mode")
     ignore_errors = read_cfg.get("ignore_errors")
     null_padding = read_cfg.get("null_padding")
+    parallel = read_cfg.get("parallel")
     quote = read_cfg.get("quote")
     escape = read_cfg.get("escape")
     comment = read_cfg.get("comment")
@@ -183,6 +184,9 @@ def _csv_read_options(read_cfg: dict[str, Any]) -> tuple[list[str], dict[str, An
     if null_padding is not None:
         opts.append(f"null_padding={'true' if bool(null_padding) else 'false'}")
         params_used["null_padding"] = bool(null_padding)
+    if parallel is not None:
+        opts.append(f"parallel={'true' if bool(parallel) else 'false'}")
+        params_used["parallel"] = bool(parallel)
     if quote is not None:
         opts.append(f"quote='{sql_str(quote)}'")
         params_used["quote"] = quote

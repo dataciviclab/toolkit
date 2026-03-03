@@ -85,6 +85,7 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 | `ignore_errors` | `bool \| null` | `null` |
 | `strict_mode` | `bool \| null` | `null` |
 | `null_padding` | `bool \| null` | `null` |
+| `parallel` | `bool \| null` | `null` |
 | `nullstr` | `string \| list[string] \| null` | `null` |
 | `columns` | `dict[string,string] \| null` | `null` |
 | `trim_whitespace` | `bool` | `true` |

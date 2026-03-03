@@ -272,6 +272,7 @@ class CleanReadConfig(BaseModel):
     columns: dict[str, str] | None = None
     trim_whitespace: bool = True
     sample_size: int | None = None
+    sheet_name: str | int | None = None
     mode: Literal["explicit", "latest", "largest", "all"] | None = None
     glob: str = "*"
     prefer_from_raw_run: bool = True

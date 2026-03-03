@@ -37,3 +37,8 @@ Le sorgenti builtin supportate dal runtime canonico sono:
 
 - `local_file`
 - `http_file`
+
+Nota:
+
+- il runtime canonico puo' conservare file `.xlsx` in RAW e leggerli in CLEAN
+- questo non cambia il ruolo del layer RAW: il file originale resta l'artefatto sorgente

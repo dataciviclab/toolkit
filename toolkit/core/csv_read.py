@@ -27,6 +27,7 @@ ALLOWED_READ_CSV_KEYS = {
     "columns",
     "trim_whitespace",
     "sample_size",
+    "sheet_name",
 }
 ALLOWED_NESTED_CSV_KEYS = {
     "delim",
@@ -45,6 +46,7 @@ ALLOWED_NESTED_CSV_KEYS = {
     "nullstr",
     "columns",
     "trim_whitespace",
+    "sheet_name",
 }
 FORMAT_HINT_KEYS = {
     "delim",

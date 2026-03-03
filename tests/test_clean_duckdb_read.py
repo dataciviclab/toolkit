@@ -89,6 +89,31 @@ def test_read_raw_to_relation_passes_parallel_flag(tmp_path: Path):
     con.close()
 
 
+def test_read_raw_to_relation_keeps_explicit_columns_unchanged(tmp_path: Path):
+    input_file = tmp_path / "ok.csv"
+    input_file.write_text("a;b\n1;2\n", encoding="utf-8")
+
+    con = duckdb.connect(":memory:")
+    logger = logging.getLogger("tests.clean.duckdb_read.columns")
+
+    info = duckdb_read.read_raw_to_relation(
+        con,
+        [input_file],
+        {
+            "delim": ";",
+            "encoding": "utf-8",
+            "header": True,
+            "columns": {"a": "VARCHAR", "b": "VARCHAR"},
+        },
+        "strict",
+        logger,
+    )
+
+    assert info.source == "strict"
+    assert info.params_used["columns"] == {"a": "VARCHAR", "b": "VARCHAR"}
+    con.close()
+
+
 def test_read_raw_to_relation_strict_error_message_uses_current_config_keys(tmp_path: Path):
     input_file = tmp_path / "bad.csv"
     input_file.write_text("a;b\n1;2;3\n", encoding="utf-8")
@@ -114,6 +139,39 @@ def test_read_raw_to_relation_strict_error_message_uses_current_config_keys(tmp_
     finally:
         duckdb_read._execute_csv_read = original_execute
 
+    con.close()
+
+
+def test_read_raw_to_relation_handles_no_header_fixed_schema_without_extra_column(tmp_path: Path):
+    input_file = tmp_path / "fixed.csv"
+    input_file.write_text("A,2024,1,123,45.6\nB,2024,2,456,78.9\n", encoding="utf-8")
+
+    con = duckdb.connect(":memory:")
+    logger = logging.getLogger("tests.clean.duckdb_read.fixed_schema")
+
+    info = duckdb_read.read_raw_to_relation(
+        con,
+        [input_file],
+        {
+            "delim": ",",
+            "encoding": "utf-8",
+            "header": False,
+            "auto_detect": False,
+            "columns": {
+                "col0": "VARCHAR",
+                "col1": "VARCHAR",
+                "col2": "VARCHAR",
+                "col3": "VARCHAR",
+                "col4": "VARCHAR",
+            },
+        },
+        "fallback",
+        logger,
+    )
+
+    rows = con.execute("SELECT col0, col1, col2, col3, col4 FROM raw_input ORDER BY col0").fetchall()
+    assert info.source == "strict"
+    assert rows == [("A", "2024", "1", "123", "45.6"), ("B", "2024", "2", "456", "78.9")]
     con.close()
 
 

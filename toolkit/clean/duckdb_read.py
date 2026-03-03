@@ -200,8 +200,6 @@ def _csv_read_options(read_cfg: dict[str, Any]) -> tuple[list[str], dict[str, An
     source_columns = None
     if columns:
         source_columns = dict(columns)
-        if "__extra" not in source_columns:
-            source_columns["__extra"] = "VARCHAR"
         cols_sql = ", ".join(
             [f"'{sql_str(name)}': '{sql_str(dtype)}'" for name, dtype in source_columns.items()]
         )

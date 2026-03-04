@@ -72,6 +72,7 @@ Uso consigliato:
 
 - repo dataset nuovi: configurazione esplicita e `--strict-config`
 - `profile raw` solo se serve capire meglio il formato RAW
+- `inspect schema-diff` quando vuoi confrontare rapidamente hints e colonne tra piu anni senza aprire a mano i metadata RAW
 
 ## Artifact policy
 

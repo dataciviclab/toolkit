@@ -218,6 +218,7 @@ Per il percorso base:
 - `validate all` esegue i quality checks su CLEAN e MART
 - `status` legge il run record e mostra lo stato piu` recente
 - `inspect paths` espone i path stabili per notebook e script locali, insieme ai principali hints del RAW
+- `inspect schema-diff` confronta i principali segnali di schema RAW tra gli anni configurati
 - `--dry-run` valida config e SQL senza eseguire la pipeline
 
 Esempi:
@@ -227,6 +228,7 @@ toolkit run all --config dataset.yml --strict-config
 toolkit validate all --config dataset.yml --strict-config
 toolkit status --dataset my_dataset --year 2024 --latest --config dataset.yml
 toolkit inspect paths --config dataset.yml --year 2024 --json
+toolkit inspect schema-diff --config dataset.yml --json
 toolkit run all --config dataset.yml --dry-run --strict-config
 ```
 

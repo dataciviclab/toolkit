@@ -9,6 +9,7 @@ import typer
 from toolkit.cli.common import iter_years
 from toolkit.core.config import load_config
 from toolkit.core.paths import layer_year_dir
+from toolkit.profile.raw import build_profile_hints
 from toolkit.core.run_context import get_run_dir, latest_run
 
 
@@ -17,6 +18,75 @@ def _read_json(path: Path) -> dict[str, Any] | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def _raw_primary_file(raw_dir: Path, manifest: dict[str, Any]) -> Path | None:
+    primary_output_file = manifest.get("primary_output_file")
+    if isinstance(primary_output_file, str):
+        candidate = raw_dir / primary_output_file
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
+    root = Path(cfg.root)
+    raw_dir = layer_year_dir(root, "raw", cfg.dataset, year)
+    manifest = _read_json(raw_dir / "manifest.json") or {}
+    metadata = _read_json(raw_dir / "metadata.json") or {}
+    primary_file = _raw_primary_file(raw_dir, manifest)
+
+    profile_hints = metadata.get("profile_hints") or {}
+    profile_source = "metadata" if profile_hints else None
+    sniff_error: str | None = None
+
+    if not profile_hints and primary_file is not None:
+        try:
+            profile_hints = build_profile_hints(primary_file)
+            profile_source = "sniff"
+        except Exception as exc:
+            sniff_error = f"{type(exc).__name__}: {exc}"
+
+    columns_preview = profile_hints.get("columns_preview") or []
+    warnings = list(profile_hints.get("warnings") or [])
+    if sniff_error is not None:
+        warnings.append(f"profile_hint_fallback_failed: {sniff_error}")
+
+    return {
+        "year": year,
+        "raw_dir": str(raw_dir),
+        "raw_exists": raw_dir.exists(),
+        "primary_output_file": manifest.get("primary_output_file"),
+        "file_used": profile_hints.get("file_used"),
+        "profile_source": profile_source,
+        "encoding": profile_hints.get("encoding_suggested"),
+        "delim": profile_hints.get("delim_suggested"),
+        "decimal": profile_hints.get("decimal_suggested"),
+        "skip": profile_hints.get("skip_suggested"),
+        "header_line": profile_hints.get("header_line"),
+        "columns_count": len(columns_preview),
+        "columns_preview": columns_preview,
+        "warnings": warnings,
+    }
+
+
+def _compare_schema_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    comparisons: list[dict[str, Any]] = []
+    for previous, current in zip(entries, entries[1:]):
+        previous_columns = set(previous.get("columns_preview") or [])
+        current_columns = set(current.get("columns_preview") or [])
+        comparisons.append(
+            {
+                "from_year": previous["year"],
+                "to_year": current["year"],
+                "from_columns_count": previous.get("columns_count") or 0,
+                "to_columns_count": current.get("columns_count") or 0,
+                "added_columns": sorted(current_columns - previous_columns),
+                "removed_columns": sorted(previous_columns - current_columns),
+                "changed": previous_columns != current_columns,
+            }
+        )
+    return comparisons
 
 
 def _raw_output_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
@@ -168,7 +238,79 @@ def paths(
         typer.echo("")
 
 
+def schema_diff(
+    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
+    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
+):
+    """
+    Confronta i principali segnali di schema RAW tra gli anni configurati.
+    """
+    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
+    cfg = load_config(config, strict_config=strict_config_flag)
+    entries = [_raw_schema_payload(cfg, selected_year) for selected_year in iter_years(cfg, None)]
+    comparisons = _compare_schema_entries(entries)
+    payload = {
+        "dataset": cfg.dataset,
+        "config_path": str(cfg.base_dir / "dataset.yml"),
+        "years": [entry["year"] for entry in entries],
+        "entries": entries,
+        "comparisons": comparisons,
+    }
+
+    if as_json:
+        typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+
+    typer.echo(f"dataset: {payload['dataset']}")
+    typer.echo(f"config_path: {payload['config_path']}")
+    typer.echo(f"years: {', '.join(str(year) for year in payload['years'])}")
+    typer.echo("")
+
+    for entry in entries:
+        typer.echo(f"year: {entry['year']}")
+        typer.echo(f"  raw_exists: {entry['raw_exists']}")
+        typer.echo(f"  raw_dir: {entry['raw_dir']}")
+        typer.echo(f"  primary_output_file: {entry['primary_output_file']}")
+        typer.echo(f"  profile_source: {entry['profile_source']}")
+        typer.echo(f"  encoding: {entry['encoding']}")
+        typer.echo(f"  delim: {entry['delim']}")
+        typer.echo(f"  decimal: {entry['decimal']}")
+        typer.echo(f"  skip: {entry['skip']}")
+        typer.echo(f"  columns_count: {entry['columns_count']}")
+        typer.echo(f"  header_line: {entry['header_line']}")
+        if entry["columns_preview"]:
+            typer.echo("  columns_preview:")
+            for column in entry["columns_preview"]:
+                typer.echo(f"    - {column}")
+        if entry["warnings"]:
+            typer.echo("  warnings:")
+            for warning in entry["warnings"]:
+                typer.echo(f"    - {warning}")
+        typer.echo("")
+
+    if comparisons:
+        typer.echo("comparisons:")
+        for comparison in comparisons:
+            typer.echo(f"  {comparison['from_year']} -> {comparison['to_year']}:")
+            typer.echo(
+                f"    counts: {comparison['from_columns_count']} -> {comparison['to_columns_count']}"
+            )
+            typer.echo(f"    changed: {comparison['changed']}")
+            if comparison["added_columns"]:
+                typer.echo("    added_columns:")
+                for column in comparison["added_columns"]:
+                    typer.echo(f"      - {column}")
+            if comparison["removed_columns"]:
+                typer.echo("    removed_columns:")
+                for column in comparison["removed_columns"]:
+                    typer.echo(f"      - {column}")
+    else:
+        typer.echo("comparisons: none")
+
+
 def register(app: typer.Typer) -> None:
     inspect_app = typer.Typer(no_args_is_help=True, add_completion=False)
     inspect_app.command("paths")(paths)
+    inspect_app.command("schema-diff")(schema_diff)
     app.add_typer(inspect_app, name="inspect")

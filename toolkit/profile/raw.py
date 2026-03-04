@@ -249,7 +249,8 @@ def write_suggested_read_yml(out_dir: Path, profile: "RawProfile | Dict[str, Any
     lines = ["clean:", "  read:"]
     for key, value in suggested_read.items():
         if isinstance(value, str):
-            rendered = f'"{value.replace("\"", "\\\"")}"'
+            escaped = value.replace('"', '\\"')
+            rendered = f'"{escaped}"'
         elif isinstance(value, bool):
             rendered = "true" if value else "false"
         elif value is None:

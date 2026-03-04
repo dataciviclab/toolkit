@@ -253,3 +253,83 @@ def test_smoke_e2e_local_zip_extractor(tmp_path: Path) -> None:
     raw_dir = Path(cfg.root) / "data" / "raw" / cfg.dataset / str(year)
     raw_manifest = json.loads((raw_dir / "manifest.json").read_text(encoding="utf-8"))
     assert raw_manifest["primary_output_file"] == "zip_payload.csv"
+
+
+def test_smoke_e2e_local_file_path_year_template(tmp_path: Path) -> None:
+    project_dir = tmp_path / "templated_local_project"
+    data_dir = project_dir / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(FIXTURES_DIR / "it_small.csv", data_dir / "it_small_2024.csv")
+
+    _write_text(
+        project_dir / "sql" / "clean.sql",
+        """
+        SELECT
+          comune,
+          CAST(anno AS INTEGER) AS anno,
+          CAST(valore AS DOUBLE) AS valore
+        FROM raw_input
+        """,
+    )
+    _write_text(
+        project_dir / "sql" / "mart_totali.sql",
+        """
+        SELECT
+          anno,
+          SUM(valore) AS totale
+        FROM clean_input
+        GROUP BY anno
+        """,
+    )
+    _write_text(
+        project_dir / "dataset.yml",
+        """
+        schema_version: 1
+        root: out
+        dataset:
+          name: tiny_csv_it_templated
+          years: [2024]
+        raw:
+          output_policy: overwrite
+          sources:
+            - name: csv_it
+              type: local_file
+              primary: true
+              args:
+                path: data/it_small_{year}.csv
+                filename: tiny_it_{year}.csv
+        clean:
+          sql: sql/clean.sql
+          read_mode: strict
+          read:
+            source: config_only
+            header: true
+            delim: ";"
+            decimal: ","
+            mode: explicit
+            include: tiny_it_2024.csv
+          required_columns: comune
+          validate:
+            not_null: valore
+        mart:
+          tables:
+            - name: mart_totali
+              sql: sql/mart_totali.sql
+          required_tables: mart_totali
+          validate:
+            table_rules:
+              mart_totali:
+                required_columns: [anno, totale]
+        """,
+    )
+
+    cfg = load_config(project_dir / "dataset.yml")
+    year = cfg.years[0]
+    context = run_year(cfg, year, step="all", logger=_project_logger())
+
+    _assert_run_success(context.path)
+    _assert_common_outputs(Path(cfg.root), cfg.dataset, year, ["mart_totali"])
+
+    raw_dir = Path(cfg.root) / "data" / "raw" / cfg.dataset / str(year)
+    raw_manifest = json.loads((raw_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert raw_manifest["primary_output_file"] == "tiny_it_2024.csv"

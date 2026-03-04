@@ -124,6 +124,35 @@ mart:
     assert cfg.mart["label_path"] == "labels/mart.txt"
 
 
+def test_load_config_preserves_year_template_in_raw_local_file_path(tmp_path: Path):
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    yml = project_dir / "dataset.yml"
+    yml.write_text(
+        """
+root: "./out"
+dataset:
+  name: demo
+  years: [2022, 2023]
+raw:
+  sources:
+    - type: local_file
+      args:
+        path: "data/raw_{year}.csv"
+        filename: "raw_{year}.csv"
+clean: {}
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_config(yml)
+
+    assert cfg.raw["sources"][0]["args"]["path"] == str((project_dir / "data" / "raw_{year}.csv").resolve())
+    assert cfg.raw["sources"][0]["args"]["filename"] == "raw_{year}.csv"
+
+
 def test_load_config_logs_normalized_whitelist_fields(tmp_path: Path, caplog, monkeypatch):
     project_dir = tmp_path / "project"
     project_dir.mkdir()

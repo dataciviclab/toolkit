@@ -463,6 +463,13 @@ def _resolve_path_value(value: Any, *, base_dir: Path) -> Any:
     text = value.strip()
     if not text:
         return value
+    if "{year}" in text:
+        sentinel = "__DCL_YEAR_PLACEHOLDER__"
+        templated = text.replace("{year}", sentinel)
+        path = Path(templated).expanduser()
+        if path.is_absolute():
+            return str(path.resolve()).replace(sentinel, "{year}")
+        return str((base_dir / path).resolve()).replace(sentinel, "{year}")
     path = Path(text).expanduser()
     if path.is_absolute():
         return path.resolve()

@@ -25,6 +25,7 @@ ALLOWED_READ_CSV_KEYS = {
     "include",
     "csv",
     "columns",
+    "normalize_rows_to_columns",
     "trim_whitespace",
     "sample_size",
     "sheet_name",
@@ -45,6 +46,7 @@ ALLOWED_NESTED_CSV_KEYS = {
     "parallel",
     "nullstr",
     "columns",
+    "normalize_rows_to_columns",
     "trim_whitespace",
     "sheet_name",
 }
@@ -60,6 +62,7 @@ FORMAT_HINT_KEYS = {
     "nullstr",
     "parallel",
     "columns",
+    "normalize_rows_to_columns",
     "trim_whitespace",
 }
 READ_SELECTION_KEYS = {"mode", "glob", "prefer_from_raw_run", "allow_ambiguous", "include"}

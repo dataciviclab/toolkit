@@ -177,6 +177,32 @@ Convenzioni:
 - `sql/mart/*.sql` definisce le tabelle MART
 - per esempi pronti, vedi [examples/dataset_min.yml](examples/dataset_min.yml) e [examples/dataset_full.yml](examples/dataset_full.yml)
 
+Caso utile per CSV pubblici multi-anno quasi stabili ma non identici:
+
+```yaml
+clean:
+  sql: "sql/clean.sql"
+  read:
+    source: config_only
+    header: false
+    skip: 1
+    delim: ";"
+    encoding: "utf-8"
+    columns:
+      column00: "VARCHAR"
+      column01: "VARCHAR"
+      column02: "VARCHAR"
+    normalize_rows_to_columns: true
+```
+
+Usa `normalize_rows_to_columns: true` quando:
+
+- vuoi un layout posizionale canonico
+- alcuni file o anni hanno righe piu corte del numero di colonne atteso
+- vuoi evitare che una colonna aggiunta o mancante faccia saltare il `clean`
+
+Non usarlo come default. Ha senso quando stai deliberatamente gestendo una fonte instabile con schema posizionale dichiarato.
+
 ## CLI
 
 Workflow canonico:

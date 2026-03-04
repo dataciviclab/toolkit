@@ -217,7 +217,7 @@ Per il percorso base:
 - `run all` esegue RAW -> CLEAN -> MART
 - `validate all` esegue i quality checks su CLEAN e MART
 - `status` legge il run record e mostra lo stato piu` recente
-- `inspect paths` espone i path stabili per notebook e script locali
+- `inspect paths` espone i path stabili per notebook e script locali, insieme ai principali hints del RAW
 - `--dry-run` valida config e SQL senza eseguire la pipeline
 
 Esempi:
@@ -242,6 +242,7 @@ In pratica:
 - CLEAN: `root/data/clean/<dataset>/<year>/`
 - MART: `root/data/mart/<dataset>/<year>/`
 - run records: `root/data/_runs/<dataset>/<year>/`
+- hints RAW: `root/data/raw/<dataset>/<year>/_profile/suggested_read.yml`
 
 Helper ufficiale per evitare path logic duplicata nei notebook:
 
@@ -254,7 +255,7 @@ Ruoli stabili degli output:
 - `metadata.json`: payload ricco del layer
 - `manifest.json`: summary stabile del layer con puntatori a metadata e validation
 - `data/_runs/.../<run_id>.json`: stato del run usato da `status` e `resume`
-- `inspect paths --json`: discovery helper read-only per notebook e script locali
+- `inspect paths --json`: discovery helper read-only per notebook e script locali, con blocco `raw_hints`
 
 Questo mantiene il contratto semplice tra toolkit e repo dataset:
 

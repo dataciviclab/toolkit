@@ -20,6 +20,8 @@ Questa pagina raccoglie i contratti operativi stabili del toolkit per la pipelin
 - Il file JSON canonico e` `raw_profile.json`, ma viene scritto solo per policy `standard|debug`.
 - `profile.json` resta un alias di compatibilita` opzionale, controllato da `output.legacy_aliases`.
 - `suggested_read.yml` e` il contratto usato da CLEAN per i format hints e resta richiesto solo quando `clean.read.source: auto`.
+- `run raw` puo` scrivere un `suggested_read.yml` conservativo gia` nel percorso canonico.
+- `profile raw` puo` rigenerare lo stesso file insieme ad artefatti diagnostici piu` ricchi.
 - `suggested_mapping.yml` resta un artefatto diagnostico opzionale per uso umano; non e` un input del runtime canonico del toolkit.
 
 ## Artifacts Policy

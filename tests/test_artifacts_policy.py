@@ -49,7 +49,16 @@ def test_artifacts_policy_minimal_skips_optional_outputs(tmp_path: Path, monkeyp
     year = cfg.years[0]
     logger = _NoopLogger()
 
-    run_raw(cfg.dataset, year, cfg.root, cfg.raw, logger, base_dir=cfg.base_dir)
+    run_raw(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.raw,
+        logger,
+        base_dir=cfg.base_dir,
+        output_cfg=cfg.output,
+        clean_cfg=cfg.clean,
+    )
     profile_cmd(step="raw", config=str(config_path))
     run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
     run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
@@ -96,7 +105,16 @@ def test_artifacts_policy_standard_keeps_current_debug_artifacts(tmp_path: Path,
     year = cfg.years[0]
     logger = _NoopLogger()
 
-    run_raw(cfg.dataset, year, cfg.root, cfg.raw, logger, base_dir=cfg.base_dir)
+    run_raw(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.raw,
+        logger,
+        base_dir=cfg.base_dir,
+        output_cfg=cfg.output,
+        clean_cfg=cfg.clean,
+    )
     profile_cmd(step="raw", config=str(config_path))
     run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
     run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)

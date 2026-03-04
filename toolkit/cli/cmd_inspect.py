@@ -12,6 +12,13 @@ from toolkit.core.paths import layer_year_dir
 from toolkit.core.run_context import get_run_dir, latest_run
 
 
+def _read_json(path: Path) -> dict[str, Any] | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
 def _raw_output_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
     raw_dir = layer_year_dir(root, "raw", dataset, year)
     return {
@@ -56,6 +63,11 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
     root = Path(cfg.root)
     run_dir = get_run_dir(root, cfg.dataset, year)
     mart_tables = cfg.mart.get("tables") or []
+    raw_dir = layer_year_dir(root, "raw", cfg.dataset, year)
+    raw_manifest = _read_json(raw_dir / "manifest.json") or {}
+    raw_metadata = _read_json(raw_dir / "metadata.json") or {}
+    suggested_read_path = raw_dir / "_profile" / "suggested_read.yml"
+    profile_hints = raw_metadata.get("profile_hints") or {}
 
     latest_payload: dict[str, Any] | None = None
     try:
@@ -79,6 +91,16 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
             "clean": _clean_paths(root, cfg.dataset, year),
             "mart": _mart_paths(root, cfg.dataset, year, mart_tables),
             "run_dir": str(run_dir),
+        },
+        "raw_hints": {
+            "primary_output_file": raw_manifest.get("primary_output_file"),
+            "suggested_read_path": str(suggested_read_path),
+            "suggested_read_exists": suggested_read_path.exists(),
+            "encoding": profile_hints.get("encoding_suggested"),
+            "delim": profile_hints.get("delim_suggested"),
+            "decimal": profile_hints.get("decimal_suggested"),
+            "skip": profile_hints.get("skip_suggested"),
+            "warnings": profile_hints.get("warnings") or [],
         },
         "latest_run": latest_payload,
     }
@@ -111,6 +133,18 @@ def paths(
         typer.echo(f"raw_manifest: {item['paths']['raw']['manifest']}")
         typer.echo(f"raw_metadata: {item['paths']['raw']['metadata']}")
         typer.echo(f"raw_validation: {item['paths']['raw']['validation']}")
+        typer.echo("raw_hints:")
+        typer.echo(f"  - primary_output_file: {item['raw_hints']['primary_output_file']}")
+        typer.echo(f"  - suggested_read_exists: {item['raw_hints']['suggested_read_exists']}")
+        typer.echo(f"  - suggested_read_path: {item['raw_hints']['suggested_read_path']}")
+        typer.echo(f"  - encoding: {item['raw_hints']['encoding']}")
+        typer.echo(f"  - delim: {item['raw_hints']['delim']}")
+        typer.echo(f"  - decimal: {item['raw_hints']['decimal']}")
+        typer.echo(f"  - skip: {item['raw_hints']['skip']}")
+        if item["raw_hints"]["warnings"]:
+            typer.echo("  - warnings:")
+            for warning in item["raw_hints"]["warnings"]:
+                typer.echo(f"    - {warning}")
         typer.echo(f"clean_dir: {item['paths']['clean']['dir']}")
         typer.echo(f"clean_output: {item['paths']['clean']['output']}")
         typer.echo(f"clean_manifest: {item['paths']['clean']['manifest']}")

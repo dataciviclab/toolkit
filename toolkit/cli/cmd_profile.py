@@ -8,7 +8,12 @@ import typer
 from toolkit.cli.common import iter_years, load_cfg_and_logger
 from toolkit.core.artifacts import resolve_artifact_policy, should_write
 from toolkit.core.paths import layer_year_dir
-from toolkit.profile.raw import build_suggested_read_cfg, profile_raw, write_raw_profile
+from toolkit.profile.raw import (
+    build_suggested_read_cfg,
+    profile_raw,
+    write_raw_profile,
+    write_suggested_read_yml,
+)
 
 
 def render_profile_md(profile: dict[str, Any]) -> str:
@@ -91,19 +96,6 @@ def _yml_scalar(v: Any) -> str:
     if v is None:
         return "null"
     return str(v)
-
-
-def write_suggested_read_yml(out_dir: Path, profile: dict[str, Any]) -> Path:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    suggested_read = build_suggested_read_cfg(profile)
-
-    lines = ["clean:", "  read:"]
-    for key, value in suggested_read.items():
-        lines.append(f"    {key}: {_yml_scalar(value)}")
-
-    p = out_dir / "suggested_read.yml"
-    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return p
 
 
 def write_suggested_mapping_yml(out_dir: Path, profile: dict[str, Any]) -> Path:

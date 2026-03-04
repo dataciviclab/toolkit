@@ -5,13 +5,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+from toolkit.core.artifacts import resolve_artifact_policy, should_write
 from toolkit.core.manifest import write_raw_manifest
 from toolkit.core.config import parse_bool
 from toolkit.core.metadata import config_hash_for_year, sha256_bytes, write_metadata
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.registry import register_builtin_plugins, registry
 from toolkit.core.validation import write_validation_json
-from toolkit.profile.raw import build_profile_hints
+from toolkit.profile.raw import build_profile_hints, write_suggested_read_yml
 from toolkit.raw.extractors import get_extractor
 from toolkit.raw.validate import validate_raw_output
 
@@ -142,6 +143,8 @@ def run_raw(
     base_dir: Path | None = None,
     run_id: str | None = None,
     strict_plugins: bool = False,
+    output_cfg: dict | None = None,
+    clean_cfg: dict | None = None,
 ):
     """
     Supporta:
@@ -255,6 +258,16 @@ def run_raw(
             ".txt",
         }:
             profile_hints = build_profile_hints(primary_output_path)
+            profile_ctx = {
+                "clean": clean_cfg or {},
+                "output": output_cfg or {},
+            }
+            policy = resolve_artifact_policy(output_cfg)
+            if should_write("profile", "suggested_read", policy, profile_ctx):
+                conservative_hints = dict(profile_hints)
+                conservative_hints["decimal_suggested"] = None
+                suggested_path = write_suggested_read_yml(out_dir / "_profile", conservative_hints)
+                logger.info("RAW suggested_read -> %s", suggested_path)
     except Exception as exc:
         logger.warning("RAW profile_hints generation failed: %s: %s", type(exc).__name__, exc)
 

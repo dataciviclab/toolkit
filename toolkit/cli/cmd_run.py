@@ -166,6 +166,8 @@ def run_year(
             base_dir=cfg.base_dir,
             run_id=context.run_id,
             strict_plugins=bool((getattr(cfg, "config", {}) or {}).get("strict", False)),
+            output_cfg=cfg.output,
+            clean_cfg=cfg.clean,
         )
 
     if "clean" in layers_to_run:

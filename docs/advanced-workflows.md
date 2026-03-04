@@ -49,6 +49,11 @@ Artefatti principali:
 - `raw/<dataset>/<year>/_profile/raw_profile.json`
 - `raw/<dataset>/<year>/_profile/suggested_read.yml`
 
+Nota pratica:
+
+- `run raw` scrive gia` un `suggested_read.yml` leggero e conservativo quando il file primario e` profilabile
+- `profile raw` resta il comando da usare quando vuoi profiling piu` ricco, report diagnostici e `suggested_mapping.yml`
+
 `profile.json` resta un alias legacy opzionale e non e` il nome canonico da promuovere nei nuovi repo.
 
 ## CLEAN read e input selection

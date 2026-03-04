@@ -35,6 +35,9 @@ def test_inspect_paths_reports_dataset_repo_layout_from_other_cwd(tmp_path: Path
     assert f"clean_output: {dst / '_smoke_out' / 'data' / 'clean' / 'project_example' / '2022' / 'project_example_2022_clean.parquet'}" in result.output
     assert f"clean_validation: {dst / '_smoke_out' / 'data' / 'clean' / 'project_example' / '2022' / '_validate' / 'clean_validation.json'}" in result.output
     assert f"mart_manifest: {dst / '_smoke_out' / 'data' / 'mart' / 'project_example' / '2022' / 'manifest.json'}" in result.output
+    assert "raw_hints:" in result.output
+    assert "primary_output_file:" in result.output
+    assert "suggested_read_exists: True" in result.output
     assert "latest_run_status: SUCCESS" in result.output
 
 
@@ -63,4 +66,7 @@ def test_inspect_paths_json_is_notebook_friendly(tmp_path: Path, monkeypatch) ->
     assert payload["paths"]["raw"]["manifest"].endswith("manifest.json")
     assert payload["paths"]["mart"]["outputs"]
     assert payload["paths"]["mart"]["metadata"].endswith("metadata.json")
+    assert payload["raw_hints"]["primary_output_file"] is None
+    assert payload["raw_hints"]["suggested_read_exists"] is False
+    assert payload["raw_hints"]["suggested_read_path"].endswith("suggested_read.yml")
     assert payload["latest_run"] is None

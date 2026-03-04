@@ -47,7 +47,16 @@ def test_project_example_golden_path(tmp_path: Path, monkeypatch):
     year = cfg.years[0]
     logger = _NoopLogger()
 
-    run_raw(cfg.dataset, year, cfg.root, cfg.raw, logger, base_dir=cfg.base_dir)
+    run_raw(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.raw,
+        logger,
+        base_dir=cfg.base_dir,
+        output_cfg=cfg.output,
+        clean_cfg=cfg.clean,
+    )
     run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
     run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
     validate_cmd(step="clean", config=str(dst / "dataset.yml"))
@@ -64,6 +73,7 @@ def test_project_example_golden_path(tmp_path: Path, monkeypatch):
     assert (raw_dir / "raw_validation.json").exists()
     assert (raw_dir / "metadata.json").exists()
     assert (raw_dir / "manifest.json").exists()
+    assert (raw_dir / "_profile" / "suggested_read.yml").exists()
     assert clean_parquet.exists()
     assert (clean_dir / "metadata.json").exists()
     assert (clean_dir / "manifest.json").exists()
@@ -179,7 +189,16 @@ def test_project_example_outputs_can_be_replaced_after_run(tmp_path: Path, monke
     year = cfg.years[0]
     logger = _NoopLogger()
 
-    run_raw(cfg.dataset, year, cfg.root, cfg.raw, logger, base_dir=cfg.base_dir)
+    run_raw(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.raw,
+        logger,
+        base_dir=cfg.base_dir,
+        output_cfg=cfg.output,
+        clean_cfg=cfg.clean,
+    )
     run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
     run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
 

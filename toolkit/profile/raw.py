@@ -242,6 +242,28 @@ def build_suggested_read_cfg(
     return normalize_read_cfg(cfg)
 
 
+def write_suggested_read_yml(out_dir: Path, profile: "RawProfile | Dict[str, Any]") -> Path:
+    _safe_mkdir(out_dir)
+    suggested_read = build_suggested_read_cfg(profile)
+
+    lines = ["clean:", "  read:"]
+    for key, value in suggested_read.items():
+        if isinstance(value, str):
+            escaped = value.replace('"', '\\"')
+            rendered = f'"{escaped}"'
+        elif isinstance(value, bool):
+            rendered = "true" if value else "false"
+        elif value is None:
+            rendered = "null"
+        else:
+            rendered = str(value)
+        lines.append(f"    {key}: {rendered}")
+
+    p = out_dir / "suggested_read.yml"
+    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return p
+
+
 def _pick_data_file(files: List[Path]) -> Path:
     # prefer csv-like, exclude metadata/validation json
     preferred = [p for p in files if p.suffix.lower() in {".csv", ".tsv", ".txt", ".php", ".gz"}]

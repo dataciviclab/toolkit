@@ -176,6 +176,69 @@ def test_read_raw_to_relation_handles_no_header_fixed_schema_without_extra_colum
     con.close()
 
 
+def test_read_raw_to_relation_normalizes_short_rows_to_fixed_schema(tmp_path: Path):
+    input_file = tmp_path / "ragged.csv"
+    input_file.write_text("A;B;C\n1;2\n3;4;5\n", encoding="utf-8")
+
+    con = duckdb.connect(":memory:")
+    logger = logging.getLogger("tests.clean.duckdb_read.normalize_rows")
+
+    info = duckdb_read.read_raw_to_relation(
+        con,
+        [input_file],
+        {
+            "delim": ";",
+            "encoding": "utf-8",
+            "header": False,
+            "columns": {
+                "col0": "VARCHAR",
+                "col1": "VARCHAR",
+                "col2": "VARCHAR",
+            },
+            "normalize_rows_to_columns": True,
+        },
+        "strict",
+        logger,
+    )
+
+    rows = con.execute("SELECT col0, col1, col2 FROM raw_input ORDER BY col0").fetchall()
+    assert info.source == "strict"
+    assert info.params_used["normalize_rows_to_columns"] is True
+    assert rows == [("1", "2", ""), ("3", "4", "5"), ("A", "B", "C")]
+    con.close()
+
+
+def test_read_raw_to_relation_normalize_rows_skips_header_when_configured(tmp_path: Path):
+    input_file = tmp_path / "ragged_header.csv"
+    input_file.write_text("h0;h1;h2\n1;2\n", encoding="utf-8")
+
+    con = duckdb.connect(":memory:")
+    logger = logging.getLogger("tests.clean.duckdb_read.normalize_rows_header")
+
+    info = duckdb_read.read_raw_to_relation(
+        con,
+        [input_file],
+        {
+            "delim": ";",
+            "encoding": "utf-8",
+            "header": True,
+            "columns": {
+                "col0": "VARCHAR",
+                "col1": "VARCHAR",
+                "col2": "VARCHAR",
+            },
+            "normalize_rows_to_columns": True,
+        },
+        "strict",
+        logger,
+    )
+
+    rows = con.execute("SELECT col0, col1, col2 FROM raw_input").fetchall()
+    assert info.params_used["header"] is True
+    assert rows == [("1", "2", "")]
+    con.close()
+
+
 def test_read_raw_to_relation_reads_xlsx_first_sheet(tmp_path: Path):
     input_file = tmp_path / "ok.xlsx"
     pd.DataFrame(

@@ -270,6 +270,7 @@ class CleanReadConfig(BaseModel):
     parallel: bool | None = None
     nullstr: str | list[str] | None = None
     columns: dict[str, str] | None = None
+    normalize_rows_to_columns: bool = False
     trim_whitespace: bool = True
     sample_size: int | None = None
     sheet_name: str | int | None = None
@@ -283,6 +284,11 @@ class CleanReadConfig(BaseModel):
     @classmethod
     def _normalize_columns(cls, value: Any) -> dict[str, str] | None:
         return normalize_columns_spec(value)
+
+    @field_validator("normalize_rows_to_columns", mode="before")
+    @classmethod
+    def _normalize_rows_to_columns(cls, value: Any) -> bool:
+        return parse_bool(value, "clean.read.normalize_rows_to_columns")
 
     @field_validator("include", mode="before")
     @classmethod

@@ -71,6 +71,27 @@ clean:
 - I suggested hints non forzano mai il preset robusto.
 - Il preset robusto viene applicato solo se richiesto da `clean.read_mode` o dal fallback runtime del reader.
 
+## Positional Fixed Schema
+
+- `clean.read.columns` dichiara uno schema canonico per il reader CLEAN.
+- `clean.read.normalize_rows_to_columns: true` attiva una lettura CSV normalizzata lato toolkit:
+  - richiede `clean.read.columns`
+  - salta l'header se `header: true`
+  - pad-da a destra le righe piu corte fino al numero di colonne atteso
+  - fallisce se una riga ha piu colonne di quelle dichiarate
+
+Usarlo quando:
+
+- stai leggendo CSV pubblici multi-anno con schema quasi stabile ma non identico
+- vuoi mantenere un mapping posizionale unico nel `clean.sql`
+- alcune annualita hanno colonne finali assenti o vuote
+
+Non usarlo quando:
+
+- il file ha gia uno schema per nome colonna stabile
+- il problema e solo di delimitatore o quoting
+- non hai deciso esplicitamente uno schema canonico
+
 ## Metadata
 
 - Ogni `metadata.json` include `metadata_schema_version`.

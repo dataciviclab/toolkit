@@ -88,6 +88,7 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 | `parallel` | `bool \| null` | `null` |
 | `nullstr` | `string \| list[string] \| null` | `null` |
 | `columns` | `dict[string,string] \| null` | `null` |
+| `normalize_rows_to_columns` | `bool` | `false` |
 | `trim_whitespace` | `bool` | `true` |
 | `sample_size` | `int \| null` | `null` |
 | `sheet_name` | `string \| int \| null` | `null` |
@@ -103,6 +104,8 @@ Note pratiche:
 - RAW conserva il workbook originale senza convertirlo
 - per `.xlsx`, le opzioni utili sono soprattutto `header`, `skip`, `columns`, `trim_whitespace`, `sheet_name`
 - `sheet_name` usa il primo foglio se omesso
+- `normalize_rows_to_columns: true` ha senso solo insieme a `columns`
+- con `normalize_rows_to_columns: true`, il toolkit normalizza le righe corte del CSV allo schema atteso prima di esporre `raw_input`
 
 `CleanValidate`:
 

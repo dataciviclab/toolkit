@@ -138,6 +138,14 @@ def _manifest_primary_input(raw_year_dir: Path) -> tuple[Path | None, str | None
     )
 
 
+def _should_use_manifest_primary(mode: str, include=None) -> bool:
+    if mode == "all":
+        return False
+    if mode == "explicit" and include is not None:
+        return False
+    return True
+
+
 def select_raw_input(
     raw_year_dir: Path,
     logger,
@@ -165,11 +173,12 @@ def select_raw_input(
                 prefer_from_raw_run=prefer_from_raw_run,
             )
 
-    manifest_primary, manifest_warning = _manifest_primary_input(raw_year_dir)
-    if manifest_primary is not None:
-        return [manifest_primary]
-    if manifest_warning is not None:
-        logger.warning(manifest_warning)
+    if _should_use_manifest_primary(mode, include=include):
+        manifest_primary, manifest_warning = _manifest_primary_input(raw_year_dir)
+        if manifest_primary is not None:
+            return [manifest_primary]
+        if manifest_warning is not None:
+            logger.warning(manifest_warning)
 
     selected = select_inputs(
         selected_candidates,

@@ -177,6 +177,67 @@ def test_run_clean_uses_manifest_primary(tmp_path: Path, monkeypatch):
     assert seen["input_files"] == [selected_file]
 
 
+def test_run_clean_mode_all_ignores_manifest_primary(tmp_path: Path, monkeypatch):
+    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    first_file = raw_dir / "a.csv"
+    first_file.write_text("a\n1\n", encoding="utf-8")
+    second_file = raw_dir / "b.csv"
+    second_file.write_text("a\n2\n", encoding="utf-8")
+    write_raw_manifest(
+        raw_dir,
+        {
+            "dataset": "demo",
+            "year": 2024,
+            "run_id": "run-1",
+            "created_at": "2026-02-28T00:00:00+00:00",
+            "sources": [{"name": "source_1", "output_file": "a.csv"}],
+            "primary_output_file": "a.csv",
+        },
+    )
+
+    sql_path = _write_clean_sql(tmp_path)
+    seen = _run_clean_capture_inputs(
+        monkeypatch,
+        tmp_path,
+        {"sql": str(sql_path), "read": {"mode": "all"}},
+    )
+
+    assert seen["input_files"] == [first_file, second_file]
+
+
+def test_run_clean_explicit_include_ignores_manifest_primary(tmp_path: Path, monkeypatch):
+    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    preferred_file = raw_dir / "preferred.csv"
+    preferred_file.write_text("a\n1\n", encoding="utf-8")
+    target_file = raw_dir / "uscite.csv"
+    target_file.write_text("a\n2\n", encoding="utf-8")
+    write_raw_manifest(
+        raw_dir,
+        {
+            "dataset": "demo",
+            "year": 2024,
+            "run_id": "run-1",
+            "created_at": "2026-02-28T00:00:00+00:00",
+            "sources": [{"name": "source_1", "output_file": "preferred.csv"}],
+            "primary_output_file": "preferred.csv",
+        },
+    )
+
+    sql_path = _write_clean_sql(tmp_path)
+    seen = _run_clean_capture_inputs(
+        monkeypatch,
+        tmp_path,
+        {
+            "sql": str(sql_path),
+            "read": {"mode": "explicit", "include": ["uscite.csv"]},
+        },
+    )
+
+    assert seen["input_files"] == [target_file]
+
+
 def test_run_clean_rejects_php_only_inputs_with_clear_error(tmp_path: Path):
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     raw_dir.mkdir(parents=True, exist_ok=True)

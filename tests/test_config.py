@@ -54,6 +54,7 @@ def test_load_config_resolves_relative_paths_from_dataset_dir(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     (project_dir / "sql" / "mart").mkdir(parents=True)
+    (project_dir / "sql" / "cross").mkdir(parents=True)
 
     yml = project_dir / "dataset.yml"
     yml.write_text(
@@ -73,6 +74,11 @@ mart:
   tables:
     - name: demo_mart
       sql: "sql/mart/demo.sql"
+cross_year:
+  tables:
+    - name: demo_cross
+      sql: "sql/cross/demo_cross.sql"
+      source_layer: clean
 """.strip(),
         encoding="utf-8",
     )
@@ -85,6 +91,7 @@ mart:
     assert cfg.raw["source"]["args"]["path"] == (project_dir / "data" / "raw.csv").resolve()
     assert cfg.clean["sql"] == (project_dir / "sql" / "clean.sql").resolve()
     assert cfg.mart["tables"][0]["sql"] == (project_dir / "sql" / "mart" / "demo.sql").resolve()
+    assert cfg.cross_year["tables"][0]["sql"] == (project_dir / "sql" / "cross" / "demo_cross.sql").resolve()
 
 
 def test_load_config_does_not_transform_non_whitelisted_path_like_fields(tmp_path: Path):

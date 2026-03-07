@@ -7,8 +7,9 @@ import typer
 from toolkit.cli.common import iter_years, load_cfg_and_logger
 from toolkit.clean.run import run_clean
 from toolkit.clean.validate import run_clean_validation
+from toolkit.cross.run import run_cross_year
 from toolkit.core.logging import bind_logger, get_logger
-from toolkit.core.paths import layer_year_dir
+from toolkit.core.paths import layer_dataset_dir, layer_year_dir
 from toolkit.core.run_context import RunContext
 from toolkit.mart.run import run_mart
 from toolkit.mart.validate import run_mart_validation
@@ -33,6 +34,8 @@ def _validation_runner(layer_name: str):
 def _planned_layers(step: str) -> list[str]:
     if step == "all":
         return ["raw", "clean", "mart"]
+    if step == "cross_year":
+        return ["cross_year"]
     return [step]
 
 
@@ -64,6 +67,19 @@ def _validate_execution_plan(cfg, step: str) -> list[str]:
             if not sql_path.exists():
                 raise FileNotFoundError(f"MART SQL file not found: {sql_path}")
 
+    if "cross_year" in layers:
+        tables = cfg.cross_year.get("tables") or []
+        if not isinstance(tables, list) or not tables:
+            raise ValueError("cross_year.tables missing or empty in dataset.yml")
+        for table in tables:
+            if not isinstance(table, dict):
+                raise ValueError("Each entry in cross_year.tables must be a mapping (dict).")
+            sql_path = _resolve_sql_path(cfg, table.get("sql"))
+            if not sql_path.exists():
+                raise FileNotFoundError(f"CROSS_YEAR SQL file not found: {sql_path}")
+            if table.get("source_layer", "clean") == "mart" and not table.get("source_table"):
+                raise ValueError("cross_year.tables[].source_table is required when source_layer = mart")
+
     return layers
 
 
@@ -89,8 +105,53 @@ def _print_execution_plan(cfg, year: int, layers: list[str], context: RunContext
     typer.echo(f"run_record: {context.path}")
     typer.echo("output_dirs:")
     for layer in layers:
-        typer.echo(f"  - {layer}: {layer_year_dir(cfg.root, layer, cfg.dataset, year)}")
+        if layer == "cross_year":
+            typer.echo(f"  - {layer}: {layer_dataset_dir(cfg.root, 'cross', cfg.dataset)}")
+        else:
+            typer.echo(f"  - {layer}: {layer_year_dir(cfg.root, layer, cfg.dataset, year)}")
     typer.echo("")
+
+
+def run_cross_year_step(
+    cfg,
+    *,
+    dry_run: bool = False,
+    logger=None,
+) -> None:
+    if logger is None:
+        logger = get_logger()
+
+    _validate_execution_plan(cfg, "cross_year")
+    output_dir = layer_dataset_dir(cfg.root, "cross", cfg.dataset)
+
+    if dry_run:
+        typer.echo("Execution Plan")
+        typer.echo(f"dataset: {cfg.dataset}")
+        typer.echo("scope: cross_year")
+        typer.echo("status: DRY_RUN")
+        typer.echo(f"years: {', '.join(str(year) for year in cfg.years)}")
+        typer.echo("steps: cross_year")
+        typer.echo(f"output_dir: {output_dir}")
+        typer.echo("")
+        return
+
+    logger.info(
+        "RUN cross_year | dataset=%s years=%s base_dir=%s effective_root=%s root_source=%s",
+        cfg.dataset,
+        ",".join(str(year) for year in cfg.years),
+        cfg.base_dir,
+        cfg.root,
+        cfg.root_source,
+    )
+    run_cross_year(
+        cfg.dataset,
+        cfg.years,
+        cfg.root,
+        cfg.cross_year,
+        logger,
+        base_dir=cfg.base_dir,
+        output_cfg=cfg.output,
+    )
 
 
 def run_year(
@@ -199,7 +260,7 @@ def run_year(
 
 
 def run(
-    step: str = typer.Argument(..., help="raw | clean | mart | all"),
+    step: str = typer.Argument(..., help="raw | clean | mart | cross_year | all"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
@@ -211,8 +272,12 @@ def run(
     cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag)
     dry_run_flag = dry_run if isinstance(dry_run, bool) else False
 
-    if step not in {"raw", "clean", "mart", "all"}:
-        raise typer.BadParameter("step must be one of: raw, clean, mart, all")
+    if step not in {"raw", "clean", "mart", "cross_year", "all"}:
+        raise typer.BadParameter("step must be one of: raw, clean, mart, cross_year, all")
+
+    if step == "cross_year":
+        run_cross_year_step(cfg, dry_run=dry_run_flag, logger=logger)
+        return
 
     for year in iter_years(cfg, None):
         run_year(cfg, year, step=step, dry_run=dry_run_flag, logger=logger)

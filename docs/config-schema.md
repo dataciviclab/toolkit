@@ -14,6 +14,7 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 | `raw` | `object` | no | configurazione acquisizione RAW |
 | `clean` | `object` | no | configurazione CLEAN |
 | `mart` | `object` | no | configurazione MART |
+| `cross_year` | `object` | no | output opzionali multi-anno |
 | `config` | `object` | no | policy parser config |
 | `validation` | `object` | no | solo opzioni globali del validation gate |
 | `output` | `object` | no | policy artefatti |
@@ -155,6 +156,37 @@ Note pratiche:
 | `ranges` | `dict[str, RangeRule]` | `{}` |
 | `min_rows` | `int \| null` | `null` |
 
+## cross_year
+
+`cross_year` definisce output opzionali multi-anno. Non entra nel loop annuale di `raw/clean/mart`.
+
+L'esecuzione e esplicita:
+
+```bash
+py -m toolkit.cli.app run cross_year --config dataset.yml
+```
+
+Campi supportati:
+
+| Campo | Tipo | Default |
+|---|---|---|
+| `cross_year.tables` | `list[CrossYearTable]` | `[]` |
+
+`CrossYearTable`:
+
+| Campo | Tipo | Default |
+|---|---|---|
+| `name` | `string` | nessuno |
+| `sql` | `string` | nessuno |
+| `source_layer` | `clean \| mart` | `clean` |
+| `source_table` | `string \| null` | `null` |
+
+Note pratiche:
+
+- con `source_layer: clean`, il runner unisce tutti i parquet annuali del layer CLEAN e li espone come view `clean_input` e `clean`
+- con `source_layer: mart`, `source_table` e obbligatorio; il runner legge `<year>/<source_table>.parquet` e lo espone come view `mart_input` e `mart`
+- gli output vengono scritti in `root/data/cross/<dataset>/`
+
 ## validation
 
 Campi supportati:
@@ -198,6 +230,7 @@ Con `config.strict: true` o `--strict-config`, gli stessi casi diventano errori.
 | `DCL006` | `clean.sql_path` | `clean.sql` | ignored |
 | `DCL007` | `mart.sql_dir` | `mart.tables[].sql` | ignored |
 | `DCL008` | `bq` | rimuovere il campo | ignored |
+| `DCL013` | `cross_year.* unknown keys` | rimuovere il campo | ignored |
 
 ## Esempi minimi
 
@@ -252,6 +285,22 @@ mart:
     table_rules:
       mart_summary:
         min_rows: 1
+```
+
+### CROSS_YEAR
+
+Presuppone che i layer annuali richiesti esistano gia sotto `root/data/clean/...` oppure `root/data/mart/...`.
+
+```yaml
+dataset:
+  name: cross_demo
+  years: [2022, 2023]
+
+cross_year:
+  tables:
+    - name: clean_union
+      sql: sql/cross/clean_union.sql
+      source_layer: clean
 ```
 
 ## Errori config: come leggerli

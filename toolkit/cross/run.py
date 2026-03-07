@@ -78,6 +78,7 @@ def _bind_source_view(con: duckdb.DuckDBPyConnection, files: list[Path], source_
     con.execute(f"CREATE OR REPLACE VIEW source_input AS SELECT * FROM {source_expr}")
     con.execute(f"CREATE OR REPLACE VIEW {source_layer}_input AS SELECT * FROM source_input")
     con.execute(f"CREATE OR REPLACE VIEW {source_layer} AS SELECT * FROM source_input")
+    con.execute(f"CREATE OR REPLACE VIEW {source_layer}_all_years AS SELECT * FROM source_input")
 
 
 def run_cross_year(

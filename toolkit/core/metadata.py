@@ -64,7 +64,7 @@ def write_layer_manifest(
     folder: Path,
     *,
     metadata_path: str,
-    validation_path: str,
+    validation_path: str | None,
     outputs: list[dict[str, Any]],
     ok: bool | None,
     errors_count: int | None,

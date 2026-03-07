@@ -110,6 +110,13 @@ _CONFIG_DEPRECATIONS: dict[str, ConfigDeprecation] = {
         status="ignored",
         message="unknown mart config keys detected",
     ),
+    "unknown.cross_year": ConfigDeprecation(
+        code="DCL013",
+        legacy="cross_year.* unknown keys",
+        replacement="remove unsupported cross_year keys",
+        status="ignored",
+        message="unknown cross_year config keys detected",
+    ),
 }
 
 
@@ -369,6 +376,21 @@ class MartTableConfig(BaseModel):
     sql: Path
 
 
+class CrossYearTableConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    sql: Path
+    source_layer: Literal["clean", "mart"] = "clean"
+    source_table: str | None = None
+
+
+class CrossYearConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tables: list[CrossYearTableConfig] = Field(default_factory=list)
+
+
 class MartTableRuleConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -440,6 +462,7 @@ class ToolkitConfigModel(BaseModel):
     raw: RawConfig = Field(default_factory=RawConfig)
     clean: CleanConfig = Field(default_factory=CleanConfig)
     mart: MartConfig = Field(default_factory=MartConfig)
+    cross_year: CrossYearConfig = Field(default_factory=CrossYearConfig)
     config: ConfigPolicy = Field(default_factory=ConfigPolicy)
     validation: GlobalValidationConfig = Field(default_factory=GlobalValidationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
@@ -487,6 +510,9 @@ _SECTION_PATH_WHITELIST: dict[str, tuple[tuple[str, ...], ...]] = {
     ),
     "mart": (
         ("sql_dir",),
+        ("tables", "*", "sql"),
+    ),
+    "cross_year": (
         ("tables", "*", "sql"),
     ),
 }
@@ -675,6 +701,7 @@ _TOP_LEVEL_ALLOWED_KEYS = {
     "raw",
     "clean",
     "mart",
+    "cross_year",
     "config",
     "validation",
     "output",
@@ -683,6 +710,7 @@ _TOP_LEVEL_ALLOWED_KEYS = {
 _RAW_ALLOWED_KEYS = _declared_model_keys(RawConfig)
 _CLEAN_ALLOWED_KEYS = _declared_model_keys(CleanConfig) | {"sql_path"}
 _MART_ALLOWED_KEYS = _declared_model_keys(MartConfig) | {"sql_dir"}
+_CROSS_YEAR_ALLOWED_KEYS = _declared_model_keys(CrossYearConfig)
 
 
 def _normalize_legacy_clean_read(
@@ -794,6 +822,7 @@ def _warn_or_reject_unknown_keys(
         ("raw", _RAW_ALLOWED_KEYS, "unknown.raw"),
         ("clean", _CLEAN_ALLOWED_KEYS, "unknown.clean"),
         ("mart", _MART_ALLOWED_KEYS, "unknown.mart"),
+        ("cross_year", _CROSS_YEAR_ALLOWED_KEYS, "unknown.cross_year"),
     ):
         section = normalized.get(section_name)
         if not isinstance(section, dict):
@@ -855,6 +884,7 @@ def load_config_model(path: str | Path, *, strict_config: bool = False) -> Toolk
     raw = normalized.get("raw", {}) or {}
     clean = normalized.get("clean", {}) or {}
     mart = normalized.get("mart", {}) or {}
+    cross_year = normalized.get("cross_year", {}) or {}
 
     normalized_fields: list[tuple[str, Path]] = []
     if isinstance(raw, dict):
@@ -866,6 +896,9 @@ def load_config_model(path: str | Path, *, strict_config: bool = False) -> Toolk
     if isinstance(mart, dict):
         mart, mart_changes = _normalize_section_paths("mart", mart, base_dir=base_dir)
         normalized_fields.extend(mart_changes)
+    if isinstance(cross_year, dict):
+        cross_year, cross_year_changes = _normalize_section_paths("cross_year", cross_year, base_dir=base_dir)
+        normalized_fields.extend(cross_year_changes)
     normalized_fields.append(("root", root_path))
 
     if normalized_fields:
@@ -880,6 +913,7 @@ def load_config_model(path: str | Path, *, strict_config: bool = False) -> Toolk
         "raw": raw,
         "clean": clean,
         "mart": mart,
+        "cross_year": cross_year,
     }
 
     try:

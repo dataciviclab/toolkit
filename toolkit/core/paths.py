@@ -37,6 +37,10 @@ def layer_year_dir(root: str | os.PathLike[str], layer: str, dataset: str, year:
     return dataset_dir(root, layer, dataset) / str(year)
 
 
+def layer_dataset_dir(root: str | os.PathLike[str], layer: str, dataset: str) -> Path:
+    return dataset_dir(root, layer, dataset)
+
+
 def run_dir(root: str | os.PathLike[str], layer: str, dataset: str, year: int | str, run_id: str) -> Path:
     # Esempio: data/clean/ispra/2022/_runs/20260223T221500Z_x9a2f
     return layer_year_dir(root, layer, dataset, year) / "_runs" / run_id

@@ -8,6 +8,14 @@ from toolkit.core.config import ensure_str_list, load_config, parse_bool
 from toolkit.core.config_models import load_config_model
 
 
+def _bind_config_logger(caplog, monkeypatch):
+    module_logger = logging.getLogger("toolkit.core.config")
+    monkeypatch.setattr(module_logger, "handlers", [caplog.handler])
+    monkeypatch.setattr(module_logger, "propagate", False)
+    module_logger.setLevel(logging.WARNING)
+    caplog.set_level(logging.WARNING, logger="toolkit.core.config")
+
+
 def test_load_config_ok(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
@@ -426,7 +434,7 @@ output:
     assert cfg.mart["validate"]["table_rules"]["mart_ok"]["primary_key"] == ["key_id"]
 
 
-def test_load_config_warns_on_zombie_field_bq(tmp_path: Path, caplog):
+def test_load_config_warns_on_zombie_field_bq(tmp_path: Path, caplog, monkeypatch):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
         """
@@ -441,6 +449,8 @@ mart: {}
 """.strip(),
         encoding="utf-8",
     )
+
+    _bind_config_logger(caplog, monkeypatch)
 
     with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
         load_config(yml)
@@ -572,7 +582,7 @@ def test_project_example_config_parses_in_strict_mode():
     assert len(model.raw.sources) == 1
 
 
-def test_load_config_warns_on_unknown_top_level_keys_in_non_strict_mode(tmp_path: Path, caplog):
+def test_load_config_warns_on_unknown_top_level_keys_in_non_strict_mode(tmp_path: Path, caplog, monkeypatch):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
         """
@@ -586,6 +596,8 @@ unknown_top: true
 """.strip(),
         encoding="utf-8",
     )
+
+    _bind_config_logger(caplog, monkeypatch)
 
     with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
         cfg = load_config(yml)
@@ -667,6 +679,7 @@ mart:
 def test_load_config_warns_on_unknown_section_keys_in_non_strict_mode(
     tmp_path: Path,
     caplog,
+    monkeypatch,
     section: str,
     yaml_text: str,
     code: str,
@@ -674,6 +687,8 @@ def test_load_config_warns_on_unknown_section_keys_in_non_strict_mode(
 ):
     yml = tmp_path / "dataset.yml"
     yml.write_text(yaml_text, encoding="utf-8")
+
+    _bind_config_logger(caplog, monkeypatch)
 
     with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
         cfg = load_config(yml)

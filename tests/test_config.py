@@ -3,7 +3,6 @@ from pathlib import Path
 import logging
 import pytest
 
-from toolkit.cli.cmd_run import run as run_cmd
 from toolkit.core.config import ensure_str_list, load_config, parse_bool
 from toolkit.core.config_models import load_config_model
 

@@ -26,20 +26,6 @@ class ConfigDeprecation:
 
 
 _CONFIG_DEPRECATIONS: dict[str, ConfigDeprecation] = {
-    "clean.sql_path": ConfigDeprecation(
-        code="DCL006",
-        legacy="clean.sql_path",
-        replacement="clean.sql",
-        status="ignored",
-        message="clean.sql_path is deprecated/ignored, usare clean.sql",
-    ),
-    "mart.sql_dir": ConfigDeprecation(
-        code="DCL007",
-        legacy="mart.sql_dir",
-        replacement="mart.tables[].sql",
-        status="ignored",
-        message="mart.sql_dir is deprecated/ignored, usare mart.tables[].sql",
-    ),
     "bq": ConfigDeprecation(
         code="DCL008",
         legacy="bq",
@@ -471,10 +457,8 @@ _SECTION_PATH_WHITELIST: dict[str, tuple[tuple[str, ...], ...]] = {
     ),
     "clean": (
         ("sql",),
-        ("sql_path",),
     ),
     "mart": (
-        ("sql_dir",),
         ("tables", "*", "sql"),
     ),
     "cross_year": (
@@ -660,8 +644,8 @@ _TOP_LEVEL_ALLOWED_KEYS = {
     "bq",
 }
 _RAW_ALLOWED_KEYS = _declared_model_keys(RawConfig)
-_CLEAN_ALLOWED_KEYS = _declared_model_keys(CleanConfig) | {"sql_path"}
-_MART_ALLOWED_KEYS = _declared_model_keys(MartConfig) | {"sql_dir"}
+_CLEAN_ALLOWED_KEYS = _declared_model_keys(CleanConfig)
+_MART_ALLOWED_KEYS = _declared_model_keys(MartConfig)
 _CROSS_YEAR_ALLOWED_KEYS = _declared_model_keys(CrossYearConfig)
 
 
@@ -679,15 +663,10 @@ def _normalize_legacy_payload(
 
     clean = normalized.get("clean")
     if isinstance(clean, dict):
-        updated_clean = dict(clean)
-        if "sql_path" in updated_clean:
-            _emit_deprecation_notice("clean.sql_path", strict_config=strict_config, path=path)
-        normalized["clean"] = updated_clean
+        normalized["clean"] = dict(clean)
 
     mart = normalized.get("mart")
     if isinstance(mart, dict):
-        if "sql_dir" in mart:
-            _emit_deprecation_notice("mart.sql_dir", strict_config=strict_config, path=path)
         normalized["mart"] = dict(mart)
 
     if "bq" in normalized:
@@ -727,6 +706,10 @@ def _warn_or_reject_unknown_keys(
         extras = [key for key in section.keys() if key not in allowed_keys]
         if section_name == "raw" and "source" in extras:
             raise _err("raw.source is no longer supported; use raw.sources", path=path)
+        if section_name == "clean" and "sql_path" in extras:
+            raise _err("clean.sql_path is no longer supported; use clean.sql", path=path)
+        if section_name == "mart" and "sql_dir" in extras:
+            raise _err("mart.sql_dir is no longer supported; use mart.tables[].sql", path=path)
         if extras:
             _emit_unknown_keys_notice(
                 notice_key,

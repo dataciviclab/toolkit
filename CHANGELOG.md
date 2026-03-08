@@ -41,6 +41,4 @@ All notable changes to this project will be documented in this file.
 - `raw.sources[].id` in favor of `raw.sources[].name`
 - scalar `clean.read` in favor of `clean.read.source`
 - `clean.read.csv.*` in favor of `clean.read.*`
-- `clean.sql_path`
-- `mart.sql_dir`
 - `bq`

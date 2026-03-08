@@ -222,8 +222,6 @@ Con `config.strict: true` o `--strict-config`, gli stessi casi diventano errori.
 
 | Code | Legacy | Replacement | Status |
 |---|---|---|---|
-| `DCL006` | `clean.sql_path` | `clean.sql` | ignored |
-| `DCL007` | `mart.sql_dir` | `mart.tables[].sql` | ignored |
 | `DCL008` | `bq` | rimuovere il campo | ignored |
 | `DCL013` | `cross_year.* unknown keys` | rimuovere il campo | ignored |
 

@@ -180,7 +180,6 @@ raw:
 clean:
   sql: "sql/clean.sql"
 mart:
-  sql_dir: "sql/mart"
   tables:
     - name: demo_mart
       sql: "sql/mart/demo.sql"
@@ -200,14 +199,12 @@ mart:
     assert cfg.root == (project_dir / "out").resolve()
     assert cfg.raw["sources"][0]["args"]["path"] == (project_dir / "data" / "raw_a.csv").resolve()
     assert cfg.clean["sql"] == (project_dir / "sql" / "clean.sql").resolve()
-    assert cfg.mart["sql_dir"] == (project_dir / "sql" / "mart").resolve()
     assert cfg.mart["tables"][0]["sql"] == (project_dir / "sql" / "mart" / "demo.sql").resolve()
 
     assert "Normalized config paths:" in caplog.text
     assert "root=" in caplog.text
     assert "raw.sources[0].args.path=" in caplog.text
     assert "clean.sql=" in caplog.text
-    assert "mart.sql_dir=" in caplog.text
     assert "mart.tables[0].sql=" in caplog.text
 
 
@@ -429,7 +426,30 @@ output:
     assert cfg.mart["validate"]["table_rules"]["mart_ok"]["primary_key"] == ["key_id"]
 
 
-def test_load_config_warns_on_zombie_fields(tmp_path: Path, caplog):
+def test_load_config_warns_on_zombie_field_bq(tmp_path: Path, caplog):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+bq:
+  dataset: ignored
+clean: {}
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
+        load_config(yml)
+
+    assert "DCL008" in caplog.text
+    assert "deprecated/ignored, usare remove field" in caplog.text
+
+
+def test_load_config_rejects_clean_sql_path(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
         """
@@ -439,6 +459,28 @@ dataset:
 raw: {}
 clean:
   sql_path: sql/legacy_clean.sql
+mart: {}
+bq:
+  dataset: ignored
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as exc:
+        load_config(yml)
+
+    assert "clean.sql_path" in str(exc.value)
+
+
+def test_load_config_rejects_mart_sql_dir(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
 mart:
   sql_dir: sql/mart
 bq:
@@ -447,15 +489,10 @@ bq:
         encoding="utf-8",
     )
 
-    with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
+    with pytest.raises(ValueError) as exc:
         load_config(yml)
 
-    assert "DCL006" in caplog.text
-    assert "DCL007" in caplog.text
-    assert "DCL008" in caplog.text
-    assert "deprecated/ignored, usare clean.sql" in caplog.text
-    assert "deprecated/ignored, usare mart.tables[].sql" in caplog.text
-    assert "deprecated/ignored, usare remove field" in caplog.text
+    assert "mart.sql_dir" in str(exc.value)
 
 
 def test_load_config_model_rejects_legacy_raw_source_plugin_id_shape(tmp_path: Path):

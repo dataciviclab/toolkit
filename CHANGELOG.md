@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Removed
+
+- Legacy config forms below no longer emit deprecation warnings and now fail with explicit config errors:
+  - `raw.source`
+  - `raw.sources[].plugin`
+  - `raw.sources[].id`
+  - scalar `clean.read`
+  - `clean.read.csv.*`
+  - `clean.sql_path`
+  - `mart.sql_dir`
+
 ## [1.0.0] - 2026-02-28
 
 ### Added

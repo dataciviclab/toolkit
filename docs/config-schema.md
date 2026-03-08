@@ -225,6 +225,20 @@ Con `config.strict: true` o `--strict-config`, gli stessi casi diventano errori.
 | `DCL008` | `bq` | rimuovere il campo | ignored |
 | `DCL013` | `cross_year.* unknown keys` | rimuovere il campo | ignored |
 
+## Legacy rimosso
+
+Le forme seguenti non sono piu supportate. Non generano warning legacy: falliscono subito con errore di config e va usata la shape canonica.
+
+| Legacy rimosso | Usa invece |
+|---|---|
+| `raw.source` | `raw.sources` |
+| `raw.sources[].plugin` | `raw.sources[].type` |
+| `raw.sources[].id` | `raw.sources[].name` |
+| `clean.read: "auto"` | `clean.read.source: auto` |
+| `clean.read.csv.*` | `clean.read.*` |
+| `clean.sql_path` | `clean.sql` |
+| `mart.sql_dir` | `mart.tables[].sql` |
+
 ## Esempi minimi
 
 ### RAW only

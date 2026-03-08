@@ -370,7 +370,7 @@ def test_resolve_clean_read_cfg_config_only_ignores_suggested(tmp_path: Path):
 
     _, relation_cfg, params_source = duckdb_read.resolve_clean_read_cfg(
         raw_dir,
-        {"read": "config_only"},
+        {"read": {"source": "config_only"}},
         logging.getLogger("tests.clean.duckdb_read.config_only"),
     )
 

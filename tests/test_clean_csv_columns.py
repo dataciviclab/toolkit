@@ -33,16 +33,14 @@ def test_run_clean_csv_columns_reads_trailing_delimiter_csv(tmp_path: Path):
             "sql": str(sql_path),
             "read": {
                 "mode": "latest",
-                "csv": {
-                    "delim": ";",
-                    "header": True,
-                    "ignore_errors": True,
-                    "null_padding": True,
-                    "trim_whitespace": True,
-                    "columns": {
-                        "a": "VARCHAR",
-                        "b": "VARCHAR",
-                    },
+                "delim": ";",
+                "header": True,
+                "ignore_errors": True,
+                "null_padding": True,
+                "trim_whitespace": True,
+                "columns": {
+                    "a": "VARCHAR",
+                    "b": "VARCHAR",
                 },
             },
         },

@@ -95,8 +95,6 @@ Regola pratica:
 
 ## Compat legacy
 
-Il toolkit mantiene compatibilita` con alcune forme legacy del config per facilitare la migrazione.
-
 Per i repo nuovi:
 
 - usa la shape canonica documentata in [config-schema.md](./config-schema.md)

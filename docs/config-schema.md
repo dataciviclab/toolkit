@@ -222,15 +222,22 @@ Con `config.strict: true` o `--strict-config`, gli stessi casi diventano errori.
 
 | Code | Legacy | Replacement | Status |
 |---|---|---|---|
-| `DCL001` | `raw.source` | `raw.sources` | deprecated |
-| `DCL002` | `raw.sources[].plugin` | `raw.sources[].type` | deprecated |
-| `DCL003` | `raw.sources[].id` | `raw.sources[].name` | deprecated |
-| `DCL004` | `clean.read: "auto"` | `clean.read.source: auto` | deprecated |
-| `DCL005` | `clean.read.csv.*` | `clean.read.*` | deprecated |
-| `DCL006` | `clean.sql_path` | `clean.sql` | ignored |
-| `DCL007` | `mart.sql_dir` | `mart.tables[].sql` | ignored |
 | `DCL008` | `bq` | rimuovere il campo | ignored |
 | `DCL013` | `cross_year.* unknown keys` | rimuovere il campo | ignored |
+
+## Legacy rimosso
+
+Le forme seguenti non sono piu supportate. Non generano warning legacy: falliscono subito con errore di config e va usata la shape canonica.
+
+| Legacy rimosso | Usa invece |
+|---|---|
+| `raw.source` | `raw.sources` |
+| `raw.sources[].plugin` | `raw.sources[].type` |
+| `raw.sources[].id` | `raw.sources[].name` |
+| `clean.read: "auto"` | `clean.read.source: auto` |
+| `clean.read.csv.*` | `clean.read.*` |
+| `clean.sql_path` | `clean.sql` |
+| `mart.sql_dir` | `mart.tables[].sql` |
 
 ## Esempi minimi
 
@@ -312,7 +319,7 @@ Esempi tipici:
 - `Config validation failed: output.unknown_flag: Extra inputs are not permitted`
 - `Config validation failed: raw.sources: Input should be a valid list`
 - `Config validation failed: clean.validate.primary_key: clean.validate.primary_key must be a string or a list of strings`
-- `DCL001 raw.source is deprecated, usare raw.sources`
+- `Config validation failed: raw.sources: Input should be a valid list`
 
 Regola pratica:
 

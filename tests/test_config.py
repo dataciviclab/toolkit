@@ -3,9 +3,16 @@ from pathlib import Path
 import logging
 import pytest
 
-from toolkit.cli.cmd_run import run as run_cmd
 from toolkit.core.config import ensure_str_list, load_config, parse_bool
 from toolkit.core.config_models import load_config_model
+
+
+def _bind_config_logger(caplog, monkeypatch):
+    module_logger = logging.getLogger("toolkit.core.config")
+    monkeypatch.setattr(module_logger, "handlers", [caplog.handler])
+    monkeypatch.setattr(module_logger, "propagate", False)
+    module_logger.setLevel(logging.WARNING)
+    caplog.set_level(logging.WARNING, logger="toolkit.core.config")
 
 
 def test_load_config_ok(tmp_path: Path):
@@ -64,10 +71,10 @@ dataset:
   name: demo
   years: [2022]
 raw:
-  source:
-    type: local_file
-    args:
-      path: "data/raw.csv"
+  sources:
+    - type: local_file
+      args:
+        path: "data/raw.csv"
 clean:
   sql: "sql/clean.sql"
 mart:
@@ -88,7 +95,7 @@ cross_year:
     assert cfg.base_dir == project_dir.resolve()
     assert cfg.root == (project_dir / "out").resolve()
     assert cfg.root_source == "yml"
-    assert cfg.raw["source"]["args"]["path"] == (project_dir / "data" / "raw.csv").resolve()
+    assert cfg.raw["sources"][0]["args"]["path"] == (project_dir / "data" / "raw.csv").resolve()
     assert cfg.clean["sql"] == (project_dir / "sql" / "clean.sql").resolve()
     assert cfg.mart["tables"][0]["sql"] == (project_dir / "sql" / "mart" / "demo.sql").resolve()
     assert cfg.cross_year["tables"][0]["sql"] == (project_dir / "sql" / "cross" / "demo_cross.sql").resolve()
@@ -106,11 +113,11 @@ dataset:
   name: demo
   years: [2022]
 raw:
-  source:
-    type: local_file
-    args:
-      path: "data/raw.csv"
-      filename: "nested/raw.csv"
+  sources:
+    - type: local_file
+      args:
+        path: "data/raw.csv"
+        filename: "nested/raw.csv"
 clean:
   sql: "sql/clean.sql"
   note_path: "docs/clean.md"
@@ -125,8 +132,8 @@ mart:
 
     cfg = load_config(yml)
 
-    assert cfg.raw["source"]["args"]["path"] == (project_dir / "data" / "raw.csv").resolve()
-    assert cfg.raw["source"]["args"]["filename"] == "nested/raw.csv"
+    assert cfg.raw["sources"][0]["args"]["path"] == (project_dir / "data" / "raw.csv").resolve()
+    assert cfg.raw["sources"][0]["args"]["filename"] == "nested/raw.csv"
     assert cfg.clean["note_path"] == "docs/clean.md"
     assert cfg.mart["label_path"] == "labels/mart.txt"
 
@@ -180,7 +187,6 @@ raw:
 clean:
   sql: "sql/clean.sql"
 mart:
-  sql_dir: "sql/mart"
   tables:
     - name: demo_mart
       sql: "sql/mart/demo.sql"
@@ -200,14 +206,12 @@ mart:
     assert cfg.root == (project_dir / "out").resolve()
     assert cfg.raw["sources"][0]["args"]["path"] == (project_dir / "data" / "raw_a.csv").resolve()
     assert cfg.clean["sql"] == (project_dir / "sql" / "clean.sql").resolve()
-    assert cfg.mart["sql_dir"] == (project_dir / "sql" / "mart").resolve()
     assert cfg.mart["tables"][0]["sql"] == (project_dir / "sql" / "mart" / "demo.sql").resolve()
 
     assert "Normalized config paths:" in caplog.text
     assert "root=" in caplog.text
     assert "raw.sources[0].args.path=" in caplog.text
     assert "clean.sql=" in caplog.text
-    assert "mart.sql_dir=" in caplog.text
     assert "mart.tables[0].sql=" in caplog.text
 
 
@@ -289,7 +293,7 @@ mart: {}
     assert cfg.root_source == "base_dir_fallback"
 
 
-def test_load_config_normalizes_legacy_clean_read_csv_and_warns(tmp_path: Path, caplog):
+def test_load_config_rejects_legacy_clean_read_csv_shape(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     yml = project_dir / "dataset.yml"
@@ -311,21 +315,10 @@ mart: {}
         encoding="utf-8",
     )
 
-    module_logger = logging.getLogger("toolkit.core.config")
-    module_logger.handlers = [caplog.handler]
-    module_logger.propagate = True
-    module_logger.setLevel(logging.WARNING)
+    with pytest.raises(ValueError) as exc:
+        load_config(yml)
 
-    with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
-        cfg = load_config(yml)
-
-    assert cfg.clean["read"] == {
-        "source": "auto",
-        "columns": {"amount": "DOUBLE"},
-        "delim": ";",
-    }
-    assert "DCL005" in caplog.text
-    assert "deprecated, usare clean.read.*" in caplog.text
+    assert "clean.read.csv" in str(exc.value)
 
 
 def test_load_config_canonical_clean_read_has_no_deprecation_warning(tmp_path: Path, caplog):
@@ -440,7 +433,32 @@ output:
     assert cfg.mart["validate"]["table_rules"]["mart_ok"]["primary_key"] == ["key_id"]
 
 
-def test_load_config_warns_on_zombie_fields(tmp_path: Path, caplog):
+def test_load_config_warns_on_zombie_field_bq(tmp_path: Path, caplog, monkeypatch):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+bq:
+  dataset: ignored
+clean: {}
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    _bind_config_logger(caplog, monkeypatch)
+
+    with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
+        load_config(yml)
+
+    assert "DCL008" in caplog.text
+    assert "deprecated/ignored, usare remove field" in caplog.text
+
+
+def test_load_config_rejects_clean_sql_path(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
         """
@@ -450,6 +468,28 @@ dataset:
 raw: {}
 clean:
   sql_path: sql/legacy_clean.sql
+mart: {}
+bq:
+  dataset: ignored
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as exc:
+        load_config(yml)
+
+    assert "clean.sql_path" in str(exc.value)
+
+
+def test_load_config_rejects_mart_sql_dir(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
 mart:
   sql_dir: sql/mart
 bq:
@@ -458,18 +498,13 @@ bq:
         encoding="utf-8",
     )
 
-    with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
+    with pytest.raises(ValueError) as exc:
         load_config(yml)
 
-    assert "DCL006" in caplog.text
-    assert "DCL007" in caplog.text
-    assert "DCL008" in caplog.text
-    assert "deprecated/ignored, usare clean.sql" in caplog.text
-    assert "deprecated/ignored, usare mart.tables[].sql" in caplog.text
-    assert "deprecated/ignored, usare remove field" in caplog.text
+    assert "mart.sql_dir" in str(exc.value)
 
 
-def test_load_config_model_normalizes_legacy_aliases_to_canonical_shape(tmp_path: Path):
+def test_load_config_model_rejects_legacy_raw_source_plugin_id_shape(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
         """
@@ -480,89 +515,9 @@ raw:
   source:
     id: src_legacy
     plugin: local_file
-    args:
-      path: data/raw.csv
-clean:
-  read: auto
-mart: {}
-""".strip(),
-        encoding="utf-8",
-    )
-
-    model = load_config_model(yml)
-
-    assert len(model.raw.sources) == 1
-    assert model.raw.sources[0].name == "src_legacy"
-    assert model.raw.sources[0].type == "local_file"
-    assert model.clean.read is not None
-    assert model.clean.read.source == "auto"
-
-
-def test_load_config_logs_deprecation_codes_for_legacy_normalization(tmp_path: Path, caplog):
-    yml = tmp_path / "dataset.yml"
-    yml.write_text(
-        """
-dataset:
-  name: demo
-  years: [2022]
-raw:
-  source:
-    id: src_legacy
-    plugin: local_file
-    args:
-      path: data/raw.csv
-clean:
-  read: auto
-mart: {}
-""".strip(),
-        encoding="utf-8",
-    )
-
-    with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
-        load_config(yml)
-
-    assert "DCL001" in caplog.text
-    assert "DCL002" in caplog.text
-    assert "DCL003" in caplog.text
-    assert "DCL004" in caplog.text
-
-
-def test_load_config_model_strict_config_rejects_legacy_normalization(tmp_path: Path):
-    yml = tmp_path / "dataset.yml"
-    yml.write_text(
-        """
-dataset:
-  name: demo
-  years: [2022]
-raw:
-  source:
-    type: local_file
     args:
       path: data/raw.csv
 clean: {}
-mart: {}
-""".strip(),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ValueError) as exc:
-        load_config_model(yml, strict_config=True)
-
-    assert "DCL001" in str(exc.value)
-    assert "raw.source is deprecated, usare raw.sources" in str(exc.value)
-
-
-def test_load_config_model_config_strict_rejects_legacy_normalization(tmp_path: Path):
-    yml = tmp_path / "dataset.yml"
-    yml.write_text(
-        """
-config:
-  strict: true
-dataset:
-  name: demo
-  years: [2022]
-clean:
-  read: auto
 mart: {}
 """.strip(),
         encoding="utf-8",
@@ -571,24 +526,22 @@ mart: {}
     with pytest.raises(ValueError) as exc:
         load_config_model(yml)
 
-    assert "DCL004" in str(exc.value)
-    assert "clean.read scalar form is deprecated" in str(exc.value)
+    assert "raw.sources" in str(exc.value) or "raw.source" in str(exc.value)
 
 
-def test_cli_strict_config_rejects_legacy_config(tmp_path: Path):
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    yml = project_dir / "dataset.yml"
+def test_load_config_model_rejects_legacy_raw_sources_plugin_id_fields(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
     yml.write_text(
         """
 dataset:
   name: demo
   years: [2022]
 raw:
-  source:
-    type: local_file
-    args:
-      path: data/raw.csv
+  sources:
+    - id: src_legacy
+      plugin: local_file
+      args:
+        path: data/raw.csv
 clean: {}
 mart: {}
 """.strip(),
@@ -596,9 +549,29 @@ mart: {}
     )
 
     with pytest.raises(ValueError) as exc:
-        run_cmd(step="raw", config=str(yml), strict_config=True)
+        load_config_model(yml)
 
-    assert "DCL001" in str(exc.value)
+    assert "raw.sources.0" in str(exc.value)
+
+
+def test_load_config_rejects_legacy_clean_read_scalar_form(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+clean:
+  read: auto
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as exc:
+        load_config(yml)
+
+    assert "clean.read" in str(exc.value)
 
 
 def test_project_example_config_parses_in_strict_mode():
@@ -608,7 +581,7 @@ def test_project_example_config_parses_in_strict_mode():
     assert len(model.raw.sources) == 1
 
 
-def test_load_config_warns_on_unknown_top_level_keys_in_non_strict_mode(tmp_path: Path, caplog):
+def test_load_config_warns_on_unknown_top_level_keys_in_non_strict_mode(tmp_path: Path, caplog, monkeypatch):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
         """
@@ -622,6 +595,8 @@ unknown_top: true
 """.strip(),
         encoding="utf-8",
     )
+
+    _bind_config_logger(caplog, monkeypatch)
 
     with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
         cfg = load_config(yml)
@@ -703,6 +678,7 @@ mart:
 def test_load_config_warns_on_unknown_section_keys_in_non_strict_mode(
     tmp_path: Path,
     caplog,
+    monkeypatch,
     section: str,
     yaml_text: str,
     code: str,
@@ -710,6 +686,8 @@ def test_load_config_warns_on_unknown_section_keys_in_non_strict_mode(
 ):
     yml = tmp_path / "dataset.yml"
     yml.write_text(yaml_text, encoding="utf-8")
+
+    _bind_config_logger(caplog, monkeypatch)
 
     with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
         cfg = load_config(yml)

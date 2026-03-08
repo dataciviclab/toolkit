@@ -26,41 +26,6 @@ class ConfigDeprecation:
 
 
 _CONFIG_DEPRECATIONS: dict[str, ConfigDeprecation] = {
-    "raw.source": ConfigDeprecation(
-        code="DCL001",
-        legacy="raw.source",
-        replacement="raw.sources",
-        status="deprecated",
-        message="raw.source is deprecated, usare raw.sources",
-    ),
-    "raw.sources[].plugin": ConfigDeprecation(
-        code="DCL002",
-        legacy="raw.sources[].plugin",
-        replacement="raw.sources[].type",
-        status="deprecated",
-        message="raw.sources[].plugin is deprecated, usare raw.sources[].type",
-    ),
-    "raw.sources[].id": ConfigDeprecation(
-        code="DCL003",
-        legacy="raw.sources[].id",
-        replacement="raw.sources[].name",
-        status="deprecated",
-        message="raw.sources[].id is deprecated, usare raw.sources[].name",
-    ),
-    "clean.read": ConfigDeprecation(
-        code="DCL004",
-        legacy="clean.read: <string>",
-        replacement="clean.read.source",
-        status="deprecated",
-        message="clean.read scalar form is deprecated, usare clean.read.source",
-    ),
-    "clean.read.csv": ConfigDeprecation(
-        code="DCL005",
-        legacy="clean.read.csv.*",
-        replacement="clean.read.*",
-        status="deprecated",
-        message="clean.read.csv.* is deprecated, usare clean.read.*",
-    ),
     "clean.sql_path": ConfigDeprecation(
         code="DCL006",
         legacy="clean.sql_path",
@@ -644,19 +609,6 @@ def _resolve_root(root: Any, *, base_dir: Path) -> tuple[Path, str]:
         source = "env:TOOLKIT_OUTDIR" if os.environ.get("TOOLKIT_OUTDIR") else "env:DCL_OUTDIR"
         return Path(managed_outdir).expanduser().resolve(), source
     return _resolve_path_value(root, base_dir=base_dir), "yml"
-
-
-def _normalize_legacy_source(source: dict[str, Any]) -> dict[str, Any]:
-    normalized = dict(source)
-    plugin = normalized.pop("plugin", None)
-    if plugin is not None and "type" not in normalized:
-        normalized["type"] = plugin
-    source_id = normalized.pop("id", None)
-    if source_id is not None and "name" not in normalized:
-        normalized["name"] = source_id
-    return normalized
-
-
 def _emit_deprecation_notice(
     key: str,
     *,
@@ -713,39 +665,6 @@ _MART_ALLOWED_KEYS = _declared_model_keys(MartConfig) | {"sql_dir"}
 _CROSS_YEAR_ALLOWED_KEYS = _declared_model_keys(CrossYearConfig)
 
 
-def _normalize_legacy_clean_read(
-    clean: dict[str, Any],
-    *,
-    path: Path,
-    strict_config: bool,
-) -> dict[str, Any]:
-    normalized = dict(clean)
-    read_cfg = normalized.get("read")
-
-    if isinstance(read_cfg, str):
-        _emit_deprecation_notice("clean.read", strict_config=strict_config, path=path)
-        normalized["read"] = {"source": read_cfg}
-        read_cfg = normalized["read"]
-
-    if not isinstance(read_cfg, dict):
-        return normalized
-
-    csv_cfg = read_cfg.get("csv")
-    if csv_cfg is None:
-        return normalized
-    if not isinstance(csv_cfg, dict):
-        raise _err("clean.read.csv deve essere una mappa YAML (oggetto).", path=path)
-
-    merged_read = dict(read_cfg)
-    merged_read.pop("csv", None)
-    for key, value in csv_cfg.items():
-        merged_read.setdefault(key, value)
-
-    _emit_deprecation_notice("clean.read.csv", strict_config=strict_config, path=path)
-    normalized["read"] = merged_read
-    return normalized
-
-
 def _normalize_legacy_payload(
     data: dict[str, Any],
     *,
@@ -756,33 +675,11 @@ def _normalize_legacy_payload(
 
     raw = normalized.get("raw")
     if isinstance(raw, dict):
-        updated_raw = dict(raw)
-        if "source" in updated_raw:
-            source = updated_raw.pop("source")
-            if "sources" in updated_raw:
-                raise _err("Use either raw.source or raw.sources, not both.", path=path)
-            updated_raw["sources"] = [source]
-            _emit_deprecation_notice("raw.source", strict_config=strict_config, path=path)
-        sources = updated_raw.get("sources")
-        if isinstance(sources, list):
-            normalized_sources: list[Any] = []
-            for source in sources:
-                if not isinstance(source, dict):
-                    normalized_sources.append(source)
-                    continue
-                original = dict(source)
-                normalized_source = _normalize_legacy_source(source)
-                if "plugin" in original and "type" not in original:
-                    _emit_deprecation_notice("raw.sources[].plugin", strict_config=strict_config, path=path)
-                if "id" in original and "name" not in original:
-                    _emit_deprecation_notice("raw.sources[].id", strict_config=strict_config, path=path)
-                normalized_sources.append(normalized_source)
-            updated_raw["sources"] = normalized_sources
-        normalized["raw"] = updated_raw
+        normalized["raw"] = dict(raw)
 
     clean = normalized.get("clean")
     if isinstance(clean, dict):
-        updated_clean = _normalize_legacy_clean_read(clean, path=path, strict_config=strict_config)
+        updated_clean = dict(clean)
         if "sql_path" in updated_clean:
             _emit_deprecation_notice("clean.sql_path", strict_config=strict_config, path=path)
         normalized["clean"] = updated_clean
@@ -828,6 +725,8 @@ def _warn_or_reject_unknown_keys(
         if not isinstance(section, dict):
             continue
         extras = [key for key in section.keys() if key not in allowed_keys]
+        if section_name == "raw" and "source" in extras:
+            raise _err("raw.source is no longer supported; use raw.sources", path=path)
         if extras:
             _emit_unknown_keys_notice(
                 notice_key,

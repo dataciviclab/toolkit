@@ -46,17 +46,13 @@ def _read_source_mode(clean_cfg: dict[str, Any], logger=None) -> tuple[str, dict
 
     if raw_read_cfg is None:
         pass
-    elif isinstance(raw_read_cfg, str):
-        if logger is not None:
-            logger.warning("clean.read scalar form is deprecated; use clean.read.source")
-        read_source = raw_read_cfg
     elif isinstance(raw_read_cfg, dict):
         explicit_cfg = dict(raw_read_cfg)
         nested_source = explicit_cfg.pop("source", None)
         if nested_source is not None:
             read_source = nested_source
     else:
-        raise ValueError("clean.read must be either a mapping (dict) or one of: auto, config_only")
+        raise ValueError("clean.read must be a mapping (dict)")
 
     normalized_source = str(read_source or "auto")
     if normalized_source not in READ_SOURCE_MODES:

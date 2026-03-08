@@ -23,31 +23,10 @@ ALLOWED_READ_CSV_KEYS = {
     "prefer_from_raw_run",
     "allow_ambiguous",
     "include",
-    "csv",
     "columns",
     "normalize_rows_to_columns",
     "trim_whitespace",
     "sample_size",
-    "sheet_name",
-}
-ALLOWED_NESTED_CSV_KEYS = {
-    "delim",
-    "header",
-    "encoding",
-    "decimal",
-    "skip",
-    "auto_detect",
-    "quote",
-    "escape",
-    "comment",
-    "ignore_errors",
-    "strict_mode",
-    "null_padding",
-    "parallel",
-    "nullstr",
-    "columns",
-    "normalize_rows_to_columns",
-    "trim_whitespace",
     "sheet_name",
 }
 FORMAT_HINT_KEYS = {
@@ -118,12 +97,8 @@ def normalize_columns_spec(columns: object) -> dict[str, str] | None:
 
 def normalize_read_cfg(read_cfg: dict[str, Any] | None) -> dict[str, Any]:
     cfg = dict(read_cfg or {})
-    csv_cfg = cfg.get("csv") or {}
-    if csv_cfg and not isinstance(csv_cfg, dict):
-        raise ValueError(
-            "clean.read must be a mapping (dict) in dataset.yml; "
-            "legacy clean.read.csv must also be a mapping if used"
-        )
+    if "csv" in cfg:
+        raise ValueError("clean.read.csv is no longer supported; use clean.read.* directly")
 
     unknown_top = sorted(set(cfg.keys()) - ALLOWED_READ_CSV_KEYS)
     if unknown_top:
@@ -131,21 +106,8 @@ def normalize_read_cfg(read_cfg: dict[str, Any] | None) -> dict[str, Any]:
             "Unsupported clean.read options for CSV reader: "
             f"{unknown_top}. Allowed keys: {sorted(ALLOWED_READ_CSV_KEYS)}"
         )
-
-    if csv_cfg:
-        unknown_nested = sorted(set(csv_cfg.keys()) - ALLOWED_NESTED_CSV_KEYS)
-        if unknown_nested:
-            raise ValueError(
-                "Unsupported legacy clean.read.csv options: "
-                f"{unknown_nested}. Allowed keys: {sorted(ALLOWED_NESTED_CSV_KEYS)}"
-            )
-
-    merged = dict(csv_cfg)
-    for key in ALLOWED_NESTED_CSV_KEYS:
-        if key in cfg:
-            merged[key] = cfg[key]
-    merged["columns"] = normalize_columns_spec(merged.get("columns"))
-    return merged
+    cfg["columns"] = normalize_columns_spec(cfg.get("columns"))
+    return cfg
 
 
 def filter_suggested_format_keys(cfg: dict[str, Any] | None) -> dict[str, Any]:

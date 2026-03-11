@@ -8,6 +8,7 @@ from toolkit.cli.common import iter_selected_years, load_cfg_and_logger
 from toolkit.clean.run import run_clean
 from toolkit.clean.validate import run_clean_validation
 from toolkit.cross.run import run_cross_year
+from toolkit.cross.validate import run_cross_validation
 from toolkit.core.logging import bind_logger, get_logger
 from toolkit.core.paths import layer_dataset_dir, layer_year_dir
 from toolkit.core.run_context import RunContext
@@ -154,6 +155,10 @@ def run_cross_year_step(
         base_dir=cfg.base_dir,
         output_cfg=cfg.output,
     )
+    summary = run_cross_validation(cfg, selected_years, logger)
+    fail_on_error = bool((cfg.validation or {}).get("fail_on_error", True))
+    if not summary.get("passed", False) and fail_on_error:
+        raise ValidationGateError("CROSS_YEAR validation failed")
 
 
 def run_year(

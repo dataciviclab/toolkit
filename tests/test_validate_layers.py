@@ -1,11 +1,13 @@
 import json
 from pathlib import Path
 import re
+from types import SimpleNamespace
 
 import duckdb
 
 from toolkit.raw.validate import validate_raw_output
 from toolkit.clean.validate import validate_clean
+from toolkit.cross.validate import run_cross_validation, validate_cross_outputs
 from toolkit.mart.validate import validate_mart
 from toolkit.core.validation import write_validation_json
 
@@ -131,3 +133,40 @@ def test_validate_mart_report_uses_root_relative_dir(tmp_path: Path):
         field="dir",
         expected="data/mart/demo/2024",
     )
+
+
+def test_validate_cross_outputs_required_tables(tmp_path: Path):
+    d = tmp_path / "cross"
+    d.mkdir(parents=True, exist_ok=True)
+
+    _write_parquet(d / "foo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
+
+    res = validate_cross_outputs(d, required_tables=["foo", "bar"], years=[2022, 2023])
+    assert res.ok is False
+    assert any("Missing required CROSS tables" in e for e in res.errors)
+    assert res.summary["years"] == [2022, 2023]
+
+
+def test_run_cross_validation_does_not_require_metadata_json(tmp_path: Path):
+    root = tmp_path / "root"
+    cross_dir = root / "data" / "cross" / "demo"
+    cross_dir.mkdir(parents=True, exist_ok=True)
+    _write_parquet(cross_dir / "foo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
+
+    cfg = SimpleNamespace(
+        root=root,
+        dataset="demo",
+        cross_year={"tables": [{"name": "foo", "sql": "sql/cross/foo.sql"}]},
+    )
+
+    summary = run_cross_validation(cfg, [2022, 2023], logger=SimpleNamespace(info=lambda *args, **kwargs: None))
+
+    assert summary["passed"] is True
+    report = cross_dir / "_validate" / "cross_validation.json"
+    manifest = cross_dir / "manifest.json"
+    assert report.exists()
+    assert manifest.exists()
+
+    manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
+    assert manifest_payload["validation"] == "_validate/cross_validation.json"
+    assert manifest_payload["summary"]["ok"] is True

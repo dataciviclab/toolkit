@@ -27,7 +27,6 @@ class ToolkitConfig:
     config: dict[str, Any]
     validation: dict[str, Any]
     output: dict[str, Any]
-    bq: dict[str, Any] | None
 
     def resolve(self, rel_path: str | Path) -> Path:
         p = Path(rel_path)
@@ -43,14 +42,6 @@ def parse_bool(value: Any, field_name: str) -> bool:
 
 def ensure_str_list(value: Any, field_name: str) -> list[str]:
     return _ensure_str_list(value, field_name)
-
-
-def _compat_raw(model: ToolkitConfigModel) -> dict[str, Any]:
-    raw = model.raw.model_dump(mode="python", exclude_none=True, exclude_unset=True)
-    sources = raw.get("sources") or []
-    if sources and "source" not in raw:
-        raw["source"] = dict(sources[0])
-    return raw
 
 
 def _compat_clean(model: ToolkitConfigModel) -> dict[str, Any]:
@@ -88,12 +79,11 @@ def load_config(path: str | Path, *, strict_config: bool = False) -> ToolkitConf
         root_source=model.root_source,
         dataset=model.dataset.name,
         years=list(model.dataset.years),
-        raw=_compat_raw(model),
+        raw=model.raw.model_dump(mode="python", exclude_none=True, exclude_unset=True),
         clean=_compat_clean(model),
         mart=_compat_mart(model),
         cross_year=_compat_cross_year(model),
         config=model.config.model_dump(mode="python"),
         validation=model.validation.model_dump(mode="python"),
         output=model.output.model_dump(mode="python"),
-        bq=model.bq,
     )

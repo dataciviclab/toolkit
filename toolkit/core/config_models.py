@@ -26,13 +26,6 @@ class ConfigDeprecation:
 
 
 _CONFIG_DEPRECATIONS: dict[str, ConfigDeprecation] = {
-    "bq": ConfigDeprecation(
-        code="DCL008",
-        legacy="bq",
-        replacement="remove field",
-        status="ignored",
-        message="bq is deprecated/ignored, usare remove field",
-    ),
     "unknown.top_level": ConfigDeprecation(
         code="DCL009",
         legacy="unknown top-level keys",
@@ -417,7 +410,6 @@ class ToolkitConfigModel(BaseModel):
     config: ConfigPolicy = Field(default_factory=ConfigPolicy)
     validation: GlobalValidationConfig = Field(default_factory=GlobalValidationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
-    bq: dict[str, Any] | None = None
 
 
 def _err(msg: str, *, path: Path) -> ValueError:
@@ -641,7 +633,6 @@ _TOP_LEVEL_ALLOWED_KEYS = {
     "config",
     "validation",
     "output",
-    "bq",
 }
 _RAW_ALLOWED_KEYS = _declared_model_keys(RawConfig)
 _CLEAN_ALLOWED_KEYS = _declared_model_keys(CleanConfig)
@@ -669,9 +660,6 @@ def _normalize_legacy_payload(
     if isinstance(mart, dict):
         normalized["mart"] = dict(mart)
 
-    if "bq" in normalized:
-        _emit_deprecation_notice("bq", strict_config=strict_config, path=path)
-
     return normalized
 
 
@@ -684,6 +672,8 @@ def _warn_or_reject_unknown_keys(
     normalized = dict(data)
 
     top_level_extras = [key for key in normalized.keys() if key not in _TOP_LEVEL_ALLOWED_KEYS]
+    if "bq" in top_level_extras:
+        raise _err("bq is no longer supported; remove field", path=path)
     if top_level_extras:
         _emit_unknown_keys_notice(
             "unknown.top_level",

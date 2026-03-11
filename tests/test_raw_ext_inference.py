@@ -32,14 +32,16 @@ def test_run_raw_filename_override_has_priority(monkeypatch, tmp_path: Path):
     monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
 
     raw_cfg = {
-        "source": {
-            "name": "my_source",
-            "type": "http_file",
-            "args": {
-                "url": "https://example.org/dataset.csv.php",
-                "filename": "forced_name.data",
-            },
-        }
+        "sources": [
+            {
+                "name": "my_source",
+                "type": "http_file",
+                "args": {
+                    "url": "https://example.org/dataset.csv.php",
+                    "filename": "forced_name.data",
+                },
+            }
+        ]
     }
 
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger())
@@ -61,11 +63,13 @@ def test_run_raw_avoids_overwrite_with_incremental_suffix(monkeypatch, tmp_path:
     existing.write_bytes(b"old-content\n")
 
     raw_cfg = {
-        "source": {
-            "name": "my_source",
-            "type": "http_file",
-            "args": {"url": "https://example.org/file.csv", "filename": "file.csv"},
-        }
+        "sources": [
+            {
+                "name": "my_source",
+                "type": "http_file",
+                "args": {"url": "https://example.org/file.csv", "filename": "file.csv"},
+            }
+        ]
     }
 
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger())
@@ -82,11 +86,13 @@ def test_manifest_created(monkeypatch, tmp_path: Path):
     monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
 
     raw_cfg = {
-        "source": {
-            "name": "primary_source",
-            "type": "http_file",
-            "args": {"url": "https://example.org/manifest.csv", "filename": "manifest.csv"},
-        }
+        "sources": [
+            {
+                "name": "primary_source",
+                "type": "http_file",
+                "args": {"url": "https://example.org/manifest.csv", "filename": "manifest.csv"},
+            }
+        ]
     }
 
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-123")
@@ -111,11 +117,13 @@ def test_manifest_points_to_latest_in_versioned(monkeypatch, tmp_path: Path):
     monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
 
     raw_cfg = {
-        "source": {
-            "name": "my_source",
-            "type": "http_file",
-            "args": {"url": "https://example.org/file.csv", "filename": "file.csv"},
-        }
+        "sources": [
+            {
+                "name": "my_source",
+                "type": "http_file",
+                "args": {"url": "https://example.org/file.csv", "filename": "file.csv"},
+            }
+        ]
     }
 
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-1")
@@ -140,11 +148,13 @@ def test_manifest_overwrite_policy(monkeypatch, tmp_path: Path):
 
     raw_cfg = {
         "output_policy": "overwrite",
-        "source": {
-            "name": "my_source",
-            "type": "http_file",
-            "args": {"url": "https://example.org/file.csv", "filename": "file.csv"},
-        },
+        "sources": [
+            {
+                "name": "my_source",
+                "type": "http_file",
+                "args": {"url": "https://example.org/file.csv", "filename": "file.csv"},
+            }
+        ],
     }
 
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-1")

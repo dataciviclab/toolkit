@@ -5,11 +5,11 @@ dataset:
   years: [2022]
 
 raw:
-  source:
-    type: "http_file"
-    args:
-      url: "https://www.catasto-rifiuti.isprambiente.it/get/getDettaglioComunale.csv.php?&aa={year}"
-      filename: "ispra_http_sample_{year}.csv"
+  sources:
+    - type: "http_file"
+      args:
+        url: "https://www.catasto-rifiuti.isprambiente.it/get/getDettaglioComunale.csv.php?&aa={year}"
+        filename: "ispra_http_sample_{year}.csv"
 
 clean:
   sql: "sql/clean.sql"

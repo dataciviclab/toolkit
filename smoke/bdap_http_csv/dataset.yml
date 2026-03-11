@@ -5,11 +5,11 @@ dataset:
   years: [2022]
 
 raw:
-  source:
-    type: "http_file"
-    args:
-      url: "https://bdap-opendata.rgs.mef.gov.it/export/csv/Rendiconto-Pubblicato---Serie-storica---Saldi.csv"
-      filename: "bdap_rendiconto_saldi_{year}.csv"
+  sources:
+    - type: "http_file"
+      args:
+        url: "https://bdap-opendata.rgs.mef.gov.it/export/csv/Rendiconto-Pubblicato---Serie-storica---Saldi.csv"
+        filename: "bdap_rendiconto_saldi_{year}.csv"
 
 clean:
   sql: "sql/clean.sql"

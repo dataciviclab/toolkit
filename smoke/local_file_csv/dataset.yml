@@ -5,11 +5,11 @@ dataset:
   years: [2022]
 
 raw:
-  source:
-    type: "local_file"
-    args:
-      path: "fixtures/local_file_sample.csv"
-      filename: "local_file_sample_{year}.csv"
+  sources:
+    - type: "local_file"
+      args:
+        path: "fixtures/local_file_sample.csv"
+        filename: "local_file_sample_{year}.csv"
 
 clean:
   sql: "sql/clean.sql"

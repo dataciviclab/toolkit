@@ -15,6 +15,7 @@ raw:
 clean:
   sql: "sql/clean.sql"
   read:
+    mode: "largest"
     header: true
     delim: ";"
     quote: "\""

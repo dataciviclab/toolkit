@@ -79,3 +79,21 @@ def test_cli_years_filter_rejects_unconfigured_year(tmp_path: Path, monkeypatch)
     assert result.exit_code != 0
     assert result.exception is not None
     assert "Year(s) not configured in dataset.yml: 2024" in str(result.exception)
+
+
+def test_cli_run_all_without_years_keeps_direct_python_invocation_compat(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_dir = tmp_path / "project-example"
+    config_path = _copy_project_example_multi_year(project_dir)
+
+    monkeypatch.chdir(tmp_path)
+
+    from toolkit.cli.cmd_run import run as run_cmd
+
+    run_cmd(step="all", config=str(config_path))
+
+    root = project_dir / "_smoke_out"
+    assert (root / "data" / "raw" / "project_example" / "2022").exists()
+    assert (root / "data" / "raw" / "project_example" / "2023").exists()

@@ -274,7 +274,8 @@ def run(
     strict_config_flag = strict_config if isinstance(strict_config, bool) else False
     cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag)
     dry_run_flag = dry_run if isinstance(dry_run, bool) else False
-    selected_years = iter_selected_years(cfg, years_arg=years)
+    years_arg = years if isinstance(years, str) else None
+    selected_years = iter_selected_years(cfg, years_arg=years_arg)
 
     if step not in {"raw", "clean", "mart", "cross_year", "all"}:
         raise typer.BadParameter("step must be one of: raw, clean, mart, cross_year, all")

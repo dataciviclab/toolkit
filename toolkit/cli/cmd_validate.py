@@ -26,7 +26,8 @@ def validate(
     """
     strict_config_flag = strict_config if isinstance(strict_config, bool) else False
     cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag)
-    selected_years = iter_selected_years(cfg, years_arg=years)
+    years_arg = years if isinstance(years, str) else None
+    selected_years = iter_selected_years(cfg, years_arg=years_arg)
 
     for year in selected_years:
         if step == "all":

@@ -98,6 +98,24 @@ def test_validate_mart_min_rows_rule(tmp_path: Path):
     assert ok.ok is True
 
 
+def test_validate_mart_warns_on_orphan_table_rules_against_declared_tables(tmp_path: Path):
+    d = tmp_path / "mart"
+    d.mkdir(parents=True, exist_ok=True)
+
+    _write_parquet(d / "foo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
+
+    result = validate_mart(
+        d,
+        declared_tables=["foo"],
+        table_rules={"bar": {"min_rows": 1}},
+    )
+
+    assert result.ok is True
+    assert any("not declared in mart.tables" in warning for warning in result.warnings)
+    assert result.summary["declared_tables"] == ["foo"]
+    assert result.summary["orphan_table_rules"] == ["bar"]
+
+
 def test_validate_mart_report_uses_root_relative_dir(tmp_path: Path):
     root = tmp_path / "root"
     mart_dir = root / "data" / "mart" / "demo" / "2024"

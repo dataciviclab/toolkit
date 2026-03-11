@@ -28,6 +28,7 @@ def validate_mart(
     *,
     root: str | Path | None = None,
     table_rules: dict[str, MartTableRuleConfig | dict[str, Any]] | None = None,
+    declared_tables: list[str] | None = None,
 ) -> ValidationResult:
     """
     Validate MART folder with optional per-table rules.
@@ -65,11 +66,20 @@ def validate_mart(
 
     existing_files = sorted(d.glob("*.parquet"))
     existing_tables = sorted([p.stem for p in existing_files])
+    declared_tables = sorted(set(declared_tables or []))
 
     # Required tables presence
     missing = [t for t in required_tables if t not in existing_tables]
     if missing:
         errors.append(f"Missing required MART tables: {missing}")
+
+    if declared_tables:
+        orphan_rules = sorted(table for table in table_rules.keys() if table not in declared_tables)
+        if orphan_rules:
+            warnings.append(
+                "MART table_rules reference tables not declared in mart.tables: "
+                f"{orphan_rules}"
+            )
 
     con = duckdb.connect(":memory:")
     row_counts: dict[str, int] = {}
@@ -182,7 +192,9 @@ def validate_mart(
             "dir": dir_value,
             "tables": existing_tables,
             "required_tables": required_tables,
+            "declared_tables": declared_tables,
             "row_counts": row_counts,
+            "orphan_table_rules": [table for table in table_rules.keys() if table not in declared_tables],
             "table_rules": {
                 table: {
                     "required_columns": rule.required_columns,
@@ -205,6 +217,11 @@ def run_mart_validation(cfg, year: int, logger) -> dict[str, Any]:
     mart_dir = layer_year_dir(cfg.root, "mart", cfg.dataset, year)
 
     mart_cfg: dict[str, Any] = cfg.mart or {}
+    declared_tables = [
+        table.get("name")
+        for table in mart_cfg.get("tables", [])
+        if isinstance(table, dict) and table.get("name")
+    ]
     spec = MartValidationSpec.model_validate(
         {
             "required_tables": mart_cfg.get("required_tables"),
@@ -217,6 +234,7 @@ def run_mart_validation(cfg, year: int, logger) -> dict[str, Any]:
         required_tables=spec.required_tables,
         root=cfg.root,
         table_rules=spec.validate.table_rules,
+        declared_tables=declared_tables,
     )
 
     report = write_validation_json(Path(mart_dir) / "_validate" / "mart_validation.json", result)

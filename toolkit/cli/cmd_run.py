@@ -4,7 +4,7 @@ from pathlib import Path
 
 import typer
 
-from toolkit.cli.common import iter_years, load_cfg_and_logger
+from toolkit.cli.common import iter_selected_years, load_cfg_and_logger
 from toolkit.clean.run import run_clean
 from toolkit.clean.validate import run_clean_validation
 from toolkit.cross.run import run_cross_year
@@ -115,6 +115,7 @@ def _print_execution_plan(cfg, year: int, layers: list[str], context: RunContext
 def run_cross_year_step(
     cfg,
     *,
+    years: list[int] | None = None,
     dry_run: bool = False,
     logger=None,
 ) -> None:
@@ -123,13 +124,14 @@ def run_cross_year_step(
 
     _validate_execution_plan(cfg, "cross_year")
     output_dir = layer_dataset_dir(cfg.root, "cross", cfg.dataset)
+    selected_years = list(years) if years is not None else list(cfg.years)
 
     if dry_run:
         typer.echo("Execution Plan")
         typer.echo(f"dataset: {cfg.dataset}")
         typer.echo("scope: cross_year")
         typer.echo("status: DRY_RUN")
-        typer.echo(f"years: {', '.join(str(year) for year in cfg.years)}")
+        typer.echo(f"years: {', '.join(str(year) for year in selected_years)}")
         typer.echo("steps: cross_year")
         typer.echo(f"output_dir: {output_dir}")
         typer.echo("")
@@ -138,14 +140,14 @@ def run_cross_year_step(
     logger.info(
         "RUN cross_year | dataset=%s years=%s base_dir=%s effective_root=%s root_source=%s",
         cfg.dataset,
-        ",".join(str(year) for year in cfg.years),
+        ",".join(str(year) for year in selected_years),
         cfg.base_dir,
         cfg.root,
         cfg.root_source,
     )
     run_cross_year(
         cfg.dataset,
-        cfg.years,
+        selected_years,
         cfg.root,
         cfg.cross_year,
         logger,
@@ -262,6 +264,7 @@ def run_year(
 def run(
     step: str = typer.Argument(..., help="raw | clean | mart | cross_year | all"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
@@ -271,15 +274,16 @@ def run(
     strict_config_flag = strict_config if isinstance(strict_config, bool) else False
     cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag)
     dry_run_flag = dry_run if isinstance(dry_run, bool) else False
+    selected_years = iter_selected_years(cfg, years_arg=years)
 
     if step not in {"raw", "clean", "mart", "cross_year", "all"}:
         raise typer.BadParameter("step must be one of: raw, clean, mart, cross_year, all")
 
     if step == "cross_year":
-        run_cross_year_step(cfg, dry_run=dry_run_flag, logger=logger)
+        run_cross_year_step(cfg, years=selected_years, dry_run=dry_run_flag, logger=logger)
         return
 
-    for year in iter_years(cfg, None):
+    for year in selected_years:
         run_year(cfg, year, step=step, dry_run=dry_run_flag, logger=logger)
 
 

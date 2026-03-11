@@ -7,7 +7,9 @@ import zipfile
 from pathlib import Path
 
 import duckdb
+from typer.testing import CliRunner
 
+from toolkit.cli.app import app
 from toolkit.cli.cmd_run import run_year
 from toolkit.core.config import load_config
 from toolkit.core.logging import get_logger
@@ -227,6 +229,95 @@ def _write_zip_project(project_dir: Path) -> Path:
     return project_dir / "dataset.yml"
 
 
+def _write_cross_year_project(project_dir: Path) -> Path:
+    data_dir = project_dir / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    fixture_text = (FIXTURES_DIR / "it_small.csv").read_text(encoding="utf-8")
+    (data_dir / "it_small_2024.csv").write_text(fixture_text, encoding="utf-8")
+    (data_dir / "it_small_2025.csv").write_text(fixture_text.replace("2024", "2025"), encoding="utf-8")
+
+    _write_text(
+        project_dir / "sql" / "clean.sql",
+        """
+        SELECT
+          comune,
+          CAST(anno AS INTEGER) AS anno,
+          CAST(valore AS DOUBLE) AS valore
+        FROM raw_input
+        """,
+    )
+    _write_text(
+        project_dir / "sql" / "mart_totali.sql",
+        """
+        SELECT
+          anno,
+          SUM(valore) AS totale
+        FROM clean_input
+        GROUP BY anno
+        """,
+    )
+    _write_text(
+        project_dir / "sql" / "cross" / "clean_union.sql",
+        """
+        SELECT
+          anno,
+          COUNT(*) AS righe,
+          SUM(valore) AS totale
+        FROM clean_input
+        GROUP BY anno
+        ORDER BY anno
+        """,
+    )
+    _write_text(
+        project_dir / "dataset.yml",
+        """
+        schema_version: 1
+        root: out
+        dataset:
+          name: tiny_cross_year
+          years: [2024, 2025]
+        raw:
+          output_policy: overwrite
+          sources:
+            - name: csv_it
+              type: local_file
+              primary: true
+              args:
+                path: data/it_small_{year}.csv
+                filename: tiny_it_{year}.csv
+        clean:
+          sql: sql/clean.sql
+          read_mode: strict
+          read:
+            source: auto
+            header: true
+            delim: ";"
+            decimal: ","
+            mode: all
+          required_columns: [comune, anno, valore]
+          validate:
+            not_null: [comune, anno, valore]
+        mart:
+          tables:
+            - name: mart_totali
+              sql: sql/mart_totali.sql
+          required_tables: [mart_totali]
+          validate:
+            table_rules:
+              mart_totali:
+                required_columns: [anno, totale]
+        cross_year:
+          tables:
+            - name: clean_union
+              sql: sql/cross/clean_union.sql
+              source_layer: clean
+        validation:
+          fail_on_error: true
+        """,
+    )
+    return project_dir / "dataset.yml"
+
+
 def test_smoke_e2e_csv_it_semicolon_decimal_comma(tmp_path: Path) -> None:
     project_dir = tmp_path / "csv_it_project"
     dataset_yml = _write_csv_it_project(project_dir)
@@ -333,3 +424,47 @@ def test_smoke_e2e_local_file_path_year_template(tmp_path: Path) -> None:
     raw_dir = Path(cfg.root) / "data" / "raw" / cfg.dataset / str(year)
     raw_manifest = json.loads((raw_dir / "manifest.json").read_text(encoding="utf-8"))
     assert raw_manifest["primary_output_file"] == "tiny_it_2024.csv"
+
+
+def test_smoke_e2e_cross_year_cli_flow(tmp_path: Path) -> None:
+    project_dir = tmp_path / "cross_year_project"
+    dataset_yml = _write_cross_year_project(project_dir)
+
+    runner = CliRunner()
+    run_all = runner.invoke(app, ["run", "all", "--config", str(dataset_yml)])
+    assert run_all.exit_code == 0, run_all.stdout
+
+    run_cross = runner.invoke(app, ["run", "cross_year", "--config", str(dataset_yml)])
+    assert run_cross.exit_code == 0, run_cross.stdout
+
+    root = project_dir / "out"
+    dataset = "tiny_cross_year"
+    for year in ("2024", "2025"):
+        clean_dir = root / "data" / "clean" / dataset / year
+        assert (clean_dir / f"{dataset}_{year}_clean.parquet").exists()
+        assert (clean_dir / "_validate" / "clean_validation.json").exists()
+
+    cross_dir = root / "data" / "cross" / dataset
+    assert (cross_dir / "clean_union.parquet").exists()
+    assert (cross_dir / "metadata.json").exists()
+    assert (cross_dir / "manifest.json").exists()
+    assert (cross_dir / "_validate" / "cross_validation.json").exists()
+
+    cross_validation = json.loads((cross_dir / "_validate" / "cross_validation.json").read_text(encoding="utf-8"))
+    assert cross_validation["ok"] is True
+
+    manifest = json.loads((cross_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["validation"] == "_validate/cross_validation.json"
+    assert manifest["summary"]["ok"] is True
+
+    con = duckdb.connect(":memory:")
+    rows = con.execute(
+        f"SELECT COUNT(*) FROM read_parquet('{(cross_dir / 'clean_union.parquet').as_posix()}')"
+    ).fetchone()[0]
+    years = con.execute(
+        f"SELECT COUNT(DISTINCT anno) FROM read_parquet('{(cross_dir / 'clean_union.parquet').as_posix()}')"
+    ).fetchone()[0]
+    con.close()
+
+    assert int(rows) == 2
+    assert int(years) == 2

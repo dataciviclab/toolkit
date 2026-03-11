@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- `run cross_year` now writes dedicated metadata, manifest and validation artifacts for multi-year outputs.
+- `run` and `validate` now support `--years` for scoped multi-year execution.
+- MART validation now reports `table_rules` entries that do not match declared tables.
+
 ### Changed
 
 - Documentation now classifies `run cross_year` and `inspect schema-diff` as supported advanced tooling in the feature stability matrix.
@@ -20,6 +26,27 @@ All notable changes to this project will be documented in this file.
   - `clean.read.csv.*`
   - `clean.sql_path`
   - `mart.sql_dir`
+
+## [1.1.0] - 2026-03-02
+
+### Added
+
+- Runtime boundaries documentation clarifying core, advanced and compatibility-only toolkit surfaces.
+- RAW profile hints in metadata for lightweight diagnostics during normal RAW runs.
+- Pytest markers and a more explicit split between fast tests and heavier smoke-like checks.
+
+### Changed
+
+- Reduced the runtime surface area by removing peripheral experimental helpers and non-core shims.
+- Refined CLEAN input selection, DuckDB read flow and orchestration to make the RAW -> CLEAN bridge more predictable.
+- Refreshed smoke and profiling documentation around the supported operational workflow.
+- Clarified manifest and metadata writing so runtime artifacts better reflect actual layer outputs.
+
+### Removed
+
+- Deprecated core import shims that no longer belonged to the stable runtime contract.
+- Frozen helper surfaces such as `gen-sql` and peripheral experimental plugins.
+- Obsolete validator/helper modules that duplicated the current runtime path.
 
 ## [1.0.0] - 2026-02-28
 

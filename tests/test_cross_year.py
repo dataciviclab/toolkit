@@ -1,5 +1,6 @@
 from pathlib import Path
 import shutil
+import json
 
 from toolkit.cli.cmd_run import run as run_cmd
 
@@ -45,3 +46,8 @@ def test_cli_run_cross_year_on_project_example(tmp_path: Path, monkeypatch) -> N
     assert (cross_dir / "clean_union.parquet").exists()
     assert (cross_dir / "metadata.json").exists()
     assert (cross_dir / "manifest.json").exists()
+    assert (cross_dir / "_validate" / "cross_validation.json").exists()
+
+    manifest = json.loads((cross_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["validation"] == "_validate/cross_validation.json"
+    assert manifest["summary"]["ok"] is True

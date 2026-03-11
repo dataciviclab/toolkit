@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation now classifies `run cross_year` and `inspect schema-diff` as supported advanced tooling in the feature stability matrix.
+- Changelog/docs references to config warning codes now reflect the current implemented range through `DCL013`.
+
 ### Removed
 
 - Legacy config forms below no longer emit deprecation warnings and now fail with explicit config errors:
@@ -23,7 +28,7 @@ All notable changes to this project will be documented in this file.
 - End-to-end smoke tests for tiny CSV and local ZIP extraction flows.
 - Install and CLI smoke script for clean-environment verification.
 - Configuration schema documentation with minimal and full examples.
-- Centralized config deprecation policy with `DCL001` to `DCL008` warning codes.
+- Centralized config deprecation policy with `DCL001` to `DCL013` warning codes.
 - `--strict-config` CLI option and `config.strict` config switch.
 - Explicit built-in plugin registry with strict/non-strict handling for optional plugins.
 - Coverage reporting in CI with XML artifact upload and fail-under threshold.

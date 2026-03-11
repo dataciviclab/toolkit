@@ -67,6 +67,7 @@ def validate_mart(
     existing_files = sorted(d.glob("*.parquet"))
     existing_tables = sorted([p.stem for p in existing_files])
     declared_tables = sorted(set(declared_tables or []))
+    orphan_rules: list[str] = []
 
     # Required tables presence
     missing = [t for t in required_tables if t not in existing_tables]
@@ -194,7 +195,7 @@ def validate_mart(
             "required_tables": required_tables,
             "declared_tables": declared_tables,
             "row_counts": row_counts,
-            "orphan_table_rules": [table for table in table_rules.keys() if table not in declared_tables],
+            "orphan_table_rules": orphan_rules,
             "table_rules": {
                 table: {
                     "required_columns": rule.required_columns,

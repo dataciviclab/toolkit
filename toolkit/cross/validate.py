@@ -6,7 +6,7 @@ from typing import Any
 
 import duckdb
 
-from toolkit.core.metadata import write_layer_manifest
+from toolkit.core.metadata import file_record, write_layer_manifest
 from toolkit.core.paths import layer_dataset_dir, to_root_relative
 from toolkit.core.validation import ValidationResult, build_validation_summary, write_validation_json
 
@@ -26,7 +26,13 @@ def validate_cross_outputs(
             ok=False,
             errors=[f"Missing CROSS dir: {d}"],
             warnings=[],
-            summary={"dir": dir_value, "years": list(years or [])},
+            summary={
+                "dir": dir_value,
+                "years": list(years or []),
+                "tables": [],
+                "required_tables": required,
+                "row_counts": {},
+            },
         )
 
     existing_files = sorted(d.glob("*.parquet"))
@@ -81,12 +87,17 @@ def run_cross_validation(cfg, years: list[int], logger) -> dict[str, Any]:
     )
 
     report = write_validation_json(Path(cross_dir) / "_validate" / "cross_validation.json", result)
-    metadata = json.loads((cross_dir / "metadata.json").read_text(encoding="utf-8"))
+    metadata_path = Path(cross_dir) / "metadata.json"
+    if metadata_path.exists():
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        outputs = metadata.get("outputs", [])
+    else:
+        outputs = [file_record(path) for path in sorted(Path(cross_dir).glob("*.parquet"))]
     write_layer_manifest(
         cross_dir,
         metadata_path="metadata.json",
         validation_path="_validate/cross_validation.json",
-        outputs=metadata.get("outputs", []),
+        outputs=outputs,
         ok=result.ok,
         errors_count=len(result.errors),
         warnings_count=len(result.warnings),

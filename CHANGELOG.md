@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Removed
 
 - Legacy config forms below no longer emit deprecation warnings and now fail with explicit config errors:
+  - `bq`
   - `raw.source`
   - `raw.sources[].plugin`
   - `raw.sources[].id`
@@ -59,4 +60,3 @@ All notable changes to this project will be documented in this file.
 - `raw.sources[].id` in favor of `raw.sources[].name`
 - scalar `clean.read` in favor of `clean.read.source`
 - `clean.read.csv.*` in favor of `clean.read.*`
-- `bq`

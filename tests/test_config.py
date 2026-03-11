@@ -433,7 +433,7 @@ output:
     assert cfg.mart["validate"]["table_rules"]["mart_ok"]["primary_key"] == ["key_id"]
 
 
-def test_load_config_warns_on_zombie_field_bq(tmp_path: Path, caplog, monkeypatch):
+def test_load_config_rejects_removed_bq_field(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
         """
@@ -449,13 +449,10 @@ mart: {}
         encoding="utf-8",
     )
 
-    _bind_config_logger(caplog, monkeypatch)
-
-    with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
+    with pytest.raises(ValueError) as exc:
         load_config(yml)
 
-    assert "DCL008" in caplog.text
-    assert "deprecated/ignored, usare remove field" in caplog.text
+    assert "bq is no longer supported; remove field" in str(exc.value)
 
 
 def test_load_config_rejects_clean_sql_path(tmp_path: Path):
@@ -469,8 +466,6 @@ raw: {}
 clean:
   sql_path: sql/legacy_clean.sql
 mart: {}
-bq:
-  dataset: ignored
 """.strip(),
         encoding="utf-8",
     )
@@ -492,8 +487,6 @@ raw: {}
 clean: {}
 mart:
   sql_dir: sql/mart
-bq:
-  dataset: ignored
 """.strip(),
         encoding="utf-8",
     )

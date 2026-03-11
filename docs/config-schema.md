@@ -18,7 +18,6 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 | `config` | `object` | no | policy parser config |
 | `validation` | `object` | no | solo opzioni globali del validation gate |
 | `output` | `object` | no | policy artefatti |
-| `bq` | `object \| null` | no | accettato ma ignorato, con warning |
 
 ## dataset
 
@@ -222,7 +221,6 @@ Con `config.strict: true` o `--strict-config`, gli stessi casi diventano errori.
 
 | Code | Legacy | Replacement | Status |
 |---|---|---|---|
-| `DCL008` | `bq` | rimuovere il campo | ignored |
 | `DCL013` | `cross_year.* unknown keys` | rimuovere il campo | ignored |
 
 ## Legacy rimosso
@@ -238,6 +236,7 @@ Le forme seguenti non sono piu supportate. Non generano warning legacy: fallisco
 | `clean.read.csv.*` | `clean.read.*` |
 | `clean.sql_path` | `clean.sql` |
 | `mart.sql_dir` | `mart.tables[].sql` |
+| `bq` | rimuovere il campo |
 
 ## Esempi minimi
 

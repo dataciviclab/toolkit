@@ -148,18 +148,14 @@ def run_raw(
 ):
     """
     Supporta:
-    - legacy:
-      raw:
-        source: {type, client, args}
-    - nuovo:
-      raw:
-        extractor: {type, args}   # default extractor
-        sources:
-          - name: ...
-            type: ...
-            client: ...
-            args: ...
-            extractor: {type, args}  # override per source
+    raw:
+      extractor: {type, args}   # default extractor
+      sources:
+        - name: ...
+          type: ...
+          client: ...
+          args: ...
+          extractor: {type, args}  # override per source
     """
 
     register_builtin_plugins(strict=strict_plugins)
@@ -172,12 +168,9 @@ def run_raw(
     default_extractor_fn, default_extractor_args = get_extractor(default_extractor_spec)
     output_policy = str(raw_cfg.get("output_policy", "versioned"))
 
-    # -------- build sources list (retrocompat) --------
     sources = raw_cfg.get("sources")
     if not sources:
-        # fallback legacy
-        legacy = raw_cfg.get("source", {})
-        sources = [legacy]
+        raise ValueError("raw.sources missing or empty in dataset.yml")
 
     files_written: list[dict] = []
     inputs: list[dict] = []

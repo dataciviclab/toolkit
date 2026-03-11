@@ -7,10 +7,10 @@ dataset:
 raw:
   extractor:
     type: "unzip_first_csv"
-  source:
-    type: "http_file"
-    args:
-      url: "http://127.0.0.1:8000/fixtures/irpef_http_sample.zip"
+  sources:
+    - type: "http_file"
+      args:
+        url: "http://127.0.0.1:8000/fixtures/irpef_http_sample.zip"
 
 clean:
   sql: "sql/clean.sql"

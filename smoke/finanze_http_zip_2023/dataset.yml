@@ -7,10 +7,10 @@ dataset:
 raw:
   extractor:
     type: "unzip_first_csv"
-  source:
-    type: "http_file"
-    args:
-      url: "https://www1.finanze.gov.it/finanze/analisi_stat/public/v_4_0_0/contenuti/Redditi_e_principali_variabili_IRPEF_su_base_comunale_CSV_2023.zip?d=1615465800"
+  sources:
+    - type: "http_file"
+      args:
+        url: "https://www1.finanze.gov.it/finanze/analisi_stat/public/v_4_0_0/contenuti/Redditi_e_principali_variabili_IRPEF_su_base_comunale_CSV_2023.zip?d=1615465800"
 
 clean:
   sql: "sql/clean.sql"

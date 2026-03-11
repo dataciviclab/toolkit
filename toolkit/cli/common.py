@@ -31,3 +31,38 @@ def iter_years(cfg, year_arg: int | None = None) -> list[int]:
     if year_arg not in cfg.years:
         raise ValueError(f"Year {year_arg} is not configured in dataset.yml")
     return [year_arg]
+
+
+def iter_selected_years(
+    cfg,
+    *,
+    year_arg: int | None = None,
+    years_arg: str | None = None,
+) -> list[int]:
+    if year_arg is not None and years_arg is not None:
+        raise ValueError("Use either --year or --years, not both")
+
+    if years_arg is None:
+        return iter_years(cfg, year_arg)
+
+    requested: list[int] = []
+    for raw_part in years_arg.split(","):
+        part = raw_part.strip()
+        if not part:
+            raise ValueError("Invalid --years value: empty year entry")
+        try:
+            year = int(part)
+        except ValueError as exc:
+            raise ValueError(f"Invalid --years value: '{part}' is not an integer year") from exc
+        if year not in requested:
+            requested.append(year)
+
+    if not requested:
+        raise ValueError("Invalid --years value: no years provided")
+
+    invalid = [year for year in requested if year not in cfg.years]
+    if invalid:
+        listed = ", ".join(str(year) for year in invalid)
+        raise ValueError(f"Year(s) not configured in dataset.yml: {listed}")
+
+    return requested

@@ -155,3 +155,153 @@ mart:
     assert "delim: ;" in result.output
     assert "skip: 1" in result.output
     assert "header_preamble_detected" in result.output
+
+
+def test_status_reports_validation_summary_from_layer_artifacts(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "project"
+    config_path = project_dir / "dataset.yml"
+    project_dir.mkdir()
+
+    config_path.write_text(
+        """
+root: "./out"
+dataset:
+  name: demo_ds
+  years: [2022]
+raw: {}
+clean:
+  sql: "sql/clean.sql"
+  required_columns: ["id", "value"]
+mart:
+  tables:
+    - name: mart_ok
+      sql: "sql/mart/mart_ok.sql"
+  required_tables: ["mart_ok", "mart_missing"]
+cross_year:
+  tables:
+    - name: cross_ok
+      sql: "sql/cross/cross_ok.sql"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    sql_mart_dir = project_dir / "sql" / "mart"
+    sql_cross_dir = project_dir / "sql" / "cross"
+    sql_mart_dir.mkdir(parents=True, exist_ok=True)
+    sql_cross_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
+    (sql_mart_dir / "mart_ok.sql").write_text("select * from clean_input", encoding="utf-8")
+    (sql_cross_dir / "cross_ok.sql").write_text("select * from clean_input", encoding="utf-8")
+
+    clean_dir = project_dir / "out" / "data" / "clean" / "demo_ds" / "2022"
+    mart_dir = project_dir / "out" / "data" / "mart" / "demo_ds" / "2022"
+    cross_dir = project_dir / "out" / "data" / "cross" / "demo_ds"
+    (clean_dir / "_validate").mkdir(parents=True, exist_ok=True)
+    (mart_dir / "_validate").mkdir(parents=True, exist_ok=True)
+    (cross_dir / "_validate").mkdir(parents=True, exist_ok=True)
+
+    (clean_dir / "demo_ds_2022_clean.parquet").write_text("placeholder", encoding="utf-8")
+    (cross_dir / "cross_ok.parquet").write_text("placeholder", encoding="utf-8")
+
+    (clean_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "validation": "_validate/clean_validation.json",
+                "summary": {"ok": True, "errors_count": 0, "warnings_count": 1},
+                "outputs": [{"file": "demo_ds_2022_clean.parquet"}],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (clean_dir / "_validate" / "clean_validation.json").write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "errors": [],
+                "warnings": ["header_preamble_detected"],
+                "summary": {
+                    "required": ["id", "value"],
+                    "columns": ["id"],
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    (mart_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "validation": "_validate/mart_validation.json",
+                "summary": {"ok": False, "errors_count": 1, "warnings_count": 1},
+                "outputs": [{"file": "mart_ok.parquet"}],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (mart_dir / "_validate" / "mart_validation.json").write_text(
+        json.dumps(
+            {
+                "ok": False,
+                "errors": ["Missing required MART tables: ['mart_missing']"],
+                "warnings": ["MART table_rules reference tables not declared in mart.tables: ['mart_extra']"],
+                "summary": {
+                    "required_tables": ["mart_ok", "mart_missing"],
+                    "tables": ["mart_ok"],
+                    "per_table": {},
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    (cross_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "validation": "_validate/cross_validation.json",
+                "summary": {"ok": True, "errors_count": 0, "warnings_count": 0},
+                "outputs": [{"file": "cross_ok.parquet"}],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (cross_dir / "_validate" / "cross_validation.json").write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "errors": [],
+                "warnings": [],
+                "summary": {
+                    "required_tables": [],
+                    "tables": ["cross_ok"],
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    run_dir = get_run_dir(project_dir / "out", "demo_ds", 2022)
+    _write_run_record(run_dir / "run-123.json", "run-123", "2026-03-04T10:00:00+00:00", "FAILED")
+
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        ["status", "--dataset", "demo_ds", "--year", "2022", "--latest", "--config", str(config_path)],
+    )
+
+    assert result.exit_code == 0
+    assert "validation_summary:" in result.output
+    assert "clean: state=passed warnings=1 errors=0" in result.output
+    assert "warnings_present: yes" in result.output
+    assert "missing_columns=value" in result.output
+    assert "mart: state=failed warnings=1 errors=1" in result.output
+    assert "missing_tables=mart_missing" in result.output
+    assert "missing_outputs=mart_ok.parquet" in result.output
+    assert "cross_year: state=passed warnings=0 errors=0" in result.output

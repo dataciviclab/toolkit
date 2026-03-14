@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
+from toolkit.cli.cmd_scout_url import probe_url
 
 
 class _ScoutHandler(BaseHTTPRequestHandler):
@@ -125,3 +127,52 @@ def test_scout_url_marks_opaque_non_html_response() -> None:
     assert "content_disposition: None" in result.output
     assert "kind: opaque" in result.output
     assert "candidate_links: none" in result.output
+
+
+def test_probe_url_uses_streaming_and_reads_body_only_for_html(monkeypatch) -> None:
+    calls: list[dict[str, Any]] = []
+
+    class _FakeResponse:
+        def __init__(self, *, content_type: str, text: str = "") -> None:
+            self.headers = {"Content-Type": content_type}
+            self.url = "https://example.org/resource"
+            self.status_code = 200
+            self.encoding = None
+            self.apparent_encoding = "utf-8"
+            self._text = text
+            self.text_reads = 0
+
+        @property
+        def text(self) -> str:
+            self.text_reads += 1
+            return self._text
+
+        def __enter__(self) -> "_FakeResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    responses = [
+        _FakeResponse(content_type="application/octet-stream"),
+        _FakeResponse(content_type="text/html; charset=utf-8", text='<a href="/data.csv">CSV</a>'),
+    ]
+
+    def _fake_get(*args, **kwargs):
+        calls.append(kwargs)
+        return responses[len(calls) - 1]
+
+    monkeypatch.setattr("toolkit.cli.cmd_scout_url.requests.get", _fake_get)
+
+    opaque = probe_url("https://example.org/opaque", timeout=7)
+    html = probe_url("https://example.org/html", timeout=7)
+
+    assert opaque["kind"] == "opaque"
+    assert html["kind"] == "html"
+    assert html["candidate_links"] == ["https://example.org/data.csv"]
+    assert calls[0]["stream"] is True
+    assert calls[1]["stream"] is True
+    assert calls[0]["timeout"] == 7
+    assert calls[1]["timeout"] == 7
+    assert responses[0].text_reads == 0
+    assert responses[1].text_reads == 1

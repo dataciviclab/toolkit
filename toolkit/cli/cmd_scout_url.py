@@ -74,32 +74,32 @@ def _candidate_links(base_url: str, html_text: str) -> list[str]:
 
 def probe_url(url: str, *, timeout: int = _DEFAULT_TIMEOUT) -> dict[str, Any]:
     headers = {"User-Agent": _DEFAULT_USER_AGENT}
-    response = requests.get(url, allow_redirects=True, timeout=timeout, headers=headers)
-    content_type = response.headers.get("Content-Type")
-    content_disposition = response.headers.get("Content-Disposition")
-    final_url = response.url
-    is_html = _is_html(content_type)
+    with requests.get(url, allow_redirects=True, timeout=timeout, headers=headers, stream=True) as response:
+        content_type = response.headers.get("Content-Type")
+        content_disposition = response.headers.get("Content-Disposition")
+        final_url = response.url
+        is_html = _is_html(content_type)
 
-    if is_html:
-        response.encoding = response.encoding or response.apparent_encoding or "utf-8"
-        candidate_links = _candidate_links(final_url, response.text)
-        kind = "html"
-    elif _is_file_like(final_url, content_type, content_disposition):
-        candidate_links = []
-        kind = "file"
-    else:
-        candidate_links = []
-        kind = "opaque"
+        if is_html:
+            response.encoding = response.encoding or response.apparent_encoding or "utf-8"
+            candidate_links = _candidate_links(final_url, response.text)
+            kind = "html"
+        elif _is_file_like(final_url, content_type, content_disposition):
+            candidate_links = []
+            kind = "file"
+        else:
+            candidate_links = []
+            kind = "opaque"
 
-    return {
-        "requested_url": url,
-        "final_url": final_url,
-        "status_code": response.status_code,
-        "content_type": content_type,
-        "content_disposition": content_disposition,
-        "kind": kind,
-        "candidate_links": candidate_links,
-    }
+        return {
+            "requested_url": url,
+            "final_url": final_url,
+            "status_code": response.status_code,
+            "content_type": content_type,
+            "content_disposition": content_disposition,
+            "kind": kind,
+            "candidate_links": candidate_links,
+        }
 
 
 def scout_url(

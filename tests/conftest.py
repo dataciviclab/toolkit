@@ -8,6 +8,7 @@ CORE_TESTS = {
     "test_cli_inspect_paths.py",
     "test_cli_path_contract.py",
     "test_cli_resume.py",
+    "test_cli_scout_url.py",
     "test_cli_status.py",
     "test_config.py",
     "test_metadata_hash.py",

@@ -199,7 +199,7 @@ def run_year(
         context.mark_dry_run()
         _print_execution_plan(cfg, year, layers_to_run, context, fail_on_error)
         try:
-            validate_sql_dry_run(cfg, year=year, step=step)
+            validate_sql_dry_run(cfg, year=year, layers=layers_to_run)
         except Exception as exc:
             context.fail_run(str(exc))
             raise

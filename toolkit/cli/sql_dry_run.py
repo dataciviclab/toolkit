@@ -31,6 +31,10 @@ def _placeholder_columns(clean_cfg: dict[str, Any], sql: str) -> list[str]:
     if isinstance(read_columns, dict):
         columns.extend(str(name) for name in read_columns.keys())
 
+    # Fallback minimale: raccoglie identifier quoted dal SQL per costruire un
+    # raw_input placeholder abbastanza utile nel dry-run. E' deliberatamente
+    # approssimativo: puo' includere nomi non-colonna e non copre colonne non
+    # quotate se non sono gia' dichiarate in clean.read.columns.
     columns.extend(match.group(1) for match in _QUOTED_IDENTIFIER_RE.finditer(sql))
     return _dedupe_preserve_order(columns)
 
@@ -90,14 +94,16 @@ def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection) -> Non
             raise ValueError(f"MART SQL dry-run failed ({name}, {sql_path}): {exc}") from exc
 
 
-def validate_sql_dry_run(cfg, *, year: int, step: str) -> None:
-    if step not in {"clean", "mart", "all"}:
+def validate_sql_dry_run(cfg, *, year: int, layers: list[str]) -> None:
+    # Oggi il check copre solo CLEAN e MART. cross_year resta fuori perche'
+    # ha un contratto di input diverso e richiede una validazione dedicata.
+    if not any(layer in {"clean", "mart"} for layer in layers):
         return
 
     con = duckdb.connect(":memory:")
     try:
         _build_clean_preview(cfg, year=year, con=con)
-        if step in {"mart", "all"}:
+        if "mart" in layers:
             _validate_mart_sql(cfg, year=year, con=con)
     finally:
         con.close()

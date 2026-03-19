@@ -10,6 +10,7 @@ from toolkit.core.template import render_template
 from toolkit.mart.run import _resolve_sql_path as _resolve_mart_sql_path
 
 _QUOTED_IDENTIFIER_RE = re.compile(r'"([^"]+)"')
+_BINDER_MISSING_COLUMN_RE = re.compile(r'Referenced column "([^"]+)" not found in FROM clause')
 
 
 def _dedupe_preserve_order(items: list[str]) -> list[str]:
@@ -48,11 +49,25 @@ def _normalize_sql(sql: str) -> str:
 
 def _create_placeholder_raw_input(con: duckdb.DuckDBPyConnection, clean_cfg: dict[str, Any], sql: str) -> None:
     columns = _placeholder_columns(clean_cfg, sql)
+    _create_placeholder_raw_input_with_columns(con, columns)
+
+
+def _create_placeholder_raw_input_with_columns(
+    con: duckdb.DuckDBPyConnection,
+    columns: list[str],
+) -> None:
     if columns:
         projection = ", ".join(f"NULL::VARCHAR AS {_quoted_identifier(name)}" for name in columns)
     else:
         projection = "NULL::VARCHAR AS __dry_run_placeholder"
     con.execute(f"CREATE OR REPLACE VIEW raw_input AS SELECT {projection} LIMIT 0")
+
+
+def _extract_missing_binder_column(exc: Exception) -> str | None:
+    match = _BINDER_MISSING_COLUMN_RE.search(str(exc))
+    if not match:
+        return None
+    return match.group(1)
 
 
 def _build_clean_preview(
@@ -68,11 +83,27 @@ def _build_clean_preview(
         base_dir=cfg.base_dir,
     )
     clean_sql = _normalize_sql(clean_sql)
-    _create_placeholder_raw_input(con, cfg.clean, clean_sql)
-    try:
-        con.execute(f"CREATE OR REPLACE TABLE __dry_run_clean_preview AS SELECT * FROM ({clean_sql}) AS q LIMIT 0")
-    except Exception as exc:
-        raise ValueError(f"CLEAN SQL dry-run failed ({clean_sql_path}): {exc}") from exc
+    columns = _placeholder_columns(cfg.clean, clean_sql)
+
+    # Fallback incrementale: se il clean.sql usa colonne raw non quotate e non
+    # dichiarate in clean.read.columns, il binder di DuckDB ci dice il nome
+    # mancante. Lo aggiungiamo al placeholder e riproviamo, cosi' il dry-run
+    # evita falsi positivi banali senza provare a parsare SQL completo.
+    for _ in range(25):
+        _create_placeholder_raw_input_with_columns(con, columns)
+        try:
+            con.execute(f"CREATE OR REPLACE TABLE __dry_run_clean_preview AS SELECT * FROM ({clean_sql}) AS q LIMIT 0")
+            return
+        except Exception as exc:
+            missing = _extract_missing_binder_column(exc)
+            if missing and missing not in columns:
+                columns.append(missing)
+                continue
+            raise ValueError(f"CLEAN SQL dry-run failed ({clean_sql_path}): {exc}") from exc
+
+    raise ValueError(
+        f"CLEAN SQL dry-run failed ({clean_sql_path}): exceeded placeholder inference attempts"
+    )
 
 
 def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection) -> None:

@@ -5,6 +5,7 @@ from pathlib import Path
 import typer
 
 from toolkit.cli.common import iter_selected_years, load_cfg_and_logger
+from toolkit.cli.sql_dry_run import validate_sql_dry_run
 from toolkit.clean.run import run_clean
 from toolkit.clean.validate import run_clean_validation
 from toolkit.cross.run import run_cross_year
@@ -197,6 +198,14 @@ def run_year(
     if dry_run:
         context.mark_dry_run()
         _print_execution_plan(cfg, year, layers_to_run, context, fail_on_error)
+        try:
+            validate_sql_dry_run(cfg, year=year, layers=layers_to_run)
+        except Exception as exc:
+            context.fail_run(str(exc))
+            raise
+        if any(layer in {"clean", "mart"} for layer in layers_to_run):
+            typer.echo("sql_validation: OK")
+            typer.echo("")
         return context
 
     base_logger.info(f"RUN -> step={step} dataset={cfg.dataset} year={year}")

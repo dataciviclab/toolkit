@@ -15,6 +15,38 @@ Questa categoria include anche tooling di supporto che non va confuso con il run
 - `resume`
 - run parziali per layer
 
+## Quando usare cosa
+
+Regola pratica:
+
+- se stai eseguendo un dataset per la prima volta o hai cambiato fonte, anni,
+  `dataset.yml` o logica `clean.sql`, parti da `toolkit run all`
+- se hai toccato solo SQL `mart`, preferisci `toolkit run mart`
+- se hai aggiunto o modificato solo output multi-anno, preferisci
+  `toolkit run cross_year`
+- se un run si interrompe ma il run record e gli artefatti precedenti sono
+  ancora coerenti, usa `toolkit resume`
+- se hai toccato solo notebook, docs o script locali del repo dataset, non
+  rilanciare la pipeline per default
+
+Matrice minima:
+
+| Tipo di modifica | Comando consigliato |
+|---|---|
+| prima esecuzione del dataset | `toolkit run all --config dataset.yml` |
+| cambio fonte o perimetro anni | `toolkit run all --config dataset.yml` |
+| cambio `dataset.yml` con impatto su input/layer | `toolkit run all --config dataset.yml` |
+| cambio `clean.sql` | `toolkit run clean --config dataset.yml` poi `toolkit run mart --config dataset.yml` |
+| cambio solo `mart.sql` | `toolkit run mart --config dataset.yml` |
+| cambio solo `cross_year` | `toolkit run cross_year --config dataset.yml` |
+| run interrotto a meta' | `toolkit resume ... --config dataset.yml` |
+| cambio solo notebook/docs | nessun rerun automatico |
+
+Il toolkit non impone di cancellare `raw/`, `clean/`, `mart/` o `cross/` tra un
+run e l'altro. Negli ambienti di lavoro questi output possono restare come
+cache locale finche' il loro perimetro e' ancora coerente con la config e con
+il layer che stai rieseguendo.
+
 ## Step singoli
 
 Utili per debug o per ripetere solo una parte della pipeline:

@@ -234,6 +234,11 @@ toolkit run all --config dataset.yml --dry-run --strict-config
 
 `resume`, `profile raw`, `run raw|clean|mart` e la policy completa degli artifacts restano disponibili, ma sono tooling avanzato: vedi [docs/advanced-workflows.md](docs/advanced-workflows.md).
 
+In particolare, [docs/advanced-workflows.md](docs/advanced-workflows.md)
+chiarisce quando restare su `run all`, quando preferire rerun parziali
+(`run clean`, `run mart`, `run cross_year`) e quando usare `resume` senza
+rilanciare l'intera pipeline.
+
 ## Notebook locali
 
 Nei repo dataset clonati dal template, i notebook dovrebbero leggere gli output reali gia` scritti dal toolkit, non ricostruire logica di path.

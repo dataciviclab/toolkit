@@ -155,6 +155,98 @@ Note pratiche:
 | `ranges` | `dict[str, RangeRule]` | `{}` |
 | `min_rows` | `int \| null` | `null` |
 
+Note pratiche:
+
+- `clean.validate` controlla il parquet CLEAN complessivo del dataset/anno
+- `mart.validate.table_rules` controlla invece ogni tabella MART per nome
+- le chiavi di `table_rules` devono corrispondere ai `name` dichiarati in `mart.tables`
+- se una regola punta a una tabella non dichiarata, il validator la segnala come orphan rule
+
+Esempio minimo corretto:
+
+```yaml
+mart:
+  tables:
+    - name: mart_summary
+      sql: sql/mart/mart_summary.sql
+  required_tables:
+    - mart_summary
+  validate:
+    table_rules:
+      mart_summary:
+        min_rows: 1
+```
+
+Esempio tipico con piu' vincoli su una tabella:
+
+```yaml
+mart:
+  tables:
+    - name: mart_summary
+      sql: sql/mart/mart_summary.sql
+  required_tables:
+    - mart_summary
+  validate:
+    table_rules:
+      mart_summary:
+        required_columns:
+          - anno
+          - totale
+        not_null:
+          - anno
+          - totale
+        primary_key:
+          - anno
+        ranges:
+          totale:
+            min: 0
+        min_rows: 1
+```
+
+Esempio completo con due tabelle:
+
+```yaml
+clean:
+  validate:
+    primary_key:
+      - anno
+      - comune
+    not_null:
+      - anno
+
+mart:
+  tables:
+    - name: mart_summary
+      sql: sql/mart/mart_summary.sql
+    - name: mart_detail
+      sql: sql/mart/mart_detail.sql
+  required_tables:
+    - mart_summary
+    - mart_detail
+  validate:
+    table_rules:
+      mart_summary:
+        required_columns:
+          - anno
+          - totale
+        primary_key:
+          - anno
+        min_rows: 1
+      mart_detail:
+        required_columns:
+          - anno
+          - comune
+        primary_key:
+          - anno
+          - comune
+```
+
+Errori comuni:
+
+- mettere `required_columns`, `not_null` o `primary_key` direttamente sotto `mart.validate` invece che dentro `table_rules.<nome_tabella>`
+- usare come chiave di `table_rules` un nome diverso da quello dichiarato in `mart.tables`
+- aspettarsi che `clean.validate` valga automaticamente anche per le tabelle MART
+
 ## cross_year
 
 `cross_year` definisce output opzionali multi-anno. Non entra nel loop annuale di `raw/clean/mart`.

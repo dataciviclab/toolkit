@@ -32,6 +32,48 @@ Nota pratica:
 
 - `inspect paths` restituisce path assoluti della macchina locale: e' pensato per notebook e script nello stesso ambiente, non come formato portabile tra macchine diverse.
 
+## Contratto operativo di `inspect paths`
+
+`inspect paths` e' il comando da usare quando il problema e':
+
+- trovare i path runtime gia` risolti dal toolkit
+- evitare di ricostruire a mano `root/data/...`
+- leggere l'ultimo run disponibile per un anno
+- recuperare i principali hint RAW senza aprire a mano i metadata
+
+Input minimo:
+
+- `--config dataset.yml`
+- opzionale `--year` per restringere il payload a un solo anno
+
+Output garantito in `--json`:
+
+- `dataset`, `year`, `config_path`, `root`
+- `paths.raw`, `paths.clean`, `paths.mart`, `paths.run_dir`
+- `raw_hints`
+- `latest_run`
+
+Regola pratica:
+
+- notebook e script locali: usa sempre `inspect paths --json`
+- CI che deve validare `effective_root` o path contract: usa `inspect paths --json`
+- se non passi `--year`, il payload puo` essere una lista multi-anno
+
+## Differenza rispetto a `inspect schema-diff`
+
+`inspect schema-diff` non e' un helper per notebook.
+
+Serve invece quando vuoi:
+
+- confrontare schema e hints RAW tra anni configurati
+- capire se una fonte multi-anno ha drift di colonne o profile hints
+- decidere se `clean.read` o una nota metodologica devono esplicitare un caveat
+
+In breve:
+
+- `inspect paths`: "dove sono gli artefatti e quale runtime path contract posso usare?"
+- `inspect schema-diff`: "il RAW cambia tra anni e quanto cambia?"
+
 Regola pratica:
 
 - il toolkit produce

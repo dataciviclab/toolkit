@@ -221,6 +221,58 @@ Per il percorso base:
 - `inspect schema-diff` confronta i principali segnali di schema RAW tra gli anni configurati
 - `--dry-run` valida config e SQL senza eseguire la pipeline
 
+### `inspect paths` vs `inspect schema-diff`
+
+I due comandi sono entrambi read-only, ma hanno scopi diversi:
+
+- `inspect paths`: helper operativo per notebook, script locali e CI
+- `inspect schema-diff`: helper diagnostico per capire drift e incoerenze del RAW tra anni
+
+Usa `inspect paths` quando ti serve sapere:
+
+- dove il toolkit scrive RAW, CLEAN, MART e run records per un dataset/anno
+- qual e' il `root` effettivo risolto dalla config
+- se esiste gia` un `latest_run`
+- quali hint RAW sono disponibili (`encoding`, `delim`, `skip`, `suggested_read.yml`)
+
+Usa `inspect schema-diff` quando ti serve sapere:
+
+- se il RAW cambia tra anni in numero o nomi colonne
+- se i profile hints cambiano tra anni
+- se ci sono warning di sniffing o drift da esplicitare prima del `clean`
+
+Contratto operativo minimo:
+
+- input comune: `--config dataset.yml`
+- `inspect paths` puo` essere scoped su un singolo anno con `--year`
+- `inspect schema-diff` lavora sugli anni configurati nel dataset
+- nessuno dei due modifica artefatti o lancia layer della pipeline
+
+`--json` e' il formato raccomandato quando il chiamante e':
+
+- CI
+- notebook che vogliono evitare path logic duplicata
+- script locali che leggono programmaticamente il payload
+
+Output garantito di `inspect paths`:
+
+- `dataset`, `year`, `config_path`, `root`
+- blocco `paths.raw|clean|mart|run_dir`
+- blocco `raw_hints`
+- blocco `latest_run` se esiste, altrimenti `null`
+
+Output garantito di `inspect schema-diff`:
+
+- `dataset`, `config_path`, `years`
+- `entries` con i principali segnali RAW per anno
+- `comparisons` tra anni consecutivi
+
+Regola pratica:
+
+- CI e effective root: `inspect paths --json`
+- onboarding notebook o script repo dataset: `inspect paths --json`
+- debug schema drift su fonti multi-anno: `inspect schema-diff --json`
+
 Esempi:
 
 ```bash
@@ -256,6 +308,12 @@ Helper ufficiale per evitare path logic duplicata nei notebook:
 ```bash
 toolkit inspect paths --config dataset.yml --year 2024 --json
 ```
+
+`inspect schema-diff` non sostituisce `inspect paths`:
+
+- non nasce per trovare i path runtime
+- nasce per confrontare hints e colonne RAW tra anni configurati
+- ha senso quando stai definendo `clean.read`, validando una fonte instabile o spiegando un drift nella nota metodologica del dataset
 
 Ruoli stabili degli output:
 

@@ -19,8 +19,11 @@ Questa categoria include anche tooling di supporto che non va confuso con il run
 
 Regola pratica:
 
-- se stai eseguendo un dataset per la prima volta o hai cambiato fonte, anni,
-  `dataset.yml` o logica `clean.sql`, parti da `toolkit run all`
+- se stai eseguendo un dataset per la prima volta, parti da `toolkit run all`
+- se hai cambiato fonte, anni, extractor, `dataset.yml` o il perimetro del RAW,
+  torna a `toolkit run all`
+- se hai cambiato `clean.sql` o la logica `clean.read`, riparti da
+  `toolkit run clean` e poi `toolkit run mart`
 - se hai toccato solo SQL `mart`, preferisci `toolkit run mart`
 - se hai aggiunto o modificato solo output multi-anno, preferisci
   `toolkit run cross_year`
@@ -36,16 +39,23 @@ Matrice minima:
 | prima esecuzione del dataset | `toolkit run all --config dataset.yml` |
 | cambio fonte o perimetro anni | `toolkit run all --config dataset.yml` |
 | cambio `dataset.yml` con impatto su input/layer | `toolkit run all --config dataset.yml` |
-| cambio `clean.sql` | `toolkit run clean --config dataset.yml` poi `toolkit run mart --config dataset.yml` |
+| cambio `clean.sql` o `clean.read` | `toolkit run clean --config dataset.yml` poi `toolkit run mart --config dataset.yml` |
 | cambio solo `mart.sql` | `toolkit run mart --config dataset.yml` |
 | cambio solo `cross_year` | `toolkit run cross_year --config dataset.yml` |
-| run interrotto a meta' | `toolkit resume ... --config dataset.yml` |
+| run interrotto a meta' con run record/artifacts coerenti | `toolkit resume ... --config dataset.yml` |
 | cambio solo notebook/docs | nessun rerun automatico |
 
 Il toolkit non impone di cancellare `raw/`, `clean/`, `mart/` o `cross/` tra un
 run e l'altro. Negli ambienti di lavoro questi output possono restare come
 cache locale finche' il loro perimetro e' ancora coerente con la config e con
 il layer che stai rieseguendo.
+
+In pratica:
+
+- non trattare `run all` come default per ogni modifica minima
+- non cancellare gli output locali "per pulizia" se non hai cambiato il loro perimetro
+- usa i rerun parziali quando il punto di ingresso corretto e' chiaro
+- usa `resume` per recovery, non come scorciatoia generica a meta' sviluppo
 
 ## Step singoli
 

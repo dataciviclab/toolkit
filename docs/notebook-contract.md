@@ -49,8 +49,19 @@ Input minimo:
 Output garantito in `--json`:
 
 - `dataset`, `year`, `config_path`, `root`
-- `paths.raw`, `paths.clean`, `paths.mart`, `paths.run_dir`
-- `raw_hints`
+- `paths.raw` con `dir`, `manifest`, `metadata`, `validation`
+- `paths.clean` con `dir`, `output`, `manifest`, `metadata`, `validation`
+- `paths.mart` con `dir`, `outputs`, `manifest`, `metadata`, `validation`
+- `paths.run_dir`
+- `raw_hints` con:
+  - `primary_output_file`
+  - `suggested_read_path`
+  - `suggested_read_exists`
+  - `encoding`
+  - `delim`
+  - `decimal`
+  - `skip`
+  - `warnings`
 - `latest_run`
 
 Regola pratica:

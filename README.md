@@ -233,7 +233,7 @@ Usa `inspect paths` quando ti serve sapere:
 - dove il toolkit scrive RAW, CLEAN, MART e run records per un dataset/anno
 - qual e' il `root` effettivo risolto dalla config
 - se esiste gia` un `latest_run`
-- quali hint RAW sono disponibili (`encoding`, `delim`, `skip`, `suggested_read.yml`)
+- quali hint RAW sono disponibili (`encoding`, `delim`, `decimal`, `skip`, `suggested_read_path`, `suggested_read_exists`)
 
 Usa `inspect schema-diff` quando ti serve sapere:
 
@@ -257,8 +257,20 @@ Contratto operativo minimo:
 Output garantito di `inspect paths`:
 
 - `dataset`, `year`, `config_path`, `root`
-- blocco `paths.raw|clean|mart|run_dir`
-- blocco `raw_hints`
+- blocco `paths` con:
+  - `raw.dir|manifest|metadata|validation`
+  - `clean.dir|output|manifest|metadata|validation`
+  - `mart.dir|outputs|manifest|metadata|validation`
+  - `run_dir`
+- blocco `raw_hints` con:
+  - `primary_output_file`
+  - `suggested_read_path`
+  - `suggested_read_exists`
+  - `encoding`
+  - `delim`
+  - `decimal`
+  - `skip`
+  - `warnings`
 - blocco `latest_run` se esiste, altrimenti `null`
 
 Output garantito di `inspect schema-diff`:

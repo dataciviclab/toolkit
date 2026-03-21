@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import time
+
 from toolkit.core.run_context import RunContext, get_run_dir, read_run_record
 
 
@@ -78,6 +80,67 @@ def test_read_run_record_marks_absolute_paths_outside_root_as_non_portable(tmp_p
     assert record["layers"]["raw"]["artifact_path"] == "/outside/root/file.csv"
     assert record["_portability"]["portable"] is False
     assert record["_portability"]["warnings"] == ["/outside/root/file.csv"]
+
+
+def test_layer_metrics_default_to_null(tmp_path: Path) -> None:
+    ctx = RunContext("ds", 2030, root=str(tmp_path))
+    stored = _read_context(ctx.path)
+    for layer in ("raw", "clean", "mart"):
+        metrics = stored["layers"][layer]["metrics"]
+        assert metrics["output_rows"] is None
+        assert metrics["output_bytes"] is None
+        assert metrics["tables_count"] is None
+
+
+def test_set_layer_metrics_persists(tmp_path: Path) -> None:
+    ctx = RunContext("ds", 2030, root=str(tmp_path))
+    ctx.set_layer_metrics("clean", output_rows=1000, output_bytes=204800)
+    stored = _read_context(ctx.path)
+    m = stored["layers"]["clean"]["metrics"]
+    assert m["output_rows"] == 1000
+    assert m["output_bytes"] == 204800
+    assert m["tables_count"] is None
+
+
+def test_set_layer_metrics_mart_with_tables_count(tmp_path: Path) -> None:
+    ctx = RunContext("ds", 2030, root=str(tmp_path))
+    ctx.set_layer_metrics("mart", output_rows=5000, output_bytes=409600, tables_count=3)
+    stored = _read_context(ctx.path)
+    m = stored["layers"]["mart"]["metrics"]
+    assert m["output_rows"] == 5000
+    assert m["output_bytes"] == 409600
+    assert m["tables_count"] == 3
+
+
+def test_duration_seconds_computed_after_complete(tmp_path: Path) -> None:
+    ctx = RunContext("ds", 2030, root=str(tmp_path))
+    ctx.start_layer("raw")
+    time.sleep(0.05)
+    ctx.complete_layer("raw")
+    ctx.complete_run()
+    stored = _read_context(ctx.path)
+    assert stored["layers"]["raw"]["duration_seconds"] is not None
+    assert stored["layers"]["raw"]["duration_seconds"] >= 0
+    assert stored["duration_seconds"] is not None
+    assert stored["duration_seconds"] >= 0
+
+
+def test_duration_seconds_null_while_running(tmp_path: Path) -> None:
+    ctx = RunContext("ds", 2030, root=str(tmp_path))
+    stored = _read_context(ctx.path)
+    assert stored["duration_seconds"] is None
+    assert stored["layers"]["raw"]["duration_seconds"] is None
+
+
+def test_metrics_survive_json_round_trip(tmp_path: Path) -> None:
+    ctx = RunContext("ds", 2030, root=str(tmp_path))
+    ctx.set_layer_metrics("raw", output_bytes=8192)
+    ctx.set_layer_metrics("clean", output_rows=500, output_bytes=16384)
+    ctx.set_layer_metrics("mart", output_rows=200, output_bytes=4096, tables_count=2)
+    record = read_run_record(get_run_dir(tmp_path, "ds", 2030), ctx.run_id)
+    assert record["layers"]["raw"]["metrics"]["output_bytes"] == 8192
+    assert record["layers"]["clean"]["metrics"]["output_rows"] == 500
+    assert record["layers"]["mart"]["metrics"]["tables_count"] == 2
 
 
 def test_read_run_record_does_not_treat_error_message_as_path(tmp_path: Path) -> None:

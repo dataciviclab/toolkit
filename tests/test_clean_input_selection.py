@@ -47,7 +47,7 @@ def _run_clean_capture_inputs(
         seen["output_path"] = output_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(b"PAR1")
-        return ("strict", {"delim": ";", "decimal": ",", "encoding": "utf-8"})
+        return ("strict", {"delim": ";", "decimal": ",", "encoding": "utf-8"}, 42)
 
     monkeypatch.setattr("toolkit.clean.run._run_sql", _fake_run_sql)
     run_clean("demo", 2024, str(tmp_path), clean_cfg, logger or _NoopLogger())

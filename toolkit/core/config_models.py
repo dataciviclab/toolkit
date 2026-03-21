@@ -588,16 +588,21 @@ def _resolve_root(root: Any, *, base_dir: Path) -> tuple[Path, str]:
 
 
 def _ensure_root_within_repo(root: Path, *, repo_root: Path, path: Path) -> Path:
-    resolved_repo_root = repo_root.expanduser().resolve()
-    resolved_root = root.expanduser().resolve()
+    """
+    Verify that `root` is contained within `repo_root` using resolved paths.
+    Both `root` and `repo_root` must already be fully resolved by the caller.
+    Returns `root` unchanged on success; raises ValueError on violation.
+    `path` is the config file path, used only for error context.
+    Note: this guard checks only the output root directory, not SQL input paths.
+    """
     try:
-        resolved_root.relative_to(resolved_repo_root)
+        root.relative_to(repo_root)
     except ValueError as exc:
         raise _err(
-            f"root resolves outside repo_root: root={resolved_root} repo_root={resolved_repo_root}",
+            f"root resolves outside repo_root: root={root} repo_root={repo_root}",
             path=path,
         ) from exc
-    return resolved_root
+    return root
 
 
 def _emit_deprecation_notice(
@@ -783,7 +788,13 @@ def load_config_model(
     normalized = _warn_or_reject_unknown_keys(normalized, path=p, strict_config=strict_mode)
     root_path, root_source = _resolve_root(normalized.get("root"), base_dir=base_dir)
     if repo_root is not None:
-        root_path = _ensure_root_within_repo(root_path, repo_root=Path(repo_root), path=p)
+        repo_root_path = Path(repo_root).expanduser().resolve()
+        if not repo_root_path.is_dir():
+            raise _err(
+                f"repo_root does not exist or is not a directory: {repo_root_path}",
+                path=p,
+            )
+        root_path = _ensure_root_within_repo(root_path, repo_root=repo_root_path, path=p)
 
     raw = normalized.get("raw", {}) or {}
     clean = normalized.get("clean", {}) or {}

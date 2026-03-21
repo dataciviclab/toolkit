@@ -293,6 +293,117 @@ mart: {}
     assert cfg.root_source == "base_dir_fallback"
 
 
+@pytest.mark.parametrize(
+    ("dataset_rel", "root_value"),
+    [
+        ("candidates/demo_dataset", "../../out"),
+        ("candidates/demo_dataset/sources/demo_source", "../../../../out"),
+        ("support_datasets/demo_support", "../../out"),
+    ],
+)
+def test_load_config_resolves_repo_out_for_dataset_incubator_layouts(
+    tmp_path: Path,
+    dataset_rel: str,
+    root_value: str,
+):
+    repo_root = tmp_path / "dataset-incubator"
+    dataset_dir = repo_root / Path(dataset_rel)
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    yml = dataset_dir / "dataset.yml"
+    yml.write_text(
+        f"""
+root: "{root_value}"
+dataset:
+  name: demo
+  years: [2022]
+raw: {{}}
+clean: {{}}
+mart: {{}}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_config(yml, repo_root=repo_root)
+
+    assert cfg.root == (repo_root / "out").resolve()
+    assert cfg.root_source == "yml"
+
+
+def test_load_config_accepts_absolute_root_within_repo_when_repo_root_is_provided(tmp_path: Path):
+    repo_root = tmp_path / "dataset-incubator"
+    dataset_dir = repo_root / "candidates" / "demo_dataset"
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    allowed_root = (repo_root / "out").resolve()
+    yml = dataset_dir / "dataset.yml"
+    yml.write_text(
+        f"""
+root: "{allowed_root.as_posix()}"
+dataset:
+  name: demo
+  years: [2022]
+raw: {{}}
+clean: {{}}
+mart: {{}}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_config(yml, repo_root=repo_root)
+
+    assert cfg.root == allowed_root
+    assert cfg.root_source == "yml"
+
+
+def test_load_config_rejects_root_outside_repo_when_repo_root_is_provided(tmp_path: Path):
+    repo_root = tmp_path / "dataset-incubator"
+    dataset_dir = repo_root / "candidates" / "demo_dataset"
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    outside_root = tmp_path / "outside"
+    yml = dataset_dir / "dataset.yml"
+    yml.write_text(
+        f"""
+root: "{outside_root.as_posix()}"
+dataset:
+  name: demo
+  years: [2022]
+raw: {{}}
+clean: {{}}
+mart: {{}}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as exc:
+        load_config(yml, repo_root=repo_root)
+
+    assert "root resolves outside repo_root" in str(exc.value)
+    assert str(outside_root.resolve()) in str(exc.value)
+    assert str(repo_root.resolve()) in str(exc.value)
+
+
+def test_load_config_allows_root_outside_repo_without_repo_root_guard(tmp_path: Path):
+    repo_root = tmp_path / "dataset-incubator"
+    dataset_dir = repo_root / "candidates" / "demo_dataset"
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    yml = dataset_dir / "dataset.yml"
+    yml.write_text(
+        """
+root: "../../../outside"
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_config(yml)
+
+    assert cfg.root == (tmp_path / "outside").resolve()
+
+
 def test_load_config_rejects_legacy_clean_read_csv_shape(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()

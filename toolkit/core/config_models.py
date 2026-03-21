@@ -585,6 +585,26 @@ def _resolve_root(root: Any, *, base_dir: Path) -> tuple[Path, str]:
         source = "env:TOOLKIT_OUTDIR" if os.environ.get("TOOLKIT_OUTDIR") else "env:DCL_OUTDIR"
         return Path(managed_outdir).expanduser().resolve(), source
     return _resolve_path_value(root, base_dir=base_dir), "yml"
+
+
+def _ensure_root_within_repo(root: Path, *, repo_root: Path, path: Path) -> Path:
+    """
+    Verify that `root` is contained within `repo_root` using resolved paths.
+    Both `root` and `repo_root` must already be fully resolved by the caller.
+    Returns `root` unchanged on success; raises ValueError on violation.
+    `path` is the config file path, used only for error context.
+    Note: this guard checks only the output root directory, not SQL input paths.
+    """
+    try:
+        root.relative_to(repo_root)
+    except ValueError as exc:
+        raise _err(
+            f"root resolves outside repo_root: root={root} repo_root={repo_root}",
+            path=path,
+        ) from exc
+    return root
+
+
 def _emit_deprecation_notice(
     key: str,
     *,
@@ -730,7 +750,22 @@ def _read_strict_config(data: dict[str, Any], *, path: Path) -> bool:
     return parse_bool(strict_value, "config.strict")
 
 
-def load_config_model(path: str | Path, *, strict_config: bool = False) -> ToolkitConfigModel:
+def load_config_model(
+    path: str | Path,
+    *,
+    strict_config: bool = False,
+    repo_root: str | Path | None = None,
+) -> ToolkitConfigModel:
+    """
+    Load and normalize toolkit config.
+
+    repo_root is an optional guardrail for callers that need to enforce that
+    the resolved effective root stays inside a known repository tree. This is
+    intentionally opt-in so the toolkit can still support valid workflows that
+    write outputs outside the project directory. A typical caller is external
+    CI that validates dataset.yml contracts for monorepos such as
+    dataset-incubator.
+    """
     p = Path(path)
     base_dir = p.parent.resolve()
 
@@ -752,6 +787,14 @@ def load_config_model(path: str | Path, *, strict_config: bool = False) -> Toolk
     normalized = _normalize_legacy_payload(data, path=p, strict_config=strict_mode)
     normalized = _warn_or_reject_unknown_keys(normalized, path=p, strict_config=strict_mode)
     root_path, root_source = _resolve_root(normalized.get("root"), base_dir=base_dir)
+    if repo_root is not None:
+        repo_root_path = Path(repo_root).expanduser().resolve()
+        if not repo_root_path.is_dir():
+            raise _err(
+                f"repo_root does not exist or is not a directory: {repo_root_path}",
+                path=p,
+            )
+        root_path = _ensure_root_within_repo(root_path, repo_root=repo_root_path, path=p)
 
     raw = normalized.get("raw", {}) or {}
     clean = normalized.get("clean", {}) or {}

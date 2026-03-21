@@ -50,10 +50,25 @@ def _resolve_sql_path(cfg, rel_path: str | None) -> Path:
     return Path(cfg.base_dir) / path
 
 
+def _is_mart_only_cfg(cfg) -> bool:
+    return not bool(cfg.clean.get("sql"))
+
+
 def _validate_execution_plan(cfg, step: str) -> list[str]:
     layers = _planned_layers(step)
 
+    if step == "all" and _is_mart_only_cfg(cfg):
+        raise ValueError(
+            "run all is not supported for mart-only / compose-only configs; "
+            "use: toolkit run mart --config ...",
+        )
+
     if "clean" in layers:
+        if _is_mart_only_cfg(cfg):
+            raise ValueError(
+                "run clean is not supported for mart-only / compose-only configs; "
+                "use: toolkit run mart --config ...",
+            )
         clean_sql = _resolve_sql_path(cfg, cfg.clean.get("sql"))
         if not clean_sql.exists():
             raise FileNotFoundError(f"CLEAN SQL file not found: {clean_sql}")
@@ -270,6 +285,7 @@ def run_year(
             cfg.root,
             cfg.mart,
             base_dir=cfg.base_dir,
+            clean_cfg=cfg.clean,
             output_cfg=cfg.output,
         )
 

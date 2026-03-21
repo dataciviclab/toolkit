@@ -303,6 +303,25 @@ chiarisce quando restare su `run all`, quando preferire rerun parziali
 (`run clean`, `run mart`, `run cross_year`) e quando usare `resume` senza
 rilanciare l'intera pipeline.
 
+### Decision Rule Rapida
+
+Se non sei sicuro, parti da questa regola minima:
+
+| Se hai cambiato... | Comando consigliato |
+| --- | --- |
+| fonte, anni, extractor o shape di `dataset.yml` | `toolkit run all --config dataset.yml` |
+| logica `clean.sql` o `clean.read` | `toolkit run clean --config dataset.yml` poi `toolkit run mart --config dataset.yml` |
+| solo SQL `mart` | `toolkit run mart --config dataset.yml` |
+| solo output `cross_year` | `toolkit run cross_year --config dataset.yml` |
+| solo notebook, docs o note metodologiche | nessun rerun automatico |
+| run interrotto con artefatti precedenti coerenti | `toolkit resume ... --config dataset.yml` |
+
+Regola pratica:
+
+- `run all` resta il percorso canonico
+- i rerun parziali servono per non rilanciare tutto quando il perimetro del cambio e' gia' chiaro
+- `raw`, `clean`, `mart` e `cross_year` locali possono restare come cache di lavoro: non vanno cancellati a caso tra un test e l'altro
+
 ## Notebook locali
 
 Nei repo dataset clonati dal template, i notebook dovrebbero leggere gli output reali gia` scritti dal toolkit, non ricostruire logica di path.

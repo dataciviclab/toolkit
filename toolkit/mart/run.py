@@ -36,6 +36,7 @@ def run_mart(
     logger,
     *,
     base_dir: Path | None = None,
+    clean_cfg: dict[str, Any] | None = None,
     output_cfg: dict[str, Any] | None = None,
 ):
     policy = resolve_artifact_policy(output_cfg)
@@ -44,24 +45,27 @@ def run_mart(
     mart_dir = layer_year_dir(root, "mart", dataset, year)
     mart_dir.mkdir(parents=True, exist_ok=True)
 
-    if not clean_dir.exists():
+    clean_sql_configured = bool((clean_cfg or {}).get("sql"))
+    clean_files: list[Path] = []
+    if clean_dir.exists():
+        clean_files = list(clean_dir.glob("*.parquet"))
+        if not clean_files and clean_sql_configured:
+            raise FileNotFoundError(f"No CLEAN parquet found in {clean_dir}")
+    elif clean_sql_configured:
         raise FileNotFoundError(f"CLEAN dir not found: {clean_dir}. Run: toolkit run clean -c dataset.yml")
-
-    clean_files = list(clean_dir.glob("*.parquet"))
-    if not clean_files:
-        raise FileNotFoundError(f"No CLEAN parquet found in {clean_dir}")
 
     con = duckdb.connect(":memory:")
     try:
-        # clean_input view
-        if len(clean_files) == 1:
-            con.execute(f"CREATE VIEW clean_input AS SELECT * FROM read_parquet('{clean_files[0]}')")
-        else:
-            paths = ",".join([f"'{p}'" for p in clean_files])
-            con.execute(f"CREATE VIEW clean_input AS SELECT * FROM read_parquet([{paths}])")
+        if clean_files:
+            # clean_input view
+            if len(clean_files) == 1:
+                con.execute(f"CREATE VIEW clean_input AS SELECT * FROM read_parquet('{clean_files[0]}')")
+            else:
+                paths = ",".join([f"'{p}'" for p in clean_files])
+                con.execute(f"CREATE VIEW clean_input AS SELECT * FROM read_parquet([{paths}])")
 
-        # alias for backward-compatible SQL (old templates may reference "clean")
-        con.execute("CREATE OR REPLACE VIEW clean AS SELECT * FROM clean_input")
+            # alias for backward-compatible SQL (old templates may reference "clean")
+            con.execute("CREATE OR REPLACE VIEW clean AS SELECT * FROM clean_input")
 
         tables = mart_cfg.get("tables") or []
         if not isinstance(tables, list) or not tables:

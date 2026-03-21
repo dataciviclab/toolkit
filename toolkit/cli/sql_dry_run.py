@@ -107,8 +107,9 @@ def _build_clean_preview(
 
 
 def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection) -> None:
-    con.execute("CREATE OR REPLACE VIEW clean_input AS SELECT * FROM __dry_run_clean_preview")
-    con.execute("CREATE OR REPLACE VIEW clean AS SELECT * FROM clean_input")
+    if cfg.clean.get("sql"):
+        con.execute("CREATE OR REPLACE VIEW clean_input AS SELECT * FROM __dry_run_clean_preview")
+        con.execute("CREATE OR REPLACE VIEW clean AS SELECT * FROM clean_input")
 
     tables = cfg.mart.get("tables") or []
     template_ctx = {"year": year, "dataset": cfg.dataset}
@@ -132,7 +133,8 @@ def validate_sql_dry_run(cfg, *, year: int, layers: list[str]) -> None:
 
     con = duckdb.connect(":memory:")
     try:
-        _build_clean_preview(cfg, year=year, con=con)
+        if cfg.clean.get("sql"):
+            _build_clean_preview(cfg, year=year, con=con)
         if "mart" in layers:
             _validate_mart_sql(cfg, year=year, con=con)
     finally:

@@ -4,6 +4,7 @@ import json
 import logging
 from pathlib import Path
 
+import duckdb
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
@@ -205,3 +206,150 @@ def test_run_year_logs_effective_root_context(tmp_path: Path, caplog) -> None:
     assert f"base_dir={tmp_path}" in caplog.text
     assert f"effective_root={root_dir}" in caplog.text
     assert "root_source=yml" in caplog.text
+
+
+def test_run_dry_run_accepts_mart_only_config(tmp_path: Path) -> None:
+    mart_sql = tmp_path / "compose" / "sql"
+    mart_sql.mkdir(parents=True, exist_ok=True)
+    source_path = tmp_path / "external_source.parquet"
+
+    con = duckdb.connect()
+    con.execute("COPY (SELECT 1 AS value) TO ? (FORMAT PARQUET)", [str(source_path)])
+    con.close()
+
+    (mart_sql / "mart_example.sql").write_text(
+        f"select * from read_parquet('{source_path.as_posix()}')",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "compose" / "dataset.yml"
+    root_dir = tmp_path / "out"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'root: "{root_dir.as_posix()}"',
+                "dataset:",
+                '  name: "compose_demo"',
+                "  years: [2022]",
+                "raw: {}",
+                "mart:",
+                "  tables:",
+                '    - name: "mart_example"',
+                '      sql: "sql/mart_example.sql"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "mart", "--config", str(config_path), "--dry-run"])
+
+    assert result.exit_code == 0
+    assert "Execution Plan" in result.output
+    assert "steps: mart" in result.output
+    assert "sql_validation: OK" in result.output
+
+
+def test_run_dry_run_all_fails_readably_on_mart_only_config(tmp_path: Path) -> None:
+    mart_sql = tmp_path / "compose" / "sql"
+    mart_sql.mkdir(parents=True, exist_ok=True)
+    (mart_sql / "mart_example.sql").write_text("select 1 as value", encoding="utf-8")
+
+    config_path = tmp_path / "compose" / "dataset.yml"
+    root_dir = tmp_path / "out"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'root: "{root_dir.as_posix()}"',
+                "dataset:",
+                '  name: "compose_demo"',
+                "  years: [2022]",
+                "raw: {}",
+                "mart:",
+                "  tables:",
+                '    - name: "mart_example"',
+                '      sql: "sql/mart_example.sql"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+
+    assert result.exit_code != 0
+    assert "run all is not supported for mart-only / compose-only configs" in str(result.exception)
+
+
+def test_run_mart_executes_mart_only_config(tmp_path: Path) -> None:
+    mart_sql = tmp_path / "compose" / "sql"
+    mart_sql.mkdir(parents=True, exist_ok=True)
+    source_path = tmp_path / "external_source.parquet"
+
+    con = duckdb.connect()
+    con.execute("COPY (SELECT 1 AS value) TO ? (FORMAT PARQUET)", [str(source_path)])
+    con.close()
+
+    (mart_sql / "mart_example.sql").write_text(
+        f"select * from read_parquet('{source_path.as_posix()}')",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "compose" / "dataset.yml"
+    root_dir = tmp_path / "out"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'root: "{root_dir.as_posix()}"',
+                "dataset:",
+                '  name: "compose_demo"',
+                "  years: [2022]",
+                "raw: {}",
+                "mart:",
+                "  tables:",
+                '    - name: "mart_example"',
+                '      sql: "sql/mart_example.sql"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "mart", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    mart_dir = root_dir / "data" / "mart" / "compose_demo" / "2022"
+    assert (mart_dir / "mart_example.parquet").exists()
+    assert (mart_dir / "metadata.json").exists()
+    assert not (root_dir / "data" / "clean" / "compose_demo" / "2022").exists()
+
+
+def test_run_all_fails_readably_on_mart_only_config(tmp_path: Path) -> None:
+    mart_sql = tmp_path / "compose" / "sql"
+    mart_sql.mkdir(parents=True, exist_ok=True)
+    (mart_sql / "mart_example.sql").write_text("select 1 as value", encoding="utf-8")
+
+    config_path = tmp_path / "compose" / "dataset.yml"
+    root_dir = tmp_path / "out"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'root: "{root_dir.as_posix()}"',
+                "dataset:",
+                '  name: "compose_demo"',
+                "  years: [2022]",
+                "raw: {}",
+                "mart:",
+                "  tables:",
+                '    - name: "mart_example"',
+                '      sql: "sql/mart_example.sql"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "all", "--config", str(config_path)])
+
+    assert result.exit_code != 0
+    assert "run all is not supported for mart-only / compose-only configs" in str(result.exception)

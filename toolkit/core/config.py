@@ -70,8 +70,13 @@ def _compat_cross_year(model: ToolkitConfigModel) -> dict[str, Any]:
     )
 
 
-def load_config(path: str | Path, *, strict_config: bool = False) -> ToolkitConfig:
-    model = load_config_model(path, strict_config=strict_config)
+def load_config(
+    path: str | Path,
+    *,
+    strict_config: bool = False,
+    repo_root: str | Path | None = None,
+) -> ToolkitConfig:
+    model = load_config_model(path, strict_config=strict_config, repo_root=repo_root)
     return ToolkitConfig(
         base_dir=model.base_dir,
         schema_version=model.schema_version,

@@ -217,8 +217,10 @@ def run_year(
         layer_logger = bind_logger(base_logger, layer=layer_name)
         context.start_layer(layer_name)
         try:
-            target(*args, logger=layer_logger, **kwargs)
+            metrics = target(*args, logger=layer_logger, **kwargs)
             context.complete_layer(layer_name)
+            if isinstance(metrics, dict):
+                context.set_layer_metrics(layer_name, **metrics)
 
             summary = _validation_runner(layer_name)(cfg, year, layer_logger)
             context.set_validation(layer_name, summary)

@@ -77,6 +77,7 @@ def run_mart(
         written: list[Path] = []
         executed: list[dict[str, Any]] = []
         debug_tables: list[dict[str, Any]] = []
+        total_rows = 0
 
         for i, table in enumerate(tables, start=1):
             if not isinstance(table, dict):
@@ -102,6 +103,7 @@ def run_mart(
 
             # Create table and export
             con.execute(f"CREATE OR REPLACE TABLE {name} AS {sql}")
+            total_rows += con.execute(f"SELECT count(*) FROM {name}").fetchone()[0]
 
             out = mart_dir / f"{name}.parquet"
             con.execute(f"COPY {name} TO '{out}' (FORMAT PARQUET);")
@@ -158,4 +160,6 @@ def run_mart(
         errors_count=None,
         warnings_count=None,
     )
+    total_bytes = sum(p.stat().st_size for p in written if p.exists())
     logger.info(f"MART -> {mart_dir}")
+    return {"output_rows": total_rows, "output_bytes": total_bytes, "tables_count": len(written)}

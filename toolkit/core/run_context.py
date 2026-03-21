@@ -5,7 +5,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from toolkit.core.paths import to_root_relative
 
@@ -20,6 +20,21 @@ _PORTABLE_RUN_PATH_FIELDS: set[tuple[str, ...]] = {
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _duration_seconds(started: Optional[str], finished: Optional[str]) -> Optional[float]:
+    if started is None or finished is None:
+        return None
+    try:
+        s = datetime.fromisoformat(started)
+        f = datetime.fromisoformat(finished)
+        return round((f - s).total_seconds(), 3)
+    except Exception:
+        return None
+
+
+def _empty_layer_metrics() -> Dict[str, Any]:
+    return {"output_rows": None, "output_bytes": None, "tables_count": None}
 
 
 def get_run_dir(root: Path, dataset: str, year: int) -> Path:
@@ -155,7 +170,7 @@ class RunContext:
         self.finished_at: str | None = None
         self.status = "RUNNING"
         self.layers = {
-            layer: {"status": "PENDING", "started_at": None, "finished_at": None}
+            layer: {"status": "PENDING", "started_at": None, "finished_at": None, "metrics": _empty_layer_metrics()}
             for layer in _LAYER_NAMES
         }
         self.validations = {layer: {} for layer in _LAYER_NAMES}
@@ -169,14 +184,21 @@ class RunContext:
         return self._path
 
     def to_dict(self) -> Dict[str, Any]:
+        layers_out = {}
+        for layer, info in self.layers.items():
+            layers_out[layer] = {
+                **info,
+                "duration_seconds": _duration_seconds(info.get("started_at"), info.get("finished_at")),
+            }
         return {
             "dataset": self.dataset,
             "year": self.year,
             "run_id": self.run_id,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
+            "duration_seconds": _duration_seconds(self.started_at, self.finished_at),
             "status": self.status,
-            "layers": self.layers,
+            "layers": layers_out,
             "validations": self.validations,
             "resumed_from": self.resumed_from,
             "error": self.error,
@@ -218,6 +240,22 @@ class RunContext:
         if layer not in self.validations:
             raise ValueError(f"Unknown validation layer: {layer}")
         self.validations[layer] = summary
+        self.save()
+
+    def set_layer_metrics(
+        self,
+        layer: str,
+        *,
+        output_rows: Optional[int] = None,
+        output_bytes: Optional[int] = None,
+        tables_count: Optional[int] = None,
+    ) -> None:
+        info = self._layer(layer)
+        info["metrics"] = {
+            "output_rows": output_rows,
+            "output_bytes": output_bytes,
+            "tables_count": tables_count,
+        }
         self.save()
 
     def complete_run(self, *, success_with_warnings: bool = False) -> None:

@@ -324,3 +324,6 @@ def run_raw(
         raise RuntimeError(f"RAW validation failed for {dataset} {year}. See {vpath}")
     else:
         logger.info(f"RAW QA OK ({dataset} {year}) -> {vpath.name}")
+
+    output_bytes = sum(f.get("bytes", 0) for f in files_written) if files_written else None
+    return {"output_bytes": output_bytes}

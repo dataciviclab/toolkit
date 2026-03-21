@@ -188,7 +188,7 @@ def _run_sql(
     read_cfg: dict[str, Any] | None = None,
     read_mode: str = "fallback",
     logger=None,
-) -> tuple[str, dict[str, Any]]:
+) -> tuple[str, dict[str, Any], int]:
     con = duckdb.connect(":memory:")
     try:
         read_info = read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
@@ -197,7 +197,8 @@ def _run_sql(
         con.execute(
             f"COPY clean_out TO '{sql_path(output_path)}' (FORMAT PARQUET);"
         )
-        return read_info.source, read_info.params_used
+        row_count: int = con.execute("SELECT count(*) FROM clean_out").fetchone()[0]
+        return read_info.source, read_info.params_used, row_count
     finally:
         con.close()
 
@@ -253,7 +254,7 @@ def run_clean(
     )
 
     output_path = out_dir / f"{dataset}_{year}_clean.parquet"
-    read_source_used, read_params_used = _run_sql(
+    read_source_used, read_params_used, output_rows = _run_sql(
         input_files,
         sql,
         output_path,
@@ -261,6 +262,7 @@ def run_clean(
         read_mode=read_mode,
         logger=logger,
     )
+    output_bytes: int | None = output_path.stat().st_size if output_path.exists() else None
 
     outputs = [file_record(output_path)]
     metadata_payload = _clean_metadata_payload(
@@ -294,3 +296,4 @@ def run_clean(
         warnings_count=None,
     )
     logger.info(f"CLEAN -> {output_path}")
+    return {"output_rows": output_rows, "output_bytes": output_bytes}

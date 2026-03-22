@@ -26,7 +26,7 @@ def from_root_relative(rel: str, root: Path) -> Path:
 
 
 def resolve_root(root: str | os.PathLike[str]) -> Path:
-    return Path(root).expanduser()
+    return Path(root).expanduser().resolve()
 
 
 def dataset_dir(root: str | os.PathLike[str], layer: str, dataset: str) -> Path:

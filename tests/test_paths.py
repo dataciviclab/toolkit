@@ -7,7 +7,13 @@ from toolkit.core.paths import from_root_relative, layer_year_dir, resolve_root,
 
 def test_resolve_root_returns_expanded_explicit_path(tmp_path):
     root = resolve_root(tmp_path / "out")
-    assert root == tmp_path / "out"
+    assert root == (tmp_path / "out").resolve()
+
+
+def test_resolve_root_canonicalizes_relative_path(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    root = resolve_root("out")
+    assert root == (tmp_path / "out").resolve()
 
 
 def test_resolve_root_requires_explicit_value():

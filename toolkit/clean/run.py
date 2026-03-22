@@ -15,7 +15,7 @@ from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, to_root_relative
-from toolkit.core.template import render_template
+from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 
 
 def _serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | None:
@@ -40,6 +40,7 @@ def _load_clean_sql(
     *,
     dataset: str,
     year: int,
+    root: str | Path | None,
     base_dir: Path | None,
 ) -> tuple[Path, str, dict[str, Any]]:
     sql_ref = clean_cfg.get("sql")
@@ -50,7 +51,12 @@ def _load_clean_sql(
     if not sql_path_obj.exists():
         raise FileNotFoundError(f"CLEAN SQL file not found: {sql_path_obj}")
 
-    template_ctx = {"year": year, "dataset": dataset}
+    template_ctx = build_runtime_template_ctx(
+        dataset=dataset,
+        year=year,
+        root=root,
+        base_dir=base_dir,
+    )
     sql = render_template(sql_path_obj.read_text(encoding="utf-8"), template_ctx)
     return sql_path_obj, sql, template_ctx
 
@@ -160,7 +166,7 @@ def _clean_metadata_payload(
         "year": year,
         "sql": _serialize_metadata_path(sql_path_obj, base_dir),
         "sql_rendered": _serialize_metadata_path(rendered_sql_path, root_dir),
-        "template_ctx": template_ctx,
+        "template_ctx": public_template_ctx(template_ctx),
         "read": clean_cfg.get("read"),
         "read_mode": read_mode,
         "read_params_source": read_params_source,
@@ -232,6 +238,7 @@ def run_clean(
         clean_cfg,
         dataset=dataset,
         year=year,
+        root=root_dir,
         base_dir=base_dir,
     )
     rendered_sql_path = _write_rendered_sql(

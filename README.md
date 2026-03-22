@@ -55,6 +55,14 @@ Il percorso canonico per i repo dataset clonati dal template e':
 3. `toolkit status --dataset <dataset> --year <year> --latest --config dataset.yml`
 4. notebook locali che leggono gli output reali sotto `root/data/...`
 
+Per leggere gli output dal notebook senza duplicare la path logic:
+
+```bash
+toolkit inspect paths --config dataset.yml --year 2024 --json
+```
+
+Contratto completo tra toolkit e notebook: [docs/notebook-contract.md](docs/notebook-contract.md)
+
 Validazione rapida della config prima di eseguire la pipeline:
 
 ```bash

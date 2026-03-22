@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 
@@ -14,3 +15,28 @@ def render_template(text: str, ctx: dict[str, Any]) -> str:
     for k, v in ctx.items():
         out = out.replace("{" + k + "}", str(v))
     return out
+
+
+def build_runtime_template_ctx(
+    *,
+    dataset: str,
+    year: int,
+    root: str | Path | None = None,
+    base_dir: Path | None = None,
+) -> dict[str, Any]:
+    """
+    Build the minimal deterministic template context exposed to SQL runtime.
+
+    Existing placeholders `{year}` and `{dataset}` remain stable; additional
+    path placeholders are additive-only and let SQL bind to the effective root
+    without depending on the current working directory.
+    """
+    ctx: dict[str, Any] = {"year": year, "dataset": dataset}
+    if root is not None:
+        root_path = Path(root)
+        ctx["root"] = str(root_path)
+        ctx["root_posix"] = root_path.as_posix()
+    if base_dir is not None:
+        ctx["base_dir"] = str(base_dir)
+        ctx["base_dir_posix"] = base_dir.as_posix()
+    return ctx

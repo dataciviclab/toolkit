@@ -4,6 +4,7 @@ import json
 import logging
 from pathlib import Path
 
+import duckdb
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
@@ -139,6 +140,49 @@ def test_run_dry_run_accepts_unquoted_raw_columns_without_read_columns(tmp_path:
 
     config_path = tmp_path / "dataset.yml"
     root_dir = tmp_path / "out"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'root: "{root_dir.as_posix()}"',
+                "dataset:",
+                '  name: "demo_ds"',
+                "  years: [2022]",
+                "raw: {}",
+                "clean:",
+                '  sql: "sql/clean.sql"',
+                "mart:",
+                "  tables:",
+                '    - name: "mart_example"',
+                '      sql: "sql/mart/mart_example.sql"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+
+    assert result.exit_code == 0
+    assert "sql_validation: OK" in result.output
+
+
+def test_run_dry_run_accepts_mart_sql_with_root_posix_placeholder(tmp_path: Path) -> None:
+    sql_dir = tmp_path / "sql" / "mart"
+    sql_dir.mkdir(parents=True, exist_ok=True)
+    root_dir = tmp_path / "out"
+    lookup_path = root_dir / "lookup" / "mart_lookup_2022.parquet"
+    lookup_path.parent.mkdir(parents=True, exist_ok=True)
+    duckdb.execute(
+        f"COPY (SELECT 1 AS lookup_value) TO '{lookup_path.as_posix()}' (FORMAT PARQUET)"
+    )
+
+    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
+    (sql_dir / "mart_example.sql").write_text(
+        "select * from read_parquet('{root_posix}/lookup/mart_lookup_2022.parquet')",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "dataset.yml"
     config_path.write_text(
         "\n".join(
             [

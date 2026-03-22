@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
+
+_UNRESOLVED_PLACEHOLDER_RE = re.compile(r"\{[A-Za-z_][A-Za-z0-9_]*\}")
 
 
 def render_template(text: str, ctx: dict[str, Any]) -> str:
@@ -14,6 +17,12 @@ def render_template(text: str, ctx: dict[str, Any]) -> str:
     out = text
     for k, v in ctx.items():
         out = out.replace("{" + k + "}", str(v))
+    unresolved = sorted(set(_UNRESOLVED_PLACEHOLDER_RE.findall(out)))
+    if unresolved:
+        raise ValueError(
+            "Template contains unresolved placeholders after render: "
+            + ", ".join(unresolved)
+        )
     return out
 
 
@@ -30,6 +39,9 @@ def build_runtime_template_ctx(
     Existing placeholders `{year}` and `{dataset}` remain stable; additional
     path placeholders are additive-only and let SQL bind to the effective root
     without depending on the current working directory.
+
+    Path placeholders trust that `root` and `base_dir` are already canonical
+    runtime paths. Callers should resolve them before building the context.
     """
     ctx: dict[str, Any] = {"year": year, "dataset": dataset}
     if root is not None:

@@ -15,7 +15,7 @@ from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, to_root_relative
-from toolkit.core.template import build_runtime_template_ctx, render_template
+from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 
 
 def _serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | None:
@@ -166,7 +166,7 @@ def _clean_metadata_payload(
         "year": year,
         "sql": _serialize_metadata_path(sql_path_obj, base_dir),
         "sql_rendered": _serialize_metadata_path(rendered_sql_path, root_dir),
-        "template_ctx": template_ctx,
+        "template_ctx": public_template_ctx(template_ctx),
         "read": clean_cfg.get("read"),
         "read_mode": read_mode,
         "read_params_source": read_params_source,

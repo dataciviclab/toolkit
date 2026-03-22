@@ -40,3 +40,15 @@ def build_runtime_template_ctx(
         ctx["base_dir"] = str(base_dir)
         ctx["base_dir_posix"] = base_dir.as_posix()
     return ctx
+
+
+def public_template_ctx(ctx: dict[str, Any]) -> dict[str, Any]:
+    """
+    Return the stable public subset safe to persist in metadata.
+
+    Runtime-only path helpers such as `root_posix` and `base_dir_posix` are
+    intentionally excluded so metadata stays portable and does not leak
+    absolute filesystem paths.
+    """
+    public_keys = ("year", "dataset")
+    return {key: ctx[key] for key in public_keys if key in ctx}

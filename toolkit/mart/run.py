@@ -8,7 +8,7 @@ import duckdb
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, to_root_relative
-from toolkit.core.template import build_runtime_template_ctx, render_template
+from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 
 
 def _serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | None:
@@ -144,7 +144,7 @@ def run_mart(
         "inputs": [file_record(p) for p in clean_files],
         "outputs": outputs,
         "output_paths": [_serialize_metadata_path(p, root_dir) for p in written],
-        "template_ctx": template_ctx,
+        "template_ctx": public_template_ctx(template_ctx),
         "tables": executed,
     }
     if policy == ARTIFACT_POLICY_DEBUG:

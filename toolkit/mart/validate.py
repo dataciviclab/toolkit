@@ -226,7 +226,7 @@ def run_mart_validation(cfg, year: int, logger) -> dict[str, Any]:
     spec = MartValidationSpec.model_validate(
         {
             "required_tables": mart_cfg.get("required_tables"),
-            "validate": mart_cfg.get("validate"),
+            "validate": mart_cfg.get("validate") or {},
         }
     )
 

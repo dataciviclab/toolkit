@@ -19,11 +19,18 @@ Sono le superfici che i repo dataset e il `project-template` dovrebbero consider
 Queste aree restano supportate, ma non fanno parte del percorso canonico:
 
 - `toolkit.profile`
+- `toolkit.cross` — output multi-anno (`run cross_year`)
 - `toolkit.cli.cmd_resume`
 - `toolkit.cli.cmd_profile`
 - esecuzione parziale `run raw|clean|mart`
 
-Servono per recovery, diagnostica e casi sporchi, non come baseline per i repo nuovi.
+Servono per recovery, diagnostica e output specializzati, non come baseline per i repo nuovi.
+
+## Experimental
+
+Funzionalita' presenti ma non ancora parte del contratto stabile:
+
+- `toolkit.cli.cmd_scout_url` (`toolkit scout-url`) — scouting rapido di un URL pubblico
 
 ## Compatibility Only
 

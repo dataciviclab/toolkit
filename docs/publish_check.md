@@ -1,18 +1,12 @@
 # Publish Readiness Check
 
-Publication blockers from the previous audit have been addressed:
-
-- a root `LICENSE` file is present
-- `pyproject.toml` now includes `license` and `authors` metadata
-- the quickstart and publish notes no longer contain stale pre-release TODOs
-
 ## What is ready
 
-- Core CLI flow exists and is usable from source with `python -m toolkit.cli.app` / `py -m toolkit.cli.app`.
+- Core CLI flow exists and is usable after install with `toolkit`.
 - Main commands expose help and non-zero failures on bad input:
-  - `py -m toolkit.cli.app --help`
-  - `py -m toolkit.cli.app run --help`
-  - `py -m toolkit.cli.app run all -c does-not-exist.yml`
+  - `toolkit --help`
+  - `toolkit run --help`
+  - `toolkit run all -c does-not-exist.yml`
 - Root resolution is deterministic and documented:
   - precedence is `dataset.yml root` -> `DCL_ROOT` -> `base_dir`
   - no fallback to `cwd`
@@ -55,25 +49,25 @@ Publication blockers from the previous audit have been addressed:
 Windows PowerShell:
 
 ```powershell
-py -m pip install -e ".[dev]"
-py -m ruff check .
-py -m pytest -q
-py -m toolkit.cli.app --help
-py -m toolkit.cli.app run --help
-py -m toolkit.cli.app run all -c project-example/dataset.yml
-py -m toolkit.cli.app status --dataset project_example --year 2022 --config project-example/dataset.yml
+pip install -e ".[dev]"
+ruff check .
+pytest -q
+toolkit --help
+toolkit run --help
+toolkit run all -c project-example/dataset.yml
+toolkit status --dataset project_example --year 2022 --config project-example/dataset.yml
 git ls-files | Select-String -Pattern '(_smoke_out|_test_out|\.pytest_cache|\.ruff_cache|\.egg-info)'
 ```
 
 Linux/macOS:
 
 ```bash
-python -m pip install -e ".[dev]"
-python -m ruff check .
-python -m pytest -q
-python -m toolkit.cli.app --help
-python -m toolkit.cli.app run --help
-python -m toolkit.cli.app run all -c project-example/dataset.yml
-python -m toolkit.cli.app status --dataset project_example --year 2022 --config project-example/dataset.yml
+pip install -e ".[dev]"
+ruff check .
+pytest -q
+toolkit --help
+toolkit run --help
+toolkit run all -c project-example/dataset.yml
+toolkit status --dataset project_example --year 2022 --config project-example/dataset.yml
 git ls-files | grep -E '(_smoke_out|_test_out|\.pytest_cache|\.ruff_cache|\.egg-info)'
 ```

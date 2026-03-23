@@ -1,6 +1,73 @@
 # DataCivicLab Toolkit
 
-Toolkit Python per pipeline dati riproducibili `RAW -> CLEAN -> MART`, con approccio SQL-first, audit degli artefatti e run tracking persistente.
+Dato un `dataset.yml` e del SQL, il toolkit scarica i dati pubblici, li trasforma
+e produce un mart pronto per l'analisi. Un solo comando e' sufficiente per far
+girare l'intera pipeline:
+
+```bash
+toolkit run all --config dataset.yml
+```
+
+Richiede Python 3.10+. Non serve installare DuckDB separatamente.
+
+## Installazione
+
+```bash
+git clone https://github.com/dataciviclab/toolkit.git
+cd toolkit
+pip install -e .[dev]
+```
+
+## Quickstart
+
+Prova il toolkit in pochi minuti con il progetto di esempio incluso nella repo,
+senza bisogno di dati reali.
+
+Windows PowerShell:
+
+```powershell
+pip install -e ".[dev]"
+toolkit run all -c project-example/dataset.yml
+toolkit validate all -c project-example/dataset.yml
+toolkit status --dataset project_example --year 2022 --config project-example/dataset.yml
+```
+
+Linux/macOS:
+
+```bash
+pip install -e ".[dev]"
+toolkit run all -c project-example/dataset.yml
+toolkit validate all -c project-example/dataset.yml
+toolkit status --dataset project_example --year 2022 --config project-example/dataset.yml
+```
+
+Se il comando `toolkit` non e' nel `PATH` dopo l'installazione, puoi usare
+direttamente il modulo Python:
+
+```bash
+python -m toolkit.cli.app run all --config dataset.yml
+```
+
+Il percorso canonico per i repo dataset clonati dal template e':
+
+1. `toolkit run all --config dataset.yml`
+2. `toolkit validate all --config dataset.yml`
+3. `toolkit status --dataset <dataset> --year <year> --latest --config dataset.yml`
+4. notebook locali che leggono gli output reali sotto `root/data/...`
+
+Per leggere gli output dal notebook senza duplicare la path logic:
+
+```bash
+toolkit inspect paths --config dataset.yml --year 2024 --json
+```
+
+Contratto completo tra toolkit e notebook: [docs/notebook-contract.md](docs/notebook-contract.md)
+
+Validazione rapida della config prima di eseguire la pipeline:
+
+```bash
+toolkit run all --config dataset.yml --dry-run
+```
 
 ## Ruolo Nell'Ecosistema
 
@@ -47,63 +114,6 @@ Il toolkit include:
 - run tracking persistente in `data/_runs/...`
 - comandi CLI `run`, `resume`, `status`, `validate`, `profile`, `inspect`
 - `project-example/` offline per smoke test locale
-
-## Installazione
-
-```bash
-git clone https://github.com/dataciviclab/toolkit.git
-cd toolkit
-pip install -e .[dev]
-```
-
-Richiede Python 3.10+.
-
-## CLI Naming Note
-
-Il comando CLI canonico del progetto e' `toolkit`.
-
-Se nel tuo ambiente c'e' una collisione di nome o il console script non e' nel `PATH`, puoi usare direttamente il modulo Python:
-
-```bash
-python -m toolkit.cli.app run all --config dataset.yml
-```
-
-## Quickstart
-
-Il percorso canonico per i repo dataset clonati dal template e':
-
-1. `toolkit run all --config dataset.yml`
-2. `toolkit validate all --config dataset.yml`
-3. `toolkit status --dataset <dataset> --year <year> --latest --config dataset.yml`
-4. notebook locali che leggono gli output reali sotto `root/data/...`
-
-Giro offline completo con il progetto di esempio, eseguibile in pochi minuti su una macchina pulita.
-
-Windows PowerShell:
-
-```powershell
-$env:TOOLKIT_OUTDIR = Join-Path $env:TEMP "dataciviclab-toolkit-quickstart"
-py -m pip install -e ".[dev]"
-py -m toolkit.cli.app run all -c project-example/dataset.yml
-py -m toolkit.cli.app validate all -c project-example/dataset.yml
-py -m toolkit.cli.app status --dataset project_example --year 2022 --config project-example/dataset.yml
-```
-
-Linux/macOS:
-
-```bash
-export TOOLKIT_OUTDIR="$(mktemp -d)/dataciviclab-toolkit-quickstart"
-python -m pip install -e ".[dev]"
-python -m toolkit.cli.app run all -c project-example/dataset.yml
-python -m toolkit.cli.app validate all -c project-example/dataset.yml
-python -m toolkit.cli.app status --dataset project_example --year 2022 --config project-example/dataset.yml
-```
-
-Validazione rapida della config prima di eseguire la pipeline:
-
-```bash
-toolkit run all --config dataset.yml --dry-run
-```
 
 Interpretazione errori config:
 

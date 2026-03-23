@@ -106,3 +106,68 @@ Non usarlo quando:
   - RAW: `raw_validation.json`
   - CLEAN: `_validate/clean_validation.json`
   - MART: `_validate/mart_validation.json`
+
+## Fonti pubbliche italiane — quirks noti
+
+Pattern ricorrenti su CSV e XLSX da portali pubblici italiani. Da considerare
+prima di scrivere `clean.sql` e `clean.read`.
+
+### Encoding
+
+La maggior parte dei portali PA produce file in `cp1252` (Windows-1252), non UTF-8.
+Dichiarare sempre l'encoding esplicitamente:
+
+```yaml
+clean:
+  read:
+    encoding: cp1252
+```
+
+Se non dichiarato e il file contiene caratteri accentati, il run fallisce o
+produce artefatti silenziosi.
+
+### ZIP con XLSX annidati
+
+Alcune fonti (es. MEF/Finanze, ISTAT) distribuiscono un archivio ZIP che
+contiene uno o piu XLSX. Il toolkit non estrae ZIP automaticamente: il RAW
+extractor deve essere configurato per gestire il pattern ZIP → file interno.
+
+Verificare con `toolkit scout-url <url>` se la sorgente e` un ZIP prima di
+configurare l'extractor.
+
+### Schema instabile tra annualita
+
+I CSV multi-anno di fonti come IRPEF, AIFA o SIOPE cambiano spesso:
+- colonne aggiunte o rimosse tra un anno e l'altro
+- nomi colonna con varianti ortografiche (maiuscolo/minuscolo, spazi vs underscore)
+- righe di intestazione o footer aggiuntive in alcuni anni
+
+Usare `toolkit inspect schema-diff --config dataset.yml --json` per confrontare
+i segnali RAW tra anni prima di scrivere il `clean.sql`.
+
+Per CSV con schema posizionale quasi stabile, usare `normalize_rows_to_columns: true`
+(vedi sezione Positional Fixed Schema).
+
+### Colonne con nomi impliciti o posizionali
+
+Alcuni CSV non hanno header o hanno un header non standard (riga 2, merged cell
+da XLSX). Dichiarare:
+
+```yaml
+clean:
+  read:
+    header: false
+    skip: 1       # righe da saltare prima dell'header reale
+```
+
+### Chiavi territoriali
+
+Le chiavi geografiche nei dataset PA italiani non sono sempre ISTAT-standard:
+
+- codici ISTAT comuni a 6 cifre vs 3+3 (provincia+comune)
+- nomi comune con varianti storiche (fusioni, cambio denominazione)
+- codici regione con offset legacy
+
+Dichiarare i limiti noti nel `notes.md` del candidate e nel README di `analisi/`.
+Non tentare di normalizzare le chiavi nel `clean.sql` senza documentare la
+scelta esplicitamente.

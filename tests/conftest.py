@@ -35,9 +35,7 @@ ADVANCED_TESTS = {
     "test_registry.py",
 }
 
-COMPAT_TESTS = {
-    "test_deprecated_shims.py",
-}
+COMPAT_TESTS: set[str] = set()
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

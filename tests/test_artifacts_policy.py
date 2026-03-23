@@ -63,7 +63,16 @@ def test_artifacts_policy_minimal_skips_optional_outputs(tmp_path: Path, monkeyp
     )
     profile_cmd(step="raw", config=str(config_path))
     run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
-    run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
+    run_mart(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.mart,
+        logger,
+        base_dir=cfg.base_dir,
+        clean_cfg=cfg.clean,
+        output_cfg=cfg.output,
+    )
     run_clean_validation(cfg, year, logger)
     run_mart_validation(cfg, year, logger)
 
@@ -119,7 +128,16 @@ def test_artifacts_policy_standard_keeps_current_debug_artifacts(tmp_path: Path,
     )
     profile_cmd(step="raw", config=str(config_path))
     run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
-    run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
+    run_mart(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.mart,
+        logger,
+        base_dir=cfg.base_dir,
+        clean_cfg=cfg.clean,
+        output_cfg=cfg.output,
+    )
     run_clean_validation(cfg, year, logger)
     run_mart_validation(cfg, year, logger)
 
@@ -183,7 +201,16 @@ def test_run_mart_supports_root_posix_placeholder(tmp_path: Path) -> None:
 
     cfg = load_config(config_path)
     logger = _NoopLogger()
-    result = run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
+    result = run_mart(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.mart,
+        logger,
+        base_dir=cfg.base_dir,
+        clean_cfg=cfg.clean,
+        output_cfg=cfg.output,
+    )
 
     mart_output = root_dir / "data" / "mart" / dataset / str(year) / "mart_example.parquet"
     assert mart_output.exists()

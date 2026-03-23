@@ -367,6 +367,50 @@ def test_run_mart_executes_mart_only_config(tmp_path: Path) -> None:
     assert not (root_dir / "data" / "clean" / "compose_demo" / "2022").exists()
 
 
+def test_run_mart_mart_only_ignores_stale_clean_dir(tmp_path: Path) -> None:
+    mart_sql = tmp_path / "compose" / "sql"
+    mart_sql.mkdir(parents=True, exist_ok=True)
+
+    config_path = tmp_path / "compose" / "dataset.yml"
+    root_dir = tmp_path / "out"
+    stale_clean_dir = root_dir / "data" / "clean" / "compose_demo" / "2022"
+    stale_clean_dir.mkdir(parents=True, exist_ok=True)
+    stale_clean_path = stale_clean_dir / "compose_demo_2022_clean.parquet"
+    duckdb.execute(
+        f"COPY (SELECT 1 AS stale_value) TO '{stale_clean_path.as_posix()}' (FORMAT PARQUET)"
+    )
+
+    (mart_sql / "mart_example.sql").write_text(
+        "select stale_value from clean_input",
+        encoding="utf-8",
+    )
+
+    config_path.write_text(
+        "\n".join(
+            [
+                f'root: "{root_dir.as_posix()}"',
+                "dataset:",
+                '  name: "compose_demo"',
+                "  years: [2022]",
+                "raw: {}",
+                "mart:",
+                "  tables:",
+                '    - name: "mart_example"',
+                '      sql: "sql/mart_example.sql"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "mart", "--config", str(config_path)])
+
+    assert result.exit_code != 0
+    assert "clean_input" in str(result.exception)
+    mart_output = root_dir / "data" / "mart" / "compose_demo" / "2022" / "mart_example.parquet"
+    assert not mart_output.exists()
+
+
 def test_run_all_fails_readably_on_mart_only_config(tmp_path: Path) -> None:
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)

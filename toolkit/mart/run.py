@@ -47,12 +47,14 @@ def run_mart(
 
     clean_sql_configured = bool((clean_cfg or {}).get("sql"))
     clean_files: list[Path] = []
-    if clean_dir.exists():
+    if clean_sql_configured:
+        if not clean_dir.exists():
+            raise FileNotFoundError(
+                f"CLEAN dir not found: {clean_dir}. Run: toolkit run clean -c dataset.yml"
+            )
         clean_files = list(clean_dir.glob("*.parquet"))
-        if not clean_files and clean_sql_configured:
+        if not clean_files:
             raise FileNotFoundError(f"No CLEAN parquet found in {clean_dir}")
-    elif clean_sql_configured:
-        raise FileNotFoundError(f"CLEAN dir not found: {clean_dir}. Run: toolkit run clean -c dataset.yml")
 
     con = duckdb.connect(":memory:")
     try:

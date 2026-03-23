@@ -58,7 +58,16 @@ def test_project_example_golden_path(tmp_path: Path, monkeypatch):
         clean_cfg=cfg.clean,
     )
     run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
-    run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
+    run_mart(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.mart,
+        logger,
+        base_dir=cfg.base_dir,
+        clean_cfg=cfg.clean,
+        output_cfg=cfg.output,
+    )
     validate_cmd(step="clean", config=str(dst / "dataset.yml"))
     validate_cmd(step="mart", config=str(dst / "dataset.yml"))
 
@@ -200,7 +209,16 @@ def test_project_example_outputs_can_be_replaced_after_run(tmp_path: Path, monke
         clean_cfg=cfg.clean,
     )
     run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
-    run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
+    run_mart(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.mart,
+        logger,
+        base_dir=cfg.base_dir,
+        clean_cfg=cfg.clean,
+        output_cfg=cfg.output,
+    )
 
     root = Path(cfg.root)
     clean_parquet = root / "data" / "clean" / cfg.dataset / str(year) / f"{cfg.dataset}_{year}_clean.parquet"

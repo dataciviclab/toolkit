@@ -72,8 +72,8 @@ def _candidate_links(base_url: str, html_text: str) -> list[str]:
     return links
 
 
-def probe_url(url: str, *, timeout: int = _DEFAULT_TIMEOUT) -> dict[str, Any]:
-    headers = {"User-Agent": _DEFAULT_USER_AGENT}
+def probe_url(url: str, *, timeout: int = _DEFAULT_TIMEOUT, user_agent: str = _DEFAULT_USER_AGENT) -> dict[str, Any]:
+    headers = {"User-Agent": user_agent}
     with requests.get(url, allow_redirects=True, timeout=timeout, headers=headers, stream=True) as response:
         content_type = response.headers.get("Content-Type")
         content_disposition = response.headers.get("Content-Disposition")
@@ -105,12 +105,13 @@ def probe_url(url: str, *, timeout: int = _DEFAULT_TIMEOUT) -> dict[str, Any]:
 def scout_url(
     url: str = typer.Argument(..., help="URL da ispezionare"),
     timeout: int = typer.Option(_DEFAULT_TIMEOUT, "--timeout", min=1, help="Timeout HTTP in secondi"),
+    user_agent: str = typer.Option(_DEFAULT_USER_AGENT, "--user-agent", help="User-Agent da usare per la richiesta"),
 ) -> None:
     """
     Ispeziona un URL per dataset scouting minimale.
     """
     try:
-        result = probe_url(url, timeout=timeout)
+        result = probe_url(url, timeout=timeout, user_agent=user_agent)
     except requests.RequestException as exc:
         typer.echo(f"error: {type(exc).__name__}: {exc}")
         raise typer.Exit(code=1) from exc

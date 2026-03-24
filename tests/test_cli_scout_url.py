@@ -176,3 +176,31 @@ def test_probe_url_uses_streaming_and_reads_body_only_for_html(monkeypatch) -> N
     assert calls[1]["timeout"] == 7
     assert responses[0].text_reads == 0
     assert responses[1].text_reads == 1
+
+
+def test_probe_url_passes_custom_user_agent(monkeypatch) -> None:
+    calls: list[dict[str, Any]] = []
+
+    class _FakeResponse:
+        def __init__(self) -> None:
+            self.headers = {"Content-Type": "application/octet-stream"}
+            self.url = "https://example.org/resource"
+            self.status_code = 200
+
+        def __enter__(self) -> "_FakeResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    def _fake_get(*args, **kwargs):
+        calls.append(kwargs)
+        return _FakeResponse()
+
+    monkeypatch.setattr("toolkit.cli.cmd_scout_url.requests.get", _fake_get)
+
+    custom_ua = "Mozilla/5.0 (DataCivicLab Custom)"
+    probe_url("https://example.org/test", user_agent=custom_ua)
+
+    assert len(calls) == 1
+    assert calls[0]["headers"] == {"User-Agent": custom_ua}

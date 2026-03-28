@@ -25,6 +25,10 @@ def test_infer_ext_ckan_uses_resolved_origin():
     assert _infer_ext("ckan", {}, origin="https://example.org/archive.zip.php") == ".zip"
 
 
+def test_infer_ext_sdmx_is_csv():
+    assert _infer_ext("sdmx", {"flow": "22_289"}) == ".csv"
+
+
 def test_infer_ext_never_returns_php():
     assert _infer_ext("http_file", {"url": "https://example.org/download.php?id=42"}) != ".php"
     assert _infer_ext("local_file", {"path": "C:/tmp/file.php"}) != ".php"

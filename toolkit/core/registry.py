@@ -52,6 +52,13 @@ _BUILTIN_PLUGINS: tuple[dict[str, Any], ...] = (
         "factory": lambda cls: (lambda **client: cls(**client)),
     },
     {
+        "name": "sdmx",
+        "module": "toolkit.plugins.sdmx",
+        "class_name": "SdmxSource",
+        "optional": False,
+        "factory": lambda cls: (lambda **client: cls(**client)),
+    },
+    {
         "name": "http_file",
         "module": "toolkit.plugins.http_file",
         "class_name": "HttpFileSource",

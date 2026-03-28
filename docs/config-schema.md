@@ -80,6 +80,36 @@ Note pratiche per `ckan`:
 - se il portale restituisce un file URL in `http://`, il toolkit lo forza automaticamente a `https://`
 - se `filename` non e dichiarato, il toolkit prova a inferire l'estensione dall'URL risolto
 
+Esempio `sdmx`:
+
+```yaml
+raw:
+  sources:
+    - name: popolazione_residente
+      type: sdmx
+      client:
+        timeout: 60
+        retries: 2
+      args:
+        agency: IT1
+        flow: 22_289
+        version: "1.5"
+        filters:
+          FREQ: A
+          REF_AREA: "001001"
+          DATA_TYPE: JAN
+          SEX: "9"
+          AGE: TOTAL
+          MARITAL_STATUS: "99"
+```
+
+Note pratiche per `sdmx`:
+
+- la `version` e' obbligatoria e deve coincidere con la versione corrente esposta dal dataflow
+- non esiste fallback silenzioso a `latest`
+- in v1 i `filters` sono supportati solo sulle dimensioni di serie, non su `TIME_PERIOD`
+- il plugin restituisce un CSV normalizzato con colonne `DIM`, `DIM_label` e `value`
+
 ## clean
 
 | Campo | Tipo | Default |

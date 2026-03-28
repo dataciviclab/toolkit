@@ -16,10 +16,12 @@ Di conseguenza:
 
 Progetti inclusi:
 
+- `smoke/ispra_http_csv`: `http_file` contro server locale `http.server`
 - `smoke/local_file_csv`: `local_file` completamente offline
 - `smoke/zip_http_csv`: `http_file` + extractor ZIP (`unzip_first_csv`) contro server locale
 - `smoke/bdap_http_csv`: `http_file` contro CSV pubblico BDAP
 - `smoke/bdap_ckan_csv`: `ckan` contro OpenBDAP, con fallback `package_show` e force `https`
+- `smoke/istat_sdmx_22_289`: `sdmx` contro flow ISTAT reale `22_289`
 - `smoke/finanze_http_zip_2023`: `http_file` contro ZIP pubblico reale, best-effort
 
 Ogni progetto include:

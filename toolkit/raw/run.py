@@ -25,6 +25,9 @@ def _format_args(args: dict, year: int) -> dict:
 
 
 def _infer_ext(stype: str, formatted_args: dict, origin: str | None = None) -> str:
+    if stype == "sdmx":
+        return ".csv"
+
     if stype in {"http_file", "ckan"}:
         url = origin or formatted_args.get("url", "")
         parsed = urlparse(url)
@@ -74,6 +77,13 @@ def _fetch_payload(stype: str, client: dict, formatted_args: dict) -> tuple[byte
             formatted_args["portal_url"],
             str(formatted_args["resource_id"]) if formatted_args.get("resource_id") is not None else None,
             str(formatted_args["dataset_id"]) if formatted_args.get("dataset_id") is not None else None,
+        )
+    elif stype == "sdmx":
+        payload, origin = src.fetch(
+            str(formatted_args.get("agency") or "IT1"),
+            str(formatted_args["flow"]),
+            str(formatted_args["version"]),
+            formatted_args.get("filters"),
         )
     elif stype == "http_file":
         payload = src.fetch(formatted_args["url"])

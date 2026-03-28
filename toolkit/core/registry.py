@@ -45,6 +45,13 @@ registry = Registry()
 
 _BUILTIN_PLUGINS: tuple[dict[str, Any], ...] = (
     {
+        "name": "ckan",
+        "module": "toolkit.plugins.ckan",
+        "class_name": "CkanSource",
+        "optional": False,
+        "factory": lambda cls: (lambda **client: cls(**client)),
+    },
+    {
         "name": "http_file",
         "module": "toolkit.plugins.http_file",
         "class_name": "HttpFileSource",

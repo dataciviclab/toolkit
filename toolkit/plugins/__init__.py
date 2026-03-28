@@ -6,4 +6,5 @@ Builtin stable sources exposed by the default runtime:
 
 - `local_file`
 - `http_file`
+- `ckan`
 """

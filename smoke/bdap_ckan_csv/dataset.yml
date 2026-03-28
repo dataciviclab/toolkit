@@ -1,0 +1,29 @@
+root: "./_smoke_out"
+
+dataset:
+  name: "bdap_ckan_csv"
+  years: [2022]
+
+raw:
+  sources:
+    - type: "ckan"
+      args:
+        portal_url: "https://bdap-opendata.rgs.mef.gov.it/SpodCkanApi/api/3"
+        dataset_id: "d598ebd9-949d-4214-bb33-cd9c1be08f15"
+        resource_id: "33344"
+        filename: "bdap_lea_2024.csv"
+
+clean:
+  sql: "sql/clean.sql"
+  read:
+    delim: ";"
+    decimal: "."
+    encoding: "utf-8"
+    header: true
+    columns: null
+  validate: {}
+
+mart:
+  tables:
+    - name: "mart_ok"
+      sql: "sql/mart/mart_ok.sql"

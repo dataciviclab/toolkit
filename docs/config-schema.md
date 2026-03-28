@@ -57,6 +57,29 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 
 `raw.sources[].args` e `raw.extractor.args` devono essere sempre oggetti YAML, non liste o stringhe.
 
+Esempio `ckan`:
+
+```yaml
+raw:
+  sources:
+    - name: bdap_lea
+      type: ckan
+      client:
+        timeout: 60
+        retries: 2
+      args:
+        portal_url: https://bdap-opendata.rgs.mef.gov.it/SpodCkanApi/api/3
+        dataset_id: "d598ebd9-949d-4214-bb33-cd9c1be08f15"
+        resource_id: "33344"
+```
+
+Note pratiche per `ckan`:
+
+- il toolkit interroga `resource_show` prima del download
+- se `resource_show` non e disponibile o non risolve il file, il toolkit ripiega su `package_show`
+- se il portale restituisce un file URL in `http://`, il toolkit lo forza automaticamente a `https://`
+- se `filename` non e dichiarato, il toolkit prova a inferire l'estensione dall'URL risolto
+
 ## clean
 
 | Campo | Tipo | Default |

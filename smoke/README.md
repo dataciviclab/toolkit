@@ -16,7 +16,6 @@ Di conseguenza:
 
 Progetti inclusi:
 
-- `smoke/ispra_http_csv`: `http_file` contro server locale `http.server`
 - `smoke/local_file_csv`: `local_file` completamente offline
 - `smoke/zip_http_csv`: `http_file` + extractor ZIP (`unzip_first_csv`) contro server locale
 - `smoke/bdap_http_csv`: `http_file` contro CSV pubblico BDAP

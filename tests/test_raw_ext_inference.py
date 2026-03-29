@@ -20,9 +20,43 @@ def test_infer_ext_http_csv_php_and_zip_php():
     assert _infer_ext("http_file", {"url": "https://example.org/archive.zip.php"}) == ".zip"
 
 
+def test_infer_ext_ckan_uses_resolved_origin():
+    assert _infer_ext("ckan", {}, origin="https://example.org/dump/data.csv") == ".csv"
+    assert _infer_ext("ckan", {}, origin="https://example.org/archive.zip.php") == ".zip"
+
+
+def test_infer_ext_sdmx_is_csv():
+    assert _infer_ext("sdmx", {"flow": "22_289"}) == ".csv"
+
+
 def test_infer_ext_never_returns_php():
     assert _infer_ext("http_file", {"url": "https://example.org/download.php?id=42"}) != ".php"
     assert _infer_ext("local_file", {"path": "C:/tmp/file.php"}) != ".php"
+
+
+def test_run_raw_ckan_filename_inferred_from_resolved_url(monkeypatch, tmp_path: Path):
+    def _fake_fetch_payload(_stype: str, _client: dict, _formatted_args: dict):
+        return b"a,b\n1,2\n", "https://example.org/data.csv"
+
+    monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
+
+    raw_cfg = {
+        "sources": [
+            {
+                "name": "bdap_resource",
+                "type": "ckan",
+                "args": {
+                    "portal_url": "https://portal.example.org/SpodCkanApi/api/3",
+                    "resource_id": "33344",
+                },
+            }
+        ]
+    }
+
+    run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger())
+
+    out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    assert (out_dir / "bdap_resource.csv").exists()
 
 
 def test_run_raw_filename_override_has_priority(monkeypatch, tmp_path: Path):

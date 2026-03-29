@@ -24,9 +24,12 @@ def _format_args(args: dict, year: int) -> dict:
     return formatted
 
 
-def _infer_ext(stype: str, formatted_args: dict) -> str:
-    if stype == "http_file":
-        url = formatted_args.get("url", "")
+def _infer_ext(stype: str, formatted_args: dict, origin: str | None = None) -> str:
+    if stype == "sdmx":
+        return ".csv"
+
+    if stype in {"http_file", "ckan"}:
+        url = origin or formatted_args.get("url", "")
         parsed = urlparse(url)
         path = parsed.path or ""
         low_path = path.lower()
@@ -69,7 +72,20 @@ def _infer_ext(stype: str, formatted_args: dict) -> str:
 
 def _fetch_payload(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
     src = registry.create(stype, **(client or {}))
-    if stype == "http_file":
+    if stype == "ckan":
+        payload, origin = src.fetch(
+            formatted_args["portal_url"],
+            str(formatted_args["resource_id"]) if formatted_args.get("resource_id") is not None else None,
+            str(formatted_args["dataset_id"]) if formatted_args.get("dataset_id") is not None else None,
+        )
+    elif stype == "sdmx":
+        payload, origin = src.fetch(
+            str(formatted_args.get("agency") or "IT1"),
+            str(formatted_args["flow"]),
+            str(formatted_args["version"]),
+            formatted_args.get("filters"),
+        )
+    elif stype == "http_file":
         payload = src.fetch(formatted_args["url"])
         origin = formatted_args["url"]
     elif stype == "local_file":
@@ -210,7 +226,7 @@ def run_raw(
             if explicit:
                 extracted = {explicit: payload}
             else:
-                ext = _infer_ext(stype, formatted_args)
+                ext = _infer_ext(stype, formatted_args, origin=origin)
                 extracted = {f"{name}{ext}": payload}
 
         # scrittura file

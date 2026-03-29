@@ -1,0 +1,37 @@
+root: "./_smoke_out"
+
+dataset:
+  name: "istat_sdmx_22_289"
+  years: [2024]
+
+raw:
+  sources:
+    - name: "popolazione_residente"
+      type: "sdmx"
+      args:
+        agency: "IT1"
+        flow: "22_289"
+        version: "1.5"
+        filters:
+          FREQ: "A"
+          REF_AREA: "001001"
+          DATA_TYPE: "JAN"
+          SEX: "9"
+          AGE: "TOTAL"
+          MARITAL_STATUS: "99"
+        filename: "istat_popolazione_residente_22_289.csv"
+
+clean:
+  sql: "sql/clean.sql"
+  read_mode: "strict"
+  read:
+    mode: "explicit"
+    delim: ","
+    encoding: "utf-8"
+    header: true
+  validate: {}
+
+mart:
+  tables:
+    - name: "mart_ok"
+      sql: "sql/mart/mart_ok.sql"

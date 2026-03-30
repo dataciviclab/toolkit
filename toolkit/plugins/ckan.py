@@ -52,6 +52,8 @@ class CkanSource:
                 if not data.get("success"):
                     raise DownloadError(f"CKAN API failed for {response.url}")
                 return data
+            except DownloadError:
+                raise
             except Exception as exc:
                 last_err = exc
         raise DownloadError(str(last_err) if last_err else f"Failed to fetch CKAN metadata from {url}")

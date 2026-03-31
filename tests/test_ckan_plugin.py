@@ -93,3 +93,41 @@ def test_ckan_fetch_requires_identifier():
         assert "resource_id or dataset_id" in str(exc)
     else:
         raise AssertionError("Expected DownloadError")
+
+
+def test_ckan_fetch_rejects_package_fallback_when_resource_id_missing(monkeypatch):
+    def _fake_get(url, params=None, timeout=None, headers=None):
+        if "resource_show" in url:
+            return _FakeResponse(404, json_data={}, url=f"{url}?id=99999")
+        if "package_show" in url:
+            return _FakeResponse(
+                200,
+                json_data={
+                    "success": True,
+                    "result": {
+                        "resources": [
+                            {
+                                "id": 33344,
+                                "name": "csv dump",
+                                "format": "CSV",
+                                "url": "http://portal.example.org/api/3/datastore/dump/dataset.csv",
+                            }
+                        ]
+                    },
+                },
+                url=f"{url}?id=dataset-id",
+            )
+        raise AssertionError(f"Unexpected download request to {url}")
+
+    monkeypatch.setattr("toolkit.plugins.ckan.requests.get", _fake_get)
+
+    try:
+        CkanSource().fetch(
+            "https://portal.example.org/api/3",
+            resource_id="99999",
+            dataset_id="dataset-id",
+        )
+    except DownloadError as exc:
+        assert "resource_id=99999" in str(exc)
+    else:
+        raise AssertionError("Expected DownloadError")

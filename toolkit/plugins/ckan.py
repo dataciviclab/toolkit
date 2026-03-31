@@ -78,6 +78,9 @@ class CkanSource:
             for item in resources:
                 if str(item.get("id")) == str(resource_id):
                     return item
+            raise DownloadError(
+                f"CKAN package_show did not contain requested resource_id={resource_id}"
+            )
 
         with_url = [item for item in resources if item.get("url")]
         if not with_url:

@@ -110,7 +110,6 @@ Note pratiche per `sdmx`:
 - in v1 i `filters` sono supportati solo sulle dimensioni di serie, non su `TIME_PERIOD`
 - il filtro temporale va applicato nel layer `clean.sql` (per esempio `WHERE TIME_PERIOD = '2024'`), non in `raw.sources[].args.filters`
 - il plugin restituisce un CSV normalizzato con colonne `DIM`, `DIM_label` e `value`
-
 ## clean
 
 | Campo | Tipo | Default |

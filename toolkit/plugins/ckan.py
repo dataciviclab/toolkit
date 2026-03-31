@@ -52,8 +52,6 @@ class CkanSource:
                 if not data.get("success"):
                     raise DownloadError(f"CKAN API failed for {response.url}")
                 return data
-            except DownloadError:
-                raise
             except Exception as exc:
                 last_err = exc
         raise DownloadError(str(last_err) if last_err else f"Failed to fetch CKAN metadata from {url}")
@@ -80,6 +78,9 @@ class CkanSource:
             for item in resources:
                 if str(item.get("id")) == str(resource_id):
                     return item
+            raise DownloadError(
+                f"CKAN package_show did not contain requested resource_id={resource_id}"
+            )
 
         with_url = [item for item in resources if item.get("url")]
         if not with_url:

@@ -27,7 +27,6 @@ def _format_args(args: dict, year: int) -> dict:
 def _infer_ext(stype: str, formatted_args: dict, origin: str | None = None) -> str:
     if stype == "sdmx":
         return ".csv"
-
     if stype in {"http_file", "ckan"}:
         url = origin or formatted_args.get("url", "")
         parsed = urlparse(url)

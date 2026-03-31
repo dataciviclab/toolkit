@@ -21,5 +21,6 @@ def test_register_builtin_plugins_registers_present_plugins():
     register_builtin_plugins(registry_obj=r)
 
     plugins = r.list_plugins()
+    assert "ckan" in plugins
     assert "http_file" in plugins
     assert "local_file" in plugins

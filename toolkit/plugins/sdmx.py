@@ -125,7 +125,9 @@ class SdmxSource:
             except requests.exceptions.Timeout as exc:
                 last_err = DownloadError(f"SDMX endpoint timeout for {url}: {exc}")
             except requests.exceptions.ConnectionError as exc:
-                last_err = DownloadError(f"SDMX endpoint timeout for {url}: {exc}")
+                last_err = DownloadError(
+                    f"SDMX endpoint connection error for {url}: {exc}"
+                )
             except Exception as exc:
                 if isinstance(exc, DownloadError):
                     last_err = exc

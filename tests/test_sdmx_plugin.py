@@ -269,3 +269,48 @@ def test_sdmx_fetch_does_not_fallback_on_404(monkeypatch):
         assert "HTTP 404" in str(exc)
     else:
         raise AssertionError("Expected DownloadError")
+
+
+def test_sdmx_fetch_does_not_fallback_on_connection_error(monkeypatch):
+    calls = []
+
+    def _fake_get(url, params=None, timeout=None, headers=None):
+        calls.append(url)
+        if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
+            return _FakeResponse(200, DATAFLOW_XML, url)
+        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
+            return _FakeResponse(200, PREVIEW_JSON, url)
+        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
+            raise requests.exceptions.ConnectionError("tls handshake failed")
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+
+    try:
+        SdmxSource(
+            retries=1,
+            data_base_url="https://esploradati.istat.it/SDMXWS/rest",
+            metadata_base_url="https://sdmx.istat.it/SDMXWS/rest",
+        ).fetch(
+            "IT1",
+            "22_289",
+            "1.5",
+            {
+                "FREQ": "A",
+                "REF_AREA": "001001",
+                "DATA_TYPE": "JAN",
+                "SEX": "9",
+                "AGE": "TOTAL",
+                "MARITAL_STATUS": "99",
+            },
+        )
+    except DownloadError as exc:
+        assert "connection error" in str(exc).lower()
+    else:
+        raise AssertionError("Expected DownloadError")
+
+    assert calls == [
+        "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289",
+        "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all",
+        "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99",
+    ]

@@ -23,6 +23,10 @@ def _normalize_base_url(url: str) -> str:
     return url.rstrip("/")
 
 
+def _flow_ref(agency: str, flow: str, version: str) -> str:
+    return f"{agency},{flow},{version}"
+
+
 class SdmxSource:
     """Fetch SDMX data as a normalized CSV payload."""
 
@@ -105,10 +109,11 @@ class SdmxSource:
         version = _safe_text(structure_ref.attrib.get("version"))
         return version
 
-    def _preview_dimensions(self, flow: str) -> list[str]:
+    def _preview_dimensions(self, agency: str, flow: str, version: str) -> list[str]:
+        flow_ref = _flow_ref(agency, flow, version)
         payload, _origin = self._get_json(
             self.data_base_url,
-            f"data/{flow}/all",
+            f"data/{flow_ref}/all",
             params={"firstNObservations": "0"},
         )
         structure = payload.get("structure") or {}
@@ -119,7 +124,9 @@ class SdmxSource:
             if dim_id:
                 result.append(dim_id)
         if not result:
-            raise DownloadError(f"SDMX structure preview returned no series dimensions for flow={flow}")
+            raise DownloadError(
+                f"SDMX structure preview returned no series dimensions for {flow_ref}"
+            )
         return result
 
     def _build_key(self, dimensions: list[str], filters: dict | None) -> str:
@@ -244,9 +251,10 @@ class SdmxSource:
                 f"current version is {current_version}"
             )
 
-        dimensions = self._preview_dimensions(flow)
+        flow_ref = _flow_ref(agency, flow, version)
+        dimensions = self._preview_dimensions(agency, flow, version)
         key = self._build_key(dimensions, filters)
-        payload, origin = self._get_json(self.data_base_url, f"data/{flow}/{key}")
+        payload, origin = self._get_json(self.data_base_url, f"data/{flow_ref}/{key}")
         header, rows = self._normalize_rows(payload)
         if not rows:
             raise DownloadError(f"SDMX data returned no rows for {agency}/{flow} and key={key}")

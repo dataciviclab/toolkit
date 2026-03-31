@@ -88,9 +88,9 @@ def test_sdmx_fetch_normalizes_csv(monkeypatch):
         calls.append((url, params, headers.get("Accept") if headers else None))
         if url.endswith("/dataflow/IT1/22_289"):
             return _FakeResponse(200, DATAFLOW_XML, url)
-        if url.endswith("/data/22_289/all"):
+        if url.endswith("/data/IT1,22_289,1.5/all"):
             return _FakeResponse(200, PREVIEW_JSON, url)
-        if url.endswith("/data/22_289/A.001001.JAN.9.TOTAL.99"):
+        if url.endswith("/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99"):
             return _FakeResponse(200, DATA_JSON, url)
         raise AssertionError(f"Unexpected URL {url}")
 
@@ -111,7 +111,7 @@ def test_sdmx_fetch_normalizes_csv(monkeypatch):
     )
 
     text = payload.decode("utf-8")
-    assert origin.endswith("/data/22_289/A.001001.JAN.9.TOTAL.99")
+    assert origin.endswith("/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99")
     assert "FREQ,FREQ_label" in text
     assert "A,annual" in text
     assert "001001,Agliè" in text
@@ -140,7 +140,7 @@ def test_sdmx_fetch_rejects_unknown_filter_dimension(monkeypatch):
     def _fake_get(url, params=None, timeout=None, headers=None):
         if url.endswith("/dataflow/IT1/22_289"):
             return _FakeResponse(200, DATAFLOW_XML, url)
-        if url.endswith("/data/22_289/all"):
+        if url.endswith("/data/IT1,22_289,1.5/all"):
             return _FakeResponse(200, PREVIEW_JSON, url)
         raise AssertionError(f"Unexpected URL {url}")
 

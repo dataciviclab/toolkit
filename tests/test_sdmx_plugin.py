@@ -1,5 +1,6 @@
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.sdmx import SdmxSource
+import requests
 
 
 class _FakeResponse:
@@ -96,7 +97,7 @@ def test_sdmx_fetch_normalizes_csv(monkeypatch):
 
     monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
 
-    payload, origin = SdmxSource().fetch(
+    payload, origin = SdmxSource(retries=1).fetch(
         "IT1",
         "22_289",
         "1.5",
@@ -150,5 +151,121 @@ def test_sdmx_fetch_rejects_unknown_filter_dimension(monkeypatch):
         SdmxSource().fetch("IT1", "22_289", "1.5", {"TIME_PERIOD": "2024"})
     except DownloadError as exc:
         assert "Unknown SDMX filter dimensions" in str(exc)
+    else:
+        raise AssertionError("Expected DownloadError")
+
+
+def test_sdmx_fetch_falls_back_on_metadata_timeout(monkeypatch):
+    calls = []
+
+    def _fake_get(url, params=None, timeout=None, headers=None):
+        calls.append(url)
+        if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
+            raise requests.exceptions.Timeout("metadata timeout")
+        if url == "https://esploradati.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
+            return _FakeResponse(200, DATAFLOW_XML, url)
+        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
+            return _FakeResponse(200, PREVIEW_JSON, url)
+        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
+            return _FakeResponse(200, DATA_JSON, url)
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+
+    payload, origin = SdmxSource(retries=1).fetch(
+        "IT1",
+        "22_289",
+        "1.5",
+        {
+            "FREQ": "A",
+            "REF_AREA": "001001",
+            "DATA_TYPE": "JAN",
+            "SEX": "9",
+            "AGE": "TOTAL",
+            "MARITAL_STATUS": "99",
+        },
+    )
+
+    assert origin.endswith("/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99")
+    assert payload.decode("utf-8").startswith("FREQ,FREQ_label")
+    assert calls[:2] == [
+        "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289",
+        "https://esploradati.istat.it/SDMXWS/rest/dataflow/IT1/22_289",
+    ]
+
+
+def test_sdmx_fetch_falls_back_on_data_5xx(monkeypatch):
+    calls = []
+
+    def _fake_get(url, params=None, timeout=None, headers=None):
+        calls.append(url)
+        if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
+            return _FakeResponse(200, DATAFLOW_XML, url)
+        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
+            return _FakeResponse(500, "boom", url)
+        if url == "https://sdmx.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
+            return _FakeResponse(200, PREVIEW_JSON, url)
+        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
+            return _FakeResponse(500, "boom", url)
+        if url == "https://sdmx.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
+            return _FakeResponse(200, DATA_JSON, url)
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+
+    payload, origin = SdmxSource(
+        retries=1,
+        data_base_url="https://esploradati.istat.it/SDMXWS/rest",
+        metadata_base_url="https://sdmx.istat.it/SDMXWS/rest",
+    ).fetch(
+        "IT1",
+        "22_289",
+        "1.5",
+        {
+            "FREQ": "A",
+            "REF_AREA": "001001",
+            "DATA_TYPE": "JAN",
+            "SEX": "9",
+            "AGE": "TOTAL",
+            "MARITAL_STATUS": "99",
+        },
+    )
+
+    assert origin == "https://sdmx.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99"
+    assert payload.decode("utf-8").startswith("FREQ,FREQ_label")
+
+
+def test_sdmx_fetch_does_not_fallback_on_404(monkeypatch):
+    def _fake_get(url, params=None, timeout=None, headers=None):
+        if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
+            return _FakeResponse(200, DATAFLOW_XML, url)
+        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
+            return _FakeResponse(200, PREVIEW_JSON, url)
+        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
+            return _FakeResponse(404, "not found", url)
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+
+    try:
+        SdmxSource(
+            retries=1,
+            data_base_url="https://esploradati.istat.it/SDMXWS/rest",
+            metadata_base_url="https://sdmx.istat.it/SDMXWS/rest",
+        ).fetch(
+            "IT1",
+            "22_289",
+            "1.5",
+            {
+                "FREQ": "A",
+                "REF_AREA": "001001",
+                "DATA_TYPE": "JAN",
+                "SEX": "9",
+                "AGE": "TOTAL",
+                "MARITAL_STATUS": "99",
+            },
+        )
+    except DownloadError as exc:
+        assert "HTTP 404" in str(exc)
     else:
         raise AssertionError("Expected DownloadError")

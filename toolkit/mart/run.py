@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,9 @@ from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_polic
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, to_root_relative
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
+
+
+_CLEAN_INPUT_TOKEN_RE = re.compile(r"\bclean_input\b", re.IGNORECASE)
 
 
 def _serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | None:
@@ -105,6 +109,11 @@ def run_mart(
 
             sql = sql_path.read_text(encoding="utf-8")
             sql = render_template(sql, template_ctx)
+
+            if not clean_sql_configured and _CLEAN_INPUT_TOKEN_RE.search(sql):
+                raise ValueError(
+                    "MART SQL references clean_input but clean.sql is not configured in dataset.yml"
+                )
 
             # Save rendered SQL for audit/debug
             rendered_sql_path: Path | None = None

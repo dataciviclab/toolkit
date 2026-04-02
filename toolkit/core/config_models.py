@@ -14,6 +14,7 @@ from toolkit.core.csv_read import normalize_columns_spec
 
 logger = logging.getLogger("toolkit.core.config")
 _MANAGED_OUTPUT_ROOTS = {"_smoke_out", "_test_out"}
+_SAFE_SQL_IDENTIFIER_RE = r"^[A-Za-z_][A-Za-z0-9_]*$"
 
 
 @dataclass(frozen=True)
@@ -318,6 +319,21 @@ class MartTableConfig(BaseModel):
 
     name: str
     sql: Path
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("mart.tables[].name must not be empty")
+        import re
+
+        if not re.fullmatch(_SAFE_SQL_IDENTIFIER_RE, text):
+            raise ValueError(
+                "mart.tables[].name must be a safe SQL identifier "
+                "(letters, numbers, underscore; cannot start with a number)"
+            )
+        return text
 
 
 class CrossYearTableConfig(BaseModel):

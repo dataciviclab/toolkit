@@ -209,6 +209,206 @@ def test_run_dry_run_accepts_mart_sql_with_root_posix_placeholder(tmp_path: Path
     assert "sql_validation: OK" in result.output
 
 
+def test_run_dry_run_accepts_mart_sql_with_support_placeholder(tmp_path: Path) -> None:
+    sql_dir = tmp_path / "sql" / "mart"
+    sql_dir.mkdir(parents=True, exist_ok=True)
+    root_dir = tmp_path / "out"
+
+    support_root = tmp_path / "support_out"
+    support_output = support_root / "data" / "mart" / "lookup_ds" / "2024" / "lookup_table.parquet"
+    support_output.parent.mkdir(parents=True, exist_ok=True)
+    duckdb.execute(
+        f"COPY (SELECT 7 AS lookup_value) TO '{support_output.as_posix()}' (FORMAT PARQUET)"
+    )
+
+    support_config = tmp_path / "support_dataset.yml"
+    support_config.write_text(
+        "\n".join(
+            [
+                f'root: "{support_root.as_posix()}"',
+                "dataset:",
+                '  name: "lookup_ds"',
+                "  years: [2024]",
+                "raw: {}",
+                "clean: {}",
+                "mart:",
+                "  tables:",
+                '    - name: "lookup_table"',
+                '      sql: "sql/lookup.sql"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
+    (sql_dir / "mart_example.sql").write_text(
+        "select * from read_parquet('{support.lookup.mart}')",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "dataset.yml"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'root: "{root_dir.as_posix()}"',
+                "dataset:",
+                '  name: "demo_ds"',
+                "  years: [2022]",
+                "raw: {}",
+                "clean:",
+                '  sql: "sql/clean.sql"',
+                "mart:",
+                "  tables:",
+                '    - name: "mart_example"',
+                '      sql: "sql/mart/mart_example.sql"',
+                "support:",
+                '  - name: "lookup"',
+                f'    config: "{support_config.as_posix()}"',
+                "    years: [2024]",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+
+    assert result.exit_code == 0
+    assert "sql_validation: OK" in result.output
+
+
+def test_run_dry_run_fails_when_support_output_is_missing(tmp_path: Path) -> None:
+    sql_dir = tmp_path / "sql" / "mart"
+    sql_dir.mkdir(parents=True, exist_ok=True)
+    root_dir = tmp_path / "out"
+
+    support_root = tmp_path / "support_out"
+    support_config = tmp_path / "support_dataset.yml"
+    support_config.write_text(
+        "\n".join(
+            [
+                f'root: "{support_root.as_posix()}"',
+                "dataset:",
+                '  name: "lookup_ds"',
+                "  years: [2024]",
+                "raw: {}",
+                "clean: {}",
+                "mart:",
+                "  tables:",
+                '    - name: "lookup_table"',
+                '      sql: "sql/lookup.sql"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
+    (sql_dir / "mart_example.sql").write_text(
+        "select * from read_parquet('{support.lookup.mart}')",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "dataset.yml"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'root: "{root_dir.as_posix()}"',
+                "dataset:",
+                '  name: "demo_ds"',
+                "  years: [2022]",
+                "raw: {}",
+                "clean:",
+                '  sql: "sql/clean.sql"',
+                "mart:",
+                "  tables:",
+                '    - name: "mart_example"',
+                '      sql: "sql/mart/mart_example.sql"',
+                "support:",
+                '  - name: "lookup"',
+                f'    config: "{support_config.as_posix()}"',
+                "    years: [2024]",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+
+    assert result.exit_code != 0
+    assert "Support dataset output mancante" in str(result.exception)
+
+
+def test_run_dry_run_fails_when_support_outputs_are_only_partially_present(tmp_path: Path) -> None:
+    sql_dir = tmp_path / "sql" / "mart"
+    sql_dir.mkdir(parents=True, exist_ok=True)
+    root_dir = tmp_path / "out"
+
+    support_root = tmp_path / "support_out"
+    support_output = support_root / "data" / "mart" / "lookup_ds" / "2024" / "lookup_a.parquet"
+    support_output.parent.mkdir(parents=True, exist_ok=True)
+    duckdb.execute(
+        f"COPY (SELECT 7 AS lookup_value) TO '{support_output.as_posix()}' (FORMAT PARQUET)"
+    )
+
+    support_config = tmp_path / "support_dataset.yml"
+    support_config.write_text(
+        "\n".join(
+            [
+                f'root: "{support_root.as_posix()}"',
+                "dataset:",
+                '  name: "lookup_ds"',
+                "  years: [2024]",
+                "raw: {}",
+                "clean: {}",
+                "mart:",
+                "  tables:",
+                '    - name: "lookup_a"',
+                '      sql: "sql/lookup_a.sql"',
+                '    - name: "lookup_b"',
+                '      sql: "sql/lookup_b.sql"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
+    (sql_dir / "mart_example.sql").write_text(
+        "select * from read_parquet('{support.lookup.mart}')",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "dataset.yml"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'root: "{root_dir.as_posix()}"',
+                "dataset:",
+                '  name: "demo_ds"',
+                "  years: [2022]",
+                "raw: {}",
+                "clean:",
+                '  sql: "sql/clean.sql"',
+                "mart:",
+                "  tables:",
+                '    - name: "mart_example"',
+                '      sql: "sql/mart/mart_example.sql"',
+                "support:",
+                '  - name: "lookup"',
+                f'    config: "{support_config.as_posix()}"',
+                "    years: [2024]",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+
+    assert result.exit_code != 0
+    assert "Support dataset output mancante" in str(result.exception)
+
+
 def test_run_year_logs_effective_root_context(tmp_path: Path, caplog) -> None:
     sql_dir = tmp_path / "sql" / "mart"
     sql_dir.mkdir(parents=True, exist_ok=True)

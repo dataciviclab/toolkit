@@ -9,6 +9,7 @@ import duckdb
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, to_root_relative
+from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 
 
@@ -42,6 +43,7 @@ def run_mart(
     base_dir: Path | None = None,
     clean_cfg: dict[str, Any] | None = None,
     output_cfg: dict[str, Any] | None = None,
+    support_cfg: list[dict[str, Any]] | None = None,
 ):
     policy = resolve_artifact_policy(output_cfg)
     root_dir = resolve_root(root)
@@ -77,11 +79,13 @@ def run_mart(
         if not isinstance(tables, list) or not tables:
             raise ValueError("mart.tables missing or empty in dataset.yml")
 
+        support_payloads = resolve_support_payloads(support_cfg, require_exists=True)
         template_ctx = build_runtime_template_ctx(
             dataset=dataset,
             year=year,
             root=root_dir,
             base_dir=base_dir,
+            support=flatten_support_template_ctx(support_payloads),
         )
 
         run_dir: Path | None = None

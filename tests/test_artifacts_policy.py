@@ -216,3 +216,90 @@ def test_run_mart_supports_root_posix_placeholder(tmp_path: Path) -> None:
     assert mart_output.exists()
     assert duckdb.execute(f"SELECT marker FROM read_parquet('{mart_output.as_posix()}')").fetchone() == ("ok",)
     assert result["output_rows"] == 1
+
+
+def test_run_mart_supports_support_placeholder(tmp_path: Path) -> None:
+    config_path = tmp_path / "dataset.yml"
+    sql_dir = tmp_path / "sql"
+    sql_dir.mkdir(parents=True, exist_ok=True)
+    root_dir = tmp_path / "out"
+    dataset = "demo_ds"
+    year = 2022
+
+    clean_dir = root_dir / "data" / "clean" / dataset / str(year)
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    clean_path = clean_dir / f"{dataset}_{year}_clean.parquet"
+    duckdb.execute(f"COPY (SELECT 1 AS value) TO '{clean_path.as_posix()}' (FORMAT PARQUET)")
+
+    support_root = tmp_path / "support_out"
+    support_output = support_root / "data" / "mart" / "lookup_ds" / "2024" / "lookup_table.parquet"
+    support_output.parent.mkdir(parents=True, exist_ok=True)
+    duckdb.execute(
+        f"COPY (SELECT 'ok' AS marker) TO '{support_output.as_posix()}' (FORMAT PARQUET)"
+    )
+
+    support_config = tmp_path / "support_dataset.yml"
+    support_config.write_text(
+        "\n".join(
+            [
+                f'root: "{support_root.as_posix()}"',
+                "dataset:",
+                '  name: "lookup_ds"',
+                "  years: [2024]",
+                "raw: {}",
+                "clean: {}",
+                "mart:",
+                "  tables:",
+                '    - name: "lookup_table"',
+                '      sql: "sql/lookup.sql"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    (sql_dir / "mart_example.sql").write_text(
+        "select * from read_parquet('{support.lookup.mart}')",
+        encoding="utf-8",
+    )
+    config_path.write_text(
+        "\n".join(
+            [
+                f'root: "{root_dir.as_posix()}"',
+                "dataset:",
+                f'  name: "{dataset}"',
+                f"  years: [{year}]",
+                "raw: {}",
+                "clean:",
+                '  sql: "sql/clean.sql"',
+                "mart:",
+                "  tables:",
+                '    - name: "mart_example"',
+                '      sql: "sql/mart_example.sql"',
+                "support:",
+                '  - name: "lookup"',
+                f'    config: "{support_config.as_posix()}"',
+                "    years: [2024]",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
+
+    cfg = load_config(config_path)
+    logger = _NoopLogger()
+    result = run_mart(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.mart,
+        logger,
+        base_dir=cfg.base_dir,
+        clean_cfg=cfg.clean,
+        output_cfg=cfg.output,
+        support_cfg=cfg.support,
+    )
+
+    mart_output = root_dir / "data" / "mart" / dataset / str(year) / "mart_example.parquet"
+    assert mart_output.exists()
+    assert duckdb.execute(f"SELECT marker FROM read_parquet('{mart_output.as_posix()}')").fetchone() == ("ok",)
+    assert result["output_rows"] == 1

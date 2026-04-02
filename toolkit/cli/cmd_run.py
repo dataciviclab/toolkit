@@ -287,6 +287,7 @@ def run_year(
             base_dir=cfg.base_dir,
             clean_cfg=cfg.clean,
             output_cfg=cfg.output,
+            support_cfg=cfg.support,
         )
 
     context.complete_run(success_with_warnings=run_has_validation_warnings)

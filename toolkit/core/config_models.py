@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from toolkit.core.csv_read import normalize_columns_spec
 
@@ -98,6 +98,36 @@ class DatasetBlock(BaseModel):
 
     name: str
     years: list[int]
+
+
+class SupportDatasetConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    config: Path
+    years: list[int]
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("support[].name must not be empty")
+        import re
+
+        if not re.fullmatch(_SAFE_SQL_IDENTIFIER_RE, text):
+            raise ValueError(
+                "support[].name must be a safe identifier "
+                "(letters, numbers, underscore; cannot start with a number)"
+            )
+        return text
+
+    @field_validator("years")
+    @classmethod
+    def _validate_years(cls, value: list[int]) -> list[int]:
+        if not value:
+            raise ValueError("support[].years must not be empty")
+        return value
 
 
 class OutputConfig(BaseModel):
@@ -422,10 +452,21 @@ class ToolkitConfigModel(BaseModel):
     raw: RawConfig = Field(default_factory=RawConfig)
     clean: CleanConfig = Field(default_factory=CleanConfig)
     mart: MartConfig = Field(default_factory=MartConfig)
+    support: list[SupportDatasetConfig] = Field(default_factory=list)
     cross_year: CrossYearConfig = Field(default_factory=CrossYearConfig)
     config: ConfigPolicy = Field(default_factory=ConfigPolicy)
     validation: GlobalValidationConfig = Field(default_factory=GlobalValidationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
+
+    @model_validator(mode="after")
+    def _validate_unique_support_names(self) -> "ToolkitConfigModel":
+        names = [entry.name for entry in self.support]
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        if duplicates:
+            raise ValueError(
+                "support[].name values must be unique: " + ", ".join(duplicates)
+            )
+        return self
 
 
 def _err(msg: str, *, path: Path) -> ValueError:
@@ -468,6 +509,9 @@ _SECTION_PATH_WHITELIST: dict[str, tuple[tuple[str, ...], ...]] = {
     ),
     "mart": (
         ("tables", "*", "sql"),
+    ),
+    "support": (
+        ("*", "config"),
     ),
     "cross_year": (
         ("tables", "*", "sql"),
@@ -551,11 +595,16 @@ def _get_nested_value(container: Any, tokens: tuple[str, ...]) -> Any:
 
 def _normalize_section_paths(
     section_name: str,
-    section: dict[str, Any],
+    section: Any,
     *,
     base_dir: Path,
-) -> tuple[dict[str, Any], list[tuple[str, Path]]]:
-    normalized = dict(section)
+) -> tuple[Any, list[tuple[str, Path]]]:
+    if isinstance(section, dict):
+        normalized: Any = dict(section)
+    elif isinstance(section, list):
+        normalized = list(section)
+    else:
+        normalized = section
     changes: list[tuple[str, Path]] = []
 
     for pattern in _SECTION_PATH_WHITELIST.get(section_name, ()):
@@ -665,6 +714,7 @@ _TOP_LEVEL_ALLOWED_KEYS = {
     "raw",
     "clean",
     "mart",
+    "support",
     "cross_year",
     "config",
     "validation",
@@ -815,6 +865,7 @@ def load_config_model(
     raw = normalized.get("raw", {}) or {}
     clean = normalized.get("clean", {}) or {}
     mart = normalized.get("mart", {}) or {}
+    support = normalized.get("support", []) or []
     cross_year = normalized.get("cross_year", {}) or {}
 
     normalized_fields: list[tuple[str, Path]] = []
@@ -827,6 +878,9 @@ def load_config_model(
     if isinstance(mart, dict):
         mart, mart_changes = _normalize_section_paths("mart", mart, base_dir=base_dir)
         normalized_fields.extend(mart_changes)
+    if isinstance(support, list):
+        support, support_changes = _normalize_section_paths("support", support, base_dir=base_dir)
+        normalized_fields.extend(support_changes)
     if isinstance(cross_year, dict):
         cross_year, cross_year_changes = _normalize_section_paths("cross_year", cross_year, base_dir=base_dir)
         normalized_fields.extend(cross_year_changes)
@@ -844,6 +898,7 @@ def load_config_model(
         "raw": raw,
         "clean": clean,
         "mart": mart,
+        "support": support,
         "cross_year": cross_year,
     }
 

@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-_UNRESOLVED_PLACEHOLDER_RE = re.compile(r"\{[A-Za-z_][A-Za-z0-9_]*\}")
+_UNRESOLVED_PLACEHOLDER_RE = re.compile(r"\{[A-Za-z_][A-Za-z0-9_.]*\}")
 
 
 def render_template(text: str, ctx: dict[str, Any]) -> str:
@@ -15,7 +15,7 @@ def render_template(text: str, ctx: dict[str, Any]) -> str:
     This is intentionally not a general templating engine.
     """
     out = text
-    for k, v in ctx.items():
+    for k, v in sorted(ctx.items(), key=lambda item: len(item[0]), reverse=True):
         out = out.replace("{" + k + "}", str(v))
     unresolved = sorted(set(_UNRESOLVED_PLACEHOLDER_RE.findall(out)))
     if unresolved:
@@ -32,6 +32,7 @@ def build_runtime_template_ctx(
     year: int,
     root: str | Path | None = None,
     base_dir: Path | None = None,
+    support: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Build the minimal deterministic template context exposed to SQL runtime.
@@ -51,6 +52,8 @@ def build_runtime_template_ctx(
     if base_dir is not None:
         ctx["base_dir"] = str(base_dir)
         ctx["base_dir_posix"] = base_dir.as_posix()
+    if support:
+        ctx.update(support)
     return ctx
 
 

@@ -109,7 +109,7 @@ def test_load_config_resolves_support_config_paths_from_dataset_dir(tmp_path: Pa
 
     yml = project_dir / "dataset.yml"
     yml.write_text(
-        f"""
+        """
 root: "./out"
 dataset:
   name: demo

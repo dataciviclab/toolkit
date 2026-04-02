@@ -23,6 +23,7 @@ class ToolkitConfig:
     raw: dict[str, Any]
     clean: dict[str, Any]
     mart: dict[str, Any]
+    support: list[dict[str, Any]]
     cross_year: dict[str, Any]
     config: dict[str, Any]
     validation: dict[str, Any]
@@ -70,6 +71,17 @@ def _compat_cross_year(model: ToolkitConfigModel) -> dict[str, Any]:
     )
 
 
+def _compat_support(model: ToolkitConfigModel) -> list[dict[str, Any]]:
+    return [
+        item.model_dump(
+            mode="python",
+            exclude_none=True,
+            exclude_unset=True,
+        )
+        for item in model.support
+    ]
+
+
 def load_config(
     path: str | Path,
     *,
@@ -87,6 +99,7 @@ def load_config(
         raw=model.raw.model_dump(mode="python", exclude_none=True, exclude_unset=True),
         clean=_compat_clean(model),
         mart=_compat_mart(model),
+        support=_compat_support(model),
         cross_year=_compat_cross_year(model),
         config=model.config.model_dump(mode="python"),
         validation=model.validation.model_dump(mode="python"),

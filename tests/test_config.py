@@ -101,6 +101,41 @@ cross_year:
     assert cfg.cross_year["tables"][0]["sql"] == (project_dir / "sql" / "cross" / "demo_cross.sql").resolve()
 
 
+def test_load_config_resolves_support_config_paths_from_dataset_dir(tmp_path: Path):
+    project_dir = tmp_path / "project"
+    support_dir = tmp_path / "support"
+    project_dir.mkdir()
+    support_dir.mkdir()
+
+    yml = project_dir / "dataset.yml"
+    yml.write_text(
+        f"""
+root: "./out"
+dataset:
+  name: demo
+  years: [2022]
+raw: {{}}
+clean: {{}}
+mart: {{}}
+support:
+  - name: scuole
+    config: "../support/dataset.yml"
+    years: [2024]
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_config(yml)
+
+    assert cfg.support == [
+        {
+            "name": "scuole",
+            "config": (support_dir / "dataset.yml").resolve(),
+            "years": [2024],
+        }
+    ]
+
+
 def test_load_config_does_not_transform_non_whitelisted_path_like_fields(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()

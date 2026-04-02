@@ -70,3 +70,65 @@ def test_inspect_paths_json_is_notebook_friendly(tmp_path: Path, monkeypatch) ->
     assert payload["raw_hints"]["suggested_read_exists"] is False
     assert payload["raw_hints"]["suggested_read_path"].endswith("suggested_read.yml")
     assert payload["latest_run"] is None
+
+
+def test_inspect_paths_json_reports_resolved_support_outputs(tmp_path: Path) -> None:
+    runner = CliRunner()
+
+    support_root = tmp_path / "support_out"
+    support_config = tmp_path / "support_dataset.yml"
+    support_config.write_text(
+        "\n".join(
+            [
+                f'root: "{support_root.as_posix()}"',
+                "dataset:",
+                '  name: "support_ds"',
+                "  years: [2024]",
+                "raw: {}",
+                "clean: {}",
+                "mart:",
+                "  tables:",
+                '    - name: "support_table"',
+                '      sql: "sql/support.sql"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "dataset.yml"
+    root_dir = tmp_path / "out"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'root: "{root_dir.as_posix()}"',
+                "dataset:",
+                '  name: "demo_ds"',
+                "  years: [2022]",
+                "raw: {}",
+                "clean: {}",
+                "mart: {}",
+                "support:",
+                '  - name: "scuole"',
+                f'    config: "{support_config.as_posix()}"',
+                "    years: [2024]",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        ["inspect", "paths", "--config", str(config_path), "--year", "2022", "--json", "--strict-config"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["paths"]["support"]
+    support_payload = payload["paths"]["support"][0]
+    assert support_payload["name"] == "scuole"
+    assert support_payload["dataset"] == "support_ds"
+    assert support_payload["years"] == [2024]
+    assert support_payload["outputs"] == [
+        str(support_root / "data" / "mart" / "support_ds" / "2024" / "support_table.parquet")
+    ]
+    assert support_payload["mart"].endswith("support_table.parquet")

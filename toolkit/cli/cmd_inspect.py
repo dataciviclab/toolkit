@@ -9,6 +9,7 @@ import typer
 from toolkit.cli.common import iter_years
 from toolkit.core.config import load_config
 from toolkit.core.paths import layer_year_dir
+from toolkit.core.support import resolve_support_payloads
 from toolkit.profile.raw import build_profile_hints
 from toolkit.core.run_context import get_run_dir, latest_run
 
@@ -160,6 +161,7 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
             "raw": _raw_output_paths(root, cfg.dataset, year),
             "clean": _clean_paths(root, cfg.dataset, year),
             "mart": _mart_paths(root, cfg.dataset, year, mart_tables),
+            "support": resolve_support_payloads(cfg.support, require_exists=False),
             "run_dir": str(run_dir),
         },
         "raw_hints": {
@@ -227,6 +229,17 @@ def paths(
         typer.echo(f"mart_manifest: {item['paths']['mart']['manifest']}")
         typer.echo(f"mart_metadata: {item['paths']['mart']['metadata']}")
         typer.echo(f"mart_validation: {item['paths']['mart']['validation']}")
+        if item["paths"]["support"]:
+            typer.echo("support:")
+            for support in item["paths"]["support"]:
+                typer.echo(f"  - name: {support['name']}")
+                typer.echo(f"    dataset: {support['dataset']}")
+                typer.echo(f"    config_path: {support['config_path']}")
+                typer.echo(f"    years: {', '.join(str(year_value) for year_value in support['years'])}")
+                typer.echo(f"    mart: {support['mart']}")
+                typer.echo("    outputs:")
+                for output in support["outputs"]:
+                    typer.echo(f"      - {output}")
         typer.echo(f"run_dir: {item['paths']['run_dir']}")
         latest_info = item.get("latest_run")
         if latest_info is None:

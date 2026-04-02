@@ -6,6 +6,7 @@ from typing import Any
 import duckdb
 
 from toolkit.clean.run import _load_clean_sql
+from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
 from toolkit.core.template import build_runtime_template_ctx
 from toolkit.core.template import render_template
 from toolkit.mart.run import _resolve_sql_path as _resolve_mart_sql_path
@@ -114,11 +115,13 @@ def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection) -> Non
         con.execute("CREATE OR REPLACE VIEW clean AS SELECT * FROM clean_input")
 
     tables = cfg.mart.get("tables") or []
+    support_payloads = resolve_support_payloads(cfg.support, require_exists=True)
     template_ctx = build_runtime_template_ctx(
         dataset=cfg.dataset,
         year=year,
         root=cfg.root,
         base_dir=cfg.base_dir,
+        support=flatten_support_template_ctx(support_payloads),
     )
 
     for table in tables:

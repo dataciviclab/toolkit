@@ -114,9 +114,9 @@ root: "./out"
 dataset:
   name: demo
   years: [2022]
-raw: {{}}
-clean: {{}}
-mart: {{}}
+raw: {}
+clean: {}
+mart: {}
 support:
   - name: scuole
     config: "../support/dataset.yml"

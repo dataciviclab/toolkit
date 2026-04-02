@@ -39,7 +39,14 @@ def resolve_support_payloads(
             expected_paths = _support_expected_mart_outputs(support_cfg, year)
             output_paths = [str(path) for path in expected_paths]
             existing_paths = [str(path) for path in expected_paths if path.exists()]
-            if require_exists and not existing_paths:
+            all_outputs_exist = len(output_paths) > 0 and len(existing_paths) == len(output_paths)
+            if require_exists and not output_paths:
+                raise ValueError(
+                    "Support dataset MART non configurato: "
+                    f"{name} ({config_path}) anno {year}. "
+                    "Il dataset di supporto deve dichiarare almeno una tabella in mart.tables."
+                )
+            if require_exists and not all_outputs_exist:
                 raise FileNotFoundError(
                     "Support dataset output mancante: "
                     f"{name} ({config_path}) anno {year}. "
@@ -53,7 +60,7 @@ def resolve_support_payloads(
                     "mart_dir": str(layer_year_dir(support_cfg.root, "mart", support_cfg.dataset, year)),
                     "outputs": output_paths,
                     "existing_outputs": existing_paths,
-                    "all_outputs_exist": len(output_paths) > 0 and len(existing_paths) == len(output_paths),
+                    "all_outputs_exist": all_outputs_exist,
                 }
             )
             all_outputs.extend(existing_paths if require_exists else output_paths)

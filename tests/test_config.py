@@ -136,6 +136,34 @@ support:
     ]
 
 
+def test_load_config_rejects_duplicate_support_names(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+root: "./out"
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
+mart: {}
+support:
+  - name: scuole
+    config: "./support_a.yml"
+    years: [2024]
+  - name: scuole
+    config: "./support_b.yml"
+    years: [2025]
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as e:
+        load_config(yml)
+
+    assert "support[].name values must be unique" in str(e.value)
+
+
 def test_load_config_does_not_transform_non_whitelisted_path_like_fields(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()

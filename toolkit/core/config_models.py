@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from toolkit.core.csv_read import normalize_columns_spec
 
@@ -457,6 +457,16 @@ class ToolkitConfigModel(BaseModel):
     config: ConfigPolicy = Field(default_factory=ConfigPolicy)
     validation: GlobalValidationConfig = Field(default_factory=GlobalValidationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
+
+    @model_validator(mode="after")
+    def _validate_unique_support_names(self) -> "ToolkitConfigModel":
+        names = [entry.name for entry in self.support]
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        if duplicates:
+            raise ValueError(
+                "support[].name values must be unique: " + ", ".join(duplicates)
+            )
+        return self
 
 
 def _err(msg: str, *, path: Path) -> ValueError:

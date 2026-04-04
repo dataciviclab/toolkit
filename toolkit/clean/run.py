@@ -210,6 +210,15 @@ def _run_sql(
         con.close()
 
 
+def _normalize_output_profile(output_profile: dict[str, Any] | int) -> dict[str, Any]:
+    if isinstance(output_profile, dict):
+        return output_profile
+    return {
+        "row_count": int(output_profile),
+        "columns": [],
+    }
+
+
 def run_clean(
     dataset: str,
     year: int,
@@ -270,6 +279,7 @@ def run_clean(
         read_mode=read_mode,
         logger=logger,
     )
+    output_profile = _normalize_output_profile(output_profile)
     output_bytes: int | None = output_path.stat().st_size if output_path.exists() else None
 
     outputs = [file_record(output_path)]

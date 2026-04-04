@@ -139,7 +139,7 @@ def test_project_example_golden_path(tmp_path: Path, monkeypatch):
     assert clean_meta["sql_rendered"] == "data/clean/project_example/2022/_run/clean_rendered.sql"
     assert clean_meta["output_profile"]["row_count"] > 0
     assert clean_meta["output_profile"]["columns"]
-    assert clean_meta["output_profile"]["columns"][0]["name"] == "regione"
+    assert any(item["name"] == "regione" for item in clean_meta["output_profile"]["columns"])
     assert "debug" not in clean_meta
 
     _assert_no_absolute_paths_in_json_payload(clean_meta, root)

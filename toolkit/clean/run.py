@@ -13,6 +13,7 @@ from toolkit.clean.duckdb_read import (
 )
 from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
+from toolkit.core.layer_profile import profile_relation
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, to_root_relative
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
@@ -194,19 +195,28 @@ def _run_sql(
     read_cfg: dict[str, Any] | None = None,
     read_mode: str = "fallback",
     logger=None,
-) -> tuple[str, dict[str, Any], int]:
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
     con = duckdb.connect(":memory:")
     try:
         read_info = read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
         con.execute(f"CREATE TABLE clean_out AS {sql_query}")
+        output_profile = profile_relation(con, "clean_out")
         output_path.parent.mkdir(parents=True, exist_ok=True)
         con.execute(
             f"COPY clean_out TO '{sql_path(output_path)}' (FORMAT PARQUET);"
         )
-        row_count: int = con.execute("SELECT count(*) FROM clean_out").fetchone()[0]
-        return read_info.source, read_info.params_used, row_count
+        return read_info.source, read_info.params_used, output_profile
     finally:
         con.close()
+
+
+def _normalize_output_profile(output_profile: dict[str, Any] | int) -> dict[str, Any]:
+    if isinstance(output_profile, dict):
+        return output_profile
+    return {
+        "row_count": int(output_profile),
+        "columns": [],
+    }
 
 
 def run_clean(
@@ -261,7 +271,7 @@ def run_clean(
     )
 
     output_path = out_dir / f"{dataset}_{year}_clean.parquet"
-    read_source_used, read_params_used, output_rows = _run_sql(
+    read_source_used, read_params_used, output_profile = _run_sql(
         input_files,
         sql,
         output_path,
@@ -269,6 +279,7 @@ def run_clean(
         read_mode=read_mode,
         logger=logger,
     )
+    output_profile = _normalize_output_profile(output_profile)
     output_bytes: int | None = output_path.stat().st_size if output_path.exists() else None
 
     outputs = [file_record(output_path)]
@@ -289,6 +300,7 @@ def run_clean(
         outputs=outputs,
         policy=policy,
     )
+    metadata_payload["output_profile"] = output_profile
     metadata_path = write_metadata(
         out_dir,
         metadata_payload,
@@ -303,4 +315,5 @@ def run_clean(
         warnings_count=None,
     )
     logger.info(f"CLEAN -> {output_path}")
+    output_rows = int(output_profile.get("row_count") or 0)
     return {"output_rows": output_rows, "output_bytes": output_bytes}

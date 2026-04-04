@@ -137,6 +137,9 @@ def test_project_example_golden_path(tmp_path: Path, monkeypatch):
     assert clean_meta["read_params_source"]
     assert clean_meta["sql"] == "sql/clean.sql"
     assert clean_meta["sql_rendered"] == "data/clean/project_example/2022/_run/clean_rendered.sql"
+    assert clean_meta["output_profile"]["row_count"] > 0
+    assert clean_meta["output_profile"]["columns"]
+    assert any(item["name"] == "regione" for item in clean_meta["output_profile"]["columns"])
     assert "debug" not in clean_meta
 
     _assert_no_absolute_paths_in_json_payload(clean_meta, root)
@@ -158,6 +161,13 @@ def test_project_example_golden_path(tmp_path: Path, monkeypatch):
         "data/mart/project_example/2022/rd_by_regione.parquet",
         "data/mart/project_example/2022/rd_by_provincia.parquet",
     ]
+    assert mart_meta["clean_input_profile"]["row_count"] == clean_meta["output_profile"]["row_count"]
+    assert set(mart_meta["table_profiles"].keys()) == {"rd_by_regione", "rd_by_provincia"}
+    assert len(mart_meta["transition_profiles"]) == 2
+    assert {item["target_name"] for item in mart_meta["transition_profiles"]} == {
+        "rd_by_regione",
+        "rd_by_provincia",
+    }
     assert mart_meta["tables"] == [
         {
             "name": "rd_by_regione",
@@ -172,6 +182,14 @@ def test_project_example_golden_path(tmp_path: Path, monkeypatch):
             "output": "data/mart/project_example/2022/rd_by_provincia.parquet",
         },
     ]
+    for item in mart_meta["transition_profiles"]:
+        assert item["from"] == "clean"
+        assert item["to"] == "mart"
+        assert isinstance(item["source_row_count"], int)
+        assert isinstance(item["target_row_count"], int)
+        assert isinstance(item["added_columns"], list)
+        assert isinstance(item["removed_columns"], list)
+        assert isinstance(item["type_changes"], list)
     assert "debug" not in mart_meta
 
     _assert_no_absolute_paths_in_json_payload(mart_meta, root)

@@ -7,6 +7,7 @@ from typing import Any
 import duckdb
 
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
+from toolkit.core.layer_profile import compare_layer_profiles, profile_relation, profile_parquet_files
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, to_root_relative
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
@@ -61,6 +62,7 @@ def run_mart(
         clean_files = list(clean_dir.glob("*.parquet"))
         if not clean_files:
             raise FileNotFoundError(f"No CLEAN parquet found in {clean_dir}")
+    clean_input_profile = profile_parquet_files(clean_files) if clean_files else None
 
     con = duckdb.connect(":memory:")
     try:
@@ -95,6 +97,8 @@ def run_mart(
 
         written: list[Path] = []
         executed: list[dict[str, Any]] = []
+        table_profiles: dict[str, Any] = {}
+        transition_profiles: list[dict[str, Any]] = []
         debug_tables: list[dict[str, Any]] = []
         total_rows = 0
 
@@ -127,12 +131,24 @@ def run_mart(
 
             # Create table and export
             con.execute(f"CREATE OR REPLACE TABLE {name} AS {sql}")
-            total_rows += con.execute(f"SELECT count(*) FROM {name}").fetchone()[0]
+            output_profile = profile_relation(con, name)
+            row_count = int(output_profile.get("row_count") or 0)
+            total_rows += row_count
 
             out = mart_dir / f"{name}.parquet"
             con.execute(f"COPY {name} TO '{out}' (FORMAT PARQUET);")
 
             written.append(out)
+            table_profiles[name] = output_profile
+            transition_profile = compare_layer_profiles(
+                clean_input_profile,
+                output_profile,
+                source_layer="clean",
+                target_layer="mart",
+                target_name=name,
+            )
+            if transition_profile is not None:
+                transition_profiles.append(transition_profile)
             executed.append(
                 {
                     "name": name,
@@ -165,6 +181,9 @@ def run_mart(
         "output_paths": [_serialize_metadata_path(p, root_dir) for p in written],
         "template_ctx": public_template_ctx(template_ctx),
         "tables": executed,
+        "clean_input_profile": clean_input_profile,
+        "table_profiles": table_profiles,
+        "transition_profiles": transition_profiles,
     }
     if policy == ARTIFACT_POLICY_DEBUG:
         metadata_payload["debug"] = {

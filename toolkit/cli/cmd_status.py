@@ -6,6 +6,7 @@ from typing import Any
 
 import typer
 
+from toolkit.cli.common import format_profile_preview, load_layer_profile_summaries
 from toolkit.core.config import load_config
 from toolkit.core.paths import layer_dataset_dir, layer_year_dir
 from toolkit.core.run_context import get_run_dir, latest_run, read_run_record
@@ -149,14 +150,18 @@ def _layer_validation_summary(
         if isinstance(required, list) and isinstance(columns, list):
             missing_columns = [column for column in required if column not in set(columns)]
             if missing_columns:
-                details.append(f"missing_columns={', '.join(str(column) for column in missing_columns)}")
+                details.append(
+                    f"missing_columns={', '.join(str(column) for column in missing_columns)}"
+                )
     if layer in {"mart", "cross_year"}:
         required_tables = summary.get("required_tables") or []
         tables = summary.get("tables") or []
         if isinstance(required_tables, list) and isinstance(tables, list):
             missing_tables = [table for table in required_tables if table not in set(tables)]
             if missing_tables:
-                details.append(f"missing_tables={', '.join(str(table) for table in missing_tables)}")
+                details.append(
+                    f"missing_tables={', '.join(str(table) for table in missing_tables)}"
+                )
 
     if ok is True:
         state = "passed"
@@ -217,13 +222,50 @@ def _print_validation_summary(
             typer.echo(f"    {detail}")
 
 
+def _print_layer_profiles(root: Path, dataset: str, year: int) -> None:
+    profiles = load_layer_profile_summaries(root, dataset, year)
+    if profiles is None:
+        return
+
+    typer.echo("")
+    typer.echo("layer_profiles:")
+
+    clean_output = profiles.get("clean_output")
+    if clean_output is not None:
+        typer.echo(f"  clean_output: {format_profile_preview(clean_output)}")
+
+    mart_clean_input = profiles.get("mart_clean_input")
+    if mart_clean_input is not None:
+        typer.echo(f"  mart_clean_input: {format_profile_preview(mart_clean_input)}")
+
+    mart_tables = profiles.get("mart_tables") or []
+    if mart_tables:
+        typer.echo("  mart_tables:")
+        for table in mart_tables:
+            typer.echo(f"    {table['name']}: {format_profile_preview(table)}")
+
+    transitions = profiles.get("clean_to_mart") or []
+    if transitions:
+        typer.echo("  clean_to_mart:")
+        for item in transitions:
+            typer.echo(
+                f"    {item['target_name']}: "
+                f"rows {item['source_row_count']} -> {item['target_row_count']} "
+                f"added={len(item['added_columns'])} "
+                f"removed={len(item['removed_columns'])} "
+                f"type_changes={item['type_change_count']}"
+            )
+
+
 def status(
     dataset: str = typer.Option(..., "--dataset", help="Dataset name"),
     year: int = typer.Option(..., "--year", help="Dataset year"),
     run_id: str | None = typer.Option(None, "--run-id", help="Specific run id"),
     latest: bool = typer.Option(False, "--latest", help="Show latest run"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
-    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
+    strict_config: bool = typer.Option(
+        False, "--strict-config", help="Treat deprecated config forms as errors"
+    ),
 ):
     """
     Mostra lo stato dell'ultimo run o di uno specifico run_id.
@@ -264,6 +306,7 @@ def status(
     for layer in ("raw", "clean", "mart"):
         typer.echo(_layer_row(record, layer))
     _print_validation_summary(Path(cfg.root), dataset, year, record, has_cross_year)
+    _print_layer_profiles(Path(cfg.root), dataset, year)
 
     if record.get("status") == "FAILED" and record.get("error"):
         typer.echo("")

@@ -21,13 +21,26 @@ def _write_run_record(path: Path, run_id: str, started_at: str, status: str) -> 
                 "finished_at": None,
                 "status": status,
                 "layers": {
-                    "raw": {"status": "SUCCESS", "started_at": started_at, "finished_at": started_at},
-                    "clean": {"status": "FAILED", "started_at": started_at, "finished_at": started_at},
+                    "raw": {
+                        "status": "SUCCESS",
+                        "started_at": started_at,
+                        "finished_at": started_at,
+                    },
+                    "clean": {
+                        "status": "FAILED",
+                        "started_at": started_at,
+                        "finished_at": started_at,
+                    },
                     "mart": {"status": "PENDING", "started_at": None, "finished_at": None},
                 },
                 "validations": {
                     "raw": {"passed": True, "errors_count": 0, "warnings_count": 1, "checks": []},
-                    "clean": {"passed": False, "errors_count": 2, "warnings_count": 0, "checks": []},
+                    "clean": {
+                        "passed": False,
+                        "errors_count": 2,
+                        "warnings_count": 0,
+                        "checks": [],
+                    },
                     "mart": {},
                 },
                 "error": "clean validation failed" if status == "FAILED" else None,
@@ -78,7 +91,16 @@ mart:
 
     result = runner.invoke(
         app,
-        ["status", "--dataset", "demo_ds", "--year", "2022", "--latest", "--config", str(config_path)],
+        [
+            "status",
+            "--dataset",
+            "demo_ds",
+            "--year",
+            "2022",
+            "--latest",
+            "--config",
+            str(config_path),
+        ],
     )
 
     assert result.exit_code == 0
@@ -134,7 +156,9 @@ mart:
         ),
         encoding="utf-8",
     )
-    (raw_dir / "_profile" / "suggested_read.yml").write_text("clean:\n  read:\n    delim: \";\"\n", encoding="utf-8")
+    (raw_dir / "_profile" / "suggested_read.yml").write_text(
+        'clean:\n  read:\n    delim: ";"\n', encoding="utf-8"
+    )
 
     run_dir = get_run_dir(project_dir / "out", "demo_ds", 2022)
     _write_run_record(run_dir / "run-123.json", "run-123", "2026-03-04T10:00:00+00:00", "SUCCESS")
@@ -144,7 +168,16 @@ mart:
 
     result = runner.invoke(
         app,
-        ["status", "--dataset", "demo_ds", "--year", "2022", "--latest", "--config", str(config_path)],
+        [
+            "status",
+            "--dataset",
+            "demo_ds",
+            "--year",
+            "2022",
+            "--latest",
+            "--config",
+            str(config_path),
+        ],
     )
 
     assert result.exit_code == 0
@@ -157,7 +190,9 @@ mart:
     assert "header_preamble_detected" in result.output
 
 
-def test_status_reports_validation_summary_from_layer_artifacts(tmp_path: Path, monkeypatch) -> None:
+def test_status_reports_validation_summary_from_layer_artifacts(
+    tmp_path: Path, monkeypatch
+) -> None:
     project_dir = tmp_path / "project"
     config_path = project_dir / "dataset.yml"
     project_dir.mkdir()
@@ -246,7 +281,9 @@ cross_year:
             {
                 "ok": False,
                 "errors": ["Missing required MART tables: ['mart_missing']"],
-                "warnings": ["MART table_rules reference tables not declared in mart.tables: ['mart_extra']"],
+                "warnings": [
+                    "MART table_rules reference tables not declared in mart.tables: ['mart_extra']"
+                ],
                 "summary": {
                     "required_tables": ["mart_ok", "mart_missing"],
                     "tables": ["mart_ok"],
@@ -293,7 +330,16 @@ cross_year:
 
     result = runner.invoke(
         app,
-        ["status", "--dataset", "demo_ds", "--year", "2022", "--latest", "--config", str(config_path)],
+        [
+            "status",
+            "--dataset",
+            "demo_ds",
+            "--year",
+            "2022",
+            "--latest",
+            "--config",
+            str(config_path),
+        ],
     )
 
     assert result.exit_code == 0
@@ -305,3 +351,114 @@ cross_year:
     assert "missing_tables=mart_missing" in result.output
     assert "missing_outputs=mart_ok.parquet" in result.output
     assert "cross_year: state=passed warnings=0 errors=0" in result.output
+
+
+def test_status_reports_layer_profiles_from_metadata(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "project"
+    config_path = project_dir / "dataset.yml"
+    project_dir.mkdir()
+
+    config_path.write_text(
+        """
+root: "./out"
+dataset:
+  name: demo_ds
+  years: [2022]
+raw: {}
+clean:
+  sql: "sql/clean.sql"
+mart:
+  tables:
+    - name: mart_example
+      sql: "sql/mart/mart_example.sql"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    sql_dir = project_dir / "sql" / "mart"
+    sql_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
+    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
+
+    clean_dir = project_dir / "out" / "data" / "clean" / "demo_ds" / "2022"
+    mart_dir = project_dir / "out" / "data" / "mart" / "demo_ds" / "2022"
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    mart_dir.mkdir(parents=True, exist_ok=True)
+
+    (clean_dir / "metadata.json").write_text(
+        json.dumps(
+            {
+                "output_profile": {
+                    "row_count": 120,
+                    "columns": [
+                        {"name": "id", "type": "BIGINT"},
+                        {"name": "regione", "type": "VARCHAR"},
+                    ],
+                }
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (mart_dir / "metadata.json").write_text(
+        json.dumps(
+            {
+                "clean_input_profile": {
+                    "row_count": 120,
+                    "columns": [
+                        {"name": "id", "type": "BIGINT"},
+                        {"name": "regione", "type": "VARCHAR"},
+                    ],
+                },
+                "table_profiles": {
+                    "mart_example": {
+                        "row_count": 20,
+                        "columns": [
+                            {"name": "regione", "type": "VARCHAR"},
+                            {"name": "totale", "type": "DOUBLE"},
+                        ],
+                    }
+                },
+                "transition_profiles": [
+                    {
+                        "target_name": "mart_example",
+                        "source_row_count": 120,
+                        "target_row_count": 20,
+                        "added_columns": ["totale"],
+                        "removed_columns": ["id"],
+                        "type_changes": [],
+                    }
+                ],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    run_dir = get_run_dir(project_dir / "out", "demo_ds", 2022)
+    _write_run_record(run_dir / "run-123.json", "run-123", "2026-03-04T10:00:00+00:00", "SUCCESS")
+
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "status",
+            "--dataset",
+            "demo_ds",
+            "--year",
+            "2022",
+            "--latest",
+            "--config",
+            str(config_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "layer_profiles:" in result.output
+    assert "clean_output: rows=120 columns=2 preview=id:BIGINT, regione:VARCHAR" in result.output
+    assert (
+        "mart_clean_input: rows=120 columns=2 preview=id:BIGINT, regione:VARCHAR" in result.output
+    )
+    assert "mart_example: rows=20 columns=2 preview=regione:VARCHAR, totale:DOUBLE" in result.output
+    assert "mart_example: rows 120 -> 20 added=1 removed=1 type_changes=0" in result.output

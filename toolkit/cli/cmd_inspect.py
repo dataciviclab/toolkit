@@ -6,7 +6,7 @@ from typing import Any
 
 import typer
 
-from toolkit.cli.common import iter_years
+from toolkit.cli.common import format_profile_preview, iter_years, load_layer_profile_summaries
 from toolkit.core.config import load_config
 from toolkit.core.paths import layer_year_dir
 from toolkit.core.support import resolve_support_payloads
@@ -116,10 +116,16 @@ def _clean_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
 
 
 def _mart_output_paths(root: Path, year_dir: Path, tables: list[dict[str, Any]]) -> list[Path]:
-    return [year_dir / f"{table['name']}.parquet" for table in tables if isinstance(table, dict) and table.get("name")]
+    return [
+        year_dir / f"{table['name']}.parquet"
+        for table in tables
+        if isinstance(table, dict) and table.get("name")
+    ]
 
 
-def _mart_paths(root: Path, dataset: str, year: int, tables: list[dict[str, Any]]) -> dict[str, Any]:
+def _mart_paths(
+    root: Path, dataset: str, year: int, tables: list[dict[str, Any]]
+) -> dict[str, Any]:
     mart_dir = layer_year_dir(root, "mart", dataset, year)
     return {
         "dir": str(mart_dir),
@@ -174,6 +180,7 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
             "skip": profile_hints.get("skip_suggested"),
             "warnings": profile_hints.get("warnings") or [],
         },
+        "layer_profiles": load_layer_profile_summaries(root, cfg.dataset, year),
         "latest_run": latest_payload,
     }
 
@@ -182,7 +189,9 @@ def paths(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     year: int | None = typer.Option(None, "--year", help="Dataset year"),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output for notebooks/scripts"),
-    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
+    strict_config: bool = typer.Option(
+        False, "--strict-config", help="Treat deprecated config forms as errors"
+    ),
 ):
     """
     Mostra i path stabili di output e l'ultimo run record per dataset/year.
@@ -193,7 +202,9 @@ def paths(
     payload = [_payload_for_year(cfg, selected_year) for selected_year in years]
 
     if as_json:
-        typer.echo(json.dumps(payload if len(payload) > 1 else payload[0], indent=2, ensure_ascii=False))
+        typer.echo(
+            json.dumps(payload if len(payload) > 1 else payload[0], indent=2, ensure_ascii=False)
+        )
         return
 
     for item in payload:
@@ -217,6 +228,30 @@ def paths(
             typer.echo("  - warnings:")
             for warning in item["raw_hints"]["warnings"]:
                 typer.echo(f"    - {warning}")
+        if item["layer_profiles"]:
+            typer.echo("layer_profiles:")
+            clean_output = item["layer_profiles"].get("clean_output")
+            if clean_output is not None:
+                typer.echo(f"  clean_output: {format_profile_preview(clean_output)}")
+            mart_clean_input = item["layer_profiles"].get("mart_clean_input")
+            if mart_clean_input is not None:
+                typer.echo(f"  mart_clean_input: {format_profile_preview(mart_clean_input)}")
+            mart_tables = item["layer_profiles"].get("mart_tables") or []
+            if mart_tables:
+                typer.echo("  mart_tables:")
+                for table in mart_tables:
+                    typer.echo(f"    {table['name']}: {format_profile_preview(table)}")
+            transitions = item["layer_profiles"].get("clean_to_mart") or []
+            if transitions:
+                typer.echo("  clean_to_mart:")
+                for transition in transitions:
+                    typer.echo(
+                        f"    {transition['target_name']}: "
+                        f"rows {transition['source_row_count']} -> {transition['target_row_count']} "
+                        f"added={len(transition['added_columns'])} "
+                        f"removed={len(transition['removed_columns'])} "
+                        f"type_changes={transition['type_change_count']}"
+                    )
         typer.echo(f"clean_dir: {item['paths']['clean']['dir']}")
         typer.echo(f"clean_output: {item['paths']['clean']['output']}")
         typer.echo(f"clean_manifest: {item['paths']['clean']['manifest']}")
@@ -235,7 +270,9 @@ def paths(
                 typer.echo(f"  - name: {support['name']}")
                 typer.echo(f"    dataset: {support['dataset']}")
                 typer.echo(f"    config_path: {support['config_path']}")
-                typer.echo(f"    years: {', '.join(str(year_value) for year_value in support['years'])}")
+                typer.echo(
+                    f"    years: {', '.join(str(year_value) for year_value in support['years'])}"
+                )
                 typer.echo(f"    mart: {support['mart']}")
                 typer.echo("    outputs:")
                 for output in support["outputs"]:
@@ -254,7 +291,9 @@ def paths(
 def schema_diff(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
-    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
+    strict_config: bool = typer.Option(
+        False, "--strict-config", help="Treat deprecated config forms as errors"
+    ),
 ):
     """
     Confronta i principali segnali di schema RAW tra gli anni configurati.

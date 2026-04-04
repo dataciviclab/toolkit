@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
@@ -11,6 +12,7 @@ from toolkit.core.paths import to_root_relative
 
 _LAYER_NAMES = ("raw", "clean", "mart")
 _WINDOWS_ABS_RE = re.compile(r"^[A-Za-z]:[\\/]")
+_RUN_RECORD_RENAME_RETRY_DELAYS_SECONDS = (0.05, 0.1, 0.2)
 _PORTABLE_RUN_PATH_FIELDS: set[tuple[str, ...]] = {
     ("layers", "raw", "artifact_path"),
     ("layers", "clean", "artifact_path"),
@@ -119,7 +121,22 @@ def write_run_record(run_dir: Path, run_id: str, payload: dict[str, Any]) -> Pat
         json.dumps(payload, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
-    tmp.replace(path)
+
+    last_error: PermissionError | None = None
+    for attempt in range(len(_RUN_RECORD_RENAME_RETRY_DELAYS_SECONDS) + 1):
+        try:
+            tmp.replace(path)
+            return path
+        except PermissionError as exc:
+            # On Windows, AV/indexing can transiently hold the tmp/target handle.
+            # Retrying keeps run tracking resilient without changing record format.
+            last_error = exc
+            if attempt >= len(_RUN_RECORD_RENAME_RETRY_DELAYS_SECONDS):
+                raise
+            time.sleep(_RUN_RECORD_RENAME_RETRY_DELAYS_SECONDS[attempt])
+
+    if last_error is not None:
+        raise last_error
     return path
 
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import time
 
-from toolkit.core.run_context import RunContext, get_run_dir, read_run_record
+from toolkit.core.run_context import RunContext, get_run_dir, read_run_record, write_run_record
 
 
 def _read_context(path: Path) -> dict[str, object]:
@@ -165,3 +165,36 @@ def test_read_run_record_does_not_treat_error_message_as_path(tmp_path: Path) ->
     assert record["error"] == "/diagnostic text that is not a filesystem path"
     assert record["_portability"]["portable"] is True
     assert record["_portability"]["warnings"] == []
+
+
+def test_write_run_record_retries_on_permission_error(tmp_path: Path, monkeypatch) -> None:
+    run_dir = get_run_dir(tmp_path, "demo_ds", 2022)
+    payload = {
+        "dataset": "demo_ds",
+        "year": 2022,
+        "run_id": "retry_case",
+        "started_at": "2026-02-28T09:00:00+00:00",
+        "finished_at": None,
+        "status": "RUNNING",
+        "layers": {"raw": {"status": "PENDING"}, "clean": {"status": "PENDING"}, "mart": {"status": "PENDING"}},
+        "validations": {"raw": {}, "clean": {}, "mart": {}},
+        "error": None,
+    }
+
+    replace_calls = {"n": 0}
+    original_replace = Path.replace
+
+    def flaky_replace(self: Path, target: Path) -> Path:
+        replace_calls["n"] += 1
+        if replace_calls["n"] == 1 and self.name.endswith(".tmp"):
+            raise PermissionError("[WinError 5] Access is denied")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", flaky_replace)
+
+    written = write_run_record(run_dir, "retry_case", payload)
+
+    assert written.exists()
+    assert replace_calls["n"] >= 2
+    stored = json.loads(written.read_text(encoding="utf-8"))
+    assert stored["run_id"] == "retry_case"

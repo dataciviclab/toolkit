@@ -210,10 +210,8 @@ class TestBuildCleanPreview:
         finally:
             con.close()
 
-    def test_exceeds_retry_limit_raises(self, tmp_path: Path):
-        """SQL that produces a different missing column every time should eventually fail."""
-        # This is hard to trigger naturally, but we test the error path
-        # by using SQL that fails for a non-binder reason
+    def test_non_binder_error_raises_clean_dry_run_failure(self, tmp_path: Path):
+        """Non-binder SQL errors should surface as CLEAN SQL dry-run failures."""
         cfg = _FakeConfig(tmp_path, clean_sql="select from raw_input")
         con = duckdb.connect(":memory:")
         try:
@@ -321,6 +319,7 @@ class TestValidateMartSql:
 
 
 # --- Top-level validate_sql_dry_run ---
+# Support dataset paths remain covered indirectly in test_run_dry_run.py.
 
 
 class TestValidateSqlDryRun:

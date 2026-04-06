@@ -1,0 +1,205 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+
+def _snake_case(name: str) -> str:
+    """Convert a column name to snake_case (best-effort)."""
+    import re
+
+    # Replace spaces and special chars with underscores
+    s = name.strip()
+    # Insert underscore before uppercase letters that follow lowercase
+    s = re.sub(r"([a-z])([A-Z])", r"\1_\2", s)
+    # Replace non-alphanumeric with underscores
+    s = re.sub(r"[^a-zA-Z0-9]+", "_", s)
+    # Lowercase and collapse multiple underscores
+    s = re.sub(r"_+", "_", s).lower().strip("_")
+    return s or name
+
+
+def _map_duckdb_type(raw_type: str) -> str:
+    """Map raw profiling type to DuckDB SQL type for TRY_CAST."""
+    raw_type_lower = raw_type.lower().strip()
+    if raw_type_lower in (
+        "int",
+        "integer",
+        "bigint",
+        "hugeint",
+        "smallint",
+        "tinyint",
+        "ubigint",
+        "uinteger",
+    ):
+        return "BIGINT"
+    if raw_type_lower in ("double", "float", "real", "hugeint", "uhugeint"):
+        return "DOUBLE"
+    if raw_type_lower in (
+        "date",
+        "datetime",
+        "timestamp",
+        "timestamp_s",
+        "timestamp_ms",
+        "timestamp_ns",
+    ):
+        return "DATE"
+    if raw_type_lower in ("bool", "boolean"):
+        return "BOOLEAN"
+    return "VARCHAR"
+
+
+def _read_csv_params_list(profile: dict[str, Any], has_columns: bool) -> list[str]:
+    """Build read_csv parameter list from profile.
+
+    Mirrors the runtime behaviour in clean.duckdb_read:
+    when explicit columns are provided, header is forced to false
+    and skip is incremented by 1 to compensate.
+    """
+    params: list[str] = []
+
+    delim = profile.get("delim_suggested")
+    if delim:
+        params.append(f"delim='{delim}'")
+
+    encoding = profile.get("encoding_suggested")
+    if encoding:
+        params.append(f"encoding='{encoding}'")
+
+    decimal = profile.get("decimal_suggested")
+    if decimal:
+        params.append(f"decimal_separator='{decimal}'")
+
+    # When columns are explicit, the runtime forces header=false
+    # and bumps skip by 1 (see duckdb_read._csv_read_options).
+    raw_header = profile.get("header_line") is not None
+    effective_header = raw_header and not has_columns
+
+    raw_skip = profile.get("skip_suggested", 0)
+    effective_skip = raw_skip + 1 if (has_columns and raw_header) else raw_skip
+
+    params.append(f"header={'true' if effective_header else 'false'}")
+
+    if effective_skip > 0:
+        params.append(f"skip={effective_skip}")
+
+    # Always disable auto_detect when we provide explicit columns
+    params.append("auto_detect=false")
+
+    return params
+
+
+def _read_csv_params(profile: dict[str, Any]) -> str:
+    """Build read_csv parameters string (legacy, no-columns path)."""
+    params = _read_csv_params_list(profile, has_columns=False)
+    return ", ".join(params)
+
+
+def _columns_spec(profile: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
+    """Build SELECT expressions and read_csv columns spec from mapping_suggestions."""
+    mapping = profile.get("mapping_suggestions", {})
+    if not mapping:
+        # Fallback to columns_raw if mapping is empty
+        columns_raw = profile.get("columns_raw", [])
+        if columns_raw:
+            select_exprs = [f'TRY_CAST("{c}" AS VARCHAR) AS {_snake_case(c)}' for c in columns_raw]
+            columns_spec = {c: "VARCHAR" for c in columns_raw}
+            return select_exprs, columns_spec
+        return ["*"], {}
+
+    select_exprs: list[str] = []
+    columns_spec: dict[str, str] = {}
+
+    for raw_col, spec in mapping.items():
+        raw_type = spec.get("type", "str")
+        sql_type = _map_duckdb_type(raw_type)
+
+        # Use normalized name if available, otherwise snake_case of raw
+        normalize_ops = spec.get("normalize", [])
+        if normalize_ops:
+            # If there's a normalize operation, the output name might differ
+            out_name = _snake_case(raw_col)
+        else:
+            out_name = _snake_case(raw_col)
+
+        select_exprs.append(f'TRY_CAST("{raw_col}" AS {sql_type}) AS {out_name}')
+        columns_spec[raw_col] = sql_type
+
+    return select_exprs, columns_spec
+
+
+def generate_clean_sql(
+    profile: dict[str, Any],
+    dataset: str,
+    year: int,
+    root: str | Path,
+) -> str:
+    """Generate a first-draft clean.sql from a RAW profile."""
+
+    # Determine source file path
+    file_used = profile.get("file_used", "")
+
+    # Build SELECT expressions and columns spec
+    select_exprs, columns_spec = _columns_spec(profile)
+    has_columns = bool(columns_spec)
+
+    # Build read_csv parameters (unified list, includes columns when present)
+    read_params = _read_csv_params_list(profile, has_columns=has_columns)
+
+    if has_columns:
+        cols_sql = ", ".join([f"'{col}': '{dtype}'" for col, dtype in columns_spec.items()])
+        read_params.append(f"columns={{ {cols_sql} }}")
+
+    # Build header comment
+    header_parts = ["-- Generated by toolkit scaffold clean"]
+    if file_used:
+        header_parts.append(f"-- Source: data/raw/{dataset}/{year}/{file_used}")
+
+    encoding = profile.get("encoding_suggested")
+    delim = profile.get("delim_suggested")
+    decimal = profile.get("decimal_suggested")
+
+    meta_parts = []
+    if encoding:
+        meta_parts.append(f"Encoding: {encoding}")
+    if delim:
+        meta_parts.append(f"Delimiter: {delim}")
+    if decimal:
+        meta_parts.append(f"Decimal: {decimal}")
+
+    if meta_parts:
+        header_parts.append(f"-- {' | '.join(meta_parts)}")
+
+    # Add warnings if present
+    warnings = profile.get("warnings", [])
+    if warnings:
+        header_parts.append("--")
+        header_parts.append("-- Warnings from profiling:")
+        for w in warnings[:10]:
+            header_parts.append(f"--   - {w}")
+
+    header_parts.append("--")
+    header_parts.append("-- This is a FIRST DRAFT. Review and adjust before running.")
+    header_parts.append("-- Run: toolkit run clean -c dataset.yml")
+    header_parts.append("")
+
+    # Build SELECT clause
+    select_block = "    " + ",\n    ".join(select_exprs)
+
+    # Determine read_csv first arg
+    read_csv_source = (
+        f"'data/raw/{dataset}/{year}/{file_used}'"
+        if file_used
+        else f"'data/raw/{dataset}/{year}/{dataset}_{year}.csv'"
+    )
+
+    # Assemble full SQL - all params joined with ", "
+    opt_sql = ", ".join(read_params)
+
+    sql_lines = header_parts
+    sql_lines.append("SELECT")
+    sql_lines.append(select_block)
+    sql_lines.append(f"FROM read_csv({read_csv_source}, {opt_sql})")
+    sql_lines.append("")
+
+    return "\n".join(sql_lines)

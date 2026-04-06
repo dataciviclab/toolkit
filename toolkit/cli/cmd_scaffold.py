@@ -45,10 +45,9 @@ def scaffold_clean(
         # Also check raw_profile.json as fallback
         profile_path = raw_profile_dir / "raw_profile.json"
         if not profile_path.exists():
-            raise typer.Exit(
-                f"Profili RAW non trovato in {raw_profile_dir}\n"
-                f"Esegui prima: toolkit profile raw -c {config}"
-            )
+            typer.echo(f"Profilo RAW non trovato in {raw_profile_dir}", err=True)
+            typer.echo(f"Esegui prima: toolkit profile raw -c {config}", err=True)
+            raise typer.Exit(code=1)
 
     try:
         profile = json.loads(profile_path.read_text(encoding="utf-8"))
@@ -62,7 +61,7 @@ def scaffold_clean(
     default_output = Path(cfg.base_dir) / configured_sql
     target_path = Path(output) if output else default_output
 
-    sql = generate_clean_sql(profile, cfg.dataset, selected_year, cfg.root)
+    sql = generate_clean_sql(profile, cfg.dataset, selected_year)
 
     if dry_run:
         typer.echo(sql)

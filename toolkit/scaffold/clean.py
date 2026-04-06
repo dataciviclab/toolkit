@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 
@@ -114,13 +113,7 @@ def _columns_spec(profile: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
         raw_type = spec.get("type", "str")
         sql_type = _map_duckdb_type(raw_type)
 
-        # Use normalized name if available, otherwise snake_case of raw
-        normalize_ops = spec.get("normalize", [])
-        if normalize_ops:
-            # If there's a normalize operation, the output name might differ
-            out_name = _snake_case(raw_col)
-        else:
-            out_name = _snake_case(raw_col)
+        out_name = _snake_case(raw_col)
 
         select_exprs.append(f'TRY_CAST("{raw_col}" AS {sql_type}) AS {out_name}')
         columns_spec[raw_col] = sql_type
@@ -132,9 +125,8 @@ def generate_clean_sql(
     profile: dict[str, Any],
     dataset: str,
     year: int,
-    root: str | Path,
 ) -> str:
-    """Generate a first-draft clean.sql from a RAW profile."""
+    """Generate a portable first-draft clean.sql from a RAW profile."""
 
     # Determine source file path
     file_used = profile.get("file_used", "")

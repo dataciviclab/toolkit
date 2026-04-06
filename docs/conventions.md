@@ -107,30 +107,6 @@ Non usarlo quando:
   - CLEAN: `_validate/clean_validation.json`
   - MART: `_validate/mart_validation.json`
 
-## ANAC Delta Ingestion Spike
-
-Per i dataset ANAC con aggiornamenti incrementali, il toolkit oggi offre solo diagnostica e confronto tra layer, non un merge stateful canonico.
-
-Punti gia' disponibili:
-
-- `status` e `inspect` espongono i profili dei layer prodotti nei metadata
-- `toolkit.core.layer_profile.compare_layer_profiles` calcola anche `row_count_delta`
-- i report diagnostici mostrano `added_columns`, `removed_columns` e `type_changes`
-
-Prima di introdurre un eventuale `delta_merge` servono verifiche sui dump reali:
-
-- forma effettiva del payload ANAC/OCDS usato dal Lab
-- chiave operativa per l'upsert, se esiste davvero una chiave stabile
-- collocazione reale dei subappalti nel payload principale o in dataset separati
-- regole di conflitto per record duplicati, rettifiche e annullamenti
-- sufficienza di un eventuale `delta_state.json` solo filesystem-first
-
-Stato raccomandato per adesso:
-
-- tenere il tema come spike tecnico, non come feature canonica
-- evitare nuovi campi di config finche' il modello non e' verificato su dati reali
-- usare questo documento come base per il follow-up di implementazione solo dopo la validazione
-
 ## Fonti pubbliche italiane — quirks noti
 
 Pattern ricorrenti su CSV e XLSX da portali pubblici italiani. Da considerare

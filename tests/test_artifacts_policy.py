@@ -87,7 +87,7 @@ def test_artifacts_policy_minimal_skips_optional_outputs(tmp_path: Path, monkeyp
     assert (raw_dir / "raw_validation.json").exists()
     assert (profile_dir / "suggested_read.yml").exists()
 
-    assert not (profile_dir / "raw_profile.json").exists()
+    assert (profile_dir / "raw_profile.json").exists()
     assert not (profile_dir / "profile.json").exists()
     assert not (profile_dir / "profile.md").exists()
     assert not (profile_dir / "suggested_mapping.yml").exists()

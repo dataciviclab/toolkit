@@ -90,9 +90,7 @@ def normalize_columns_spec(columns: object) -> dict[str, str] | None:
                 )
             normalized[name] = dtype
         return normalized
-    raise ValueError(
-        "clean.read.columns must be a mapping or a list of {name, type} mappings"
-    )
+    raise ValueError("clean.read.columns must be a mapping or a list of {name, type} mappings")
 
 
 def normalize_read_cfg(read_cfg: dict[str, Any] | None) -> dict[str, Any]:
@@ -152,3 +150,89 @@ def robust_preset(read_cfg: dict[str, Any] | None) -> dict[str, Any]:
     robust.setdefault("strict_mode", False)
     robust.setdefault("sample_size", -1)
     return robust
+
+
+def csv_read_option_strings(read_cfg: dict[str, Any]) -> list[str]:
+    """Build a list of DuckDB read_csv option strings from a config dict.
+
+    This is the single canonical place where read_csv options are converted
+    to SQL fragments.  Callers can prepend their own fixed options (e.g.
+    ``union_by_name=true``) and append caller-specific ones (e.g. columns).
+
+    Supported keys:
+    ``delim``, ``sep``, ``encoding``, ``decimal``, ``nullstr``,
+    ``auto_detect``, ``strict_mode``, ``ignore_errors``, ``null_padding``,
+    ``parallel``, ``quote``, ``escape``, ``comment``, ``max_line_size``,
+    ``columns``.
+
+    ``header`` and ``skip`` are intentionally NOT handled here because their
+    effective values can be overridden at runtime by the clean layer when
+    explicit columns are provided (see ``duckdb_read._csv_read_options``).
+    """
+    opts: list[str] = []
+
+    delim = read_cfg.get("sep") or read_cfg.get("delim")
+    if delim is not None:
+        opts.append(f"sep='{sql_str(str(delim))}'")
+
+    encoding = normalize_encoding(read_cfg.get("encoding"))
+    if encoding is not None:
+        opts.append(f"encoding='{sql_str(encoding)}'")
+
+    decimal = read_cfg.get("decimal")
+    if decimal is not None:
+        opts.append(f"decimal_separator='{sql_str(str(decimal))}'")
+
+    nullstr = read_cfg.get("nullstr")
+    if nullstr is not None:
+        if isinstance(nullstr, list):
+            xs = ", ".join([f"'{sql_str(x)}'" for x in nullstr])
+            opts.append(f"nullstr=[{xs}]")
+        else:
+            opts.append(f"nullstr='{sql_str(nullstr)}'")
+
+    auto_detect = read_cfg.get("auto_detect")
+    if auto_detect is not None:
+        opts.append(f"auto_detect={'true' if bool(auto_detect) else 'false'}")
+
+    strict_mode = read_cfg.get("strict_mode")
+    if strict_mode is not None:
+        opts.append(f"strict_mode={'true' if bool(strict_mode) else 'false'}")
+
+    ignore_errors = read_cfg.get("ignore_errors")
+    if ignore_errors is not None:
+        opts.append(f"ignore_errors={'true' if bool(ignore_errors) else 'false'}")
+
+    null_padding = read_cfg.get("null_padding")
+    if null_padding is not None:
+        opts.append(f"null_padding={'true' if bool(null_padding) else 'false'}")
+
+    parallel = read_cfg.get("parallel")
+    if parallel is not None:
+        opts.append(f"parallel={'true' if bool(parallel) else 'false'}")
+
+    quote = read_cfg.get("quote")
+    if quote is not None:
+        opts.append(f"quote='{sql_str(str(quote))}'")
+
+    escape = read_cfg.get("escape")
+    if escape is not None:
+        opts.append(f"escape='{sql_str(str(escape))}'")
+
+    comment = read_cfg.get("comment")
+    if comment is not None:
+        opts.append(f"comment='{sql_str(str(comment))}'")
+
+    max_line_size = read_cfg.get("max_line_size")
+    if max_line_size is not None:
+        opts.append(f"max_line_size={int(max_line_size)}")
+
+    columns = read_cfg.get("columns")
+    if columns:
+        if isinstance(columns, dict):
+            cols_sql = ", ".join(
+                [f"'{sql_str(name)}': '{sql_str(dtype)}'" for name, dtype in columns.items()]
+            )
+            opts.append(f"columns={{ {cols_sql} }}")
+
+    return opts

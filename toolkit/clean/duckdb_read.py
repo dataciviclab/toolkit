@@ -12,12 +12,12 @@ import yaml
 from toolkit.core.csv_read import (
     READ_SELECTION_KEYS,
     READ_SOURCE_MODES,
+    csv_read_option_strings,
     filter_suggested_format_keys,
     merge_read_cfg,
     normalize_encoding,
     normalize_read_cfg,
     robust_preset,
-    sql_str,
 )
 
 
@@ -143,87 +143,65 @@ def csv_trim_projection(columns: dict[str, str]) -> str:
     return ", ".join(exprs)
 
 
-def _csv_read_options(read_cfg: dict[str, Any]) -> tuple[list[str], dict[str, Any], dict[str, str] | None]:
-    delim = read_cfg.get("delim")
-    encoding = normalize_encoding(read_cfg.get("encoding"))
-    decimal = read_cfg.get("decimal")
+def _csv_read_options(
+    read_cfg: dict[str, Any],
+) -> tuple[list[str], dict[str, Any], dict[str, str] | None]:
+    """Build DuckDB read_csv options, track params, extract source columns.
+
+    Delegates the option-string building to the shared
+    ``csv_read_option_strings`` in ``core/csv_read.py``.
+    The header/skip override logic (triggered when explicit columns are
+    provided) stays here because it is a runtime concern specific to the
+    clean layer.
+    """
     header = read_cfg.get("header", True)
     skip = read_cfg.get("skip")
-    nullstr = read_cfg.get("nullstr")
-    auto_detect = read_cfg.get("auto_detect")
-    strict_mode = read_cfg.get("strict_mode")
-    ignore_errors = read_cfg.get("ignore_errors")
-    null_padding = read_cfg.get("null_padding")
-    parallel = read_cfg.get("parallel")
-    quote = read_cfg.get("quote")
-    escape = read_cfg.get("escape")
-    comment = read_cfg.get("comment")
     columns = read_cfg.get("columns")
 
-    opts = ["union_by_name=true"]
-    params_used: dict[str, Any] = {}
+    source_columns = dict(columns) if columns else None
 
-    if delim is not None:
-        opts.append(f"sep='{sql_str(delim)}'")
-        params_used["delim"] = delim
-    if encoding is not None:
-        opts.append(f"encoding='{sql_str(encoding)}'")
-        params_used["encoding"] = encoding
-    if decimal is not None:
-        opts.append(f"decimal_separator='{sql_str(decimal)}'")
-        params_used["decimal"] = decimal
-    if nullstr is not None:
-        if isinstance(nullstr, list):
-            xs = ", ".join([f"'{sql_str(x)}'" for x in nullstr])
-            opts.append(f"nullstr=[{xs}]")
-        else:
-            opts.append(f"nullstr='{sql_str(nullstr)}'")
-        params_used["nullstr"] = nullstr
-    if auto_detect is not None:
-        opts.append(f"auto_detect={'true' if bool(auto_detect) else 'false'}")
-        params_used["auto_detect"] = bool(auto_detect)
-    if strict_mode is not None:
-        opts.append(f"strict_mode={'true' if bool(strict_mode) else 'false'}")
-        params_used["strict_mode"] = bool(strict_mode)
-    if ignore_errors is not None:
-        opts.append(f"ignore_errors={'true' if bool(ignore_errors) else 'false'}")
-        params_used["ignore_errors"] = bool(ignore_errors)
-    if null_padding is not None:
-        opts.append(f"null_padding={'true' if bool(null_padding) else 'false'}")
-        params_used["null_padding"] = bool(null_padding)
-    if parallel is not None:
-        opts.append(f"parallel={'true' if bool(parallel) else 'false'}")
-        params_used["parallel"] = bool(parallel)
-    if quote is not None:
-        opts.append(f"quote='{sql_str(quote)}'")
-        params_used["quote"] = quote
-    if escape is not None:
-        opts.append(f"escape='{sql_str(escape)}'")
-        params_used["escape"] = escape
-    if comment is not None:
-        opts.append(f"comment='{sql_str(comment)}'")
-        params_used["comment"] = comment
-
-    source_columns = None
-    if columns:
-        source_columns = dict(columns)
-        cols_sql = ", ".join(
-            [f"'{sql_str(name)}': '{sql_str(dtype)}'" for name, dtype in source_columns.items()]
-        )
-        opts.append(f"columns={{ {cols_sql} }}")
-        params_used["columns"] = dict(source_columns)
-
+    # Runtime override: when explicit columns are set, force header=false
+    # and bump skip by 1 so the header row is consumed as data.
     parser_header = bool(header)
     parser_skip = int(skip) if skip is not None else None
     if source_columns and parser_header:
         parser_header = False
         parser_skip = (parser_skip or 0) + 1
 
+    # Build the shared option strings, then prepend union_by_name and
+    # append header/skip (which are layer-specific).
+    opts = ["union_by_name=true"] + csv_read_option_strings(read_cfg)
     opts.append(f"header={'true' if parser_header else 'false'}")
-    params_used["header"] = parser_header
-
     if parser_skip is not None:
         opts.append(f"skip={parser_skip}")
+
+    # Build params_used for logging/metadata
+    params_used: dict[str, Any] = {}
+    for key in (
+        "delim",
+        "sep",
+        "encoding",
+        "decimal",
+        "nullstr",
+        "auto_detect",
+        "strict_mode",
+        "ignore_errors",
+        "null_padding",
+        "parallel",
+        "quote",
+        "escape",
+        "comment",
+        "max_line_size",
+        "columns",
+    ):
+        val = read_cfg.get(key)
+        if val is not None:
+            if key == "columns" and isinstance(val, dict):
+                params_used[key] = dict(val)
+            else:
+                params_used[key] = val
+    params_used["header"] = parser_header
+    if parser_skip is not None:
         params_used["skip"] = parser_skip
 
     return opts, params_used, source_columns
@@ -257,13 +235,11 @@ def _execute_csv_read(
         else:
             projection = ", ".join(q_ident(name) for name in source_columns)
         con.execute(
-            f"CREATE OR REPLACE VIEW raw_input AS "
-            f"SELECT {projection} FROM raw_input_source;"
+            f"CREATE OR REPLACE VIEW raw_input AS SELECT {projection} FROM raw_input_source;"
         )
     else:
         con.execute(
-            f"CREATE OR REPLACE VIEW raw_input AS "
-            f"SELECT * FROM read_csv([{paths}], {opt_sql});"
+            f"CREATE OR REPLACE VIEW raw_input AS SELECT * FROM read_csv([{paths}], {opt_sql});"
         )
     params_used["trim_whitespace"] = bool(trim_whitespace)
     return params_used
@@ -327,13 +303,10 @@ def _execute_normalized_csv_read(
 ) -> dict[str, Any]:
     columns = read_cfg.get("columns")
     if not columns:
-        raise ValueError(
-            "clean.read.normalize_rows_to_columns=true requires clean.read.columns"
-        )
+        raise ValueError("clean.read.normalize_rows_to_columns=true requires clean.read.columns")
 
     frames = [
-        _load_normalized_csv_frame(input_file, read_cfg, columns)
-        for input_file in input_files
+        _load_normalized_csv_frame(input_file, read_cfg, columns) for input_file in input_files
     ]
     combined = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
     con.register("raw_input_df", combined)
@@ -364,15 +337,11 @@ def _execute_parquet_read(
 ) -> ReadInfo:
     if len(input_files) == 1:
         con.execute(
-            f"CREATE VIEW raw_input AS "
-            f"SELECT * FROM read_parquet('{sql_path(input_files[0])}');"
+            f"CREATE VIEW raw_input AS SELECT * FROM read_parquet('{sql_path(input_files[0])}');"
         )
     else:
         paths = quote_list(input_files)
-        con.execute(
-            f"CREATE VIEW raw_input AS "
-            f"SELECT * FROM read_parquet([{paths}]);"
-        )
+        con.execute(f"CREATE VIEW raw_input AS SELECT * FROM read_parquet([{paths}]);")
     return ReadInfo(source="parquet", params_used={})
 
 
@@ -392,7 +361,9 @@ def _normalize_excel_sheet_name(value: Any) -> str | int:
 
 
 def _trim_excel_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    return df.apply(lambda column: column.map(lambda value: value.strip() if isinstance(value, str) else value))
+    return df.apply(
+        lambda column: column.map(lambda value: value.strip() if isinstance(value, str) else value)
+    )
 
 
 def _load_excel_frame(

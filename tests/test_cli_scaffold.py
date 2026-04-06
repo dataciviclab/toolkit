@@ -2,7 +2,6 @@ from pathlib import Path
 import json
 import shutil
 
-import pytest
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app

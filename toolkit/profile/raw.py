@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import duckdb
-from toolkit.core.csv_read import csv_read_option_strings, normalize_read_cfg, robust_preset
+from toolkit.core.csv_read import (
+    csv_read_option_strings,
+    normalize_read_cfg,
+    robust_preset,
+    sql_str,
+)
 from toolkit.core.io import write_json_atomic
 
 COMMON_DELIMS = [";", ",", "\t", "|"]
@@ -140,9 +145,19 @@ def _build_read_csv_opts(read_cfg: Dict[str, Any]) -> str:
     """Build DuckDB read_csv option string from a config dict.
 
     Delegates to the shared ``csv_read_option_strings`` in ``core/csv_read.py``
-    and prepends the ``union_by_name=true`` flag expected by the profiler.
+    for the common option set, then appends ``header`` and ``skip`` which are
+    intentionally excluded from the shared function (they are call-site
+    specific — see ``duckdb_read._csv_read_options``).
     """
     opts = ["union_by_name=true"] + csv_read_option_strings(read_cfg)
+
+    header = read_cfg.get("header", True)
+    opts.append(f"header={'true' if bool(header) else 'false'}")
+
+    skip_n = read_cfg.get("skip")
+    if skip_n is not None:
+        opts.append(f"skip={int(skip_n)}")
+
     return ", ".join(opts)
 
 

@@ -3,6 +3,7 @@ from pathlib import Path
 import toolkit.profile.raw as profile_raw_module
 from toolkit.cli.cmd_profile import write_suggested_read_yml
 from toolkit.profile.raw import (
+    _build_read_csv_opts,
     build_suggested_read_cfg,
     profile_raw,
     sniff_delim,
@@ -95,3 +96,22 @@ def test_profile_raw_writes_suggested_read_even_when_duckdb_sniff_fails(
     assert 'decimal: ","' in suggested
     assert 'encoding: "utf-8"' in suggested
     assert "header: true" in suggested
+
+
+def test_build_read_csv_opts_keeps_header_and_skip_for_profiler():
+    opts = _build_read_csv_opts(
+        {
+            "delim": ";",
+            "encoding": "utf8",
+            "header": False,
+            "skip": 2,
+            "max_line_size": 4096,
+        }
+    )
+
+    assert "union_by_name=true" in opts
+    assert "sep=';'" in opts
+    assert "encoding='utf-8'" in opts
+    assert "max_line_size=4096" in opts
+    assert "header=false" in opts
+    assert "skip=2" in opts

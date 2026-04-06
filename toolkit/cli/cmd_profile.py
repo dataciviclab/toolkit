@@ -153,10 +153,13 @@ def profile(
         policy = resolve_artifact_policy(cfg.output)
 
         prof = profile_raw(raw_dir, cfg.dataset, year, read_cfg=(cfg.clean or {}).get("read"))
+        # Explicit `toolkit profile raw` should always emit the canonical profile JSON.
+        # This keeps the assist workflow usable even when `output.artifacts: minimal`
+        # would otherwise skip profile artifacts during normal pipeline runs.
         paths = write_raw_profile(
             out_dir,
             prof,
-            write_canonical=should_write("profile", "raw_profile", policy, cfg),
+            write_canonical=True,
             write_legacy_alias=should_write("profile", "profile_alias", policy, cfg),
         )
 

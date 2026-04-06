@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import duckdb
-from toolkit.core.csv_read import normalize_read_cfg, robust_preset, sql_str
+from toolkit.core.csv_read import (
+    csv_read_option_strings,
+    normalize_read_cfg,
+    robust_preset,
+    sql_str,
+)
 from toolkit.core.io import write_json_atomic
 
 COMMON_DELIMS = [";", ",", "\t", "|"]
@@ -137,19 +142,14 @@ def build_profile_hints(filepath: Path) -> Dict[str, Any]:
 
 
 def _build_read_csv_opts(read_cfg: Dict[str, Any]) -> str:
-    opts = ["union_by_name=true"]
+    """Build DuckDB read_csv option string from a config dict.
 
-    sep = read_cfg.get("sep") or read_cfg.get("delim")
-    if sep is not None:
-        opts.append(f"sep='{sql_str(str(sep))}'")
-
-    encoding = read_cfg.get("encoding")
-    if encoding is not None:
-        opts.append(f"encoding='{sql_str(str(encoding))}'")
-
-    decimal_sep = read_cfg.get("decimal")
-    if decimal_sep is not None:
-        opts.append(f"decimal_separator='{sql_str(str(decimal_sep))}'")
+    Delegates to the shared ``csv_read_option_strings`` in ``core/csv_read.py``
+    for the common option set, then appends ``header`` and ``skip`` which are
+    intentionally excluded from the shared function (they are call-site
+    specific — see ``duckdb_read._csv_read_options``).
+    """
+    opts = ["union_by_name=true"] + csv_read_option_strings(read_cfg)
 
     header = read_cfg.get("header", True)
     opts.append(f"header={'true' if bool(header) else 'false'}")
@@ -157,38 +157,6 @@ def _build_read_csv_opts(read_cfg: Dict[str, Any]) -> str:
     skip_n = read_cfg.get("skip")
     if skip_n is not None:
         opts.append(f"skip={int(skip_n)}")
-
-    auto_detect = read_cfg.get("auto_detect")
-    if auto_detect is not None:
-        opts.append(f"auto_detect={'true' if bool(auto_detect) else 'false'}")
-
-    strict_mode = read_cfg.get("strict_mode")
-    if strict_mode is not None:
-        opts.append(f"strict_mode={'true' if bool(strict_mode) else 'false'}")
-
-    ignore_errors = read_cfg.get("ignore_errors")
-    if ignore_errors is not None:
-        opts.append(f"ignore_errors={'true' if bool(ignore_errors) else 'false'}")
-
-    null_padding = read_cfg.get("null_padding")
-    if null_padding is not None:
-        opts.append(f"null_padding={'true' if bool(null_padding) else 'false'}")
-
-    max_line_size = read_cfg.get("max_line_size")
-    if max_line_size is not None:
-        opts.append(f"max_line_size={int(max_line_size)}")
-
-    quote = read_cfg.get("quote")
-    if quote is not None:
-        opts.append(f"quote='{sql_str(str(quote))}'")
-
-    escape = read_cfg.get("escape")
-    if escape is not None:
-        opts.append(f"escape='{sql_str(str(escape))}'")
-
-    comment = read_cfg.get("comment")
-    if comment is not None:
-        opts.append(f"comment='{sql_str(str(comment))}'")
 
     return ", ".join(opts)
 
@@ -388,7 +356,9 @@ def _suggest_normalize(colname: str, detected_type: str) -> Optional[List[str]]:
     return None
 
 
-def _build_mapping_suggestions(columns: List[str], sample_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _build_mapping_suggestions(
+    columns: List[str], sample_rows: List[Dict[str, Any]]
+) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     for col in columns:
         vals = _sample_values(sample_rows, col, limit=30)
@@ -418,8 +388,7 @@ def _profile_view(
 ) -> None:
     opt_sql = _build_read_csv_opts(effective_read_cfg)
     con.execute(
-        f"CREATE OR REPLACE VIEW v AS "
-        f"SELECT * FROM read_csv('{sql_str(str(file0))}', {opt_sql});"
+        f"CREATE OR REPLACE VIEW v AS SELECT * FROM read_csv('{sql_str(str(file0))}', {opt_sql});"
     )
 
 
@@ -477,7 +446,9 @@ class RawProfile:
     warnings: List[str]
 
 
-def profile_raw(raw_dir: Path, dataset: str, year: int, read_cfg: Optional[Dict[str, Any]] = None) -> RawProfile:
+def profile_raw(
+    raw_dir: Path, dataset: str, year: int, read_cfg: Optional[Dict[str, Any]] = None
+) -> RawProfile:
     files = _raw_files(raw_dir)
     if not files:
         raise FileNotFoundError(f"No RAW files found in {raw_dir}")
@@ -502,7 +473,9 @@ def profile_raw(raw_dir: Path, dataset: str, year: int, read_cfg: Optional[Dict[
     robust_read_suggested = False
 
     if skip:
-        warnings.append("header_preamble_detected: first non-empty line looks like a title row, consider skip: 1")
+        warnings.append(
+            "header_preamble_detected: first non-empty line looks like a title row, consider skip: 1"
+        )
 
     skip_n = int(effective_read_cfg.get("skip") or 0)
     header_line = _read_header_line(

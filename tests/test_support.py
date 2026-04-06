@@ -108,14 +108,14 @@ class TestSupportExpectedMartOutputs:
         assert outputs[0].name == "alpha.parquet"
         assert outputs[1].name == "beta.parquet"
 
-    def test_no_tables_returns_empty(self):
-        ds = Path("/tmp/fake")
+    def test_no_tables_returns_empty(self, tmp_path: Path):
+        ds = tmp_path / "fake"
         cfg = FakeConfig(root=ds, dataset="ds", years=[2024], mart={"tables": []})
         outputs = _support_expected_mart_outputs(cfg, 2024)
         assert outputs == []
 
-    def test_malformed_table_entry_skipped(self):
-        ds = Path("/tmp/fake")
+    def test_malformed_table_entry_skipped(self, tmp_path: Path):
+        ds = tmp_path / "fake"
         cfg = FakeConfig(root=ds, dataset="ds", years=[2024], mart={"tables": ["not_a_dict", {}]})
         outputs = _support_expected_mart_outputs(cfg, 2024)
         assert outputs == []
@@ -233,7 +233,7 @@ class TestResolveSupportPayloadsErrors:
         assert "2023" in msg
 
     def test_multiple_years_first_missing_raises(self, tmp_path: Path):
-        """If first year has outputs but second doesn't, should raise on second."""
+        """If second year has outputs but first doesn't, should raise on first."""
         config_path = _make_support_dataset(tmp_path, years=[2023, 2024], create_mart_outputs=False)
         ds_dir = config_path.parent
         mart_dir_2024 = ds_dir / "data" / "mart" / "support_ds" / "2024"

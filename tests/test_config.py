@@ -38,6 +38,59 @@ mart: {}
     assert cfg.root_source == "base_dir_fallback"
 
 
+def test_load_config_exposes_optional_time_coverage(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+root: null
+dataset:
+  name: demo
+  years: [2024]
+  time_coverage:
+    mode: full_series
+    start_year: 2020
+    end_year: 2025
+raw: {}
+clean: {}
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_config(yml)
+
+    assert cfg.years == [2024]
+    assert cfg.time_coverage is not None
+    assert cfg.time_coverage.mode == "full_series"
+    assert cfg.time_coverage.start_year == 2020
+    assert cfg.time_coverage.end_year == 2025
+
+
+def test_load_config_rejects_invalid_time_coverage_range(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+root: null
+dataset:
+  name: demo
+  years: [2024]
+  time_coverage:
+    mode: full_series
+    start_year: 2025
+    end_year: 2020
+raw: {}
+clean: {}
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as e:
+        load_config(yml)
+
+    assert "dataset.time_coverage.end_year must be >= start_year" in str(e.value)
+
+
 def test_load_config_missing_dataset_name(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(

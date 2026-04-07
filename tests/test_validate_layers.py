@@ -146,14 +146,18 @@ def test_check_transitions_warns_on_row_drop_over_threshold_and_removed_columns(
         }
     ]
 
-    warnings = _check_transitions(
+    report = _check_transitions(
         transition_profiles,
         TransitionConfig(max_row_drop_pct=20, warn_removed_columns=True),
     )
 
-    assert len(warnings) == 2
-    assert any("row drop 30.0%" in warning for warning in warnings)
-    assert any("columns removed from clean" in warning for warning in warnings)
+    assert report["warnings_count"] == 2
+    assert len(report["warnings"]) == 2
+    assert report["profiles_count"] == 1
+    assert any("row drop 30.0%" in warning for warning in report["warning_messages"])
+    assert any("columns removed from clean" in warning for warning in report["warning_messages"])
+    assert any(item["kind"] == "row_drop_pct" for item in report["warnings"])
+    assert any(item["kind"] == "removed_columns" for item in report["warnings"])
 
 
 def test_check_transitions_respects_optional_threshold_and_removed_columns_toggle() -> None:
@@ -170,14 +174,16 @@ def test_check_transitions_respects_optional_threshold_and_removed_columns_toggl
         transition_profiles,
         TransitionConfig(max_row_drop_pct=None, warn_removed_columns=False),
     )
-    assert no_threshold == []
+    assert no_threshold["warning_messages"] == []
+    assert no_threshold["warnings"] == []
 
     removed_only = _check_transitions(
         transition_profiles,
         TransitionConfig(max_row_drop_pct=None, warn_removed_columns=True),
     )
-    assert len(removed_only) == 1
-    assert "columns removed from clean" in removed_only[0]
+    assert len(removed_only["warnings"]) == 1
+    assert removed_only["warnings"][0]["kind"] == "removed_columns"
+    assert "columns removed from clean" in removed_only["warning_messages"][0]
 
 
 def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Path):
@@ -227,6 +233,14 @@ def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Pa
     assert len(report["warnings"]) == 2
     assert any("row drop 30.0%" in warning for warning in report["warnings"])
     assert any("columns removed from clean" in warning for warning in report["warnings"])
+    assert report["transition"]["profiles_count"] == 1
+    assert report["transition"]["warnings_count"] == 2
+    assert report["transition"]["config"] == {
+        "max_row_drop_pct": 20.0,
+        "warn_removed_columns": True,
+    }
+    assert any(item["kind"] == "row_drop_pct" for item in report["transition"]["warnings"])
+    assert any(item["kind"] == "removed_columns" for item in report["transition"]["warnings"])
 
 
 def test_validate_cross_outputs_required_tables(tmp_path: Path):

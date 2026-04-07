@@ -37,6 +37,58 @@ mart: {}
     assert cfg.root == tmp_path
     assert cfg.root_source == "base_dir_fallback"
 
+
+def test_load_config_parses_mart_transition_config(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+root: null
+dataset:
+  name: demo
+  years: [2024]
+raw: {}
+clean: {}
+mart:
+  validate:
+    transition:
+      max_row_drop_pct: 12.5
+      warn_removed_columns: "false"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_config(yml)
+
+    assert cfg.mart["validate"]["transition"] == {
+        "max_row_drop_pct": 12.5,
+        "warn_removed_columns": False,
+    }
+
+
+def test_load_config_model_rejects_invalid_mart_transition_bool(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+root: null
+dataset:
+  name: demo
+  years: [2024]
+raw: {}
+clean: {}
+mart:
+  validate:
+    transition:
+      warn_removed_columns: "maybe"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as e:
+        load_config_model(yml)
+
+    assert "mart.validate.transition.warn_removed_columns" in str(e.value)
+
+
 def test_load_config_missing_dataset_name(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(

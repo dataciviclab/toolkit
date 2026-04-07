@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 from toolkit.core.config_models import (
-    TimeCoverage,
     ToolkitConfigModel,
     ensure_str_list as _ensure_str_list,
     load_config_model,
@@ -21,7 +20,6 @@ class ToolkitConfig:
     root_source: str
     dataset: str
     years: list[int]
-    time_coverage: TimeCoverage | None
     raw: dict[str, Any]
     clean: dict[str, Any]
     mart: dict[str, Any]
@@ -98,7 +96,6 @@ def load_config(
         root_source=model.root_source,
         dataset=model.dataset.name,
         years=list(model.dataset.years),
-        time_coverage=model.dataset.time_coverage,
         raw=model.raw.model_dump(mode="python", exclude_none=True, exclude_unset=True),
         clean=_compat_clean(model),
         mart=_compat_mart(model),

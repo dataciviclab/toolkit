@@ -38,7 +38,7 @@ def _check_transitions(
                 warnings.append(
                     f"[transition:{target_name}] row drop {drop_pct:.1f}% "
                     f"exceeds threshold {transition_cfg.max_row_drop_pct}% "
-                    f"(clean={source_rows} → mart={target_rows})"
+                    f"(clean={source_rows} -> mart={target_rows})"
                 )
 
         if transition_cfg.warn_removed_columns and removed:

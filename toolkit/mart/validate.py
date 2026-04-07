@@ -6,7 +6,7 @@ from typing import Any
 
 import duckdb
 
-from toolkit.core.config_models import MartTableRuleConfig, MartValidationSpec
+from toolkit.core.config_models import MartTableRuleConfig, MartValidationSpec, TransitionConfig
 from toolkit.core.metadata import write_layer_manifest
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.validation import (
@@ -15,6 +15,38 @@ from toolkit.core.validation import (
     required_columns_check,
     write_validation_json,
 )
+
+
+def _check_transitions(
+    transition_profiles: list[dict],
+    transition_cfg: TransitionConfig,
+) -> list[str]:
+    warnings: list[str] = []
+    for profile in transition_profiles:
+        target_name = profile.get("target_name", "?")
+        source_rows = profile.get("source_row_count") or 0
+        target_rows = profile.get("target_row_count") or 0
+        removed = profile.get("removed_columns") or []
+
+        if (
+            transition_cfg.max_row_drop_pct is not None
+            and source_rows > 0
+            and target_rows < source_rows
+        ):
+            drop_pct = (source_rows - target_rows) / source_rows * 100
+            if drop_pct > transition_cfg.max_row_drop_pct:
+                warnings.append(
+                    f"[transition:{target_name}] row drop {drop_pct:.1f}% "
+                    f"exceeds threshold {transition_cfg.max_row_drop_pct}% "
+                    f"(clean={source_rows} → mart={target_rows})"
+                )
+
+        if transition_cfg.warn_removed_columns and removed:
+            warnings.append(
+                f"[transition:{target_name}] columns removed from clean: {removed}"
+            )
+
+    return warnings
 
 
 def _q_ident(col: str) -> str:
@@ -238,8 +270,20 @@ def run_mart_validation(cfg, year: int, logger) -> dict[str, Any]:
         declared_tables=declared_tables,
     )
 
-    report = write_validation_json(Path(mart_dir) / "_validate" / "mart_validation.json", result)
     metadata = json.loads((mart_dir / "metadata.json").read_text(encoding="utf-8"))
+    transition_warnings = _check_transitions(
+        metadata.get("transition_profiles") or [],
+        spec.validate.transition,
+    )
+    if transition_warnings:
+        result = ValidationResult(
+            ok=result.ok,
+            errors=result.errors,
+            warnings=result.warnings + transition_warnings,
+            summary=result.summary,
+        )
+
+    report = write_validation_json(Path(mart_dir) / "_validate" / "mart_validation.json", result)
     write_layer_manifest(
         mart_dir,
         metadata_path="metadata.json",

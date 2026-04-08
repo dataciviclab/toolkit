@@ -106,6 +106,7 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
             payload = _toolkit_json(["inspect", "schema-diff", "--config", str(config), "--json"])
         except Exception as exc:
             raise ToolkitClientError(f"show_schema(raw) fallito per {config}: {exc}") from exc
+        # `schema-diff` restituisce l'intero payload raw; il filtro per anno resta qui lato client.
         entries = [e for e in payload.get("entries", []) if year is None or e.get("year") == year]
         return {
             "dataset": payload.get("dataset"),

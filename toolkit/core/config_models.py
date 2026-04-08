@@ -93,11 +93,31 @@ def ensure_str_list(value: Any, field_name: str) -> list[str]:
     raise ValueError(f"{field_name} must be a string or a list of strings")
 
 
+class TimeCoverage(BaseModel):
+    """Optional metadata per dichiarare la copertura temporale reale dei dati.
+    Questo campo e' puramente dichiarativo: non cambia il comportamento di run,
+    path o partizionamento del toolkit.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["full_series"] = "full_series"
+    start_year: int
+    end_year: int
+
+    @model_validator(mode="after")
+    def _validate_year_range(self) -> "TimeCoverage":
+        if self.end_year < self.start_year:
+            raise ValueError("dataset.time_coverage.end_year must be >= start_year")
+        return self
+
+
 class DatasetBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
     years: list[int]
+    time_coverage: TimeCoverage | None = None
 
 
 class SupportDatasetConfig(BaseModel):

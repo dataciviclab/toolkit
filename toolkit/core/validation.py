@@ -14,6 +14,7 @@ class ValidationResult:
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     summary: dict[str, Any] = field(default_factory=dict)
+    sections: dict[str, Any] = field(default_factory=dict)
 
     def ensure(self) -> "ValidationResult":
         if not self.ok:
@@ -30,6 +31,7 @@ def write_validation_json(path: str | Path, result: ValidationResult) -> Path:
         "warnings": result.warnings,
         "summary": result.summary,
     }
+    payload.update(result.sections)
     write_json_atomic(out, payload)
     return out
 

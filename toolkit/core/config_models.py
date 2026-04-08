@@ -416,10 +416,23 @@ class MartTableRuleConfig(BaseModel):
         return ensure_str_list(value, f"mart.validate.table_rules.*.{info.field_name}")
 
 
+class TransitionConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_row_drop_pct: float | None = None
+    warn_removed_columns: bool = True
+
+    @field_validator("warn_removed_columns", mode="before")
+    @classmethod
+    def _parse_warn_removed_columns(cls, value: Any) -> bool:
+        return parse_bool(value, "mart.validate.transition.warn_removed_columns")
+
+
 class MartValidateConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     table_rules: dict[str, MartTableRuleConfig] = Field(default_factory=dict)
+    transition: TransitionConfig = Field(default_factory=TransitionConfig)
 
 
 class MartConfig(BaseModel):

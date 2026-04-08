@@ -8,7 +8,8 @@ import duckdb
 from toolkit.raw.validate import validate_raw_output
 from toolkit.clean.validate import validate_clean
 from toolkit.cross.validate import run_cross_validation, validate_cross_outputs
-from toolkit.mart.validate import validate_mart
+from toolkit.core.config_models import TransitionConfig
+from toolkit.mart.validate import _check_transitions, run_mart_validation, validate_mart
 from toolkit.core.validation import write_validation_json
 
 
@@ -133,6 +134,113 @@ def test_validate_mart_report_uses_root_relative_dir(tmp_path: Path):
         field="dir",
         expected="data/mart/demo/2024",
     )
+
+
+def test_check_transitions_warns_on_row_drop_over_threshold_and_removed_columns() -> None:
+    transition_profiles = [
+        {
+            "target_name": "mart_demo",
+            "source_row_count": 100,
+            "target_row_count": 70,
+            "removed_columns": ["col_a", "col_b"],
+        }
+    ]
+
+    report = _check_transitions(
+        transition_profiles,
+        TransitionConfig(max_row_drop_pct=20, warn_removed_columns=True),
+    )
+
+    assert report["warnings_count"] == 2
+    assert len(report["warnings"]) == 2
+    assert report["profiles_count"] == 1
+    assert any("row drop 30.0%" in warning for warning in report["warning_messages"])
+    assert any("columns removed from clean" in warning for warning in report["warning_messages"])
+    assert any(item["kind"] == "row_drop_pct" for item in report["warnings"])
+    assert any(item["kind"] == "removed_columns" for item in report["warnings"])
+
+
+def test_check_transitions_respects_optional_threshold_and_removed_columns_toggle() -> None:
+    transition_profiles = [
+        {
+            "target_name": "mart_demo",
+            "source_row_count": 100,
+            "target_row_count": 70,
+            "removed_columns": ["col_a"],
+        }
+    ]
+
+    no_threshold = _check_transitions(
+        transition_profiles,
+        TransitionConfig(max_row_drop_pct=None, warn_removed_columns=False),
+    )
+    assert no_threshold["warning_messages"] == []
+    assert no_threshold["warnings"] == []
+
+    removed_only = _check_transitions(
+        transition_profiles,
+        TransitionConfig(max_row_drop_pct=None, warn_removed_columns=True),
+    )
+    assert len(removed_only["warnings"]) == 1
+    assert removed_only["warnings"][0]["kind"] == "removed_columns"
+    assert "columns removed from clean" in removed_only["warning_messages"][0]
+
+
+def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Path):
+    root = tmp_path / "root"
+    mart_dir = root / "data" / "mart" / "demo" / "2024"
+    mart_dir.mkdir(parents=True, exist_ok=True)
+    _write_parquet(mart_dir / "mart_demo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
+
+    (mart_dir / "metadata.json").write_text(
+        json.dumps(
+            {
+                "outputs": [{"name": "mart_demo", "path": "mart_demo.parquet"}],
+                "transition_profiles": [
+                    {
+                        "target_name": "mart_demo",
+                        "source_row_count": 100,
+                        "target_row_count": 70,
+                        "removed_columns": ["legacy_col"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = SimpleNamespace(
+        root=root,
+        dataset="demo",
+        mart={
+            "tables": [{"name": "mart_demo", "sql": "sql/mart_demo.sql"}],
+            "required_tables": ["mart_demo"],
+            "validate": {
+                "transition": {
+                    "max_row_drop_pct": 20,
+                    "warn_removed_columns": True,
+                }
+            },
+        },
+    )
+
+    summary = run_mart_validation(cfg, 2024, logger=SimpleNamespace(info=lambda *args, **kwargs: None))
+
+    assert summary["passed"] is True
+    assert summary["warnings_count"] == 2
+
+    report = json.loads((mart_dir / "_validate" / "mart_validation.json").read_text(encoding="utf-8"))
+    assert len(report["warnings"]) == 2
+    assert any("row drop 30.0%" in warning for warning in report["warnings"])
+    assert any("columns removed from clean" in warning for warning in report["warnings"])
+    assert report["transition"]["profiles_count"] == 1
+    assert report["transition"]["warnings_count"] == 2
+    assert report["transition"]["config"] == {
+        "max_row_drop_pct": 20.0,
+        "warn_removed_columns": True,
+    }
+    assert any(item["kind"] == "row_drop_pct" for item in report["transition"]["warnings"])
+    assert any(item["kind"] == "removed_columns" for item in report["transition"]["warnings"])
 
 
 def test_validate_cross_outputs_required_tables(tmp_path: Path):

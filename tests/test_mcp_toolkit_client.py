@@ -25,4 +25,4 @@ def test_mcp_toolkit_client_works_from_repo_layout(tmp_path: Path, monkeypatch) 
 
     state_payload = run_state(str(config_path), 2022)
     assert state_payload["dataset"] == "project_example"
-    assert state_payload["run_dir"].endswith("project_example\\2022")
+    assert Path(state_payload["run_dir"]).parts[-2:] == ("project_example", "2022")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -12,9 +13,7 @@ from toolkit.core.config import load_config
 
 TOOLKIT_ROOT = Path(__file__).resolve().parents[2]
 WORKSPACE_ROOT = Path(os.environ.get("DATACIVICLAB_WORKSPACE", str(TOOLKIT_ROOT.parent))).expanduser()
-TOOLKIT_PYTHON = Path(
-    os.environ.get("DATACIVICLAB_TOOLKIT_PYTHON", str(TOOLKIT_ROOT / ".venv" / "Scripts" / "python.exe"))
-)
+TOOLKIT_PYTHON = Path(os.environ.get("DATACIVICLAB_TOOLKIT_PYTHON", sys.executable))
 
 
 class ToolkitClientError(RuntimeError):
@@ -170,4 +169,3 @@ def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
         "latest_run": latest_run,
         "latest_run_record": latest_payload,
     }
-

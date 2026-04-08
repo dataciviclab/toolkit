@@ -28,13 +28,15 @@ Esempio `.mcp.json`:
 
 ```json
 "toolkit": {
-  "command": "C:\\Users\\gabry\\dev\\dataciviclab-workspace\\toolkit\\.venv\\Scripts\\python.exe",
+  "command": "C:\\path\\to\\toolkit\\.venv\\Scripts\\python.exe",
   "args": [
     "-m",
     "toolkit.mcp.server"
   ]
 }
 ```
+
+Sostituire il path del `command` con il Python reale del clone locale che usera' il server.
 
 ## Note tecniche
 

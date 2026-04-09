@@ -126,6 +126,22 @@ def test_run_clean_accepts_csv_gz_inputs(tmp_path: Path, monkeypatch):
     assert seen["input_files"] == [gz_file]
 
 
+def test_run_clean_accepts_nt_gz_inputs(tmp_path: Path, monkeypatch):
+    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    nt_gz_file = raw_dir / "bathw_2024.nt.gz"
+    nt_gz_file.write_bytes(b"fake-nt-gz-content")
+
+    sql_path = _write_clean_sql(tmp_path)
+    seen = _run_clean_capture_inputs(
+        monkeypatch,
+        tmp_path,
+        {"sql": str(sql_path), "read": {}},
+    )
+
+    assert seen["input_files"] == [nt_gz_file]
+
+
 def test_run_clean_accepts_xlsx_inputs(tmp_path: Path, monkeypatch):
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     raw_dir.mkdir(parents=True, exist_ok=True)

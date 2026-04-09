@@ -30,6 +30,7 @@ SUPPORTED_INPUT_EXTS = {
     ".tsv.gz",
     ".txt.gz",
     ".xlsx",
+    ".nt.gz",
 }
 
 

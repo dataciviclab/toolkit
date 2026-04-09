@@ -71,6 +71,18 @@ def test_list_input_files_accepts_csv_gz_and_excludes_php(tmp_path: Path):
     assert php_file not in files
 
 
+def test_list_input_files_accepts_nt_gz(tmp_path: Path):
+    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+
+    nt_gz_file = raw_dir / "bathw_2024.nt.gz"
+    nt_gz_file.write_bytes(b"fake-nt-gz-content")
+
+    files = list_raw_candidates(str(tmp_path), "demo", 2024)
+
+    assert nt_gz_file in files
+
+
 def test_select_inputs_explicit_requires_include(tmp_path: Path) -> None:
     candidate = _write_csv(tmp_path / "input.csv", "a\n1\n")
 
@@ -112,6 +124,22 @@ def test_run_clean_accepts_csv_gz_inputs(tmp_path: Path, monkeypatch):
     )
 
     assert seen["input_files"] == [gz_file]
+
+
+def test_run_clean_accepts_nt_gz_inputs(tmp_path: Path, monkeypatch):
+    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    nt_gz_file = raw_dir / "bathw_2024.nt.gz"
+    nt_gz_file.write_bytes(b"fake-nt-gz-content")
+
+    sql_path = _write_clean_sql(tmp_path)
+    seen = _run_clean_capture_inputs(
+        monkeypatch,
+        tmp_path,
+        {"sql": str(sql_path), "read": {}},
+    )
+
+    assert seen["input_files"] == [nt_gz_file]
 
 
 def test_run_clean_accepts_xlsx_inputs(tmp_path: Path, monkeypatch):

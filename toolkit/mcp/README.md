@@ -7,6 +7,7 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 - `toolkit_inspect_paths(config_path, year=0)`
 - `toolkit_show_schema(config_path, layer="clean", year=0)`
 - `toolkit_run_state(config_path, year=0)`
+- `toolkit_summary(config_path, year=0)`
 
 ## Boundary
 

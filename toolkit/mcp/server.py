@@ -8,6 +8,7 @@ from .toolkit_client import (
     ToolkitClientError,
     inspect_paths as inspect_paths_impl,
     run_state as run_state_impl,
+    summary as summary_impl,
     show_schema as show_schema_impl,
 )
 
@@ -42,6 +43,10 @@ def toolkit_run_state(config_path: str, year: int = 0) -> dict[str, Any]:
     return _guard(run_state_impl, config_path, year or None)
 
 
+@mcp.tool(description="Mostra un riepilogo diagnostico minimo per un dataset config.", structured_output=True)
+def toolkit_summary(config_path: str, year: int = 0) -> dict[str, Any]:
+    return _guard(summary_impl, config_path, year or None)
+
+
 if __name__ == "__main__":
     mcp.run()
-

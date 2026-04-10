@@ -201,6 +201,8 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
     run_files = sorted(run_dir.glob("*.json")) if run_dir.exists() else []
 
     warnings: list[str] = []
+    if primary_output_file and not _exists(primary_output_path):
+        warnings.append("raw_output_missing")
     if not _exists(clean_paths.get("output")):
         warnings.append("clean_output_missing")
     if mart_outputs and missing_mart_outputs:

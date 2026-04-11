@@ -131,3 +131,55 @@ def test_ckan_fetch_rejects_package_fallback_when_resource_id_missing(monkeypatc
         assert "resource_id=99999" in str(exc)
     else:
         raise AssertionError("Expected DownloadError")
+
+
+def test_ckan_download_bytes_retries_then_succeeds(monkeypatch):
+    calls = {"n": 0}
+
+    def _fake_get(url, params=None, timeout=None, headers=None):
+        calls["n"] += 1
+        if "resource_show" in url:
+            return _FakeResponse(
+                200,
+                json_data={
+                    "success": True,
+                    "result": {"url": "https://portal.example.org/export/retry.csv"},
+                },
+                url=f"{url}?id=abc",
+            )
+        if calls["n"] < 3:
+            raise RuntimeError("temporary network error")
+        return _FakeResponse(200, content=b"ok-after-retry", url=url)
+
+    monkeypatch.setattr("toolkit.plugins.ckan.requests.get", _fake_get)
+
+    payload, origin = CkanSource(retries=3).fetch(
+        "https://portal.example.org/api/3", resource_id="abc"
+    )
+
+    assert payload == b"ok-after-retry"
+    assert origin == "https://portal.example.org/export/retry.csv"
+    assert calls["n"] == 3
+
+
+def test_ckan_download_bytes_raises_on_http_error(monkeypatch):
+    def _fake_get(url, params=None, timeout=None, headers=None):
+        if "resource_show" in url:
+            return _FakeResponse(
+                200,
+                json_data={
+                    "success": True,
+                    "result": {"url": "https://portal.example.org/export/unavailable.csv"},
+                },
+                url=f"{url}?id=abc",
+            )
+        return _FakeResponse(503, content=b"", url=url)
+
+    monkeypatch.setattr("toolkit.plugins.ckan.requests.get", _fake_get)
+
+    try:
+        CkanSource(retries=1).fetch("https://portal.example.org/api/3", resource_id="abc")
+    except DownloadError as exc:
+        assert "HTTP 503" in str(exc)
+    else:
+        raise AssertionError("Expected DownloadError")

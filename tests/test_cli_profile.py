@@ -38,7 +38,7 @@ def test_render_profile_md_includes_expected_sections() -> None:
 
 
 def test_cli_profile_raw_happy_path(tmp_path: Path, monkeypatch) -> None:
-    src = Path("project-example")
+    src = Path(__file__).resolve().parents[1] / "project-example"
     dst = tmp_path / "project-example"
     shutil.copytree(src, dst)
     shutil.rmtree(dst / "_smoke_out", ignore_errors=True)

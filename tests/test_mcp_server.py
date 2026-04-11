@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from toolkit.mcp import server as mcp_server
@@ -7,8 +9,9 @@ from toolkit.mcp.toolkit_client import ToolkitClientError
 
 
 def test_mcp_server_registers_expected_tools() -> None:
-    tools = mcp_server.mcp._tool_manager._tools
-    assert set(tools) == {
+    tools = asyncio.run(mcp_server.mcp.list_tools())
+    tool_names = {tool.name for tool in tools}
+    assert tool_names == {
         "toolkit_inspect_paths",
         "toolkit_show_schema",
         "toolkit_run_state",

@@ -2,11 +2,8 @@
 from __future__ import annotations
 
 import importlib
-import logging
 from collections.abc import Callable
 from typing import Any
-
-logger = logging.getLogger("toolkit.core.registry")
 
 
 class PluginRegistrationError(RuntimeError):

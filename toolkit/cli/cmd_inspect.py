@@ -17,7 +17,7 @@ from toolkit.core.run_context import get_run_dir, latest_run
 def _read_json(path: Path) -> dict[str, Any] | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
         return None
 
 

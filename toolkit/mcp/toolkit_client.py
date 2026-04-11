@@ -170,3 +170,87 @@ def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
         "latest_run": latest_run,
         "latest_run_record": latest_payload,
     }
+
+
+def _exists(path: str | None) -> bool:
+    if not path:
+        return False
+    return Path(path).exists()
+
+
+def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
+    config = _safe_path(config_path)
+    paths = inspect_paths(str(config), year)
+    raw_paths = paths["paths"]["raw"]
+    clean_paths = paths["paths"]["clean"]
+    mart_paths = paths["paths"]["mart"]
+    run_dir = Path(paths["paths"]["run_dir"])
+
+    raw_dir = Path(raw_paths["dir"])
+    clean_dir = Path(clean_paths["dir"])
+    mart_dir = Path(mart_paths["dir"])
+    mart_outputs = list(mart_paths.get("outputs") or [])
+    missing_mart_outputs = [output for output in mart_outputs if not _exists(output)]
+
+    primary_output_file = (paths.get("raw_hints") or {}).get("primary_output_file")
+    primary_output_path = str(raw_dir / primary_output_file) if primary_output_file else None
+
+    latest_run = paths.get("latest_run") or {}
+    latest_run_path = latest_run.get("path")
+
+    run_files = sorted(run_dir.glob("*.json")) if run_dir.exists() else []
+
+    warnings: list[str] = []
+    if primary_output_file and not _exists(primary_output_path):
+        warnings.append("raw_output_missing")
+    if not _exists(clean_paths.get("output")):
+        warnings.append("clean_output_missing")
+    if mart_outputs and missing_mart_outputs:
+        warnings.append("mart_outputs_missing")
+    if latest_run_path and not _exists(latest_run_path):
+        warnings.append("latest_run_record_missing")
+
+    return {
+        "dataset": paths.get("dataset"),
+        "config_path": str(config),
+        "year": paths.get("year"),
+        "layers": {
+            "raw": {
+                "dir": str(raw_dir),
+                "dir_exists": raw_dir.exists(),
+                "manifest_exists": _exists(raw_paths.get("manifest")),
+                "metadata_exists": _exists(raw_paths.get("metadata")),
+                "primary_output_file": primary_output_file,
+                "primary_output_exists": _exists(primary_output_path),
+                "suggested_read_exists": (paths.get("raw_hints") or {}).get(
+                    "suggested_read_exists"
+                ),
+            },
+            "clean": {
+                "dir": str(clean_dir),
+                "dir_exists": clean_dir.exists(),
+                "output": clean_paths.get("output"),
+                "output_exists": _exists(clean_paths.get("output")),
+                "manifest_exists": _exists(clean_paths.get("manifest")),
+                "metadata_exists": _exists(clean_paths.get("metadata")),
+            },
+            "mart": {
+                "dir": str(mart_dir),
+                "dir_exists": mart_dir.exists(),
+                "outputs": mart_outputs,
+                "output_count": len(mart_outputs),
+                "output_exists_count": len(mart_outputs) - len(missing_mart_outputs),
+                "missing_outputs": missing_mart_outputs,
+                "manifest_exists": _exists(mart_paths.get("manifest")),
+                "metadata_exists": _exists(mart_paths.get("metadata")),
+            },
+        },
+        "run": {
+            "run_dir": str(run_dir),
+            "run_dir_exists": run_dir.exists(),
+            "run_file_count": len(run_files),
+            "latest_run": latest_run or None,
+            "latest_run_record_exists": _exists(latest_run_path),
+        },
+        "warnings": warnings,
+    }

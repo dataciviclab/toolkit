@@ -12,7 +12,9 @@ from toolkit.core.config import load_config
 
 
 TOOLKIT_ROOT = Path(__file__).resolve().parents[2]
-WORKSPACE_ROOT = Path(os.environ.get("DATACIVICLAB_WORKSPACE", str(TOOLKIT_ROOT.parent))).expanduser()
+WORKSPACE_ROOT = Path(
+    os.environ.get("DATACIVICLAB_WORKSPACE", str(TOOLKIT_ROOT.parent))
+).expanduser()
 TOOLKIT_PYTHON = Path(os.environ.get("DATACIVICLAB_TOOLKIT_PYTHON", sys.executable))
 
 
@@ -89,7 +91,9 @@ def _schema_from_parquet(parquet_path: Path) -> dict[str, Any]:
             conn.execute("PRAGMA disable_progress_bar")
             describe_rows = conn.execute(f"DESCRIBE SELECT * FROM {relation}").fetchall()
     except Exception as exc:
-        raise ToolkitClientError(f"Lettura schema parquet fallita per {parquet_path}: {exc}") from exc
+        raise ToolkitClientError(
+            f"Lettura schema parquet fallita per {parquet_path}: {exc}"
+        ) from exc
 
     columns = [{"name": row[0], "type": row[1]} for row in describe_rows]
     return {"path": str(parquet_path), "column_count": len(columns), "columns": columns}
@@ -176,6 +180,128 @@ def _exists(path: str | None) -> bool:
     if not path:
         return False
     return Path(path).exists()
+
+
+def blocker_hints(config_path: str, year: int | None = None) -> dict[str, Any]:
+    """Diagnostic hints that flag common mismatches between declared config and actual outputs."""
+    config = _safe_path(config_path)
+    s = summary(str(config), year)
+    layers = s.get("layers", {})
+    raw = layers.get("raw", {})
+    clean = layers.get("clean", {})
+    mart = layers.get("mart", {})
+    run = s.get("run", {})
+
+    # Get the full run record from run_state for layer status checks
+    rs = run_state(str(config), year)
+    run_record = rs.get("latest_run_record")
+
+    hints: list[dict[str, str]] = []
+
+    # clean output exists but mart outputs are all missing or empty
+    if (
+        clean.get("output_exists")
+        and mart.get("output_count", 0) > 0
+        and mart.get("output_exists_count", 0) == 0
+    ):
+        hints.append(
+            {
+                "code": "clean_but_no_mart",
+                "severity": "warning",
+                "message": "clean output esiste ma nessun mart output e' presente",
+            }
+        )
+
+    # clean dir missing entirely while mart dir exists
+    if not clean.get("dir_exists") and mart.get("dir_exists"):
+        hints.append(
+            {
+                "code": "clean_dir_missing",
+                "severity": "blocker",
+                "message": "mart dir esiste ma clean dir manca: run order incoerente",
+            }
+        )
+
+    # latest_run record exists but the actual run file is gone
+    latest = run.get("latest_run")
+    if latest and latest.get("path") and not _exists(latest.get("path")):
+        hints.append(
+            {
+                "code": "latest_run_record_missing",
+                "severity": "warning",
+                "message": "latest_run reference presente ma file non trovato",
+            }
+        )
+
+    # resolved output path declared but file missing
+    if raw.get("primary_output_file") and not raw.get("primary_output_exists"):
+        hints.append(
+            {
+                "code": "raw_output_missing",
+                "severity": "blocker",
+                "message": f"raw primary_output_file '{raw['primary_output_file']}' risolto ma file assente",
+            }
+        )
+
+    if clean.get("output") and not clean.get("output_exists"):
+        hints.append(
+            {
+                "code": "clean_output_missing",
+                "severity": "blocker",
+                "message": f"clean output '{clean['output']}' risolto ma file assente",
+            }
+        )
+
+    # mart with multiple outputs but only partial
+    if mart.get("output_count", 0) > 1 and mart.get("missing_outputs"):
+        missing = mart["missing_outputs"]
+        hints.append(
+            {
+                "code": "mart_partial_outputs",
+                "severity": "warning",
+                "message": f"{len(missing)} mart output su {mart['output_count']} mancanti: {', '.join(Path(o).name for o in missing[:3])}",
+            }
+        )
+
+    # run record references a layer status that contradicts file existence
+    if run_record:
+        layers_map = run_record.get("layers") or {}
+        for layer_name, layer_detail in layers_map.items():
+            layer_status = (
+                layer_detail.get("status") if isinstance(layer_detail, dict) else layer_detail
+            )
+            if layer_status == "SUCCESS":
+                layer_info = layers.get(layer_name, {})
+                if layer_name == "clean" and not layer_info.get("output_exists"):
+                    hints.append(
+                        {
+                            "code": "run_says_clean_success_but_output_missing",
+                            "severity": "blocker",
+                            "message": "run record dice clean SUCCESS ma output file manca",
+                        }
+                    )
+                elif (
+                    layer_name == "mart"
+                    and layer_info.get("output_exists_count", 0) == 0
+                    and layer_info.get("output_count", 0) > 0
+                ):
+                    hints.append(
+                        {
+                            "code": "run_says_mart_success_but_outputs_missing",
+                            "severity": "blocker",
+                            "message": "run record dice mart SUCCESS ma nessun output file presente",
+                        }
+                    )
+
+    return {
+        "dataset": s.get("dataset"),
+        "config_path": str(config),
+        "year": s.get("year"),
+        "hint_count": len(hints),
+        "hints": hints,
+        "blocker_count": sum(1 for h in hints if h.get("severity") == "blocker"),
+        "warning_count": sum(1 for h in hints if h.get("severity") == "warning"),
+    }
 
 
 def summary(config_path: str, year: int | None = None) -> dict[str, Any]:

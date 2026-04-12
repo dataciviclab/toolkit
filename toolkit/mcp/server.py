@@ -8,6 +8,7 @@ from .toolkit_client import (
     ToolkitClientError,
     blocker_hints as blocker_hints_impl,
     inspect_paths as inspect_paths_impl,
+    review_readiness as review_readiness_impl,
     run_state as run_state_impl,
     summary as summary_impl,
     show_schema as show_schema_impl,
@@ -62,6 +63,14 @@ def toolkit_summary(config_path: str, year: int = 0) -> dict[str, Any]:
 )
 def toolkit_blocker_hints(config_path: str, year: int = 0) -> dict[str, Any]:
     return _guard(blocker_hints_impl, config_path, year or None)
+
+
+@mcp.tool(
+    description="Check di readiness per review candidate: config, layer, output e coerenza run record.",
+    structured_output=True,
+)
+def toolkit_review_readiness(config_path: str, year: int = 0) -> dict[str, Any]:
+    return _guard(review_readiness_impl, config_path, year or None)
 
 
 if __name__ == "__main__":

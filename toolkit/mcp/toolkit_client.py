@@ -182,6 +182,159 @@ def _exists(path: str | None) -> bool:
     return Path(path).exists()
 
 
+def _read_parquet_row_count(parquet_path: Path) -> int | None:
+    """Return row count of a parquet file, or None if unreadable."""
+    if not parquet_path.exists():
+        return None
+    try:
+        with duckdb.connect(database=":memory:") as conn:
+            conn.execute("PRAGMA disable_progress_bar")
+            result = conn.execute(
+                f"SELECT COUNT(*) FROM read_parquet('{_sql_literal(str(parquet_path))}')"
+            ).fetchone()
+            return int(result[0]) if result else None
+    except Exception:
+        return None
+
+
+def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any]:
+    """Check minimale di readiness per review di intake/run candidate.
+
+    Risponde a:
+    - il candidate e' runnable almeno al minimo?
+    - i layer attesi esistono davvero?
+    - c'e' almeno un output leggibile?
+    - il run record e' coerente con gli output presenti?
+    """
+    config = _safe_path(config_path)
+    _, cfg = _load_cfg(config)
+
+    years = getattr(cfg, "years", []) if hasattr(cfg, "years") else []
+    target_year = year or (years[0] if years else None)
+
+    checks: list[dict[str, Any]] = []
+
+    # --- Config check ---
+    checks.append(
+        {
+            "check": "config_valid",
+            "ok": True,
+            "detail": "config parse ok",
+        }
+    )
+
+    # --- Raw layer ---
+    s = summary(str(config), target_year)
+    raw = s.get("layers", {}).get("raw", {})
+    raw_primary = raw.get("primary_output_file")
+    if raw_primary:
+        raw_ok = raw.get("primary_output_exists")
+    else:
+        # Nessun manifest: fallback su esistenza dir e presenza file
+        raw_dir_path = Path(raw.get("dir", ""))
+        raw_ok = raw_dir_path.exists() and any(raw_dir_path.iterdir())
+    checks.append(
+        {
+            "check": "raw_output_present",
+            "ok": raw_ok,
+            "detail": f"primary_output={raw.get('primary_output_file', 'unknown')}"
+            if raw_ok
+            else "raw output mancante",
+        }
+    )
+
+    # --- Clean layer ---
+    clean = s.get("layers", {}).get("clean", {})
+    clean_path_str = clean.get("output")
+    clean_path = Path(clean_path_str) if clean_path_str else None
+    clean_rows = _read_parquet_row_count(clean_path) if clean_path else None
+    clean_ok = clean.get("output_exists") and (clean_rows is not None)
+    checks.append(
+        {
+            "check": "clean_output_readable",
+            "ok": clean_ok,
+            "detail": f"{clean_rows} rows"
+            if clean_rows is not None
+            else "clean output mancante o illeggibile",
+        }
+    )
+
+    # --- Mart layer ---
+    mart = s.get("layers", {}).get("mart", {})
+    mart_outputs = mart.get("outputs", [])
+    mart_checks: list[dict[str, Any]] = []
+    for output_name in mart_outputs:
+        o_path = Path(output_name)
+        rows = _read_parquet_row_count(o_path)
+        mart_checks.append({"name": o_path.name, "exists": o_path.exists(), "rows": rows})
+    mart_ok = len(mart_outputs) > 0 and all(m.get("exists") for m in mart_checks)
+    checks.append(
+        {
+            "check": "mart_outputs_readable",
+            "ok": mart_ok,
+            "detail": mart_checks,
+        }
+    )
+
+    # --- Run record coherence ---
+    rs = run_state(str(config), target_year)
+    run_record = rs.get("latest_run_record")
+    run_coherent = True
+    run_detail: str | None = None
+    if run_record:
+        layers_map = run_record.get("layers") or {}
+        for layer_name, layer_detail in layers_map.items():
+            layer_status = (
+                layer_detail.get("status") if isinstance(layer_detail, dict) else layer_detail
+            )
+            if layer_status == "SUCCESS":
+                layer_info = s.get("layers", {}).get(layer_name, {})
+                if layer_name == "clean" and not layer_info.get("output_exists"):
+                    run_coherent = False
+                    run_detail = f"run dice {layer_name} SUCCESS ma output manca"
+                elif layer_name == "mart":
+                    if (
+                        layer_info.get("output_exists_count", 0) == 0
+                        and layer_info.get("output_count", 0) > 0
+                    ):
+                        run_coherent = False
+                        run_detail = f"run dice {layer_name} SUCCESS ma nessun output presente"
+        if run_coherent:
+            run_detail = f"run record coerente ({run_record.get('status', 'unknown')})"
+    else:
+        # Nessun run record: non e' un fallimento di readiness se i file esistono
+        run_detail = "nessun run record (ok se output presenti)"
+
+    checks.append(
+        {
+            "check": "run_record_coherent",
+            "ok": run_coherent,
+            "detail": run_detail,
+        }
+    )
+
+    ok_count = sum(1 for c in checks if c["ok"])
+    fail_count = sum(1 for c in checks if not c["ok"])
+
+    if fail_count == 0:
+        readiness = "ready"
+    elif ok_count >= len(checks) - 1:
+        readiness = "needs-review"
+    else:
+        readiness = "incomplete"
+
+    return {
+        "dataset": s.get("dataset"),
+        "config_path": str(config),
+        "year": target_year,
+        "readiness": readiness,
+        "check_count": len(checks),
+        "ok_count": ok_count,
+        "fail_count": fail_count,
+        "checks": checks,
+    }
+
+
 def blocker_hints(config_path: str, year: int | None = None) -> dict[str, Any]:
     """Diagnostic hints that flag common mismatches between declared config and actual outputs."""
     config = _safe_path(config_path)

@@ -9,6 +9,7 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 - `toolkit_run_state(config_path, year=0)`
 - `toolkit_summary(config_path, year=0)`
 - `toolkit_blocker_hints(config_path, year=0)`
+- `toolkit_review_readiness(config_path, year=0)`
 
 ## Boundary
 
@@ -17,6 +18,7 @@ Questo MCP resta nel repo `toolkit` perche' espone solo introspezione tecnica de
 - path contract risolto
 - schema `raw`, `clean`, `mart`
 - stato minimo dei run
+- readiness check per review candidate
 
 Non espone:
 
@@ -48,3 +50,4 @@ Sostituire il path del `command` con il Python reale del clone locale che usera'
   - `clean` / `mart`: legge schema reale dei parquet risolti via `inspect paths`
 - `toolkit_run_state` legge `latest_run` e il relativo record JSON se presente
 - `toolkit_blocker_hints` evidenzia mismatch pratici tra output risolti e stato run
+- `toolkit_review_readiness` esegue check di readiness per review candidate: config valida, layer presenti, output leggibili, coerenza run record

@@ -9,6 +9,7 @@ from toolkit.profile import (
     build_profile_hints,
     build_suggested_read_cfg,
     profile_raw,
+    write_raw_profile,
     write_suggested_read_yml,
 )
 from toolkit.raw import run_raw, run_raw_validation, validate_raw_output
@@ -42,10 +43,12 @@ def test_profile_exports() -> None:
         "build_profile_hints",
         "build_suggested_read_cfg",
         "profile_raw",
+        "write_raw_profile",
         "write_suggested_read_yml",
     ]
     assert RawProfile.__name__ == "RawProfile"
     assert callable(profile_raw)
     assert callable(build_profile_hints)
     assert callable(build_suggested_read_cfg)
+    assert callable(write_raw_profile)
     assert callable(write_suggested_read_yml)

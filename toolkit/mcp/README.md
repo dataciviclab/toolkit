@@ -8,6 +8,7 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 - `toolkit_show_schema(config_path, layer="clean", year=0)`
 - `toolkit_run_state(config_path, year=0)`
 - `toolkit_summary(config_path, year=0)`
+- `toolkit_blocker_hints(config_path, year=0)`
 
 ## Boundary
 
@@ -46,3 +47,4 @@ Sostituire il path del `command` con il Python reale del clone locale che usera'
   - `raw`: usa `toolkit inspect schema-diff --json`
   - `clean` / `mart`: legge schema reale dei parquet risolti via `inspect paths`
 - `toolkit_run_state` legge `latest_run` e il relativo record JSON se presente
+- `toolkit_blocker_hints` evidenzia mismatch pratici tra output risolti e stato run

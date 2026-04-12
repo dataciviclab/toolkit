@@ -4,7 +4,14 @@ import json
 import shutil
 from pathlib import Path
 
-from toolkit.mcp.toolkit_client import inspect_paths, run_state, show_schema, summary, blocker_hints
+from toolkit.mcp.toolkit_client import (
+    blocker_hints,
+    inspect_paths,
+    review_readiness,
+    run_state,
+    show_schema,
+    summary,
+)
 
 
 def test_mcp_toolkit_client_works_from_repo_layout(tmp_path: Path, monkeypatch) -> None:
@@ -146,3 +153,89 @@ def test_mcp_blocker_hints_run_says_clean_success_but_output_missing(
     assert "run_says_clean_success_but_output_missing" in codes
     blockers = [h for h in hints_payload["hints"] if h["severity"] == "blocker"]
     assert len(blockers) >= 1
+
+
+def test_review_readiness_incomplete_when_no_outputs(tmp_path: Path, monkeypatch) -> None:
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    # Nessun output creato
+    payload = review_readiness(str(config_path), 2022)
+    assert payload["readiness"] == "incomplete"
+    assert payload["fail_count"] >= 2  # raw, clean, mart tutti mancanti
+    check_names = {c["check"] for c in payload["checks"]}
+    assert "config_valid" in check_names
+    assert "raw_output_present" in check_names
+    assert "clean_output_readable" in check_names
+    assert "mart_outputs_readable" in check_names
+    assert "run_record_coherent" in check_names
+
+
+def test_review_readiness_ready_when_all_layers_present(tmp_path: Path, monkeypatch) -> None:
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    # Crea output fittizi per tutti i layer
+    raw_dir = dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "ispra_dettaglio_comunale_2022.csv").write_bytes(b"a;b\n1;2\n")
+
+    clean_dir = dst / "_smoke_out" / "data" / "clean" / "project_example" / "2022"
+    clean_dir.mkdir(parents=True, exist_ok=True)
+
+    # Crea un parquet minimale leggibile
+    import duckdb
+
+    clean_parquet = clean_dir / "project_example_2022_clean.parquet"
+    with duckdb.connect(":memory:") as conn:
+        conn.execute("CREATE TABLE t AS SELECT 1 AS x")
+        conn.execute(f"COPY t TO '{clean_parquet}' (FORMAT PARQUET)")
+
+    mart_dir = dst / "_smoke_out" / "data" / "mart" / "project_example" / "2022"
+    mart_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("rd_by_regione.parquet", "rd_by_provincia.parquet"):
+        with duckdb.connect(":memory:") as conn:
+            conn.execute("CREATE TABLE t AS SELECT 1 AS x")
+            conn.execute(f"COPY t TO '{mart_dir / name}' (FORMAT PARQUET)")
+
+    payload = review_readiness(str(config_path), 2022)
+    assert payload["readiness"] == "ready"
+    assert payload["fail_count"] == 0
+    assert payload["ok_count"] == len(payload["checks"])
+
+
+def test_review_readiness_needs_review_with_single_failure(tmp_path: Path, monkeypatch) -> None:
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    # raw presente
+    raw_dir = dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "ispra_dettaglio_comunale_2022.csv").write_bytes(b"a;b\n1;2\n")
+
+    # clean presente e leggibile
+    clean_dir = dst / "_smoke_out" / "data" / "clean" / "project_example" / "2022"
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    import duckdb
+
+    clean_parquet = clean_dir / "project_example_2022_clean.parquet"
+    with duckdb.connect(":memory:") as conn:
+        conn.execute("CREATE TABLE t AS SELECT 1 AS x")
+        conn.execute(f"COPY t TO '{clean_parquet}' (FORMAT PARQUET)")
+
+    # mart volutamente mancante -> unico fail atteso
+    payload = review_readiness(str(config_path), 2022)
+    assert payload["readiness"] == "needs-review"
+    assert payload["fail_count"] == 1

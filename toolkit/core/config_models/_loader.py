@@ -69,8 +69,10 @@ def _validation_error_to_value_error(exc: ValidationError, *, path: Path) -> Val
 
 def _read_strict_config(data: dict[str, Any], *, path: Path) -> bool:
     raw_config = data.get("config")
-    if not isinstance(raw_config, dict):
+    if raw_config is None:
         return False
+    if not isinstance(raw_config, dict):
+        raise _err("config must be a mapping object if provided.", path=path)
     strict_value = raw_config.get("strict", False)
     return parse_bool(strict_value, "config.strict")
 

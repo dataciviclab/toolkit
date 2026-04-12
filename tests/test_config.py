@@ -846,6 +846,27 @@ unknown_top: true
     assert "unknown_top" in str(exc.value)
 
 
+def test_load_config_model_rejects_non_mapping_config_block(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+config: true
+raw: {}
+clean: {}
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError) as exc:
+        load_config_model(yml)
+
+    assert "config must be a mapping object if provided" in str(exc.value)
+
+
 @pytest.mark.parametrize(
     ("section", "yaml_text", "code", "extra_key"),
     [

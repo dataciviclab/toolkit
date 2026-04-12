@@ -483,7 +483,5 @@ def _warn_or_reject_unknown_keys(
                 strict_config=strict_config,
                 path=path,
             )
-            if strict_config:
-                normalized[section_name] = {k: v for k, v in section.items() if k in allowed_keys}
 
     return normalized

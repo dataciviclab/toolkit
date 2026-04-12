@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- `pyarrow` is no longer a direct dependency. All Parquet I/O is handled natively by DuckDB. Users who need `pyarrow` directly can install the `parquet` optional extra (`pip install dataciviclab-toolkit[parquet]`).
 - Documentation now classifies `run cross_year` and `inspect schema-diff` as supported advanced tooling in the feature stability matrix.
 - Changelog/docs references to config warning codes now reflect the current implemented range through `DCL013`.
 

@@ -1,5 +1,17 @@
-"""Advanced profiling helpers.
+"""Public profiling API for RAW diagnostics."""
 
-`toolkit.profile` is supported tooling for diagnostics and format inference on RAW
-inputs. It is not a first-class pipeline layer like `raw`, `clean`, or `mart`.
-"""
+from toolkit.profile.raw import (
+    RawProfile,
+    build_profile_hints,
+    build_suggested_read_cfg,
+    profile_raw,
+    write_suggested_read_yml,
+)
+
+__all__ = [
+    "RawProfile",
+    "build_profile_hints",
+    "build_suggested_read_cfg",
+    "profile_raw",
+    "write_suggested_read_yml",
+]

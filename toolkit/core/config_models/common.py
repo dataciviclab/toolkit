@@ -9,9 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-from toolkit.core.csv_read import normalize_columns_spec
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 logger = logging.getLogger("toolkit.core.config")

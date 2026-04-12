@@ -7,10 +7,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from toolkit.core.csv_read import normalize_columns_spec
 from toolkit.core.config_models.common import (
     RangeRuleConfig,
     ensure_str_list,
-    normalize_columns_spec,
     parse_bool,
 )
 

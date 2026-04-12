@@ -154,7 +154,10 @@ def test_run_clean_positional_csv_skip_and_encoding(tmp_path: Path):
     """Skip righe iniziali e encoding non-UTF funzionano con normalize_rows_to_columns."""
     csv_path = tmp_path / "encoded.csv"
     # 2 righe da saltare (skip=2) + header = 3 righe totali prima dei dati
-    csv_path.write_text("RIGA DA SALTARE 1\nRIGA DA SALTARE 2\na;b\n1;2\n", encoding="latin-1")
+    csv_path.write_text(
+        "RIGA DA SALTARE 1\nRIGA DA SALTARE 2\na;b\ncittà;perché\n",
+        encoding="latin-1",
+    )
 
     read_cfg = {
         "columns": {"a": "VARCHAR", "b": "VARCHAR"},
@@ -167,7 +170,7 @@ def test_run_clean_positional_csv_skip_and_encoding(tmp_path: Path):
     }
     df = _load_normalized_csv_frame(csv_path, read_cfg, read_cfg["columns"])
     assert len(df) == 1
-    assert df.iloc[0].tolist() == ["1", "2"]
+    assert df.iloc[0].tolist() == ["città", "perché"]
 
 
 def test_run_clean_positional_csv_empty_rows(tmp_path: Path):

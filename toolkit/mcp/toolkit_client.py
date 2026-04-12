@@ -192,9 +192,12 @@ def blocker_hints(config_path: str, year: int | None = None) -> dict[str, Any]:
     mart = layers.get("mart", {})
     run = s.get("run", {})
 
-    # Get the full run record from run_state for layer status checks
-    rs = run_state(str(config), year)
-    run_record = rs.get("latest_run_record")
+    latest_run = run.get("latest_run") if isinstance(run, dict) else None
+    run_record = None
+    if latest_run and latest_run.get("path"):
+        latest_path = Path(latest_run["path"])
+        if latest_path.exists():
+            run_record = json.loads(latest_path.read_text(encoding="utf-8"))
 
     hints: list[dict[str, str]] = []
 

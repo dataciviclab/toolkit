@@ -210,3 +210,32 @@ def test_review_readiness_ready_when_all_layers_present(tmp_path: Path, monkeypa
     assert payload["readiness"] == "ready"
     assert payload["fail_count"] == 0
     assert payload["ok_count"] == len(payload["checks"])
+
+
+def test_review_readiness_needs_review_with_single_failure(tmp_path: Path, monkeypatch) -> None:
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    # raw presente
+    raw_dir = dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "ispra_dettaglio_comunale_2022.csv").write_bytes(b"a;b\n1;2\n")
+
+    # clean presente e leggibile
+    clean_dir = dst / "_smoke_out" / "data" / "clean" / "project_example" / "2022"
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    import duckdb
+
+    clean_parquet = clean_dir / "project_example_2022_clean.parquet"
+    with duckdb.connect(":memory:") as conn:
+        conn.execute("CREATE TABLE t AS SELECT 1 AS x")
+        conn.execute(f"COPY t TO '{clean_parquet}' (FORMAT PARQUET)")
+
+    # mart volutamente mancante -> unico fail atteso
+    payload = review_readiness(str(config_path), 2022)
+    assert payload["readiness"] == "needs-review"
+    assert payload["fail_count"] == 1

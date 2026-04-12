@@ -266,8 +266,17 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
     for output_name in mart_outputs:
         o_path = Path(output_name)
         rows = _read_parquet_row_count(o_path)
-        mart_checks.append({"name": o_path.name, "exists": o_path.exists(), "rows": rows})
-    mart_ok = len(mart_outputs) > 0 and all(m.get("exists") for m in mart_checks)
+        mart_checks.append(
+            {
+                "name": o_path.name,
+                "exists": o_path.exists(),
+                "readable": rows is not None,
+                "rows": rows,
+            }
+        )
+    mart_ok = len(mart_outputs) > 0 and all(
+        m.get("exists") and m.get("readable") for m in mart_checks
+    )
     checks.append(
         {
             "check": "mart_outputs_readable",
@@ -326,7 +335,7 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
     return {
         "dataset": s.get("dataset"),
         "config_path": str(config),
-        "year": target_year,
+        "year": s.get("year"),
         "readiness": readiness,
         "check_count": len(checks),
         "ok_count": ok_count,

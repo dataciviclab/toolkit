@@ -37,7 +37,7 @@ dependencies = [
 
 [project.optional-dependencies]
 parquet = [
-  "pyarrow>=14.0"
+  "pyarrow>=23.0.1"
 ]
 dev = [
   "build>=1.2.0",

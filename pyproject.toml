@@ -40,7 +40,7 @@ parquet = [
   "pyarrow>=14.0"
 ]
 dev = [
-  "build>=1.2.0",
+  "build>=1.4.3",
   "pytest>=8.0",
   "pytest-cov>=5.0.0",
   "ruff>=0.3.0",

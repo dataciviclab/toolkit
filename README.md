@@ -222,6 +222,20 @@ toolkit run all --config dataset.yml
 toolkit validate all --config dataset.yml
 ```
 
+Per eseguire piu` `dataset.yml` in sequenza:
+
+```bash
+toolkit batch --configs configs.txt --step all
+```
+
+Dove `configs.txt` contiene un path a `dataset.yml` per riga, con path relativi
+risolti rispetto alla directory del file lista.
+
+Output finale:
+
+- tabella con `dataset`, `years`, `step`, `status`, `duration`
+- blocco `Failures` se almeno una config fallisce
+
 Per il percorso base:
 
 - `run all` esegue RAW -> CLEAN -> MART

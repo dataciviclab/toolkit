@@ -26,7 +26,7 @@ jobs:
         run: python -m pytest -p pytest_cov -q -p no:cacheprovider --cov=toolkit --cov-report=term-missing --cov-report=xml --cov-fail-under=70
       - name: Upload Coverage Artifact
         if: always() && hashFiles('coverage.xml') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ matrix.os }}-py${{ matrix.python-version }}
           path: coverage.xml

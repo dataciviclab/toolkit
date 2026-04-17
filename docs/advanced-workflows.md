@@ -135,6 +135,19 @@ Regola pratica:
 `legacy_aliases` resta supportato per compatibilita`, ma non va promosso nei nuovi repo dataset.
 
 
+## ANAC Delta Ingestion (Spike aperto)
+
+Il toolkit oggi offre solo diagnostica e confronto tra layer, non un merge stateful canonico.
+
+Disponibile: `status`/`inspect` espongono profili layer, `compare_layer_profiles` calcola `row_count_delta`, i report diagnostici mostrano `added_columns`, `removed_columns`, `type_changes`.
+
+Prima di introdurre un eventuale `delta_merge` servono verifiche su dati reali:
+- forma effettiva del payload ANAC/OCDS usato dal Lab
+- chiave operativa stabile per l'upsert
+- regole di conflitto per duplicati, rettifiche e annullamenti
+
+**Stato**: Tenere come spike tecnico. Non aggiungere campi di config finché il modello non è verificato su dati reali.
+
 ## Compat legacy
 
 Per i repo nuovi:

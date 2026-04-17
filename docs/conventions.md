@@ -1,15 +1,4 @@
----
-name: toolkit-conventions
-description: Contratti operativi stabili del toolkit per la pipeline RAW -> CLEAN -> MART.
-license: MIT
-metadata:
-  version: "1.2"
-  owner: "DataCivicLab"
----
-
 # Toolkit Conventions
-
-**Stato: Operativo (Compact Mode)**
 
 ## 1. Paths & Manifests
 - **Risoluzione Path**: I path in `dataset.yml` sono relativi alla directory del file YAML.

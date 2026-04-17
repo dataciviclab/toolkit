@@ -1,15 +1,5 @@
----
-name: toolkit
-description: Motore tecnico della pipeline dati RAW -> CLEAN -> MART (DuckDB).
-license: MIT
-metadata:
-  version: "1.1"
-  owner: "DataCivicLab"
----
-
 # DataCivicLab Toolkit
 
-**Stato: Operativo (Compact Mode)**
 Motore tecnico per trasformazioni riproducibili su dati pubblici tramite DuckDB. Gestisce i layer `raw`, `clean`, `mart` e `validation`.
 
 ## 1. Core Workflow

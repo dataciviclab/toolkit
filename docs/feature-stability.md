@@ -26,6 +26,8 @@ Lettura equivalente a livello package:
 - advanced tooling: `toolkit.profile`, `resume`, run parziali, `cross_year`, `inspect schema-diff`
 - compatibility only: config legacy e alias storici
 
+Sorgenti builtin supportate dal runtime canonico: `local_file`, `http_file`. Il runtime può conservare `.xlsx` in RAW e leggerli in CLEAN — il file originale resta l'artefatto sorgente.
+
 Regola pratica:
 
 - se stai creando o clonando un repo dataset nuovo, resta nel percorso canonico

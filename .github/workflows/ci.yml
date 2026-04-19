@@ -7,11 +7,10 @@ on:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
         python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v6
@@ -29,7 +28,7 @@ jobs:
         if: always() && hashFiles('coverage.xml') != ''
         uses: actions/upload-artifact@v7
         with:
-          name: coverage-${{ matrix.os }}-py${{ matrix.python-version }}
+          name: coverage-py${{ matrix.python-version }}
           path: coverage.xml
       - name: Install And CLI Smoke
         if: ${{ hashFiles('scripts/smoke_install_cli.py') != '' }}

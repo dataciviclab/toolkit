@@ -316,4 +316,5 @@ def run_clean(
     )
     logger.info(f"CLEAN -> {output_path}")
     output_rows = int(output_profile.get("row_count") or 0)
-    return {"output_rows": output_rows, "output_bytes": output_bytes}
+    col_count = len(output_profile.get("columns") or [])
+    return {"output_rows": output_rows, "output_bytes": output_bytes, "col_count": col_count or None}

@@ -12,7 +12,7 @@ from toolkit.core.metadata import config_hash_for_year, sha256_bytes, write_meta
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.registry import register_builtin_plugins, registry
 from toolkit.core.validation import write_validation_json
-from toolkit.profile.raw import build_profile_hints, write_suggested_read_yml
+from toolkit.profile.raw import build_profile_hints, profile_raw, write_raw_profile, write_suggested_read_yml
 from toolkit.raw.extractors import get_extractor
 from toolkit.raw.validate import validate_raw_output
 
@@ -259,25 +259,39 @@ def run_raw(
     primary_output_file = _choose_primary_output(manifest_sources, logger)
     primary_output_path = out_dir / primary_output_file
     profile_hints = None
-    try:
-        if primary_output_path.exists() and primary_output_path.suffix.lower() in {
-            ".csv",
-            ".tsv",
-            ".txt",
-        }:
+    profile_ctx = {"clean": clean_cfg or {}, "output": output_cfg or {}}
+    policy = resolve_artifact_policy(output_cfg)
+    if primary_output_path.exists() and primary_output_path.suffix.lower() in {".csv", ".tsv", ".txt"}:
+        try:
             profile_hints = build_profile_hints(primary_output_path)
-            profile_ctx = {
-                "clean": clean_cfg or {},
-                "output": output_cfg or {},
-            }
-            policy = resolve_artifact_policy(output_cfg)
             if should_write("profile", "suggested_read", policy, profile_ctx):
                 conservative_hints = dict(profile_hints)
                 conservative_hints["decimal_suggested"] = None
                 suggested_path = write_suggested_read_yml(out_dir / "_profile", conservative_hints)
                 logger.info("RAW suggested_read -> %s", suggested_path)
-    except Exception as exc:
-        logger.warning("RAW profile_hints generation failed: %s: %s", type(exc).__name__, exc)
+
+            if should_write("profile", "raw_profile", policy, profile_ctx):
+                from toolkit.scaffold.clean import generate_clean_sql
+                raw_profile = profile_raw(out_dir, dataset, year)
+                profile_dir = out_dir / "_profile"
+                write_raw_profile(
+                    profile_dir,
+                    raw_profile,
+                    write_canonical=True,
+                    write_legacy_alias=should_write("profile", "profile_alias", policy, profile_ctx),
+                )
+                logger.info("RAW profile -> %s", profile_dir / "raw_profile.json")
+
+                clean_sql_path = Path(base_dir) / (clean_cfg or {}).get("sql", "sql/clean.sql")
+                if not clean_sql_path.exists():
+                    scaffold_sql = generate_clean_sql(raw_profile.__dict__, dataset, year)
+                    clean_sql_path.parent.mkdir(parents=True, exist_ok=True)
+                    clean_sql_path.write_text(scaffold_sql, encoding="utf-8")
+                    logger.info("scaffold clean.sql -> %s", clean_sql_path)
+                else:
+                    logger.info("clean.sql gia esistente, scaffold saltato (%s)", clean_sql_path)
+        except Exception as exc:
+            logger.warning("RAW profile/scaffold generation failed: %s: %s", type(exc).__name__, exc)
 
     metadata_path = write_metadata(
         out_dir,
@@ -341,4 +355,7 @@ def run_raw(
         logger.info(f"RAW QA OK ({dataset} {year}) -> {vpath.name}")
 
     output_bytes = sum(f.get("bytes", 0) for f in files_written) if files_written else None
-    return {"output_bytes": output_bytes}
+    source_urls = list(dict.fromkeys(
+        inp["origin"] for inp in inputs if inp.get("origin") and str(inp["origin"]).startswith("http")
+    ))
+    return {"output_bytes": output_bytes, "source_urls": source_urls}

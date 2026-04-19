@@ -32,7 +32,11 @@ def write_validation_json(path: str | Path, result: ValidationResult) -> Path:
         "warnings": result.warnings,
         "summary": result.summary,
     }
-    payload.update(result.sections)
+    for key, section in result.sections.items():
+        if isinstance(section, dict):
+            payload[key] = {k: v for k, v in section.items() if k != "warning_messages"}
+        else:
+            payload[key] = section
     write_json_atomic(out, payload)
     return out
 
@@ -57,7 +61,7 @@ def required_columns_check(actual: Iterable[str], required: Iterable[str]) -> Va
 def build_validation_summary(result: ValidationResult) -> dict[str, Any]:
     errors_count = len(result.errors)
     warnings_count = len(result.warnings)
-    return {
+    out: dict[str, Any] = {
         "passed": result.ok,
         "errors_count": errors_count,
         "warnings_count": warnings_count,
@@ -74,6 +78,9 @@ def build_validation_summary(result: ValidationResult) -> dict[str, Any]:
             },
         ],
     }
+    if "stats" in result.summary:
+        out["stats"] = result.summary["stats"]
+    return out
 
 
 def check_transitions(

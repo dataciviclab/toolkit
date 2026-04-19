@@ -9,6 +9,7 @@ from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 from typing import Any, Dict, Optional
 
 from toolkit.core.paths import to_root_relative
+from toolkit.version import __version__ as _toolkit_version
 
 _LAYER_NAMES = ("raw", "clean", "mart")
 _WINDOWS_ABS_RE = re.compile(r"^[A-Za-z]:[\\/]")
@@ -36,7 +37,7 @@ def _duration_seconds(started: Optional[str], finished: Optional[str]) -> Option
 
 
 def _empty_layer_metrics() -> Dict[str, Any]:
-    return {"output_rows": None, "output_bytes": None, "tables_count": None}
+    return {"output_rows": None, "output_bytes": None, "col_count": None, "tables_count": None}
 
 
 def get_run_dir(root: Path, dataset: str, year: int) -> Path:
@@ -191,6 +192,7 @@ class RunContext:
             for layer in _LAYER_NAMES
         }
         self.validations = {layer: {} for layer in _LAYER_NAMES}
+        self.source_urls: list[str] = []
         self.error: str | None = None
         self._runs_dir = get_run_dir(self.root, self.dataset, self.year)
         self._path = self._runs_dir / f"{self.run_id}.json"
@@ -210,6 +212,7 @@ class RunContext:
         return {
             "dataset": self.dataset,
             "year": self.year,
+            "toolkit_version": _toolkit_version,
             "run_id": self.run_id,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
@@ -217,6 +220,7 @@ class RunContext:
             "status": self.status,
             "layers": layers_out,
             "validations": self.validations,
+            "source_urls": self.source_urls,
             "resumed_from": self.resumed_from,
             "error": self.error,
         }
@@ -265,14 +269,19 @@ class RunContext:
         *,
         output_rows: Optional[int] = None,
         output_bytes: Optional[int] = None,
+        col_count: Optional[int] = None,
         tables_count: Optional[int] = None,
+        source_urls: Optional[list[str]] = None,
     ) -> None:
         info = self._layer(layer)
         info["metrics"] = {
             "output_rows": output_rows,
             "output_bytes": output_bytes,
+            "col_count": col_count,
             "tables_count": tables_count,
         }
+        if source_urls:
+            self.source_urls = list(dict.fromkeys(self.source_urls + source_urls))
         self.save()
 
     def complete_run(self, *, success_with_warnings: bool = False) -> None:

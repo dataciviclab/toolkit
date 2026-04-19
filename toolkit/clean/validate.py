@@ -296,6 +296,7 @@ def validate_promotion(
             "input_files": [path.name for path in input_files],
             "raw_row_count": raw_profile.get("row_count"),
             "clean_row_count": clean_profile.get("row_count"),
+            "raw_col_count": len(raw_profile.get("columns") or []),
         },
         sections={"transition": transition_report},
     )
@@ -322,6 +323,83 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
         ranges=spec.validate.ranges,
         max_null_pct=spec.validate.max_null_pct,
         min_rows=spec.validate.min_rows,
+    )
+
+    # cross-layer raw→clean check (row retention, column coverage)
+    raw_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year)
+    promotion_result = validate_promotion(
+        raw_dir,
+        out_dir,
+        root=cfg.root,
+        transition=spec.validate.promotion,
+        logger=logger,
+    )
+    merged_errors = result.errors + promotion_result.errors
+    merged_warnings = result.warnings + promotion_result.warnings
+
+    clean_cols = result.summary.get("columns") or []
+    raw_row_count = promotion_result.summary.get("raw_row_count")
+    clean_row_count = promotion_result.summary.get("clean_row_count") or result.summary.get("row_count")
+    raw_col_count = promotion_result.summary.get("raw_col_count")
+
+    # scaffold check: se esiste _profile/profile.json, confronta colonne raw vs clean
+    profile_path = raw_dir / "_profile" / "profile.json"
+    if profile_path.exists():
+        try:
+            import re as _re
+            def _to_snake(n: str) -> str:
+                s = _re.sub(r"([a-z])([A-Z])", r"\1_\2", n.strip())
+                s = _re.sub(r"[^a-zA-Z0-9]+", "_", s)
+                return _re.sub(r"_+", "_", s).lower().strip("_") or "col"
+
+            raw_profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            scaffold_cols = {_to_snake(c) for c in (raw_profile.get("columns_raw") or [])}
+            clean_cols_set = set(clean_cols)
+            unmapped = sorted(scaffold_cols - clean_cols_set)
+            if unmapped:
+                merged_warnings.append(
+                    f"[scaffold] {len(unmapped)} colonne raw non mappate nel clean "
+                    f"(drop senza -- DROP: <motivo>?): {unmapped}"
+                )
+        except Exception:
+            pass
+    row_drop_pct = (
+        round((raw_row_count - clean_row_count) / raw_row_count * 100, 2)
+        if raw_row_count and clean_row_count is not None and raw_row_count > 0
+        else None
+    )
+    col_drop_count = (raw_col_count - len(clean_cols)) if raw_col_count is not None else None
+
+    rules = {k: v for k, v in {
+        "required": spec.required_columns or [],
+        "primary_key": spec.validate.primary_key or [],
+        "not_null": spec.validate.not_null or [],
+        "ranges": {c: {"min": r.min, "max": r.max} for c, r in (spec.validate.ranges or {}).items()},
+        "max_null_pct": spec.validate.max_null_pct or {},
+        "min_rows": spec.validate.min_rows,
+    }.items() if v not in ([], {}, None)}
+
+    merged_summary = {
+        "dataset": cfg.dataset,
+        "year": year,
+        "stats": {
+            "raw_rows": raw_row_count,
+            "clean_rows": clean_row_count,
+            "row_drop_pct": row_drop_pct,
+            "raw_cols": raw_col_count,
+            "clean_cols": len(clean_cols),
+            "col_drop_count": col_drop_count,
+        },
+        "columns": clean_cols,
+        **({"rules": rules} if rules else {}),
+    }
+    merged_sections = {**(result.sections or {}), **(promotion_result.sections or {})}
+    result = ValidationResult(
+        ok=len(merged_errors) == 0,
+        errors=merged_errors,
+        warnings=merged_warnings,
+        summary=merged_summary,
+        sections=merged_sections,
     )
 
     report = write_validation_json(Path(out_dir) / "_validate" / "clean_validation.json", result)

@@ -342,8 +342,11 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
     clean_row_count = promotion_result.summary.get("clean_row_count") or result.summary.get("row_count")
     raw_col_count = promotion_result.summary.get("raw_col_count")
 
-    # scaffold check: se esiste _profile/profile.json, confronta colonne raw vs clean
-    profile_path = raw_dir / "_profile" / "profile.json"
+    # scaffold check: legge profile raw (canonical prima, fallback legacy alias)
+    _profile_dir = raw_dir / "_profile"
+    profile_path = _profile_dir / "raw_profile.json"
+    if not profile_path.exists():
+        profile_path = _profile_dir / "profile.json"
     if profile_path.exists():
         try:
             import re as _re
@@ -417,7 +420,7 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
     return build_validation_summary(result)
 
 
-def run_promotion_validation(cfg, year: int, logger) -> dict[str, Any]:
+def _run_promotion_validation(cfg, year: int, logger) -> dict[str, Any]:
     raw_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year)
     clean_dir = layer_year_dir(cfg.root, "clean", cfg.dataset, year)
 

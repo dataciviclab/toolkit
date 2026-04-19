@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import duckdb
 
 from toolkit.raw.validate import validate_raw_output
-from toolkit.clean.validate import run_promotion_validation, validate_clean
+from toolkit.clean.validate import _run_promotion_validation as run_promotion_validation, validate_clean
 from toolkit.cross.validate import run_cross_validation, validate_cross_outputs
 from toolkit.core.config_models import TransitionConfig
 from toolkit.core.validation import check_transitions

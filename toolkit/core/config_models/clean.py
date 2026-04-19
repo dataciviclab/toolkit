@@ -13,6 +13,7 @@ from toolkit.core.config_models.common import (
     ensure_str_list,
     parse_bool,
 )
+from toolkit.core.config_models.mart import TransitionConfig
 
 
 class CleanReadConfig(BaseModel):
@@ -70,6 +71,9 @@ class CleanValidateConfig(BaseModel):
     ranges: dict[str, RangeRuleConfig] = Field(default_factory=dict)
     max_null_pct: dict[str, float] = Field(default_factory=dict)
     min_rows: int | None = None
+    promotion: TransitionConfig = Field(
+        default_factory=lambda: TransitionConfig(max_row_drop_pct=15.0)
+    )
 
     @field_validator("primary_key", "not_null", mode="before")
     @classmethod

@@ -15,6 +15,7 @@ def test_cli_run_all_and_validate_all_on_project_example(tmp_path: Path, monkeyp
 
     run_cmd(step="all", config=str(config_path))
     validate_cmd(step="all", config=str(config_path))
+    validate_cmd(step="promotion", config=str(config_path))
 
     root = dst / "_smoke_out"
     year = "2022"
@@ -23,6 +24,7 @@ def test_cli_run_all_and_validate_all_on_project_example(tmp_path: Path, monkeyp
     assert (root / "data" / "raw" / dataset / year / "raw_validation.json").exists()
     assert (root / "data" / "clean" / dataset / year / "project_example_2022_clean.parquet").exists()
     assert (root / "data" / "clean" / dataset / year / "_validate" / "clean_validation.json").exists()
+    assert (root / "data" / "clean" / dataset / year / "_validate" / "promotion_validation.json").exists()
     assert (root / "data" / "mart" / dataset / year / "rd_by_regione.parquet").exists()
     assert (root / "data" / "mart" / dataset / year / "rd_by_provincia.parquet").exists()
     assert (root / "data" / "mart" / dataset / year / "_validate" / "mart_validation.json").exists()

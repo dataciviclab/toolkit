@@ -418,27 +418,3 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
     )
     logger.info(f"VALIDATE CLEAN -> {report} (ok={result.ok})")
     return build_validation_summary(result)
-
-
-def _run_promotion_validation(cfg, year: int, logger) -> dict[str, Any]:
-    raw_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year)
-    clean_dir = layer_year_dir(cfg.root, "clean", cfg.dataset, year)
-
-    clean_cfg: dict[str, Any] = getattr(cfg, "clean", {}) or {}
-    spec = CleanValidationSpec.model_validate(
-        {
-            "required_columns": clean_cfg.get("required_columns"),
-            "validate": clean_cfg.get("validate") or {},
-        }
-    )
-
-    result = validate_promotion(
-        raw_dir,
-        clean_dir,
-        root=cfg.root,
-        transition=spec.validate.promotion,
-        logger=logger,
-    )
-    report = write_validation_json(clean_dir / "_validate" / "promotion_validation.json", result)
-    logger.info(f"VALIDATE PROMOTION -> {report} (ok={result.ok})")
-    return build_validation_summary(result)

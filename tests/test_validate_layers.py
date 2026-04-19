@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import duckdb
 
 from toolkit.raw.validate import validate_raw_output
-from toolkit.clean.validate import _run_promotion_validation as run_promotion_validation, validate_clean
+from toolkit.clean.validate import validate_clean
 from toolkit.cross.validate import run_cross_validation, validate_cross_outputs
 from toolkit.core.config_models import TransitionConfig
 from toolkit.core.validation import check_transitions
@@ -243,54 +243,6 @@ def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Pa
     assert any(item["kind"] == "row_drop_pct" for item in report["transition"]["warnings"])
     assert any(item["kind"] == "removed_columns" for item in report["transition"]["warnings"])
 
-
-def test_run_promotion_validation_warns_on_raw_to_clean_row_drop_and_removed_columns(tmp_path: Path):
-    root = tmp_path / "root"
-    raw_dir = root / "data" / "raw" / "demo" / "2024"
-    clean_dir = root / "data" / "clean" / "demo" / "2024"
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    clean_dir.mkdir(parents=True, exist_ok=True)
-
-    raw_csv = raw_dir / "raw.csv"
-    raw_csv.write_text("id,legacy,value\n1,a,10\n2,b,20\n3,c,30\n", encoding="utf-8")
-    _write_parquet(clean_dir / "demo_2024_clean.parquet", "CREATE TABLE t AS SELECT 1 AS id, 10 AS value")
-
-    (clean_dir / "metadata.json").write_text(
-        json.dumps(
-            {
-                "input_files": ["raw.csv"],
-                "read_source_used": "strict",
-                "read_params_used": {"delim": ",", "header": True},
-                "output_profile": {
-                    "row_count": 1,
-                    "columns": [
-                        {"name": "id", "type": "INTEGER"},
-                        {"name": "value", "type": "INTEGER"},
-                    ],
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    cfg = SimpleNamespace(root=root, dataset="demo")
-    summary = run_promotion_validation(
-        cfg,
-        2024,
-        logger=SimpleNamespace(info=lambda *args, **kwargs: None),
-    )
-
-    assert summary["passed"] is True
-    assert summary["warnings_count"] == 2
-
-    report = json.loads((clean_dir / "_validate" / "promotion_validation.json").read_text(encoding="utf-8"))
-    assert report["summary"]["raw_dir"] == "data/raw/demo/2024"
-    assert report["summary"]["clean_dir"] == "data/clean/demo/2024"
-    assert report["summary"]["raw_row_count"] == 3
-    assert report["summary"]["clean_row_count"] == 1
-    assert report["transition"]["profiles_count"] == 1
-    assert any(item["kind"] == "row_drop_pct" for item in report["transition"]["warnings"])
-    assert any(item["kind"] == "removed_columns" for item in report["transition"]["warnings"])
 
 
 def test_validate_cross_outputs_required_tables(tmp_path: Path):

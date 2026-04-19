@@ -64,4 +64,13 @@ Contratti correlati:
 - **Hygiene**: Gli output in `out/` o `_smoke_out/` sono ignorati da git. Non versionare dati.
 
 ---
-**Boundary**: Questa repo è il motore. Per i dataset reali, vedi `dataset-incubator`.
+
+## 7. Ruolo nell'ecosistema
+
+```
+dataset-incubator  →  toolkit  →  GCS (parquet clean/mart)  →  data-explorer
+```
+
+Il toolkit non gestisce il deployment degli output: li scrive nella directory configurata via `root` o `DCL_ROOT`. La CI di `dataset-incubator` si occupa di caricarli su GCS dopo ogni run validato. Da lì, `data-explorer` li legge direttamente via DuckDB per la visualizzazione pubblica.
+
+**Boundary**: questa repo è il motore. I contratti dataset reali vivono in `dataset-incubator`.

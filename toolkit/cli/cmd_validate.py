@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 
 from toolkit.cli.common import iter_selected_years, load_cfg_and_logger
-from toolkit.clean.validate import run_clean_validation
+from toolkit.clean.validate import run_clean_validation, run_promotion_validation
 from toolkit.mart.validate import run_mart_validation
 
 
@@ -13,13 +13,13 @@ def _raise_on_failed_summary(summary: dict[str, object]) -> None:
 
 
 def validate(
-    step: str = typer.Argument(..., help="clean | mart | all"),
+    step: str = typer.Argument(..., help="clean | mart | promotion | all"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
     """
-    Quality gate per CLEAN e MART.
+    Quality gate per CLEAN, MART e promotion QA raw -> clean.
     Usa regole opzionali in dataset.yml:
       clean.validate.*
       mart.validate.table_rules.*
@@ -40,8 +40,11 @@ def validate(
         elif step == "mart":
             _raise_on_failed_summary(run_mart_validation(cfg, year, logger))
 
+        elif step == "promotion":
+            _raise_on_failed_summary(run_promotion_validation(cfg, year, logger))
+
         else:
-            raise typer.BadParameter("step must be one of: clean, mart, all")
+            raise typer.BadParameter("step must be one of: clean, mart, promotion, all")
 
 
 def register(app: typer.Typer) -> None:

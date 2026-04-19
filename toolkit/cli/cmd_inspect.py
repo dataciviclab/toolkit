@@ -112,6 +112,7 @@ def _clean_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
         "manifest": str(clean_dir / "manifest.json"),
         "metadata": str(clean_dir / "metadata.json"),
         "validation": str(clean_dir / "_validate" / "clean_validation.json"),
+        "promotion_validation": str(clean_dir / "_validate" / "promotion_validation.json"),
     }
 
 
@@ -257,6 +258,7 @@ def paths(
         typer.echo(f"clean_manifest: {item['paths']['clean']['manifest']}")
         typer.echo(f"clean_metadata: {item['paths']['clean']['metadata']}")
         typer.echo(f"clean_validation: {item['paths']['clean']['validation']}")
+        typer.echo(f"promotion_validation: {item['paths']['clean']['promotion_validation']}")
         typer.echo(f"mart_dir: {item['paths']['mart']['dir']}")
         typer.echo("mart_outputs:")
         for output in item["paths"]["mart"]["outputs"]:

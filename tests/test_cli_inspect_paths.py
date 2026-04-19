@@ -49,6 +49,10 @@ def test_inspect_paths_reports_dataset_repo_layout_from_other_cwd(
         in result.output
     )
     assert (
+        f"promotion_validation: {dst / '_smoke_out' / 'data' / 'clean' / 'project_example' / '2022' / '_validate' / 'promotion_validation.json'}"
+        in result.output
+    )
+    assert (
         f"mart_manifest: {dst / '_smoke_out' / 'data' / 'mart' / 'project_example' / '2022' / 'manifest.json'}"
         in result.output
     )
@@ -89,6 +93,7 @@ def test_inspect_paths_json_is_notebook_friendly(tmp_path: Path, monkeypatch) ->
     assert payload["config_path"] == str(config_path)
     assert payload["paths"]["clean"]["output"].endswith("project_example_2022_clean.parquet")
     assert payload["paths"]["clean"]["validation"].endswith("clean_validation.json")
+    assert payload["paths"]["clean"]["promotion_validation"].endswith("promotion_validation.json")
     assert payload["paths"]["raw"]["manifest"].endswith("manifest.json")
     assert payload["paths"]["mart"]["outputs"]
     assert payload["paths"]["mart"]["metadata"].endswith("metadata.json")

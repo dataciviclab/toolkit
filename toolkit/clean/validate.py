@@ -6,12 +6,15 @@ from typing import Any
 
 import duckdb
 
-from toolkit.core.config_models import CleanValidationSpec, RangeRuleConfig
+from toolkit.clean.duckdb_read import read_raw_to_relation
+from toolkit.core.config_models import CleanValidationSpec, RangeRuleConfig, TransitionConfig
+from toolkit.core.layer_profile import compare_layer_profiles, profile_relation
 from toolkit.core.metadata import write_layer_manifest
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.validation import (
     ValidationResult,
     build_validation_summary,
+    check_transitions,
     required_columns_check,
     write_validation_json,
 )
@@ -201,15 +204,112 @@ def validate_clean(
     )
 
 
+def _input_files_from_clean_metadata(raw_dir: Path, clean_metadata: dict[str, Any]) -> list[Path]:
+    input_files = clean_metadata.get("input_files") or []
+    return [raw_dir / str(name) for name in input_files]
+
+
+def _profile_raw_input(
+    input_files: list[Path],
+    read_cfg: dict[str, Any],
+    read_mode: str,
+    logger,
+) -> dict[str, Any]:
+    con = duckdb.connect(":memory:")
+    try:
+        read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
+        return profile_relation(con, "raw_input")
+    finally:
+        con.close()
+
+
+def validate_promotion(
+    raw_dir: str | Path,
+    clean_dir: str | Path,
+    *,
+    root: str | Path | None = None,
+    transition: TransitionConfig | None = None,
+    logger=None,
+) -> ValidationResult:
+    raw_path = Path(raw_dir)
+    clean_path = Path(clean_dir)
+    raw_value = to_root_relative(raw_path, Path(root)) if root is not None else str(raw_path)
+    clean_value = to_root_relative(clean_path, Path(root)) if root is not None else str(clean_path)
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    clean_metadata_path = clean_path / "metadata.json"
+    if not raw_path.exists():
+        errors.append(f"Missing RAW dir: {raw_path}")
+    if not clean_metadata_path.exists():
+        errors.append(f"Missing CLEAN metadata: {clean_metadata_path}")
+    if errors:
+        return ValidationResult(
+            ok=False,
+            errors=errors,
+            warnings=warnings,
+            summary={"raw_dir": raw_value, "clean_dir": clean_value},
+        )
+
+    clean_metadata = json.loads(clean_metadata_path.read_text(encoding="utf-8"))
+    input_files = _input_files_from_clean_metadata(raw_path, clean_metadata)
+    missing_inputs = [path for path in input_files if not path.exists()]
+    if missing_inputs:
+        errors.append(f"Missing RAW input files used by CLEAN: {[p.name for p in missing_inputs]}")
+
+    clean_profile = clean_metadata.get("output_profile")
+    if not isinstance(clean_profile, dict):
+        errors.append("CLEAN metadata missing output_profile")
+
+    if errors:
+        return ValidationResult(
+            ok=False,
+            errors=errors,
+            warnings=warnings,
+            summary={"raw_dir": raw_value, "clean_dir": clean_value},
+        )
+
+    read_cfg = clean_metadata.get("read_params_used") or {}
+    read_mode = str(clean_metadata.get("read_source_used") or "fallback")
+    raw_profile = _profile_raw_input(input_files, read_cfg, read_mode, logger)
+    transition_profile = compare_layer_profiles(
+        raw_profile,
+        clean_profile,
+        source_layer="raw",
+        target_layer="clean",
+        target_name="clean",
+    )
+    transition_report = check_transitions(
+        [transition_profile] if transition_profile is not None else [],
+        transition or TransitionConfig(),
+    )
+    warnings.extend(transition_report["warning_messages"])
+
+    return ValidationResult(
+        ok=True,
+        errors=[],
+        warnings=warnings,
+        summary={
+            "raw_dir": raw_value,
+            "clean_dir": clean_value,
+            "input_files": [path.name for path in input_files],
+            "raw_row_count": raw_profile.get("row_count"),
+            "clean_row_count": clean_profile.get("row_count"),
+        },
+        sections={"transition": transition_report},
+    )
+
+
 def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
     out_dir = layer_year_dir(cfg.root, "clean", cfg.dataset, year)
     parquet = out_dir / f"{cfg.dataset}_{year}_clean.parquet"
 
-    clean_cfg: dict[str, Any] = cfg.clean or {}
+    clean_cfg: dict[str, Any] = getattr(cfg, "clean", {}) or {}
     spec = CleanValidationSpec.model_validate(
         {
             "required_columns": clean_cfg.get("required_columns"),
-            "validate": clean_cfg.get("validate"),
+            "validate": clean_cfg.get("validate") or {},
         }
     )
 
@@ -236,4 +336,28 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
         warnings_count=len(result.warnings),
     )
     logger.info(f"VALIDATE CLEAN -> {report} (ok={result.ok})")
+    return build_validation_summary(result)
+
+
+def run_promotion_validation(cfg, year: int, logger) -> dict[str, Any]:
+    raw_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year)
+    clean_dir = layer_year_dir(cfg.root, "clean", cfg.dataset, year)
+
+    clean_cfg: dict[str, Any] = getattr(cfg, "clean", {}) or {}
+    spec = CleanValidationSpec.model_validate(
+        {
+            "required_columns": clean_cfg.get("required_columns"),
+            "validate": clean_cfg.get("validate") or {},
+        }
+    )
+
+    result = validate_promotion(
+        raw_dir,
+        clean_dir,
+        root=cfg.root,
+        transition=spec.validate.promotion,
+        logger=logger,
+    )
+    report = write_validation_json(clean_dir / "_validate" / "promotion_validation.json", result)
+    logger.info(f"VALIDATE PROMOTION -> {report} (ok={result.ok})")
     return build_validation_summary(result)

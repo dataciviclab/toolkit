@@ -6,12 +6,15 @@ from typing import Any
 
 import duckdb
 
-from toolkit.core.config_models import CleanValidationSpec, RangeRuleConfig
+from toolkit.clean.duckdb_read import read_raw_to_relation
+from toolkit.core.config_models import CleanValidationSpec, RangeRuleConfig, TransitionConfig
+from toolkit.core.layer_profile import compare_layer_profiles, profile_relation
 from toolkit.core.metadata import write_layer_manifest
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.validation import (
     ValidationResult,
     build_validation_summary,
+    check_transitions,
     required_columns_check,
     write_validation_json,
 )
@@ -201,15 +204,113 @@ def validate_clean(
     )
 
 
+def _input_files_from_clean_metadata(raw_dir: Path, clean_metadata: dict[str, Any]) -> list[Path]:
+    input_files = clean_metadata.get("input_files") or []
+    return [raw_dir / str(name) for name in input_files]
+
+
+def _profile_raw_input(
+    input_files: list[Path],
+    read_cfg: dict[str, Any],
+    read_mode: str,
+    logger,
+) -> dict[str, Any]:
+    con = duckdb.connect(":memory:")
+    try:
+        read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
+        return profile_relation(con, "raw_input")
+    finally:
+        con.close()
+
+
+def validate_promotion(
+    raw_dir: str | Path,
+    clean_dir: str | Path,
+    *,
+    root: str | Path | None = None,
+    transition: TransitionConfig | None = None,
+    logger=None,
+) -> ValidationResult:
+    raw_path = Path(raw_dir)
+    clean_path = Path(clean_dir)
+    raw_value = to_root_relative(raw_path, Path(root)) if root is not None else str(raw_path)
+    clean_value = to_root_relative(clean_path, Path(root)) if root is not None else str(clean_path)
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    clean_metadata_path = clean_path / "metadata.json"
+    if not raw_path.exists():
+        errors.append(f"Missing RAW dir: {raw_path}")
+    if not clean_metadata_path.exists():
+        errors.append(f"Missing CLEAN metadata: {clean_metadata_path}")
+    if errors:
+        return ValidationResult(
+            ok=False,
+            errors=errors,
+            warnings=warnings,
+            summary={"raw_dir": raw_value, "clean_dir": clean_value},
+        )
+
+    clean_metadata = json.loads(clean_metadata_path.read_text(encoding="utf-8"))
+    input_files = _input_files_from_clean_metadata(raw_path, clean_metadata)
+    missing_inputs = [path for path in input_files if not path.exists()]
+    if missing_inputs:
+        errors.append(f"Missing RAW input files used by CLEAN: {[p.name for p in missing_inputs]}")
+
+    clean_profile = clean_metadata.get("output_profile")
+    if not isinstance(clean_profile, dict):
+        errors.append("CLEAN metadata missing output_profile")
+
+    if errors:
+        return ValidationResult(
+            ok=False,
+            errors=errors,
+            warnings=warnings,
+            summary={"raw_dir": raw_value, "clean_dir": clean_value},
+        )
+
+    read_cfg = clean_metadata.get("read_params_used") or {}
+    read_mode = str(clean_metadata.get("read_source_used") or "fallback")
+    raw_profile = _profile_raw_input(input_files, read_cfg, read_mode, logger)
+    transition_profile = compare_layer_profiles(
+        raw_profile,
+        clean_profile,
+        source_layer="raw",
+        target_layer="clean",
+        target_name="clean",
+    )
+    transition_report = check_transitions(
+        [transition_profile] if transition_profile is not None else [],
+        transition or TransitionConfig(),
+    )
+    warnings.extend(transition_report["warning_messages"])
+
+    return ValidationResult(
+        ok=True,
+        errors=[],
+        warnings=warnings,
+        summary={
+            "raw_dir": raw_value,
+            "clean_dir": clean_value,
+            "input_files": [path.name for path in input_files],
+            "raw_row_count": raw_profile.get("row_count"),
+            "clean_row_count": clean_profile.get("row_count"),
+            "raw_col_count": len(raw_profile.get("columns") or []),
+        },
+        sections={"transition": transition_report},
+    )
+
+
 def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
     out_dir = layer_year_dir(cfg.root, "clean", cfg.dataset, year)
     parquet = out_dir / f"{cfg.dataset}_{year}_clean.parquet"
 
-    clean_cfg: dict[str, Any] = cfg.clean or {}
+    clean_cfg: dict[str, Any] = getattr(cfg, "clean", {}) or {}
     spec = CleanValidationSpec.model_validate(
         {
             "required_columns": clean_cfg.get("required_columns"),
-            "validate": clean_cfg.get("validate"),
+            "validate": clean_cfg.get("validate") or {},
         }
     )
 
@@ -222,6 +323,86 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
         ranges=spec.validate.ranges,
         max_null_pct=spec.validate.max_null_pct,
         min_rows=spec.validate.min_rows,
+    )
+
+    # cross-layer raw→clean check (row retention, column coverage)
+    raw_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year)
+    promotion_result = validate_promotion(
+        raw_dir,
+        out_dir,
+        root=cfg.root,
+        transition=spec.validate.promotion,
+        logger=logger,
+    )
+    merged_errors = result.errors + promotion_result.errors
+    merged_warnings = result.warnings + promotion_result.warnings
+
+    clean_cols = result.summary.get("columns") or []
+    raw_row_count = promotion_result.summary.get("raw_row_count")
+    clean_row_count = promotion_result.summary.get("clean_row_count") or result.summary.get("row_count")
+    raw_col_count = promotion_result.summary.get("raw_col_count")
+
+    # scaffold check: legge profile raw (canonical prima, fallback legacy alias)
+    _profile_dir = raw_dir / "_profile"
+    profile_path = _profile_dir / "raw_profile.json"
+    if not profile_path.exists():
+        profile_path = _profile_dir / "profile.json"
+    if profile_path.exists():
+        try:
+            import re as _re
+            def _to_snake(n: str) -> str:
+                s = _re.sub(r"([a-z])([A-Z])", r"\1_\2", n.strip())
+                s = _re.sub(r"[^a-zA-Z0-9]+", "_", s)
+                return _re.sub(r"_+", "_", s).lower().strip("_") or "col"
+
+            raw_profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            scaffold_cols = {_to_snake(c) for c in (raw_profile.get("columns_raw") or [])}
+            clean_cols_set = set(clean_cols)
+            unmapped = sorted(scaffold_cols - clean_cols_set)
+            if unmapped:
+                merged_warnings.append(
+                    f"[scaffold] {len(unmapped)} colonne raw non mappate nel clean "
+                    f"(drop senza -- DROP: <motivo>?): {unmapped}"
+                )
+        except Exception:
+            pass
+    row_drop_pct = (
+        round((raw_row_count - clean_row_count) / raw_row_count * 100, 2)
+        if raw_row_count and clean_row_count is not None and raw_row_count > 0
+        else None
+    )
+    col_drop_count = (raw_col_count - len(clean_cols)) if raw_col_count is not None else None
+
+    rules = {k: v for k, v in {
+        "required": spec.required_columns or [],
+        "primary_key": spec.validate.primary_key or [],
+        "not_null": spec.validate.not_null or [],
+        "ranges": {c: {"min": r.min, "max": r.max} for c, r in (spec.validate.ranges or {}).items()},
+        "max_null_pct": spec.validate.max_null_pct or {},
+        "min_rows": spec.validate.min_rows,
+    }.items() if v not in ([], {}, None)}
+
+    merged_summary = {
+        "dataset": cfg.dataset,
+        "year": year,
+        "stats": {
+            "raw_rows": raw_row_count,
+            "clean_rows": clean_row_count,
+            "row_drop_pct": row_drop_pct,
+            "raw_cols": raw_col_count,
+            "clean_cols": len(clean_cols),
+            "col_drop_count": col_drop_count,
+        },
+        "columns": clean_cols,
+        **({"rules": rules} if rules else {}),
+    }
+    merged_sections = {**(result.sections or {}), **(promotion_result.sections or {})}
+    result = ValidationResult(
+        ok=len(merged_errors) == 0,
+        errors=merged_errors,
+        warnings=merged_warnings,
+        summary=merged_summary,
+        sections=merged_sections,
     )
 
     report = write_validation_json(Path(out_dir) / "_validate" / "clean_validation.json", result)

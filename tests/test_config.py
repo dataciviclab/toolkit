@@ -65,6 +65,33 @@ mart:
     }
 
 
+def test_load_config_parses_clean_promotion_config(tmp_path: Path):
+    yml = tmp_path / "dataset.yml"
+    yml.write_text(
+        """
+root: null
+dataset:
+  name: demo
+  years: [2024]
+raw: {}
+clean:
+  validate:
+    promotion:
+      max_row_drop_pct: 8.5
+      warn_removed_columns: "false"
+mart: {}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_config(yml)
+
+    assert cfg.clean["validate"]["promotion"] == {
+        "max_row_drop_pct": 8.5,
+        "warn_removed_columns": False,
+    }
+
+
 def test_load_config_model_rejects_invalid_mart_transition_bool(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(

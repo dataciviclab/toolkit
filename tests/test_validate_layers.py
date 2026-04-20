@@ -9,7 +9,8 @@ from toolkit.raw.validate import validate_raw_output
 from toolkit.clean.validate import validate_clean
 from toolkit.cross.validate import run_cross_validation, validate_cross_outputs
 from toolkit.core.config_models import TransitionConfig
-from toolkit.mart.validate import _check_transitions, run_mart_validation, validate_mart
+from toolkit.core.validation import check_transitions
+from toolkit.mart.validate import run_mart_validation, validate_mart
 from toolkit.core.validation import write_validation_json
 
 
@@ -146,7 +147,7 @@ def test_check_transitions_warns_on_row_drop_over_threshold_and_removed_columns(
         }
     ]
 
-    report = _check_transitions(
+    report = check_transitions(
         transition_profiles,
         TransitionConfig(max_row_drop_pct=20, warn_removed_columns=True),
     )
@@ -170,14 +171,14 @@ def test_check_transitions_respects_optional_threshold_and_removed_columns_toggl
         }
     ]
 
-    no_threshold = _check_transitions(
+    no_threshold = check_transitions(
         transition_profiles,
         TransitionConfig(max_row_drop_pct=None, warn_removed_columns=False),
     )
     assert no_threshold["warning_messages"] == []
     assert no_threshold["warnings"] == []
 
-    removed_only = _check_transitions(
+    removed_only = check_transitions(
         transition_profiles,
         TransitionConfig(max_row_drop_pct=None, warn_removed_columns=True),
     )
@@ -241,6 +242,7 @@ def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Pa
     }
     assert any(item["kind"] == "row_drop_pct" for item in report["transition"]["warnings"])
     assert any(item["kind"] == "removed_columns" for item in report["transition"]["warnings"])
+
 
 
 def test_validate_cross_outputs_required_tables(tmp_path: Path):

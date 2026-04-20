@@ -105,6 +105,24 @@ def run_raw_validation(root: str | None, dataset: str, year: int, logger) -> dic
     files = metadata.get("files") or metadata.get("outputs") or []
 
     result = validate_raw_output(out_dir, files)
+
+    hints = metadata.get("profile_hints") or {}
+    primary_file = hints.get("file_used") or (files[0].get("file") if files else None)
+    enriched_summary = {
+        "dataset": dataset,
+        "year": year,
+        **({"file": primary_file} if primary_file else {}),
+        **({"encoding": hints["encoding_suggested"]} if hints.get("encoding_suggested") else {}),
+        **({"delim": hints["delim_suggested"]} if hints.get("delim_suggested") else {}),
+        **result.summary,
+    }
+    result = result.__class__(
+        ok=result.ok,
+        errors=result.errors,
+        warnings=result.warnings,
+        summary=enriched_summary,
+        sections=result.sections,
+    )
     report = write_validation_json(out_dir / "raw_validation.json", result)
     existing_manifest = read_raw_manifest(out_dir) or {
         "dataset": dataset,

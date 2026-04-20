@@ -89,6 +89,7 @@ def test_inspect_paths_json_is_notebook_friendly(tmp_path: Path, monkeypatch) ->
     assert payload["config_path"] == str(config_path)
     assert payload["paths"]["clean"]["output"].endswith("project_example_2022_clean.parquet")
     assert payload["paths"]["clean"]["validation"].endswith("clean_validation.json")
+    assert payload["paths"]["clean"]["validation"].endswith("clean_validation.json")
     assert payload["paths"]["raw"]["manifest"].endswith("manifest.json")
     assert payload["paths"]["mart"]["outputs"]
     assert payload["paths"]["mart"]["metadata"].endswith("metadata.json")

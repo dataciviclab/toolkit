@@ -272,7 +272,23 @@ def validate_promotion(
 
     read_cfg = clean_metadata.get("read_params_used") or {}
     read_mode = str(clean_metadata.get("read_source_used") or "fallback")
-    raw_profile = _profile_raw_input(input_files, read_cfg, read_mode, logger)
+
+    profile_dir = raw_path / "_profile"
+    saved_profile_path = profile_dir / "raw_profile.json"
+    if not saved_profile_path.exists():
+        saved_profile_path = profile_dir / "profile.json"
+
+    if saved_profile_path.exists():
+        try:
+            saved = json.loads(saved_profile_path.read_text(encoding="utf-8"))
+            raw_profile = {
+                "row_count": saved.get("row_count"),
+                "columns": [{"name": c, "type": "VARCHAR"} for c in (saved.get("columns_raw") or [])],
+            }
+        except Exception:
+            raw_profile = _profile_raw_input(input_files, read_cfg, read_mode, logger)
+    else:
+        raw_profile = _profile_raw_input(input_files, read_cfg, read_mode, logger)
     transition_profile = compare_layer_profiles(
         raw_profile,
         clean_profile,
@@ -343,10 +359,13 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
     raw_col_count = promotion_result.summary.get("raw_col_count")
 
     # scaffold check: legge profile raw (canonical prima, fallback legacy alias)
+    # Usa columns_raw dal profile come source of truth per raw_col_count, bypassing
+    # _profile_raw_input che potrebbe rileggere il CSV con parametri header errati
     _profile_dir = raw_dir / "_profile"
     profile_path = _profile_dir / "raw_profile.json"
     if not profile_path.exists():
         profile_path = _profile_dir / "profile.json"
+    trusted_raw_cols: list[str] = []
     if profile_path.exists():
         try:
             import re as _re
@@ -356,7 +375,8 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
                 return _re.sub(r"_+", "_", s).lower().strip("_") or "col"
 
             raw_profile = json.loads(profile_path.read_text(encoding="utf-8"))
-            scaffold_cols = {_to_snake(c) for c in (raw_profile.get("columns_raw") or [])}
+            trusted_raw_cols = raw_profile.get("columns_raw") or []
+            scaffold_cols = {_to_snake(c) for c in trusted_raw_cols}
             clean_cols_set = set(clean_cols)
             unmapped = sorted(scaffold_cols - clean_cols_set)
             if unmapped:
@@ -366,6 +386,8 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
                 )
         except Exception:
             pass
+    if trusted_raw_cols:
+        raw_col_count = len(trusted_raw_cols)
     row_drop_pct = (
         round((raw_row_count - clean_row_count) / raw_row_count * 100, 2)
         if raw_row_count and clean_row_count is not None and raw_row_count > 0

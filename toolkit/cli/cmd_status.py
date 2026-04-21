@@ -8,21 +8,9 @@ import typer
 
 from toolkit.cli.common import format_profile_preview, load_layer_profile_summaries
 from toolkit.core.config import load_config
+from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import layer_dataset_dir, layer_year_dir
 from toolkit.core.run_context import get_run_dir, latest_run, read_run_record
-
-
-def _layer_row(record: dict[str, object], layer: str) -> str:
-    layer_info = (record.get("layers") or {}).get(layer, {})
-    validation = (record.get("validations") or {}).get(layer, {})
-    validation_passed = validation.get("passed")
-    return (
-        f"{layer:<5} "
-        f"{str(layer_info.get('status', 'PENDING')):<20} "
-        f"{str(validation_passed):<17} "
-        f"{str(validation.get('errors_count', 0)):<12} "
-        f"{str(validation.get('warnings_count', 0)):<14}"
-    )
 
 
 def _read_json(path: Path) -> dict[str, object] | None:
@@ -32,14 +20,13 @@ def _read_json(path: Path) -> dict[str, object] | None:
         return None
 
 
-def _raw_hints(root: Path, dataset: str, year: int) -> dict[str, object]:
+def _raw_hints(root: Path, dataset: str, year: int) -> dict[str, Any]:
     raw_dir = layer_year_dir(root, "raw", dataset, year)
-    raw_manifest = _read_json(raw_dir / "manifest.json") or {}
-    raw_metadata = _read_json(raw_dir / "metadata.json") or {}
-    profile_hints = raw_metadata.get("profile_hints") or {}
+    raw_meta = read_layer_metadata(raw_dir)
+    profile_hints = raw_meta.get("profile_hints") or {}
     suggested_read_path = raw_dir / "_profile" / "suggested_read.yml"
     return {
-        "primary_output_file": raw_manifest.get("primary_output_file"),
+        "primary_output_file": raw_meta.get("primary_output_file"),
         "suggested_read_exists": suggested_read_path.exists(),
         "suggested_read_path": str(suggested_read_path),
         "encoding": profile_hints.get("encoding_suggested"),
@@ -58,7 +45,7 @@ def _layer_artifacts_dir(root: Path, dataset: str, year: int, layer: str) -> Pat
 
 def _validation_counts(
     validation_payload: dict[str, Any] | None,
-    manifest_payload: dict[str, Any] | None,
+    meta_payload: dict[str, Any] | None,
     record_summary: dict[str, Any] | None,
 ) -> tuple[bool | None, int | None, int | None]:
     if validation_payload is not None:
@@ -68,12 +55,12 @@ def _validation_counts(
             len(validation_payload.get("warnings") or []),
         )
 
-    manifest_summary = (manifest_payload or {}).get("summary") or {}
-    if manifest_summary:
+    summary = (meta_payload or {}).get("summary") or {}
+    if summary:
         return (
-            manifest_summary.get("ok"),
-            manifest_summary.get("errors_count"),
-            manifest_summary.get("warnings_count"),
+            summary.get("ok"),
+            summary.get("errors_count"),
+            summary.get("warnings_count"),
         )
 
     record_summary = record_summary or {}
@@ -95,8 +82,8 @@ def _layer_validation_summary(
     record: dict[str, Any],
 ) -> dict[str, Any] | None:
     layer_dir = _layer_artifacts_dir(root, dataset, year, layer)
-    manifest_payload = _read_json(layer_dir / "manifest.json")
-    validation_rel = (manifest_payload or {}).get("validation")
+    meta_payload = read_layer_metadata(layer_dir)
+    validation_rel = meta_payload.get("validation")
     validation_payload = None
     validation_path = None
     if isinstance(validation_rel, str) and validation_rel.strip():
@@ -106,13 +93,13 @@ def _layer_validation_summary(
     record_summary = (record.get("validations") or {}).get(layer, {})
     ok, errors_count, warnings_count = _validation_counts(
         validation_payload,
-        manifest_payload,
+        meta_payload,
         record_summary if isinstance(record_summary, dict) else {},
     )
 
     has_any_data = any(
         [
-            manifest_payload is not None,
+            meta_payload is not None,
             validation_payload is not None,
             bool(record_summary),
             layer_dir.exists(),
@@ -131,7 +118,7 @@ def _layer_validation_summary(
     if validation_path is not None and validation_payload is None:
         details.append(f"validation_missing={validation_path.name}")
 
-    outputs = (manifest_payload or {}).get("outputs") or []
+    outputs = meta_payload.get("outputs") or []
     if isinstance(outputs, list):
         missing_outputs = []
         for entry in outputs:
@@ -167,7 +154,7 @@ def _layer_validation_summary(
         state = "passed"
     elif ok is False:
         state = "failed"
-    elif manifest_payload is not None:
+    elif meta_payload is not None:
         state = "not_validated"
     else:
         state = "unknown"
@@ -304,7 +291,16 @@ def status(
     typer.echo("")
     typer.echo("layer layer_status         validation_passed errors_count warnings_count")
     for layer in ("raw", "clean", "mart"):
-        typer.echo(_layer_row(record, layer))
+        layer_info = (record.get("layers") or {}).get(layer, {})
+        validation = (record.get("validations") or {}).get(layer, {})
+        validation_passed = validation.get("passed")
+        typer.echo(
+            f"{layer:<5} "
+            f"{str(layer_info.get('status', 'PENDING')):<20} "
+            f"{str(validation_passed):<17} "
+            f"{str(validation.get('errors_count', 0)):<12} "
+            f"{str(validation.get('warnings_count', 0)):<14}"
+        )
     _print_validation_summary(Path(cfg.root), dataset, year, record, has_cross_year)
     _print_layer_profiles(Path(cfg.root), dataset, year)
 

@@ -8,6 +8,7 @@ import typer
 
 from toolkit.cli.common import format_profile_preview, iter_years, load_layer_profile_summaries
 from toolkit.core.config import load_config
+from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import layer_year_dir
 from toolkit.core.support import resolve_support_payloads
 from toolkit.profile.raw import build_profile_hints
@@ -21,8 +22,8 @@ def _read_json(path: Path) -> dict[str, Any] | None:
         return None
 
 
-def _raw_primary_file(raw_dir: Path, manifest: dict[str, Any]) -> Path | None:
-    primary_output_file = manifest.get("primary_output_file")
+def _raw_primary_file(raw_dir: Path, metadata: dict[str, Any]) -> Path | None:
+    primary_output_file = metadata.get("primary_output_file")
     if isinstance(primary_output_file, str):
         candidate = raw_dir / primary_output_file
         if candidate.exists():
@@ -33,11 +34,10 @@ def _raw_primary_file(raw_dir: Path, manifest: dict[str, Any]) -> Path | None:
 def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
     root = Path(cfg.root)
     raw_dir = layer_year_dir(root, "raw", cfg.dataset, year)
-    manifest = _read_json(raw_dir / "manifest.json") or {}
-    metadata = _read_json(raw_dir / "metadata.json") or {}
-    primary_file = _raw_primary_file(raw_dir, manifest)
+    raw_meta = read_layer_metadata(raw_dir)
+    primary_file = _raw_primary_file(raw_dir, raw_meta)
 
-    profile_hints = metadata.get("profile_hints") or {}
+    profile_hints = raw_meta.get("profile_hints") or {}
     profile_source = "metadata" if profile_hints else None
     sniff_error: str | None = None
 
@@ -57,7 +57,7 @@ def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
         "year": year,
         "raw_dir": str(raw_dir),
         "raw_exists": raw_dir.exists(),
-        "primary_output_file": manifest.get("primary_output_file"),
+        "primary_output_file": raw_meta.get("primary_output_file"),
         "file_used": profile_hints.get("file_used"),
         "profile_source": profile_source,
         "encoding": profile_hints.get("encoding_suggested"),
@@ -94,8 +94,8 @@ def _raw_output_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
     raw_dir = layer_year_dir(root, "raw", dataset, year)
     return {
         "dir": str(raw_dir),
-        "manifest": str(raw_dir / "manifest.json"),
         "metadata": str(raw_dir / "metadata.json"),
+        "manifest": str(raw_dir / "manifest.json"),
         "validation": str(raw_dir / "raw_validation.json"),
     }
 
@@ -109,8 +109,8 @@ def _clean_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
     return {
         "dir": str(clean_dir),
         "output": str(_clean_output_path(root, dataset, year)),
-        "manifest": str(clean_dir / "manifest.json"),
         "metadata": str(clean_dir / "metadata.json"),
+        "manifest": str(clean_dir / "manifest.json"),
         "validation": str(clean_dir / "_validate" / "clean_validation.json"),
     }
 
@@ -130,8 +130,8 @@ def _mart_paths(
     return {
         "dir": str(mart_dir),
         "outputs": [str(path) for path in _mart_output_paths(root, mart_dir, tables)],
-        "manifest": str(mart_dir / "manifest.json"),
         "metadata": str(mart_dir / "metadata.json"),
+        "manifest": str(mart_dir / "manifest.json"),
         "validation": str(mart_dir / "_validate" / "mart_validation.json"),
     }
 
@@ -141,10 +141,9 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
     run_dir = get_run_dir(root, cfg.dataset, year)
     mart_tables = cfg.mart.get("tables") or []
     raw_dir = layer_year_dir(root, "raw", cfg.dataset, year)
-    raw_manifest = _read_json(raw_dir / "manifest.json") or {}
-    raw_metadata = _read_json(raw_dir / "metadata.json") or {}
+    raw_meta = read_layer_metadata(raw_dir)
     suggested_read_path = raw_dir / "_profile" / "suggested_read.yml"
-    profile_hints = raw_metadata.get("profile_hints") or {}
+    profile_hints = raw_meta.get("profile_hints") or {}
 
     latest_payload: dict[str, Any] | None = None
     try:
@@ -171,7 +170,7 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
             "run_dir": str(run_dir),
         },
         "raw_hints": {
-            "primary_output_file": raw_manifest.get("primary_output_file"),
+            "primary_output_file": raw_meta.get("primary_output_file"),
             "suggested_read_path": str(suggested_read_path),
             "suggested_read_exists": suggested_read_path.exists(),
             "encoding": profile_hints.get("encoding_suggested"),
@@ -213,8 +212,8 @@ def paths(
         typer.echo(f"config_path: {item['config_path']}")
         typer.echo(f"root: {item['root']}")
         typer.echo(f"raw_dir: {item['paths']['raw']['dir']}")
-        typer.echo(f"raw_manifest: {item['paths']['raw']['manifest']}")
         typer.echo(f"raw_metadata: {item['paths']['raw']['metadata']}")
+        typer.echo(f"raw_manifest: {item['paths']['raw']['manifest']}")
         typer.echo(f"raw_validation: {item['paths']['raw']['validation']}")
         typer.echo("raw_hints:")
         typer.echo(f"  - primary_output_file: {item['raw_hints']['primary_output_file']}")

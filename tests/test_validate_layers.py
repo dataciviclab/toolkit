@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import duckdb
 
 from toolkit.raw.validate import validate_raw_output
-from toolkit.clean.validate import validate_clean
+from toolkit.clean.validate import validate_clean, run_clean_validation
 from toolkit.cross.validate import run_cross_validation, validate_cross_outputs
 from toolkit.core.config_models import TransitionConfig
 from toolkit.core.validation import check_transitions
@@ -280,3 +280,63 @@ def test_run_cross_validation_does_not_require_metadata_json(tmp_path: Path):
     manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
     assert manifest_payload["validation"] == "_validate/cross_validation.json"
     assert manifest_payload["summary"]["ok"] is True
+
+
+def test_run_clean_validation_uses_columns_raw_from_raw_profile(tmp_path: Path):
+    """Regression test for issue #145: raw_col_count must come from columns_raw in
+    raw_profile.json, not from _profile_raw_input which may read the CSV with
+    broken read_params_used and get placeholder names (column00, column01, ...)."""
+    root = tmp_path / "root"
+    dataset = "demo"
+    year = 2024
+
+    raw_dir = root / "data" / "raw" / dataset / str(year)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "data.csv").write_text("a,b,c\n1,2,3\n", encoding="utf-8")
+
+    profile_dir = raw_dir / "_profile"
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    real_columns = ["col_alpha", "col_beta", "col_gamma"]
+    (profile_dir / "raw_profile.json").write_text(
+        json.dumps(
+            {
+                "columns_raw": real_columns,
+                "columns_norm": [c.lower() for c in real_columns],
+                "row_count": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    clean_dir = root / "data" / "clean" / dataset / str(year)
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    _write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet", "CREATE TABLE t AS SELECT 1 AS col_alpha, 2 AS col_beta")
+
+    (clean_dir / "metadata.json").write_text(
+        json.dumps(
+            {
+                "input_files": ["data.csv"],
+                "read_params_used": {"header": False},
+                "output_profile": {
+                    "columns": [
+                        {"name": "col_alpha", "type": "INTEGER"},
+                        {"name": "col_beta", "type": "INTEGER"},
+                    ],
+                    "row_count": 1,
+                },
+                "outputs": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = SimpleNamespace(
+        root=root,
+        dataset=dataset,
+        clean={},
+    )
+
+    summary = run_clean_validation(cfg, year, logger=SimpleNamespace(info=lambda *args, **kwargs: None))
+
+    assert summary["stats"]["raw_cols"] == len(real_columns)
+    assert summary["stats"]["col_drop_count"] == len(real_columns) - 2

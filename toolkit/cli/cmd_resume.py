@@ -54,9 +54,6 @@ def _layer_artifacts_ok(root: Path, dataset: str, year: int, layer: str) -> tupl
     if layer == "mart":
         outputs = meta.get("outputs") or []
         if not outputs:
-            manifest = _read_json(layer_dir / "manifest.json")
-            outputs = (manifest.get("outputs") or []) if manifest else []
-        if not outputs:
             return False, "mart metadata missing outputs"
         for output in outputs:
             rel_file = (output or {}).get("file")

@@ -195,6 +195,30 @@ class SdmxSource:
             )
         return result
 
+    def preview_constraints(self, agency: str, flow: str, version: str) -> dict[str, list[str]]:
+        """Return valid codes per dimension for a dataflow.
+
+        Useful to validate filters before calling fetch(), or to understand
+        which values are available without downloading data.
+        """
+        flow_ref = _flow_ref(agency, flow, version)
+        payload, _origin = self._get_json(
+            self._data_base_urls(agency),
+            f"data/{flow_ref}/all",
+            params={"firstNObservations": "0"},
+        )
+        structure = payload.get("structure") or {}
+        dimensions = structure.get("dimensions") or {}
+        result: dict[str, list[str]] = {}
+        for section in ("series", "observation"):
+            for dim in dimensions.get(section) or []:
+                dim_id = str(dim.get("id") or "")
+                if not dim_id or dim_id in result:
+                    continue
+                values: list[dict] = dim.get("values") or []
+                result[dim_id] = [str(v.get("id") or "") for v in values if v.get("id")]
+        return result
+
     def _build_key(self, dimensions: list[str], filters: dict | None) -> str:
         filters = filters or {}
         unknown = sorted(set(filters.keys()) - set(dimensions))
@@ -318,8 +342,24 @@ class SdmxSource:
             )
 
         flow_ref = _flow_ref(agency, flow, version)
-        dimensions = self._preview_dimensions(agency, flow, version)
-        key = self._build_key(dimensions, filters)
+        constraints = self.preview_constraints(agency, flow, version)
+        key = self._build_key(list(constraints.keys()), filters)
+        for dim, allowed in constraints.items():
+            if not allowed:
+                continue
+            val = filters.get(dim) if filters else None
+            if val is None:
+                continue
+            if isinstance(val, (list, tuple)):
+                invalid = [v for v in val if str(v) not in allowed]
+            else:
+                invalid = [val] if str(val) not in allowed else []
+            if invalid:
+                ellipsis = " ..." if len(allowed) > 10 else ""
+                raise DownloadError(
+                    f"Invalid value(s) for SDMX dimension {dim}: {invalid} — "
+                    f"allowed: {allowed[:10]}{ellipsis}"
+                )
         payload, origin = self._get_json(self._data_base_urls(agency), f"data/{flow_ref}/{key}")
         header, rows = self._normalize_rows(payload)
         if not rows:

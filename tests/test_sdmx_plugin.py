@@ -63,23 +63,28 @@ DATA_JSON = """
 }
 """
 
-PREVIEW_JSON = """
+PREVIEW_JSON_WITH_VALUES = """
 {
   "dataSets": [{"series": {}}],
   "structure": {
     "dimensions": {
       "series": [
-        {"id": "FREQ"},
-        {"id": "REF_AREA"},
-        {"id": "DATA_TYPE"},
-        {"id": "SEX"},
-        {"id": "AGE"},
-        {"id": "MARITAL_STATUS"}
+        {"id": "FREQ", "values": [{"id": "A", "name": "annual"}]},
+        {"id": "REF_AREA", "values": [{"id": "001001", "name": "Agliè"}]},
+        {"id": "DATA_TYPE", "values": [{"id": "JAN", "name": "population on 1st January"}]},
+        {"id": "SEX", "values": [{"id": "9", "name": "total"}]},
+        {"id": "AGE", "values": [{"id": "TOTAL", "name": "total"}]},
+        {"id": "MARITAL_STATUS", "values": [{"id": "99", "name": "total"}]}
+      ],
+      "observation": [
+        {"id": "TIME_PERIOD", "values": [{"id": "2024", "name": "2024"}]}
       ]
     }
   }
 }
 """
+
+EMPTY_DATA_JSON = '{"dataSets":[{"series":{}}],"structure":{"dimensions":{"series":[{"id":"FREQ","values":[{"id":"A","name":"annual"}]}]}}}'
 
 
 def test_sdmx_fetch_normalizes_csv(monkeypatch):
@@ -90,7 +95,7 @@ def test_sdmx_fetch_normalizes_csv(monkeypatch):
         if url.endswith("/dataflow/IT1/22_289"):
             return _FakeResponse(200, DATAFLOW_XML, url)
         if url.endswith("/data/IT1,22_289,1.5/all"):
-            return _FakeResponse(200, PREVIEW_JSON, url)
+            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
         if url.endswith("/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99"):
             return _FakeResponse(200, DATA_JSON, url)
         raise AssertionError(f"Unexpected URL {url}")
@@ -142,15 +147,16 @@ def test_sdmx_fetch_rejects_unknown_filter_dimension(monkeypatch):
         if url.endswith("/dataflow/IT1/22_289"):
             return _FakeResponse(200, DATAFLOW_XML, url)
         if url.endswith("/data/IT1,22_289,1.5/all"):
-            return _FakeResponse(200, PREVIEW_JSON, url)
-        raise AssertionError(f"Unexpected URL {url}")
+            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
+        return _FakeResponse(404, "not found", url)
 
     monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
 
     try:
-        SdmxSource().fetch("IT1", "22_289", "1.5", {"TIME_PERIOD": "2024"})
+        SdmxSource().fetch("IT1", "22_289", "1.5", {"NOT_A_VALID_DIM": "X"})
     except DownloadError as exc:
         assert "Unknown SDMX filter dimensions" in str(exc)
+        assert "NOT_A_VALID_DIM" in str(exc)
     else:
         raise AssertionError("Expected DownloadError")
 
@@ -165,7 +171,7 @@ def test_sdmx_fetch_falls_back_on_metadata_timeout(monkeypatch):
         if url == "https://esploradati.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
             return _FakeResponse(200, DATAFLOW_XML, url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _FakeResponse(200, PREVIEW_JSON, url)
+            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
             return _FakeResponse(200, DATA_JSON, url)
         raise AssertionError(f"Unexpected URL {url}")
@@ -194,6 +200,64 @@ def test_sdmx_fetch_falls_back_on_metadata_timeout(monkeypatch):
     ]
 
 
+def test_sdmx_fetch_rejects_invalid_filter_value(monkeypatch):
+    def _fake_get(url, params=None, timeout=None, headers=None):
+        if url.endswith("/dataflow/IT1/22_289"):
+            return _FakeResponse(200, DATAFLOW_XML, url)
+        if url.endswith("/data/IT1,22_289,1.5/all"):
+            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
+        return _FakeResponse(404, "not found", url)
+
+    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+
+    try:
+        SdmxSource().fetch("IT1", "22_289", "1.5", {"FREQ": "X"})
+    except DownloadError as exc:
+        assert "Invalid value(s) for SDMX dimension FREQ" in str(exc)
+        assert "X" in str(exc)
+    else:
+        raise AssertionError("Expected DownloadError")
+
+
+def test_sdmx_fetch_rejects_invalid_filter_value_list(monkeypatch):
+    def _fake_get(url, params=None, timeout=None, headers=None):
+        if url.endswith("/dataflow/IT1/22_289"):
+            return _FakeResponse(200, DATAFLOW_XML, url)
+        if url.endswith("/data/IT1,22_289,1.5/all"):
+            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+
+    try:
+        SdmxSource().fetch("IT1", "22_289", "1.5", {"REF_AREA": ["001001", "999999"]})
+    except DownloadError as exc:
+        assert "Invalid value(s) for SDMX dimension REF_AREA" in str(exc)
+        assert "999999" in str(exc)
+    else:
+        raise AssertionError("Expected DownloadError")
+
+
+def test_sdmx_fetch_empty_response(monkeypatch):
+    empty_data_json = '{"dataSets":[{"series":{}}],"structure":{"dimensions":{"series":[{"id":"FREQ","values":[{"id":"A","name":"annual"}]}]}}}'
+
+    def _fake_get(url, params=None, timeout=None, headers=None):
+        if url.endswith("/dataflow/IT1/22_289"):
+            return _FakeResponse(200, DATAFLOW_XML, url)
+        if url.endswith("/data/IT1,22_289,1.5/all"):
+            return _FakeResponse(200, empty_data_json, url)
+        return _FakeResponse(200, '{"dataSets":[{"series":{}}],"structure":{"dimensions":{"series":[{"id":"FREQ","values":[{"id":"A","name":"annual"}]}]}}}', url)
+
+    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+
+    try:
+        SdmxSource().fetch("IT1", "22_289", "1.5", {"FREQ": "A"})
+    except DownloadError as exc:
+        assert "no rows" in str(exc)
+    else:
+        raise AssertionError("Expected DownloadError")
+
+
 def test_sdmx_fetch_falls_back_on_data_5xx(monkeypatch):
     calls = []
 
@@ -204,7 +268,7 @@ def test_sdmx_fetch_falls_back_on_data_5xx(monkeypatch):
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
             return _FakeResponse(500, "boom", url)
         if url == "https://sdmx.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _FakeResponse(200, PREVIEW_JSON, url)
+            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
             return _FakeResponse(500, "boom", url)
         if url == "https://sdmx.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
@@ -240,7 +304,7 @@ def test_sdmx_fetch_does_not_fallback_on_404(monkeypatch):
         if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
             return _FakeResponse(200, DATAFLOW_XML, url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _FakeResponse(200, PREVIEW_JSON, url)
+            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
             return _FakeResponse(404, "not found", url)
         raise AssertionError(f"Unexpected URL {url}")
@@ -279,7 +343,7 @@ def test_sdmx_fetch_does_not_fallback_on_connection_error(monkeypatch):
         if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
             return _FakeResponse(200, DATAFLOW_XML, url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _FakeResponse(200, PREVIEW_JSON, url)
+            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
             raise requests.exceptions.ConnectionError("tls handshake failed")
         raise AssertionError(f"Unexpected URL {url}")

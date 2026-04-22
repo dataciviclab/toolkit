@@ -14,13 +14,18 @@ Schema minimo:
 from __future__ import annotations
 
 import ast
+import argparse
 import json
 import sys
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent.resolve()
 OUT_PATH = ROOT / "generated" / "code_graph.json"
+SUMMARY_PATH = ROOT / "generated" / "code_graph_summary.md"
+TEST_OUT_PATH = ROOT / "generated" / "code_graph_tests.json"
+TEST_SUMMARY_PATH = ROOT / "generated" / "code_graph_tests_summary.md"
 
 SKIP_DIRS = {"__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", "dataciviclab_toolkit.egg-info"}
 SKIP_FILES = {"code_graph.py"}
@@ -31,7 +36,7 @@ SKIP_FILES = {"code_graph.py"}
 # ---------------------------------------------------------------------------
 
 
-def _iter_py_files(root: Path) -> list[Path]:
+def _iter_py_files(root: Path, *, include_tests: bool = False) -> list[Path]:
     files = []
     for p in (root / "toolkit").rglob("*.py"):
         if any(d in p.parts for d in SKIP_DIRS):
@@ -39,6 +44,11 @@ def _iter_py_files(root: Path) -> list[Path]:
         if p.name in SKIP_FILES:
             continue
         files.append(p)
+    if include_tests:
+        for p in (root / "tests").rglob("*.py"):
+            if any(d in p.parts for d in SKIP_DIRS):
+                continue
+            files.append(p)
     return sorted(files)
 
 
@@ -358,8 +368,8 @@ def extract_cli_commands(files: list[Path]) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def build_graph() -> dict:
-    files = _iter_py_files(ROOT)
+def build_graph(*, include_tests: bool = False) -> dict:
+    files = _iter_py_files(ROOT, include_tests=include_tests)
     all_nodes: list[dict] = []
     all_edges: list[dict] = []
     all_modules: list[dict] = []
@@ -388,6 +398,7 @@ def build_graph() -> dict:
         "metadata": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "root": str(ROOT.name),
+            "includes_tests": include_tests,
             "python_files": len(all_modules),
             "total_nodes": len(all_nodes),
             "total_edges": len(deduped_edges),
@@ -400,20 +411,172 @@ def build_graph() -> dict:
     }
 
 
+def build_summary(graph: dict) -> str:
+    nodes = graph["nodes"]
+    edges = graph["edges"]
+    cli_commands = graph["cli_commands"]
+
+    node_file = {n["id"]: n["file"] for n in nodes}
+    node_type = {n["id"]: n["type"] for n in nodes}
+
+    file_stats: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"nodes": 0, "call_out": 0, "call_in": 0, "import_out": 0}
+    )
+    internal_importers: Counter[str] = Counter()
+    calls_out: Counter[str] = Counter()
+    calls_in: Counter[str] = Counter()
+
+    for node in nodes:
+        file_stats[node["file"]]["nodes"] += 1
+
+    for edge in edges:
+        src_file = node_file.get(edge["from"])
+        dst_file = node_file.get(edge["to"])
+
+        if edge["type"] == "calls":
+            calls_out[edge["from"]] += 1
+            calls_in[edge["to"]] += 1
+            if src_file:
+                file_stats[src_file]["call_out"] += 1
+            if dst_file:
+                file_stats[dst_file]["call_in"] += 1
+        else:
+            if src_file:
+                file_stats[src_file]["import_out"] += 1
+            if edge["from"].startswith("toolkit.") and edge["to"].startswith("mod:toolkit."):
+                internal_importers[edge["from"]] += 1
+            if edge["from"].startswith("tests.") and edge["to"].startswith("mod:toolkit."):
+                internal_importers[edge["from"]] += 1
+
+    hotspot_rows = []
+    for file_path, stats in file_stats.items():
+        score = stats["nodes"] + stats["call_out"] + stats["call_in"] + stats["import_out"]
+        hotspot_rows.append((score, file_path, stats))
+    hotspot_rows.sort(reverse=True)
+
+    config_rows = []
+    for file_path, stats in sorted(file_stats.items()):
+        if "config_models" not in file_path:
+            continue
+        score = stats["nodes"] + stats["call_out"] + stats["call_in"] + stats["import_out"]
+        config_rows.append((score, file_path, stats))
+
+    lines = [
+        "# Toolkit Code Graph Summary",
+        "",
+        "## Metadata",
+        f"- Generated at: `{graph['metadata']['generated_at']}`",
+        f"- Includes tests: `{graph['metadata'].get('includes_tests', False)}`",
+        f"- Python files: `{graph['metadata']['python_files']}`",
+        f"- Nodes: `{graph['metadata']['total_nodes']}`",
+        f"- Edges: `{graph['metadata']['total_edges']}`",
+        f"- CLI commands: `{graph['metadata']['cli_commands']}`",
+        "",
+        "## CLI Commands",
+    ]
+    for item in sorted(cli_commands, key=lambda x: x["command"]):
+        lines.append(f"- `{item['command']}` -> `{item.get('function') or '(decorator-only)'}`")
+
+    lines.extend(
+        [
+            "",
+            "## Top Hotspots",
+            "| Score | File | Nodes | Call out | Call in | Import out |",
+            "|---|---|---:|---:|---:|---:|",
+        ]
+    )
+    for score, file_path, stats in hotspot_rows[:15]:
+        lines.append(
+            f"| {score} | `{file_path}` | {stats['nodes']} | {stats['call_out']} | {stats['call_in']} | {stats['import_out']} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Top Internal Importers",
+            "| Imports | Module |",
+            "|---:|---|",
+        ]
+    )
+    for module, count in internal_importers.most_common(15):
+        lines.append(f"| {count} | `{module}` |")
+
+    lines.extend(
+        [
+            "",
+            "## Top Call Out",
+            "| Calls | Type | Symbol |",
+            "|---:|---|---|",
+        ]
+    )
+    for symbol, count in calls_out.most_common(15):
+        lines.append(f"| {count} | `{node_type.get(symbol, '?')}` | `{symbol}` |")
+
+    lines.extend(
+        [
+            "",
+            "## Top Call In",
+            "| Calls | Type | Symbol |",
+            "|---:|---|---|",
+        ]
+    )
+    for symbol, count in calls_in.most_common(15):
+        lines.append(f"| {count} | `{node_type.get(symbol, '?')}` | `{symbol}` |")
+
+    lines.extend(
+        [
+            "",
+            "## Config Models Focus",
+            "| Score | File | Nodes | Call out | Call in | Import out |",
+            "|---|---|---:|---:|---:|---:|",
+        ]
+    )
+    for score, file_path, stats in sorted(config_rows, reverse=True):
+        lines.append(
+            f"| {score} | `{file_path}` | {stats['nodes']} | {stats['call_out']} | {stats['call_in']} | {stats['import_out']} |"
+        )
+
+    return "\n".join(lines) + "\n"
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Generate static code graph for toolkit.")
+    parser.add_argument(
+        "--include-tests",
+        action="store_true",
+        help="Include tests/ in a separate graph output.",
+    )
+    return parser.parse_args()
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 
 def main() -> None:
-    graph = build_graph()
+    args = parse_args()
+    graph = build_graph(include_tests=False)
+    summary = build_summary(graph)
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(graph, indent=2, ensure_ascii=False), encoding="utf-8")
+    SUMMARY_PATH.write_text(summary, encoding="utf-8")
     print(f"code_graph.json written to {OUT_PATH}")
+    print(f"code_graph_summary.md written to {SUMMARY_PATH}")
     print(f"  modules: {graph['metadata']['python_files']}")
     print(f"  nodes: {graph['metadata']['total_nodes']}")
     print(f"  edges: {graph['metadata']['total_edges']}")
     print(f"  CLI commands: {graph['metadata']['cli_commands']}")
+    if args.include_tests:
+        test_graph = build_graph(include_tests=True)
+        test_summary = build_summary(test_graph)
+        TEST_OUT_PATH.write_text(json.dumps(test_graph, indent=2, ensure_ascii=False), encoding="utf-8")
+        TEST_SUMMARY_PATH.write_text(test_summary, encoding="utf-8")
+        print(f"code_graph_tests.json written to {TEST_OUT_PATH}")
+        print(f"code_graph_tests_summary.md written to {TEST_SUMMARY_PATH}")
+        print(f"  test modules: {test_graph['metadata']['python_files']}")
+        print(f"  test nodes: {test_graph['metadata']['total_nodes']}")
+        print(f"  test edges: {test_graph['metadata']['total_edges']}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import typer
@@ -8,8 +7,13 @@ import typer
 from toolkit.cli.cmd_run import run_year
 from toolkit.core.config import load_config
 from toolkit.core.logging import get_logger
+from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import layer_year_dir
 from toolkit.core.run_context import get_run_dir, latest_run, read_run_record
+
+
+def _artifact_exists(path: Path) -> bool:
+    return path.exists() and path.is_file()
 
 
 _LAYER_ORDER = ("raw", "clean", "mart")
@@ -24,28 +28,20 @@ def _resume_layer(record: dict[str, object]) -> str | None:
     return None
 
 
-def _artifact_exists(path: Path) -> bool:
-    return path.exists() and path.is_file()
-
-
 def _layer_artifacts_ok(root: Path, dataset: str, year: int, layer: str) -> tuple[bool, str]:
     layer_dir = layer_year_dir(root, layer, dataset, year)
-    manifest_path = layer_dir / "manifest.json"
     metadata_path = layer_dir / "metadata.json"
+    manifest_path = layer_dir / "manifest.json"
 
-    if not _artifact_exists(manifest_path):
-        return False, f"missing {layer}/manifest.json"
-    if not _artifact_exists(metadata_path):
+    if not _artifact_exists(metadata_path) and not _artifact_exists(manifest_path):
         return False, f"missing {layer}/metadata.json"
 
+    meta = read_layer_metadata(layer_dir)
+
     if layer == "raw":
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            return False, f"cannot read raw manifest: {exc}"
-        primary_output = manifest.get("primary_output_file")
+        primary_output = meta.get("primary_output_file")
         if not isinstance(primary_output, str) or not primary_output:
-            return False, "raw manifest missing primary_output_file"
+            return False, "raw metadata missing primary_output_file"
         if not _artifact_exists(layer_dir / primary_output):
             return False, f"missing raw primary output: {primary_output}"
         return True, ""
@@ -57,18 +53,14 @@ def _layer_artifacts_ok(root: Path, dataset: str, year: int, layer: str) -> tupl
         return True, ""
 
     if layer == "mart":
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            return False, f"cannot read mart manifest: {exc}"
-        outputs = manifest.get("outputs") or []
-        if not isinstance(outputs, list) or not outputs:
-            return False, "mart manifest missing outputs"
+        outputs = meta.get("outputs") or []
+        if not outputs:
+            return False, "mart metadata missing outputs"
         for output in outputs:
             rel_file = (output or {}).get("file")
             if isinstance(rel_file, str) and rel_file and _artifact_exists(layer_dir / rel_file):
                 return True, ""
-        return False, "missing mart parquet outputs declared in manifest"
+        return False, "missing mart parquet outputs declared in metadata"
 
     raise ValueError(f"Unsupported layer: {layer}")
 

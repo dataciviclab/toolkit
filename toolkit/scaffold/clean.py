@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 
@@ -119,6 +120,36 @@ def _columns_spec(profile: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
         columns_spec[raw_col] = sql_type
 
     return select_exprs, columns_spec
+
+
+def _scaffold_clean_if_missing(
+    profile: dict[str, Any],
+    dataset: str,
+    year: int,
+    base_dir: Path | str,
+    clean_cfg: dict[str, Any] | None,
+    logger,
+) -> str | None:
+    """
+    Scaffold clean.sql from a raw profile dict, if the file doesn't exist.
+
+    Returns the path written, or None if skipped because file already exists.
+    ``base_dir`` is the directory containing dataset.yml.
+    ``clean_cfg`` is the ``clean:`` section of dataset.yml (may be None or empty).
+    """
+    clean_cfg = clean_cfg or {}
+    clean_sql_rel = clean_cfg.get("sql", "sql/clean.sql")
+    clean_sql_path = Path(base_dir) / clean_sql_rel
+
+    if clean_sql_path.exists():
+        logger.info("clean.sql gia esistente, scaffold saltato (%s)", clean_sql_path)
+        return None
+
+    scaffold_sql = generate_clean_sql(profile, dataset, year)
+    clean_sql_path.parent.mkdir(parents=True, exist_ok=True)
+    clean_sql_path.write_text(scaffold_sql, encoding="utf-8")
+    logger.info("scaffold clean.sql -> %s", clean_sql_path)
+    return str(clean_sql_path)
 
 
 def generate_clean_sql(

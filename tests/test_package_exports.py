@@ -2,7 +2,7 @@ import toolkit.clean as clean_pkg
 import toolkit.plugins as plugins_pkg
 import toolkit.profile as profile_pkg
 import toolkit.raw as raw_pkg
-from toolkit.clean import resolve_clean_read_cfg, run_clean, run_clean_validation, validate_clean
+from toolkit.clean import run_clean, run_clean_validation, validate_clean
 from toolkit.plugins import CkanSource, HttpFileSource, LocalFileSource, SdmxSource
 from toolkit.profile import (
     RawProfile,

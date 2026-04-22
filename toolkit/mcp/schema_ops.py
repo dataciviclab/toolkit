@@ -16,7 +16,7 @@ from typing import Any
 
 import duckdb
 
-from toolkit.mcp.cli_adapter import inspect_paths
+from toolkit.mcp.cli_adapter import _toolkit_json, inspect_paths
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import _load_cfg, _safe_path
 
@@ -71,11 +71,10 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
 
     if safe_layer == "raw":
         try:
-            payload = inspect_paths(str(config), year)
-            raw_info = payload.get("paths", {}).get("raw", {})
+            payload = _toolkit_json(["inspect", "schema-diff", "--config", str(config), "--json"])
         except Exception as exc:
             raise ToolkitClientError(f"show_schema(raw) fallito per {config}: {exc}") from exc
-        entries = [e for e in raw_info.get("entries", []) if year is None or e.get("year") == year]
+        entries = [e for e in payload.get("entries", []) if year is None or e.get("year") == year]
         return {
             "dataset": payload.get("dataset"),
             "layer": "raw",

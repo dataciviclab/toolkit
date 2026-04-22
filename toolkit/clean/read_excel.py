@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -80,8 +81,6 @@ def _execute_excel_read(
     logger,
 ) -> dict[str, Any]:
     """Execute Excel read: load each file, concatenate, register as DuckDB view ``raw_input``."""
-    import json
-
     frames: list[pd.DataFrame] = []
     params_used: dict[str, Any] | None = None
 

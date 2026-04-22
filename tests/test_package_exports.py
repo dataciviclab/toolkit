@@ -2,7 +2,7 @@ import toolkit.clean as clean_pkg
 import toolkit.plugins as plugins_pkg
 import toolkit.profile as profile_pkg
 import toolkit.raw as raw_pkg
-from toolkit.clean import run_clean, run_clean_validation, validate_clean
+from toolkit.clean import resolve_clean_read_cfg, run_clean, run_clean_validation, validate_clean
 from toolkit.plugins import CkanSource, HttpFileSource, LocalFileSource, SdmxSource
 from toolkit.profile import (
     RawProfile,
@@ -16,7 +16,13 @@ from toolkit.raw import run_raw, run_raw_validation, validate_raw_output
 
 
 def test_clean_exports() -> None:
-    assert clean_pkg.__all__ == ["run_clean", "validate_clean", "run_clean_validation"]
+    assert clean_pkg.__all__ == [
+        "resolve_clean_read_cfg",
+        "run_clean",
+        "validate_clean",
+        "run_clean_validation",
+    ]
+    assert callable(clean_pkg.resolve_clean_read_cfg)
     assert callable(run_clean)
     assert callable(validate_clean)
     assert callable(run_clean_validation)

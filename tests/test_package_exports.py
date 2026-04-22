@@ -16,7 +16,13 @@ from toolkit.raw import run_raw, run_raw_validation, validate_raw_output
 
 
 def test_clean_exports() -> None:
-    assert clean_pkg.__all__ == ["run_clean", "validate_clean", "run_clean_validation"]
+    assert clean_pkg.__all__ == [
+        "resolve_clean_read_cfg",
+        "run_clean",
+        "validate_clean",
+        "run_clean_validation",
+    ]
+    assert callable(clean_pkg.resolve_clean_read_cfg)
     assert callable(run_clean)
     assert callable(validate_clean)
     assert callable(run_clean_validation)

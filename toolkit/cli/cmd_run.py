@@ -407,8 +407,8 @@ def run_init(
         run_year(cfg, year, step="raw", dry_run=False, logger=logger)
 
         typer.echo(f"[init] Bootstrap completato per {cfg.dataset}/{year}")
-        typer.echo(f"  - raw scaricato")
-        typer.echo(f"  - profiling disponibile")
+        typer.echo("  - raw scaricato")
+        typer.echo("  - profiling disponibile")
 
         scaffolded_now = not scaffold_existed_before and clean_sql_path.exists()
         if scaffold_existed_before:
@@ -427,8 +427,8 @@ def run_init(
                     f"Profilo raw non disponibile per {cfg.dataset}/{year}. "
                     f"Esegui prima: toolkit run raw -c <config> oppure crea clean.sql manualmente."
                 )
-            typer.echo(f"  - clean.sql non scaffoldato (nessun profilo raw disponibile)")
-            typer.echo(f"    Esegui: toolkit scaffold clean -c <config> dopo aver verificato il profilo")
+            typer.echo("  - clean.sql non scaffoldato (nessun profilo raw disponibile)")
+            typer.echo("    Esegui: toolkit scaffold clean -c <config> dopo aver verificato il profilo")
 
     typer.echo("")
     typer.echo("Prossimo passo: toolkit run clean -c <config>")

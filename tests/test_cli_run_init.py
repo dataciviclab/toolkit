@@ -216,7 +216,7 @@ def test_run_init_reports_correct_scaffold_message_when_pre_existing(tmp_path: P
     yml = _make_dataset_yml(tmp_path, dataset, [year])
 
     # Pre-create clean.sql
-    existing = _scaffold_clean_sql(tmp_path, dataset, year)
+    _scaffold_clean_sql(tmp_path, dataset, year)
 
     result = runner.invoke(app, ["run", "init", "-c", str(yml)])
 

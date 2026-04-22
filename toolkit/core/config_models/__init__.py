@@ -6,8 +6,24 @@ All public symbols are re-exported here for backward compatibility.
 
 from __future__ import annotations
 
-# --- Common (shared utilities and models) ---
-from toolkit.core.config_models.common import (
+# --- path_normalization ---
+from toolkit.core.config_models.path_normalization import (
+    _err,
+    _require_map,
+    _ensure_root_within_repo,
+    _is_managed_output_root,
+    _iter_matching_tokens,
+    _normalize_section_paths,
+    _path_tokens_to_str,
+    _resolve_root,
+    _set_nested_value,
+    _get_nested_value,
+    _resolve_path_value,
+    _MANAGED_OUTPUT_ROOTS,
+)
+
+# --- shared_models ---
+from toolkit.core.config_models.shared_models import (
     ConfigDeprecation,
     ConfigPolicy,
     DatasetBlock,
@@ -17,24 +33,19 @@ from toolkit.core.config_models.common import (
     SupportDatasetConfig,
     TimeCoverage,
     _CONFIG_DEPRECATIONS,
-    _MANAGED_OUTPUT_ROOTS,
     _SAFE_SQL_IDENTIFIER_RE,
-    _declared_model_keys,
-    _ensure_root_within_repo,
-    _err,
-    _get_nested_value,
-    _is_managed_output_root,
-    _iter_matching_tokens,
-    _normalize_legacy_payload,
-    _normalize_section_paths,
-    _path_tokens_to_str,
-    _require_map,
-    _resolve_path_value,
-    _resolve_root,
-    _set_nested_value,
-    _warn_or_reject_unknown_keys,
     ensure_str_list,
     parse_bool,
+)
+
+# --- policy ---
+from toolkit.core.config_models.policy import (
+    _TOP_LEVEL_ALLOWED_KEYS,
+    _declared_model_keys,
+    _emit_deprecation_notice,
+    _emit_unknown_keys_notice,
+    _normalize_legacy_payload,
+    _warn_or_reject_unknown_keys,
 )
 
 # --- Layer models ---
@@ -70,7 +81,20 @@ from toolkit.core.config_models._loader import (
 )
 
 __all__ = [
-    # Common
+    # path_normalization
+    "_err",
+    "_MANAGED_OUTPUT_ROOTS",
+    "_require_map",
+    "_ensure_root_within_repo",
+    "_is_managed_output_root",
+    "_iter_matching_tokens",
+    "_normalize_section_paths",
+    "_path_tokens_to_str",
+    "_resolve_root",
+    "_set_nested_value",
+    "_get_nested_value",
+    "_resolve_path_value",
+    # shared_models
     "ConfigDeprecation",
     "ConfigPolicy",
     "DatasetBlock",
@@ -80,10 +104,16 @@ __all__ = [
     "SupportDatasetConfig",
     "TimeCoverage",
     "_CONFIG_DEPRECATIONS",
-    "_MANAGED_OUTPUT_ROOTS",
     "_SAFE_SQL_IDENTIFIER_RE",
     "ensure_str_list",
     "parse_bool",
+    # policy
+    "_TOP_LEVEL_ALLOWED_KEYS",
+    "_declared_model_keys",
+    "_emit_deprecation_notice",
+    "_emit_unknown_keys_notice",
+    "_normalize_legacy_payload",
+    "_warn_or_reject_unknown_keys",
     # Raw
     "ClientConfig",
     "ExtractorConfig",
@@ -107,19 +137,4 @@ __all__ = [
     # Loader
     "ToolkitConfigModel",
     "load_config_model",
-    # Internal utilities (used by config.py and tests)
-    "_declared_model_keys",
-    "_ensure_root_within_repo",
-    "_err",
-    "_get_nested_value",
-    "_is_managed_output_root",
-    "_iter_matching_tokens",
-    "_normalize_legacy_payload",
-    "_normalize_section_paths",
-    "_path_tokens_to_str",
-    "_require_map",
-    "_resolve_path_value",
-    "_resolve_root",
-    "_set_nested_value",
-    "_warn_or_reject_unknown_keys",
 ]

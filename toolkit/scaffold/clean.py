@@ -122,7 +122,7 @@ def _columns_spec(profile: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
     return select_exprs, columns_spec
 
 
-def _scaffold_clean_if_missing(
+def scaffold_clean_if_missing(
     profile: dict[str, Any],
     dataset: str,
     year: int,

@@ -201,6 +201,7 @@ def test_run_init_fails_when_profile_missing_and_no_clean_sql(tmp_path: Path):
 
     assert result.exit_code != 0
     assert "profilo" in result.output.lower() or "profile" in result.output.lower()
+    assert "profiling disponibile" not in result.output.lower()
 
 
 def test_run_init_reports_correct_scaffold_message_when_pre_existing(tmp_path: Path):

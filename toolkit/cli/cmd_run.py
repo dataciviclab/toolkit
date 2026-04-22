@@ -408,27 +408,29 @@ def run_init(
 
         typer.echo(f"[init] Bootstrap completato per {cfg.dataset}/{year}")
         typer.echo("  - raw scaricato")
-        typer.echo("  - profiling disponibile")
+        profile_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year) / "_profile"
+        profile_exists = (profile_dir / "profile.json").exists() or (
+            profile_dir / "raw_profile.json"
+        ).exists()
 
         scaffolded_now = not scaffold_existed_before and clean_sql_path.exists()
         if scaffold_existed_before:
+            if profile_exists:
+                typer.echo("  - profiling disponibile")
             typer.echo(f"  - clean.sql gia esistente ({clean_sql_rel}), skip scaffold")
         elif scaffolded_now:
+            if profile_exists:
+                typer.echo("  - profiling disponibile")
             typer.echo(f"  - clean.sql scaffoldato ({clean_sql_rel})")
         else:
-            # clean.sql was not scaffolded: raw output is not a CSV that triggers
-            # profiling, so no profile -> no scaffold.  Fail if bootstrap cannot proceed.
-            profile_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year) / "_profile"
-            profile_exists = (profile_dir / "profile.json").exists() or (
-                profile_dir / "raw_profile.json"
-            ).exists()
             if not profile_exists:
                 raise typer.BadParameter(
                     f"Profilo raw non disponibile per {cfg.dataset}/{year}. "
                     f"Esegui prima: toolkit run raw -c <config> oppure crea clean.sql manualmente."
                 )
-            typer.echo("  - clean.sql non scaffoldato (nessun profilo raw disponibile)")
-            typer.echo("    Esegui: toolkit scaffold clean -c <config> dopo aver verificato il profilo")
+            typer.echo("  - profiling disponibile")
+            typer.echo("  - clean.sql non scaffoldato nonostante il profilo raw sia disponibile")
+            typer.echo("    Esegui: toolkit scaffold clean -c <config> oppure verifica i permessi di scrittura")
 
     typer.echo("")
     typer.echo("Prossimo passo: toolkit run clean -c <config>")

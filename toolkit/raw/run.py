@@ -13,7 +13,7 @@ from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.registry import register_builtin_plugins, registry
 from toolkit.core.validation import write_validation_json
 from toolkit.profile.raw import build_profile_hints, profile_raw, write_raw_profile, write_suggested_read_yml
-from toolkit.scaffold.clean import _scaffold_clean_if_missing
+from toolkit.scaffold.clean import scaffold_clean_if_missing
 from toolkit.raw.extractors import get_extractor
 from toolkit.raw.validate import validate_raw_output
 
@@ -282,7 +282,7 @@ def run_raw(
                 )
                 logger.info("RAW profile -> %s", profile_dir / "raw_profile.json")
 
-                _scaffold_clean_if_missing(
+                scaffold_clean_if_missing(
                     raw_profile.__dict__,
                     dataset,
                     year,

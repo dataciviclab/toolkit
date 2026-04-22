@@ -77,6 +77,7 @@ def _fetch_payload(stype: str, client: dict, formatted_args: dict) -> tuple[byte
             formatted_args["portal_url"],
             str(formatted_args["resource_id"]) if formatted_args.get("resource_id") is not None else None,
             str(formatted_args["dataset_id"]) if formatted_args.get("dataset_id") is not None else None,
+            str(formatted_args["resource_name"]) if formatted_args.get("resource_name") is not None else None,
         )
     elif stype == "sdmx":
         payload, origin = src.fetch(

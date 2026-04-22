@@ -69,7 +69,12 @@ class CkanSource:
                 last_err = exc
         raise DownloadError(str(last_err) if last_err else f"Failed to fetch {url}")
 
-    def _select_resource_from_package(self, result: dict, resource_id: str | None) -> dict:
+    def _select_resource_from_package(
+        self,
+        result: dict,
+        resource_id: str | None,
+        resource_name: str | None = None,
+    ) -> dict:
         resources = result.get("resources") or []
         if not resources:
             raise DownloadError("CKAN package_show returned no resources")
@@ -80,6 +85,20 @@ class CkanSource:
                     return item
             raise DownloadError(
                 f"CKAN package_show did not contain requested resource_id={resource_id}"
+            )
+
+        if resource_name:
+            wanted = str(resource_name).strip().lower()
+            for item in resources:
+                candidate = str(item.get("name") or "").strip().lower()
+                if candidate == wanted:
+                    return item
+            for item in resources:
+                candidate = str(item.get("name") or "").strip().lower()
+                if wanted in candidate:
+                    return item
+            raise DownloadError(
+                f"CKAN package_show did not contain requested resource_name={resource_name}"
             )
 
         with_url = [item for item in resources if item.get("url")]
@@ -110,6 +129,7 @@ class CkanSource:
         portal_url: str,
         resource_id: str | None = None,
         dataset_id: str | None = None,
+        resource_name: str | None = None,
     ) -> tuple[bytes, str]:
         last_err: Exception | None = None
 
@@ -134,7 +154,7 @@ class CkanSource:
             try:
                 metadata = self._get_json(api_url, {"id": str(package_identifier)})
                 result = metadata.get("result") or {}
-                resource = self._select_resource_from_package(result, resource_id)
+                resource = self._select_resource_from_package(result, resource_id, resource_name)
                 resolved_url = _force_https(str(resource["url"]))
                 return self._download_bytes(resolved_url), resolved_url
             except Exception as exc:

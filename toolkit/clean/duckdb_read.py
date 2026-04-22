@@ -6,15 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
-import pandas as pd
-import yaml
-from toolkit.clean.read_config import (
-    _read_source_mode,
-    _split_read_cfg,
-    filter_suggested_read,
-    load_suggested_read,
-    resolve_clean_read_cfg,
-)
+from toolkit.clean.read_config import resolve_clean_read_cfg as _resolve_clean_read_cfg
 from toolkit.clean.read_csv_normalized import _execute_normalized_csv_read
 from toolkit.clean.read_sql_utils import (
     csv_trim_projection,
@@ -22,12 +14,16 @@ from toolkit.clean.read_sql_utils import (
     quote_list,
     sql_path,
 )
+
 from toolkit.clean.read_excel import _execute_excel_read
 from toolkit.core.csv_read import (
     csv_read_option_strings,
     normalize_read_cfg,
     robust_preset,
 )
+
+# Re-exported for backward compat — consumers import resolve_clean_read_cfg from duckdb_read
+resolve_clean_read_cfg = _resolve_clean_read_cfg
 
 
 SUPPORTED_INPUT_EXTS = {

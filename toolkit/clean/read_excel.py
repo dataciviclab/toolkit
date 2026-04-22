@@ -78,7 +78,7 @@ def _execute_excel_read(
     read_cfg: dict[str, Any],
     *,
     logger,
-) -> ReadInfo:
+) -> dict[str, Any]:
     """Execute Excel read: load each file, concatenate, register as DuckDB view ``raw_input``."""
     import json
 

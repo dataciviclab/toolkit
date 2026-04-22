@@ -70,7 +70,6 @@ def _execute_normalized_csv_read(
     Reads each input file with the CSV reader into a pandas DataFrame,
     concatenates if multiple files, registers as DuckDB view ``raw_input``.
     """
-    import duckdb
 
     columns = read_cfg.get("columns")
     if not columns:

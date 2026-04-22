@@ -31,8 +31,9 @@ def _resume_layer(record: dict[str, object]) -> str | None:
 def _layer_artifacts_ok(root: Path, dataset: str, year: int, layer: str) -> tuple[bool, str]:
     layer_dir = layer_year_dir(root, layer, dataset, year)
     metadata_path = layer_dir / "metadata.json"
+    manifest_path = layer_dir / "manifest.json"
 
-    if not _artifact_exists(metadata_path):
+    if not _artifact_exists(metadata_path) and not _artifact_exists(manifest_path):
         return False, f"missing {layer}/metadata.json"
 
     meta = read_layer_metadata(layer_dir)

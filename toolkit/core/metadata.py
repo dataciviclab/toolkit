@@ -131,6 +131,8 @@ def merge_layer_manifest(
     ok: bool | None = None,
     errors_count: int | None = None,
     warnings_count: int | None = None,
+    primary_output_file: str | None = None,
+    sources: list[Any] | None = None,
 ) -> Path:
     meta = _read_metadata(folder, metadata_path) or {}
     if outputs is not None:
@@ -138,11 +140,18 @@ def merge_layer_manifest(
     if validation_path is not None:
         meta["validation"] = validation_path
     if ok is not None or errors_count is not None or warnings_count is not None:
-        meta["summary"] = {
-            "ok": ok,
-            "errors_count": errors_count,
-            "warnings_count": warnings_count,
-        }
+        summary: dict[str, Any] = {}
+        if ok is not None:
+            summary["ok"] = ok
+        if errors_count is not None:
+            summary["errors_count"] = errors_count
+        if warnings_count is not None:
+            summary["warnings_count"] = warnings_count
+        meta["summary"] = summary
+    if primary_output_file and not meta.get("primary_output_file"):
+        meta["primary_output_file"] = primary_output_file
+    if sources and not meta.get("sources"):
+        meta["sources"] = sources
     out = folder / metadata_path
     write_json_atomic(out, meta)
     return out

@@ -3,7 +3,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from toolkit.clean.duckdb_read import (
+from toolkit.clean.read_csv_normalized import (
     _execute_normalized_csv_read,
     _load_normalized_csv_frame,
 )

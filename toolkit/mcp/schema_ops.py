@@ -1,0 +1,490 @@
+"""Schema inspection and readiness diagnostics for the MCP toolkit client.
+
+Provides read-only diagnostics on config, layers, and run records:
+- show_schema: schema of a raw/clean/mart layer
+- run_state: run directory state and latest run record
+- summary: layer-level overview with existence checks
+- blocker_hints: common mismatches between config and outputs
+- review_readiness: readiness check for candidate review
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import duckdb
+
+from toolkit.mcp.cli_adapter import inspect_paths
+from toolkit.mcp.errors import ToolkitClientError
+from toolkit.mcp.path_safety import _load_cfg, _safe_path
+
+
+def _sql_literal(value: str) -> str:
+    return value.replace("'", "''")
+
+
+def _schema_from_parquet(parquet_path: Path) -> dict[str, Any]:
+    if not parquet_path.exists():
+        raise ToolkitClientError(f"Parquet non trovato: {parquet_path}")
+    relation = f"read_parquet('{_sql_literal(str(parquet_path))}')"
+    try:
+        with duckdb.connect(database=":memory:") as conn:
+            conn.execute("PRAGMA disable_progress_bar")
+            describe_rows = conn.execute(f"DESCRIBE SELECT * FROM {relation}").fetchall()
+    except Exception as exc:
+        raise ToolkitClientError(
+            f"Lettura schema parquet fallita per {parquet_path}: {exc}"
+        ) from exc
+
+    columns = [{"name": row[0], "type": row[1]} for row in describe_rows]
+    return {"path": str(parquet_path), "column_count": len(columns), "columns": columns}
+
+
+def _read_parquet_row_count(parquet_path: Path) -> int | None:
+    """Return row count of a parquet file, or None if unreadable."""
+    if not parquet_path.exists():
+        return None
+    try:
+        with duckdb.connect(database=":memory:") as conn:
+            conn.execute("PRAGMA disable_progress_bar")
+            result = conn.execute(
+                f"SELECT COUNT(*) FROM read_parquet('{_sql_literal(str(parquet_path))}')"
+            ).fetchone()
+            return int(result[0]) if result else None
+    except Exception:
+        return None
+
+
+def _exists(path: str | None) -> bool:
+    if not path:
+        return False
+    return Path(path).exists()
+
+
+def show_schema(config_path: str, layer: str = "clean", year: int | None = None) -> dict[str, Any]:
+    config, _cfg = _load_cfg(config_path)
+    safe_layer = (layer or "clean").strip().lower()
+    if safe_layer not in {"raw", "clean", "mart"}:
+        raise ToolkitClientError("layer deve essere uno tra: raw, clean, mart")
+
+    if safe_layer == "raw":
+        try:
+            payload = inspect_paths(str(config), year)
+            raw_info = payload.get("paths", {}).get("raw", {})
+        except Exception as exc:
+            raise ToolkitClientError(f"show_schema(raw) fallito per {config}: {exc}") from exc
+        entries = [e for e in raw_info.get("entries", []) if year is None or e.get("year") == year]
+        return {
+            "dataset": payload.get("dataset"),
+            "layer": "raw",
+            "year": year,
+            "entry_count": len(entries),
+            "entries": entries,
+        }
+
+    paths = inspect_paths(str(config), year)
+    if safe_layer == "clean":
+        parquet_path = Path(paths["paths"]["clean"]["output"])
+        payload = _schema_from_parquet(parquet_path)
+    else:
+        outputs = paths["paths"]["mart"].get("outputs") or []
+        if not outputs:
+            raise ToolkitClientError("Nessun output mart risolto dal toolkit")
+        parquet_path = Path(outputs[0])
+        payload = _schema_from_parquet(parquet_path)
+        payload["available_outputs"] = outputs
+        if len(outputs) > 1:
+            payload["warning"] = (
+                "Sono presenti piu' output mart; lo schema mostrato riguarda solo il primo output."
+            )
+
+    payload.update(
+        {
+            "dataset": paths.get("dataset"),
+            "year": paths.get("year"),
+            "layer": safe_layer,
+            "config_path": str(config),
+        }
+    )
+    return payload
+
+
+def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
+    config = _safe_path(config_path)
+    paths = inspect_paths(str(config), year)
+    run_dir = Path(paths["paths"]["run_dir"])
+    run_files = sorted(run_dir.glob("*.json")) if run_dir.exists() else []
+    latest_run = paths.get("latest_run")
+    latest_payload = None
+    if latest_run and latest_run.get("path"):
+        latest_path = Path(latest_run["path"])
+        if latest_path.exists():
+            latest_payload = json.loads(latest_path.read_text(encoding="utf-8"))
+    years_seen = (
+        sorted({p.parent.name for p in run_dir.parent.glob("*/*.json") if p.parent.name.isdigit()})
+        if run_dir.parent.exists()
+        else []
+    )
+    return {
+        "dataset": paths.get("dataset"),
+        "config_path": str(config),
+        "requested_year": year,
+        "run_dir": str(run_dir),
+        "run_dir_exists": run_dir.exists(),
+        "run_file_count": len(run_files),
+        "years_seen": years_seen,
+        "latest_run": latest_run,
+        "latest_run_record": latest_payload,
+    }
+
+
+def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
+    config = _safe_path(config_path)
+    paths = inspect_paths(str(config), year)
+    raw_paths = paths["paths"]["raw"]
+    clean_paths = paths["paths"]["clean"]
+    mart_paths = paths["paths"]["mart"]
+    run_dir = Path(paths["paths"]["run_dir"])
+
+    raw_dir = Path(raw_paths["dir"])
+    clean_dir = Path(clean_paths["dir"])
+    mart_dir = Path(mart_paths["dir"])
+    mart_outputs = list(mart_paths.get("outputs") or [])
+    missing_mart_outputs = [output for output in mart_outputs if not _exists(output)]
+
+    primary_output_file = (paths.get("raw_hints") or {}).get("primary_output_file")
+    primary_output_path = str(raw_dir / primary_output_file) if primary_output_file else None
+
+    latest_run = paths.get("latest_run") or {}
+    latest_run_path = latest_run.get("path")
+
+    run_files = sorted(run_dir.glob("*.json")) if run_dir.exists() else []
+
+    warnings: list[str] = []
+    if primary_output_file and not _exists(primary_output_path):
+        warnings.append("raw_output_missing")
+    if not _exists(clean_paths.get("output")):
+        warnings.append("clean_output_missing")
+    if mart_outputs and missing_mart_outputs:
+        warnings.append("mart_outputs_missing")
+    if latest_run_path and not _exists(latest_run_path):
+        warnings.append("latest_run_record_missing")
+
+    return {
+        "dataset": paths.get("dataset"),
+        "config_path": str(config),
+        "year": paths.get("year"),
+        "layers": {
+            "raw": {
+                "dir": str(raw_dir),
+                "dir_exists": raw_dir.exists(),
+                "manifest_exists": _exists(raw_paths.get("manifest")),
+                "metadata_exists": _exists(raw_paths.get("metadata")),
+                "primary_output_file": primary_output_file,
+                "primary_output_exists": _exists(primary_output_path),
+                "suggested_read_exists": (paths.get("raw_hints") or {}).get(
+                    "suggested_read_exists"
+                ),
+            },
+            "clean": {
+                "dir": str(clean_dir),
+                "dir_exists": clean_dir.exists(),
+                "output": clean_paths.get("output"),
+                "output_exists": _exists(clean_paths.get("output")),
+                "manifest_exists": _exists(clean_paths.get("manifest")),
+                "metadata_exists": _exists(clean_paths.get("metadata")),
+            },
+            "mart": {
+                "dir": str(mart_dir),
+                "dir_exists": mart_dir.exists(),
+                "outputs": mart_outputs,
+                "output_count": len(mart_outputs),
+                "output_exists_count": len(mart_outputs) - len(missing_mart_outputs),
+                "missing_outputs": missing_mart_outputs,
+                "manifest_exists": _exists(mart_paths.get("manifest")),
+                "metadata_exists": _exists(mart_paths.get("metadata")),
+            },
+        },
+        "run": {
+            "run_dir": str(run_dir),
+            "run_dir_exists": run_dir.exists(),
+            "run_file_count": len(run_files),
+            "latest_run": latest_run or None,
+            "latest_run_record_exists": _exists(latest_run_path),
+        },
+        "warnings": warnings,
+    }
+
+
+def blocker_hints(config_path: str, year: int | None = None) -> dict[str, Any]:
+    """Diagnostic hints that flag common mismatches between declared config and actual outputs."""
+    config = _safe_path(config_path)
+    s = summary(str(config), year)
+    layers = s.get("layers", {})
+    raw = layers.get("raw", {})
+    clean = layers.get("clean", {})
+    mart = layers.get("mart", {})
+    run = s.get("run", {})
+
+    latest_run = run.get("latest_run") if isinstance(run, dict) else None
+    run_record = None
+    if latest_run and latest_run.get("path"):
+        latest_path = Path(latest_run["path"])
+        if latest_path.exists():
+            run_record = json.loads(latest_path.read_text(encoding="utf-8"))
+
+    hints: list[dict[str, str]] = []
+
+    # clean output exists but mart outputs are all missing or empty
+    if (
+        clean.get("output_exists")
+        and mart.get("output_count", 0) > 0
+        and mart.get("output_exists_count", 0) == 0
+    ):
+        hints.append(
+            {
+                "code": "clean_but_no_mart",
+                "severity": "warning",
+                "message": "clean output esiste ma nessun mart output e' presente",
+            }
+        )
+
+    # clean dir missing entirely while mart dir exists
+    if not clean.get("dir_exists") and mart.get("dir_exists"):
+        hints.append(
+            {
+                "code": "clean_dir_missing",
+                "severity": "blocker",
+                "message": "mart dir esiste ma clean dir manca: run order incoerente",
+            }
+        )
+
+    # latest_run record exists but the actual run file is gone
+    latest = run.get("latest_run")
+    if latest and latest.get("path") and not _exists(latest.get("path")):
+        hints.append(
+            {
+                "code": "latest_run_record_missing",
+                "severity": "warning",
+                "message": "latest_run reference presente ma file non trovato",
+            }
+        )
+
+    # resolved output path declared but file missing
+    if raw.get("primary_output_file") and not raw.get("primary_output_exists"):
+        hints.append(
+            {
+                "code": "raw_output_missing",
+                "severity": "blocker",
+                "message": f"raw primary_output_file '{raw['primary_output_file']}' risolto ma file assente",
+            }
+        )
+
+    if clean.get("output") and not clean.get("output_exists"):
+        hints.append(
+            {
+                "code": "clean_output_missing",
+                "severity": "blocker",
+                "message": f"clean output '{clean['output']}' risolto ma file assente",
+            }
+        )
+
+    # mart with multiple outputs but only partial
+    if mart.get("output_count", 0) > 1 and mart.get("missing_outputs"):
+        missing = mart["missing_outputs"]
+        hints.append(
+            {
+                "code": "mart_partial_outputs",
+                "severity": "warning",
+                "message": f"{len(missing)} mart output su {mart['output_count']} mancanti: {', '.join(Path(o).name for o in missing[:3])}",
+            }
+        )
+
+    # run record references a layer status that contradicts file existence
+    if run_record:
+        layers_map = run_record.get("layers") or {}
+        for layer_name, layer_detail in layers_map.items():
+            layer_status = (
+                layer_detail.get("status") if isinstance(layer_detail, dict) else layer_detail
+            )
+            if layer_status == "SUCCESS":
+                layer_info = layers.get(layer_name, {})
+                if layer_name == "clean" and not layer_info.get("output_exists"):
+                    hints.append(
+                        {
+                            "code": "run_says_clean_success_but_output_missing",
+                            "severity": "blocker",
+                            "message": "run record dice clean SUCCESS ma output file manca",
+                        }
+                    )
+                elif (
+                    layer_name == "mart"
+                    and layer_info.get("output_exists_count", 0) == 0
+                    and layer_info.get("output_count", 0) > 0
+                ):
+                    hints.append(
+                        {
+                            "code": "run_says_mart_success_but_outputs_missing",
+                            "severity": "blocker",
+                            "message": "run record dice mart SUCCESS ma nessun output file presente",
+                        }
+                    )
+
+    return {
+        "dataset": s.get("dataset"),
+        "config_path": str(config),
+        "year": s.get("year"),
+        "hint_count": len(hints),
+        "hints": hints,
+        "blocker_count": sum(1 for h in hints if h.get("severity") == "blocker"),
+        "warning_count": sum(1 for h in hints if h.get("severity") == "warning"),
+    }
+
+
+def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any]:
+    """Check minimale di readiness per review di intake/run candidate.
+
+    Risponde a:
+    - il candidate e' runnable almeno al minimo?
+    - i layer attesi esistono davvero?
+    - c'e' almeno un output leggibile?
+    - il run record e' coerente con gli output presenti?
+    """
+    config = _safe_path(config_path)
+    _, cfg = _load_cfg(config)
+
+    years = getattr(cfg, "years", []) if hasattr(cfg, "years") else []
+    target_year = year or (years[0] if years else None)
+
+    checks: list[dict[str, Any]] = []
+
+    # --- Config check ---
+    checks.append(
+        {
+            "check": "config_valid",
+            "ok": True,
+            "detail": "config parse ok",
+        }
+    )
+
+    # --- Raw layer ---
+    s = summary(str(config), target_year)
+    raw = s.get("layers", {}).get("raw", {})
+    raw_primary = raw.get("primary_output_file")
+    if raw_primary:
+        raw_ok = raw.get("primary_output_exists")
+    else:
+        # Nessun manifest: fallback su esistenza dir e presenza file
+        raw_dir_path = Path(raw.get("dir", ""))
+        raw_ok = raw_dir_path.exists() and any(raw_dir_path.iterdir())
+    checks.append(
+        {
+            "check": "raw_output_present",
+            "ok": raw_ok,
+            "detail": f"primary_output={raw.get('primary_output_file', 'unknown')}"
+            if raw_ok
+            else "raw output mancante",
+        }
+    )
+
+    # --- Clean layer ---
+    clean = s.get("layers", {}).get("clean", {})
+    clean_path_str = clean.get("output")
+    clean_path = Path(clean_path_str) if clean_path_str else None
+    clean_rows = _read_parquet_row_count(clean_path) if clean_path else None
+    clean_ok = clean.get("output_exists") and (clean_rows is not None)
+    checks.append(
+        {
+            "check": "clean_output_readable",
+            "ok": clean_ok,
+            "detail": f"{clean_rows} rows"
+            if clean_rows is not None
+            else "clean output mancante o illeggibile",
+        }
+    )
+
+    # --- Mart layer ---
+    mart = s.get("layers", {}).get("mart", {})
+    mart_outputs = mart.get("outputs", [])
+    mart_checks: list[dict[str, Any]] = []
+    for output_name in mart_outputs:
+        o_path = Path(output_name)
+        rows = _read_parquet_row_count(o_path)
+        mart_checks.append(
+            {
+                "name": o_path.name,
+                "exists": o_path.exists(),
+                "readable": rows is not None,
+                "rows": rows,
+            }
+        )
+    mart_ok = len(mart_outputs) > 0 and all(
+        m.get("exists") and m.get("readable") for m in mart_checks
+    )
+    checks.append(
+        {
+            "check": "mart_outputs_readable",
+            "ok": mart_ok,
+            "detail": mart_checks,
+        }
+    )
+
+    # --- Run record coherence ---
+    rs = run_state(str(config), target_year)
+    run_record = rs.get("latest_run_record")
+    run_coherent = True
+    run_detail: str | None = None
+    if run_record:
+        layers_map = run_record.get("layers") or {}
+        for layer_name, layer_detail in layers_map.items():
+            layer_status = (
+                layer_detail.get("status") if isinstance(layer_detail, dict) else layer_detail
+            )
+            if layer_status == "SUCCESS":
+                layer_info = s.get("layers", {}).get(layer_name, {})
+                if layer_name == "clean" and not layer_info.get("output_exists"):
+                    run_coherent = False
+                    run_detail = f"run dice {layer_name} SUCCESS ma output manca"
+                elif layer_name == "mart":
+                    if (
+                        layer_info.get("output_exists_count", 0) == 0
+                        and layer_info.get("output_count", 0) > 0
+                    ):
+                        run_coherent = False
+                        run_detail = f"run dice {layer_name} SUCCESS ma nessun output presente"
+        if run_coherent:
+            run_detail = f"run record coerente ({run_record.get('status', 'unknown')})"
+    else:
+        # Nessun run record: non e' un fallimento di readiness se i file esistono
+        run_detail = "nessun run record (ok se output presenti)"
+
+    checks.append(
+        {
+            "check": "run_record_coherent",
+            "ok": run_coherent,
+            "detail": run_detail,
+        }
+    )
+
+    ok_count = sum(1 for c in checks if c["ok"])
+    fail_count = sum(1 for c in checks if not c["ok"])
+
+    if fail_count == 0:
+        readiness = "ready"
+    elif ok_count >= len(checks) - 1:
+        readiness = "needs-review"
+    else:
+        readiness = "incomplete"
+
+    return {
+        "dataset": s.get("dataset"),
+        "config_path": str(config),
+        "year": s.get("year"),
+        "readiness": readiness,
+        "check_count": len(checks),
+        "ok_count": ok_count,
+        "fail_count": fail_count,
+        "checks": checks,
+    }

@@ -3,20 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import duckdb
-
-from toolkit.clean.duckdb_read import (
-    SUPPORTED_INPUT_EXTS,
-    read_raw_to_relation,
-    resolve_clean_read_cfg,
-    sql_path,
-)
+from toolkit.clean.duckdb_read import SUPPORTED_INPUT_EXTS, resolve_clean_read_cfg
 from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
-from toolkit.core.layer_profile import profile_relation
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, to_root_relative
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
+from toolkit.clean.sql_execute import _normalize_output_profile, _run_sql
 
 
 def _serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | None:
@@ -185,38 +178,6 @@ def _clean_metadata_payload(
             "output_root_absolute": str(root_dir.resolve()),
         }
     return metadata_payload
-
-
-def _run_sql(
-    input_files: list[Path],
-    sql_query: str,
-    output_path: Path,
-    *,
-    read_cfg: dict[str, Any] | None = None,
-    read_mode: str = "fallback",
-    logger=None,
-) -> tuple[str, dict[str, Any], dict[str, Any]]:
-    con = duckdb.connect(":memory:")
-    try:
-        read_info = read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
-        con.execute(f"CREATE TABLE clean_out AS {sql_query}")
-        output_profile = profile_relation(con, "clean_out")
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        con.execute(
-            f"COPY clean_out TO '{sql_path(output_path)}' (FORMAT PARQUET);"
-        )
-        return read_info.source, read_info.params_used, output_profile
-    finally:
-        con.close()
-
-
-def _normalize_output_profile(output_profile: dict[str, Any] | int) -> dict[str, Any]:
-    if isinstance(output_profile, dict):
-        return output_profile
-    return {
-        "row_count": int(output_profile),
-        "columns": [],
-    }
 
 
 def run_clean(

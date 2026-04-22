@@ -294,15 +294,77 @@ def run_year(
     return context
 
 
+# ---- run step wrappers for subcommand registration ----
+
+
 def run(
-    step: str = typer.Argument(..., help="raw | clean | mart | cross_year | all"),
+    step: str,
+    config: str,
+    years: str | None = None,
+    dry_run: bool = False,
+    strict_config: bool = False,
+):
+    """Backward-compatible Python entrypoint used by tests and internal callers."""
+    strict_flag = strict_config if isinstance(strict_config, bool) else False
+    cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag)
+    dry_flag = dry_run if isinstance(dry_run, bool) else False
+    years_arg = years if isinstance(years, str) else None
+    selected_years = iter_selected_years(cfg, years_arg=years_arg)
+
+    if step == "cross_year":
+        run_cross_year_step(cfg, years=selected_years, dry_run=dry_flag, logger=logger)
+        return
+
+    for year in selected_years:
+        run_year(cfg, year, step=step, dry_run=dry_flag, logger=logger)
+
+
+def _make_step_cmd(step: str):
+    """Factory: returns a Typer command wrapping run_year for the given step."""
+    _step = step
+
+    def cmd(
+        config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+        years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
+        dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
+        strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
+    ):
+        strict_flag = strict_config if isinstance(strict_config, bool) else False
+        cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag)
+        dry_flag = dry_run if isinstance(dry_run, bool) else False
+        years_arg = years if isinstance(years, str) else None
+        selected_years = iter_selected_years(cfg, years_arg=years_arg)
+
+        if _step == "cross_year":
+            run_cross_year_step(cfg, years=selected_years, dry_run=dry_flag, logger=logger)
+            return
+
+        for year in selected_years:
+            run_year(cfg, year, step=_step, dry_run=dry_flag, logger=logger)
+
+    cmd.__name__ = f"run_{_step}_cmd"
+    cmd.__doc__ = f"Esegue lo step {_step} della pipeline."
+    return cmd
+
+
+run_raw_cmd = _make_step_cmd("raw")
+run_clean_cmd = _make_step_cmd("clean")
+run_mart_cmd = _make_step_cmd("mart")
+run_all_cmd = _make_step_cmd("all")
+run_cross_year_cmd = _make_step_cmd("cross_year")
+
+
+def run_init(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without executing"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
     """
-    Esegue un singolo step della pipeline.
+    Bootstrap candidate: esegue run raw e scaffold clean.sql se assente.
+
+    Non esegue clean ne mart. Output: raw scaricato, profilo disponibile,
+    sql/clean.sql scaffoldato oppure skip esplicito se gia esistente.
     """
     strict_config_flag = strict_config if isinstance(strict_config, bool) else False
     cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag)
@@ -310,16 +372,76 @@ def run(
     years_arg = years if isinstance(years, str) else None
     selected_years = iter_selected_years(cfg, years_arg=years_arg)
 
-    if step not in {"raw", "clean", "mart", "cross_year", "all"}:
-        raise typer.BadParameter("step must be one of: raw, clean, mart, cross_year, all")
+    if dry_run_flag:
+        # Validate the execution plan before showing the dry-run plan.
+        # This catches missing sources, invalid paths, etc. early.
+        try:
+            _validate_execution_plan(cfg, "raw")
+        except (ValueError, FileNotFoundError) as exc:
+            raise typer.BadParameter(str(exc))
 
-    if step == "cross_year":
-        run_cross_year_step(cfg, years=selected_years, dry_run=dry_run_flag, logger=logger)
+        # Also validate raw.sources specifically (not covered by _validate_execution_plan)
+        raw_sources = cfg.raw.get("sources") if cfg.raw else None
+        if not raw_sources:
+            raise typer.BadParameter("raw.sources missing or empty in dataset.yml")
+
+        typer.echo("Init bootstrap plan")
+        typer.echo(f"dataset: {cfg.dataset}")
+        typer.echo(f"years: {', '.join(str(y) for y in selected_years)}")
+        typer.echo("steps: raw (+ scaffold clean.sql if missing)")
+        typer.echo("status: DRY_RUN")
+        typer.echo("")
+        typer.echo("Nota: clean.sql sara scaffoldato solo se non esiste gia.")
         return
 
     for year in selected_years:
-        run_year(cfg, year, step=step, dry_run=dry_run_flag, logger=logger)
+        logger.info("INIT | dataset=%s year=%s", cfg.dataset, year)
+
+        # Track scaffold state BEFORE run_raw, so we can tell if it was
+        # scaffolded by this run vs. pre-existing.
+        clean_cfg = cfg.clean or {}
+        clean_sql_rel = clean_cfg.get("sql", "sql/clean.sql")
+        clean_sql_path = Path(cfg.base_dir) / clean_sql_rel
+        scaffold_existed_before = clean_sql_path.exists()
+
+        run_year(cfg, year, step="raw", dry_run=False, logger=logger)
+
+        typer.echo(f"[init] Bootstrap completato per {cfg.dataset}/{year}")
+        typer.echo("  - raw scaricato")
+        profile_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year) / "_profile"
+        profile_exists = (profile_dir / "profile.json").exists() or (
+            profile_dir / "raw_profile.json"
+        ).exists()
+
+        scaffolded_now = not scaffold_existed_before and clean_sql_path.exists()
+        if scaffold_existed_before:
+            if profile_exists:
+                typer.echo("  - profiling disponibile")
+            typer.echo(f"  - clean.sql gia esistente ({clean_sql_rel}), skip scaffold")
+        elif scaffolded_now:
+            if profile_exists:
+                typer.echo("  - profiling disponibile")
+            typer.echo(f"  - clean.sql scaffoldato ({clean_sql_rel})")
+        else:
+            if not profile_exists:
+                raise typer.BadParameter(
+                    f"Profilo raw non disponibile per {cfg.dataset}/{year}. "
+                    f"Esegui prima: toolkit run raw -c <config> oppure crea clean.sql manualmente."
+                )
+            typer.echo("  - profiling disponibile")
+            typer.echo("  - clean.sql non scaffoldato nonostante il profilo raw sia disponibile")
+            typer.echo("    Esegui: toolkit scaffold clean -c <config> oppure verifica i permessi di scrittura")
+
+    typer.echo("")
+    typer.echo("Prossimo passo: toolkit run clean -c <config>")
 
 
 def register(app: typer.Typer) -> None:
-    app.command("run")(run)
+    run_sub = typer.Typer(no_args_is_help=True, add_completion=False)
+    run_sub.command("raw")(run_raw_cmd)
+    run_sub.command("clean")(run_clean_cmd)
+    run_sub.command("mart")(run_mart_cmd)
+    run_sub.command("all")(run_all_cmd)
+    run_sub.command("cross_year")(run_cross_year_cmd)
+    run_sub.command("init")(run_init)
+    app.add_typer(run_sub, name="run")

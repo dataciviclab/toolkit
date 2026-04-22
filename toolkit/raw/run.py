@@ -13,6 +13,7 @@ from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.registry import register_builtin_plugins, registry
 from toolkit.core.validation import write_validation_json
 from toolkit.profile.raw import build_profile_hints, profile_raw, write_raw_profile, write_suggested_read_yml
+from toolkit.scaffold.clean import scaffold_clean_if_missing
 from toolkit.raw.extractors import get_extractor
 from toolkit.raw.validate import validate_raw_output
 
@@ -271,7 +272,6 @@ def run_raw(
                 logger.info("RAW suggested_read -> %s", suggested_path)
 
             if should_write("profile", "raw_profile", policy, profile_ctx):
-                from toolkit.scaffold.clean import generate_clean_sql
                 raw_profile = profile_raw(out_dir, dataset, year)
                 profile_dir = out_dir / "_profile"
                 write_raw_profile(
@@ -282,14 +282,14 @@ def run_raw(
                 )
                 logger.info("RAW profile -> %s", profile_dir / "raw_profile.json")
 
-                clean_sql_path = Path(base_dir) / (clean_cfg or {}).get("sql", "sql/clean.sql")
-                if not clean_sql_path.exists():
-                    scaffold_sql = generate_clean_sql(raw_profile.__dict__, dataset, year)
-                    clean_sql_path.parent.mkdir(parents=True, exist_ok=True)
-                    clean_sql_path.write_text(scaffold_sql, encoding="utf-8")
-                    logger.info("scaffold clean.sql -> %s", clean_sql_path)
-                else:
-                    logger.info("clean.sql gia esistente, scaffold saltato (%s)", clean_sql_path)
+                scaffold_clean_if_missing(
+                    raw_profile.__dict__,
+                    dataset,
+                    year,
+                    base_dir,
+                    clean_cfg,
+                    logger,
+                )
         except Exception as exc:
             logger.warning("RAW profile/scaffold generation failed: %s: %s", type(exc).__name__, exc)
 

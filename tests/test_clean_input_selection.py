@@ -420,7 +420,7 @@ def test_run_clean_legacy_mode_warns_and_keeps_largest_selection(tmp_path: Path,
     assert "defaulting to largest file (legacy)" in caplog.text
 
 
-def test_clean_manifest_missing_falls_back_and_warns(tmp_path: Path, monkeypatch, caplog) -> None:
+def test_clean_manifest_missing_warns_and_selects_legacy(tmp_path: Path, monkeypatch, caplog) -> None:
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     _write_csv(raw_dir / "small.csv", "a\n1\n")
     large_file = _write_csv(raw_dir / "large.csv", "a\n" + ("1\n" * 20))
@@ -440,7 +440,7 @@ def test_clean_manifest_missing_falls_back_and_warns(tmp_path: Path, monkeypatch
         )
 
     assert seen["input_files"] == [large_file]
-    assert "manifest missing, using legacy selection" in caplog.text
+    assert "CLEAN RAW manifest missing, using legacy selection" in caplog.text
 
 
 def test_clean_manifest_points_missing_file_falls_back_and_warns(tmp_path: Path, monkeypatch, caplog) -> None:
@@ -474,4 +474,4 @@ def test_clean_manifest_points_missing_file_falls_back_and_warns(tmp_path: Path,
         )
 
     assert seen["input_files"] == [large_file]
-    assert "primary_output_file is missing or invalid: missing.csv" in caplog.text
+    assert "primary_output_file is missing or invalid: missing.csv; using legacy selection" in caplog.text

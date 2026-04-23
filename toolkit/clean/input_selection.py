@@ -173,6 +173,7 @@ def select_raw_input(
                 prefer_from_raw_run=prefer_from_raw_run,
             )
 
+    manifest_primary = None
     if _should_use_manifest_primary(mode, include=include):
         manifest_primary, manifest_warning = _manifest_primary_input(raw_year_dir)
         if manifest_primary is not None:

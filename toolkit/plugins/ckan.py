@@ -94,7 +94,7 @@ class CkanSource:
         writer = csv.DictWriter(buffer, fieldnames=fields)
         writer.writeheader()
         for row in records:
-            writer.writerow({k: row.get(k) for k in fields})
+            writer.writerow({k: (row.get(k) if row.get(k) is not None else "") for k in fields})
         return buffer.getvalue().encode("utf-8")
 
     def _select_resource_from_package(
@@ -180,7 +180,12 @@ class CkanSource:
                 if raw_url:
                     resolved_url = _force_https(str(raw_url))
                     return self._download_bytes(resolved_url), resolved_url
-                if self._resource_is_datastore_active(result):
+                if prefer_datastore and self._resource_is_datastore_active(result):
+                    try:
+                        return self._datastore_search(str(resource_id), portal_url), api_url
+                    except DownloadError:
+                        pass
+                elif self._resource_is_datastore_active(result):
                     try:
                         return self._datastore_search(str(resource_id), portal_url), api_url
                     except DownloadError:

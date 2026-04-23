@@ -89,10 +89,15 @@ class CkanSource:
             raise DownloadError(
                 f"CKAN datastore_search for resource {resource_id} returned no records"
             )
+        # NOTE: other DownloadError from this method indicate empty-result only;
+        # HTTP/API errors surface as requests exceptions, caught by outer try-except in fetch()
         fields = [f["id"] for f in result.get("fields") or []]
         buffer = io.StringIO(newline="")
         writer = csv.DictWriter(buffer, fieldnames=fields)
         writer.writeheader()
+        # NOTE: CSV format does not distinguish None from empty string.
+        # row.get(k) returns None for missing keys; csv.DictWriter emits '' for None.
+        # If semantic distinction matters, a different format (JSONL) is needed.
         for row in records:
             writer.writerow({k: row.get(k) for k in fields})
         return buffer.getvalue().encode("utf-8")
@@ -180,6 +185,9 @@ class CkanSource:
                 if raw_url:
                     resolved_url = _force_https(str(raw_url))
                     return self._download_bytes(resolved_url), resolved_url
+                # Fallback: try datastore even if prefer_datastore=False, when URL is absent.
+                # Rationale: absent URL + active datastore means resource has no direct download;
+                # trying datastore is a reasonable fallback regardless of prefer_datastore flag.
                 if self._resource_is_datastore_active(result):
                     try:
                         return self._datastore_search(str(resource_id), portal_url), api_url

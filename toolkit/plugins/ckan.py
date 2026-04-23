@@ -1,10 +1,21 @@
 from __future__ import annotations
 
+import csv
+import io
 from urllib.parse import urlparse, urlunparse
 
 import requests
 
 from toolkit.core.exceptions import DownloadError
+
+
+def _normalize_datastore_search_url(portal_url: str) -> str:
+    base = portal_url.rstrip("/")
+    if base.endswith("/api/3/action"):
+        return f"{base}/datastore_search"
+    if base.endswith("/api/3"):
+        return f"{base}/action/datastore_search"
+    return f"{base}/api/3/action/datastore_search"
 
 
 def _normalize_resource_show_url(portal_url: str) -> str:
@@ -69,6 +80,28 @@ class CkanSource:
                 last_err = exc
         raise DownloadError(str(last_err) if last_err else f"Failed to fetch {url}")
 
+    def _datastore_search(self, resource_id: str, api_base: str) -> bytes:
+        url = _normalize_datastore_search_url(api_base)
+        payload = self._get_json(url, {"id": resource_id})
+        result = payload.get("result", {})
+        records = result.get("records") or []
+        if not records:
+            raise DownloadError(
+                f"CKAN datastore_search for resource {resource_id} returned no records"
+            )
+        # NOTE: other DownloadError from this method indicate empty-result only;
+        # HTTP/API errors surface as requests exceptions, caught by outer try-except in fetch()
+        fields = [f["id"] for f in result.get("fields") or []]
+        buffer = io.StringIO(newline="")
+        writer = csv.DictWriter(buffer, fieldnames=fields)
+        writer.writeheader()
+        # NOTE: CSV format does not distinguish None from empty string.
+        # row.get(k) returns None for missing keys; csv.DictWriter emits '' for None.
+        # If semantic distinction matters, a different format (JSONL) is needed.
+        for row in records:
+            writer.writerow({k: row.get(k) for k in fields})
+        return buffer.getvalue().encode("utf-8")
+
     def _select_resource_from_package(
         self,
         result: dict,
@@ -124,12 +157,17 @@ class CkanSource:
 
         return sorted(with_url, key=_score)[0]
 
+    def _resource_is_datastore_active(self, resource: dict) -> bool:
+        return str(resource.get("datastore_active") or "").lower() == "true"
+
     def fetch(
         self,
         portal_url: str,
         resource_id: str | None = None,
         dataset_id: str | None = None,
         resource_name: str | None = None,
+        *,
+        prefer_datastore: bool = True,
     ) -> tuple[bytes, str]:
         last_err: Exception | None = None
 
@@ -138,10 +176,23 @@ class CkanSource:
             try:
                 metadata = self._get_json(api_url, {"id": str(resource_id)})
                 result = metadata.get("result") or {}
+                if prefer_datastore and self._resource_is_datastore_active(result):
+                    try:
+                        return self._datastore_search(str(resource_id), portal_url), api_url
+                    except DownloadError:
+                        pass
                 raw_url = result.get("url")
                 if raw_url:
                     resolved_url = _force_https(str(raw_url))
                     return self._download_bytes(resolved_url), resolved_url
+                # Fallback: try datastore even if prefer_datastore=False, when URL is absent.
+                # Rationale: absent URL + active datastore means resource has no direct download;
+                # trying datastore is a reasonable fallback regardless of prefer_datastore flag.
+                if self._resource_is_datastore_active(result):
+                    try:
+                        return self._datastore_search(str(resource_id), portal_url), api_url
+                    except DownloadError:
+                        pass
                 last_err = DownloadError(
                     f"CKAN resource_show returned no URL for resource_id={resource_id}"
                 )
@@ -155,6 +206,12 @@ class CkanSource:
                 metadata = self._get_json(api_url, {"id": str(package_identifier)})
                 result = metadata.get("result") or {}
                 resource = self._select_resource_from_package(result, resource_id, resource_name)
+                resource_id_for_ds = str(resource.get("id") or "")
+                if prefer_datastore and self._resource_is_datastore_active(resource):
+                    try:
+                        return self._datastore_search(resource_id_for_ds, portal_url), api_url
+                    except DownloadError:
+                        pass
                 resolved_url = _force_https(str(resource["url"]))
                 return self._download_bytes(resolved_url), resolved_url
             except Exception as exc:

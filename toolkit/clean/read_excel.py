@@ -41,13 +41,15 @@ def _load_excel_frame(
     columns = read_cfg.get("columns")
     sheet_name = _normalize_excel_sheet_name(read_cfg.get("sheet_name"))
 
+    ext = input_file.suffix.lower()
+    engine = "xlrd" if ext == ".xls" else "openpyxl"
     df = pd.read_excel(
         input_file,
         sheet_name=sheet_name,
         header=0 if header else None,
         skiprows=skip,
         dtype=object,
-        engine="openpyxl",
+        engine=engine,
     )
 
     if columns:

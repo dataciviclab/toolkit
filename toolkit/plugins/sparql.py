@@ -44,6 +44,11 @@ class SparqlSource:
             raise DownloadError("SPARQL source requires endpoint URL")
         if not query:
             raise DownloadError("SPARQL source requires a query")
+        if accept_format not in {"csv", "sparql-results+json"}:
+            raise DownloadError(
+                f"Unsupported accept_format '{accept_format}'. "
+                "Supported values: 'csv', 'sparql-results+json'."
+            )
 
         headers: dict[str, str] = {
             "Accept": "application/sparql-results+json" if accept_format == "sparql-results+json" else "text/csv",
@@ -69,10 +74,7 @@ class SparqlSource:
         content_type = r.headers.get("Content-Type", "")
 
         if "text/csv" in content_type:
-            payload: bytes | str = r.content
-            if isinstance(payload, bytes):
-                payload = payload.decode("utf-8", errors="replace")
-            return payload.encode("utf-8"), endpoint
+            return r.content, endpoint
 
         if "sparql-results+json" in content_type:
             csv_bytes = _sparql_json_to_csv(r.text)
@@ -106,8 +108,8 @@ def _sparql_json_to_csv(json_text: str) -> bytes:
     if not bindings:
         raise DownloadError("SPARQL query returned no results")
 
-    # Collect all variable names from the first binding
-    var_names: list[str] = list(bindings[0].keys())
+    # Use head.vars as canonical column list; bindings may omit unbound variables.
+    var_names: list[str] = (payload.get("head") or {}).get("vars") or list(bindings[0].keys())
     rows: list[dict[str, str]] = []
 
     for binding in bindings:

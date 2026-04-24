@@ -163,6 +163,16 @@ def test_sparql_fetch_unsupported_content_type_raises(monkeypatch: pytest.Monkey
         )
 
 
+def test_sparql_fetch_unsupported_accept_format_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    source = SparqlSource()
+    with pytest.raises(DownloadError, match="Unsupported accept_format"):
+        source.fetch(
+            "https://example.test/sparql",
+            "SELECT * WHERE { }",
+            accept_format="xml",
+        )
+
+
 def test_sparql_fetch_missing_endpoint_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     source = SparqlSource()
     with pytest.raises(DownloadError, match="requires endpoint URL"):

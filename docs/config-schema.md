@@ -153,10 +153,13 @@ Note pratiche per `sdmx`:
 
 Note pratiche:
 
-- i file `.xlsx` sono supportati nel layer CLEAN
+- i file `.xlsx` sono supportati nel layer CLEAN via `engine="openpyxl"`
+- i file `.xls` (Excel 97-2003) sono supportati via `engine="xlrd"`
 - RAW conserva il workbook originale senza convertirlo
-- per `.xlsx`, le opzioni utili sono soprattutto `header`, `skip`, `columns`, `trim_whitespace`, `sheet_name`
-- `sheet_name` usa il primo foglio se omesso
+- per Excel le opzioni principali sono `header`, `skip`, `columns`, `trim_whitespace`, `sheet_name`
+- `sheet_name` (stringa o intero): seleziona il foglio da leggere; default = primo foglio (`0`)
+- `mode: all` consente di leggere tutti i fogli di un workbook in una vista unica (`raw_input`)
+- con `header: false` + `columns` è possibile specificare i nomi-colonna manualmente per file Excel senza intestazione
 - `normalize_rows_to_columns: true` ha senso solo insieme a `columns`
 - con `normalize_rows_to_columns: true`, il toolkit normalizza le righe corte del CSV allo schema atteso prima di esporre `raw_input`
 

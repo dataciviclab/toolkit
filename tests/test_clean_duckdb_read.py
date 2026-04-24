@@ -300,6 +300,42 @@ def test_read_raw_to_relation_reads_xlsx_with_explicit_sheet_and_columns(tmp_pat
     con.close()
 
 
+def test_read_raw_to_relation_reads_xls_with_xlrd_engine(tmp_path: Path):
+    """Test that .xls files use the xlrd engine."""
+    import xlwt
+
+    input_file = tmp_path / "ok.xls"
+    wb = xlwt.Workbook()
+    ws = wb.add_sheet("Sheet1")
+    ws.write(0, 0, "Anno")
+    ws.write(0, 1, "Regione")
+    ws.write(0, 2, "Domanda")
+    ws.write(1, 0, 2022)
+    ws.write(1, 1, "Lazio")
+    ws.write(1, 2, 123.4)
+    ws.write(2, 0, 2022)
+    ws.write(2, 1, "Umbria")
+    ws.write(2, 2, 56.7)
+    wb.save(input_file)
+
+    con = duckdb.connect(":memory:")
+    logger = logging.getLogger("tests.clean.duckdb_read.xls")
+
+    info = duckdb_read.read_raw_to_relation(
+        con,
+        [input_file],
+        {"header": True},
+        "fallback",
+        logger,
+    )
+
+    rows = con.execute('SELECT "Anno", "Regione", "Domanda" FROM raw_input ORDER BY "Regione"').fetchall()
+    assert info.source == "excel"
+    assert info.params_used["sheet_name"] == 0
+    assert rows == [(2022, "Lazio", 123.4), (2022, "Umbria", 56.7)]
+    con.close()
+
+
 def test_resolve_clean_read_cfg_uses_suggested_hints_in_auto_mode(tmp_path: Path):
     raw_dir = tmp_path / "raw" / "demo" / "2024"
     profile_dir = raw_dir / "_profile"

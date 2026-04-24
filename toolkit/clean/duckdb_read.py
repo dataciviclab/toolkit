@@ -35,6 +35,7 @@ SUPPORTED_INPUT_EXTS = {
     ".tsv.gz",
     ".txt.gz",
     ".xlsx",
+    ".xls",
     ".nt.gz",
 }
 
@@ -273,7 +274,7 @@ def read_raw_to_relation(
         info = _execute_parquet_read(con, input_files)
         logger.info("read_csv params used: source=parquet params={}")
         return info
-    if exts <= {".xlsx"}:
+    if exts <= {".xlsx", ".xls"}:
         result = _execute_excel_read(con, input_files, read_cfg, logger=logger)
         return ReadInfo(source=result["source"], params_used=result["params_used"])
 

@@ -158,6 +158,22 @@ def test_run_clean_accepts_xlsx_inputs(tmp_path: Path, monkeypatch):
     assert seen["input_files"] == [xlsx_file]
 
 
+def test_run_clean_accepts_xls_inputs(tmp_path: Path, monkeypatch):
+    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    xls_file = raw_dir / "data.xls"
+    xls_file.write_bytes(b"fake-xls-content")
+
+    sql_path = _write_clean_sql(tmp_path)
+    seen = _run_clean_capture_inputs(
+        monkeypatch,
+        tmp_path,
+        {"sql": str(sql_path), "read": {}},
+    )
+
+    assert seen["input_files"] == [xls_file]
+
+
 def test_run_clean_include_pattern_restricts_to_matching_input(tmp_path: Path, monkeypatch):
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     raw_dir.mkdir(parents=True, exist_ok=True)

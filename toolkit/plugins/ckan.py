@@ -107,36 +107,36 @@ class CkanSource:
         result: dict,
         resource_id: str | None,
         resource_name: str | None = None,
-    ) -> dict:
+    ) -> list[dict]:
         resources = result.get("resources") or []
         if not resources:
             raise DownloadError("CKAN package_show returned no resources")
 
+        with_url = [item for item in resources if item.get("url")]
+        if not with_url:
+            raise DownloadError("CKAN package_show returned resources without URL")
+
         if resource_id:
-            for item in resources:
+            for item in with_url:
                 if str(item.get("id")) == str(resource_id):
-                    return item
+                    return [item]
             raise DownloadError(
                 f"CKAN package_show did not contain requested resource_id={resource_id}"
             )
 
         if resource_name:
             wanted = str(resource_name).strip().lower()
-            for item in resources:
+            for item in with_url:
                 candidate = str(item.get("name") or "").strip().lower()
                 if candidate == wanted:
-                    return item
-            for item in resources:
+                    return [item]
+            for item in with_url:
                 candidate = str(item.get("name") or "").strip().lower()
                 if wanted in candidate:
-                    return item
+                    return [item]
             raise DownloadError(
                 f"CKAN package_show did not contain requested resource_name={resource_name}"
             )
-
-        with_url = [item for item in resources if item.get("url")]
-        if not with_url:
-            raise DownloadError("CKAN package_show returned resources without URL")
 
         def _score(item: dict) -> tuple[int, str]:
             fmt = str(item.get("format") or "").lower()
@@ -155,10 +155,31 @@ class CkanSource:
                 rank = 9
             return rank, str(item.get("name") or "")
 
-        return sorted(with_url, key=_score)[0]
+        return sorted(with_url, key=_score)
 
     def _resource_is_datastore_active(self, resource: dict) -> bool:
         return str(resource.get("datastore_active") or "").lower() == "true"
+
+    def _try_resource(
+        self,
+        resource: dict,
+        prefer_datastore: bool,
+        portal_url: str,
+        api_base: str,
+    ) -> tuple[bytes, str] | None:
+        """Try to fetch a single resource. Returns (bytes, url) or None if all attempts fail."""
+        resource_id = str(resource.get("id") or "")
+        if prefer_datastore and self._resource_is_datastore_active(resource):
+            try:
+                return self._datastore_search(resource_id, portal_url), api_base
+            except DownloadError:
+                pass
+        resolved_url = _force_https(str(resource["url"]))
+        try:
+            return self._download_bytes(resolved_url), resolved_url
+        except DownloadError:
+            pass
+        return None
 
     def fetch(
         self,
@@ -176,18 +197,10 @@ class CkanSource:
             try:
                 metadata = self._get_json(api_url, {"id": str(resource_id)})
                 result = metadata.get("result") or {}
-                if prefer_datastore and self._resource_is_datastore_active(result):
-                    try:
-                        return self._datastore_search(str(resource_id), portal_url), api_url
-                    except DownloadError:
-                        pass
-                raw_url = result.get("url")
-                if raw_url:
-                    resolved_url = _force_https(str(raw_url))
-                    return self._download_bytes(resolved_url), resolved_url
+                outcome = self._try_resource(result, prefer_datastore, portal_url, api_url)
+                if outcome is not None:
+                    return outcome
                 # Fallback: try datastore even if prefer_datastore=False, when URL is absent.
-                # Rationale: absent URL + active datastore means resource has no direct download;
-                # trying datastore is a reasonable fallback regardless of prefer_datastore flag.
                 if self._resource_is_datastore_active(result):
                     try:
                         return self._datastore_search(str(resource_id), portal_url), api_url
@@ -205,15 +218,22 @@ class CkanSource:
             try:
                 metadata = self._get_json(api_url, {"id": str(package_identifier)})
                 result = metadata.get("result") or {}
-                resource = self._select_resource_from_package(result, resource_id, resource_name)
-                resource_id_for_ds = str(resource.get("id") or "")
-                if prefer_datastore and self._resource_is_datastore_active(resource):
-                    try:
-                        return self._datastore_search(resource_id_for_ds, portal_url), api_url
-                    except DownloadError:
-                        pass
-                resolved_url = _force_https(str(resource["url"]))
-                return self._download_bytes(resolved_url), resolved_url
+                ranked_resources = self._select_resource_from_package(
+                    result, resource_id, resource_name
+                )
+                last_download_err: Exception | None = None
+                for resource in ranked_resources:
+                    outcome = self._try_resource(resource, prefer_datastore, portal_url, api_url)
+                    if outcome is not None:
+                        return outcome
+                    # Capture last error from the loop for a meaningful message
+                    last_download_err = DownloadError(
+                        f"Failed to fetch resource '{resource.get('name')}' ({resource.get('format')})"
+                    )
+                if last_download_err:
+                    raise DownloadError(str(last_download_err))
+            except DownloadError:
+                raise
             except Exception as exc:
                 last_err = exc
 

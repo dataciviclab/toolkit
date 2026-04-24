@@ -7,7 +7,12 @@ from typing import Any
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
-from toolkit.cli.cmd_scout_url import probe_url
+from toolkit.cli.cmd_scout_url import (
+    _detect_ckan,
+    _extract_ckan_dataset_id,
+    _generate_yaml_scaffold,
+    probe_url,
+)
 
 
 class _ScoutHandler(BaseHTTPRequestHandler):
@@ -204,3 +209,154 @@ def test_probe_url_passes_custom_user_agent(monkeypatch) -> None:
 
     assert len(calls) == 1
     assert calls[0]["headers"] == {"User-Agent": custom_ua}
+
+
+# ── Tests for CKAN detection and scaffold ───────────────────────────────────────
+
+class TestExtractCkanDatasetId:
+    def test_uuid_from_id_param(self) -> None:
+        url = "https://www.dati.gov.it/view-dataset/dataset?id=bef11a2c-300b-4578-8143-c1ce08f46fff"
+        assert _extract_ckan_dataset_id(url) == "bef11a2c-300b-4578-8143-c1ce08f46fff"
+
+    def test_dataset_path_with_uuid(self) -> None:
+        url = "https://example.com/dataset/bef11a2c-300b-4578-8143-c1ce08f46fff"
+        assert _extract_ckan_dataset_id(url) == "bef11a2c-300b-4578-8143-c1ce08f46fff"
+
+    def test_dataset_path_with_slug(self) -> None:
+        url = "https://example.com/dataset/mio-dataset-slug"
+        assert _extract_ckan_dataset_id(url) == "mio-dataset-slug"
+
+    def test_non_ckan_url_returns_none(self) -> None:
+        url = "https://example.com/data/file.csv"
+        assert _extract_ckan_dataset_id(url) is None
+
+    def test_html_api_reference(self) -> None:
+        html = '<a href="/api/3/action/package_show?id=abc-123">Package</a>'
+        url = "https://example.com/other"
+        assert _extract_ckan_dataset_id(url, html) == "abc-123"
+
+
+class TestDetectCkan:
+    def test_detects_data_view_embed(self) -> None:
+        html = b'<div data-view-embed="/dataset/...">CKAN</div>'
+        assert _detect_ckan(html) is True
+
+    def test_detects_api_action(self) -> None:
+        html = b'/api/3/action/package_show'
+        assert _detect_ckan(html) is True
+
+    def test_detects_ckan_css_class(self) -> None:
+        html = b'<div class="ckan-1000">Content</div>'
+        assert _detect_ckan(html) is True
+
+    def test_detects_package_id(self) -> None:
+        html = b'{"package_id": "abc-123"}'
+        assert _detect_ckan(html) is True
+
+    def test_rejects_non_ckan_html(self) -> None:
+        html = b'<html><body><p>Plain HTML page</p></body></html>'
+        assert _detect_ckan(html) is False
+
+
+class TestGenerateYamlScaffold:
+    def test_http_file_scaffold(self) -> None:
+        probe_result = {
+            "final_url": "https://example.com/data/file.csv",
+            "requested_url": "https://example.com/data/file.csv",
+        }
+        yaml = _generate_yaml_scaffold(probe_result)
+        assert 'name: "file_source"' in yaml
+        assert 'type: "http_file"' in yaml
+        assert 'url: "https://example.com/data/file.csv"' in yaml
+        assert 'filename: "file.csv"' in yaml
+        assert 'years: [2024]' in yaml
+        assert "root:" in yaml
+
+    def test_http_file_scaffold_with_datastore_url(self) -> None:
+        probe_result = {
+            "final_url": "https://portal.com/api/3/datastore/dump/uuid.csv",
+            "requested_url": "https://portal.com/api/3/datastore/dump/uuid.csv",
+        }
+        yaml = _generate_yaml_scaffold(probe_result)
+        assert 'type: "ckan"' in yaml
+
+    def test_http_file_scaffold_with_sdmx_url(self) -> None:
+        probe_result = {
+            "final_url": "https://example.com/data/flow/sdmx",
+            "requested_url": "https://example.com/data/flow/sdmx",
+        }
+        yaml = _generate_yaml_scaffold(probe_result)
+        assert 'type: "sdmx"' in yaml
+
+    def test_ckan_resources_scaffold(self) -> None:
+        probe_result = {
+            "final_url": "https://portal.it/dataset/uuid",
+            "requested_url": "https://portal.it/dataset/uuid",
+        }
+        ckan_resources = [
+            {
+                "id": "res-uuid-1",
+                "name": "Main CSV",
+                "format": "csv",
+                "url": "https://portal.it/files/data.csv",
+            },
+            {
+                "id": "res-uuid-2",
+                "name": "Backup XLS",
+                "format": "xls",
+                "url": "https://portal.it/files/data.xls",
+            },
+        ]
+        yaml = _generate_yaml_scaffold(probe_result, ckan_resources)
+        assert "type: \"ckan\"" in yaml
+        assert 'resource_id: "res-uuid-1"' in yaml
+        assert 'resource_id: "res-uuid-2"' in yaml
+        assert 'filename: "data.csv"' in yaml
+
+    def test_candidate_links_fallback(self) -> None:
+        probe_result = {
+            "final_url": "https://portal.it/page",
+            "requested_url": "https://portal.it/page",
+        }
+        links = [
+            "https://portal.it/download/data.csv",
+            "https://portal.it/download/report.xlsx",
+        ]
+        yaml = _generate_yaml_scaffold(probe_result, None, links)
+        assert 'type: "http_file"' in yaml
+        assert 'url: "https://portal.it/download/data.csv"' in yaml
+        assert 'url: "https://portal.it/download/report.xlsx"' in yaml
+
+
+def test_scout_url_scaffold_flag_http_file() -> None:
+    server, base_url = _serve()
+    runner = CliRunner()
+    try:
+        result = runner.invoke(app, ["scout-url", "--scaffold", f"{base_url}/files/demo.csv"])
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert result.exit_code == 0
+    assert "root:" in result.output
+    assert 'name: "demo_source"' in result.output
+    assert 'type: "http_file"' in result.output
+    assert "dataset:" in result.output
+    assert "raw:" in result.output
+
+
+def test_scout_url_scaffold_flag_html_uses_candidate_links() -> None:
+    server, base_url = _serve()
+    runner = CliRunner()
+    try:
+        result = runner.invoke(app, ["scout-url", "--scaffold", f"{base_url}/html"])
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert result.exit_code == 0
+    assert "root:" in result.output
+    assert 'type: "http_file"' in result.output
+    # HTML page has links to CSV, XLSX in test server
+    assert "seriestoricheannualiinps" not in result.output  # uses data.csv stem
+    assert "data_source" in result.output or "csv" in result.output

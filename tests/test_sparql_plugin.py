@@ -144,6 +144,25 @@ def test_sparql_fetch_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
 
+def test_sparql_fetch_unsupported_content_type_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_post(url: str, data: dict, headers: dict, timeout: int):
+        return _FakeSparqlResponse(
+            status_code=200,
+            text="<xml>not supported</xml>",
+            headers={"Content-Type": "application/xml"},
+        )
+
+    monkeypatch.setattr("toolkit.plugins.sparql.requests.post", fake_post)
+
+    source = SparqlSource()
+    with pytest.raises(DownloadError, match="Unsupported Content-Type"):
+        source.fetch(
+            "https://example.test/sparql",
+            "SELECT * WHERE { }",
+            accept_format="csv",
+        )
+
+
 def test_sparql_fetch_missing_endpoint_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     source = SparqlSource()
     with pytest.raises(DownloadError, match="requires endpoint URL"):

@@ -68,23 +68,28 @@ class SparqlSource:
 
         content_type = r.headers.get("Content-Type", "")
 
-        if "text/csv" in content_type or accept_format == "csv":
+        if "text/csv" in content_type:
             payload: bytes | str = r.content
             if isinstance(payload, bytes):
                 payload = payload.decode("utf-8", errors="replace")
             return payload.encode("utf-8"), endpoint
 
-        if "sparql-results+json" in content_type or accept_format == "sparql-results+json":
+        if "sparql-results+json" in content_type:
             csv_bytes = _sparql_json_to_csv(r.text)
             return csv_bytes, endpoint
 
-        # Fallback: treat as text
-        text = r.text
-        return text.encode("utf-8"), endpoint
+        raise DownloadError(
+            f"Unsupported Content-Type '{content_type}' for SPARQL fetch. "
+            "Expected 'text/csv' or 'application/sparql-results+json'."
+        )
 
 
 def _sparql_json_to_csv(json_text: str) -> bytes:
-    """Convert SPARQL Results JSON to CSV bytes."""
+    """Convert SPARQL Results JSON to CSV bytes.
+
+    Assumes all bindings share the same set of variables (homogeneous schema).
+    Extra keys in later bindings or missing keys produce empty values silently.
+    """
     import json
 
     try:

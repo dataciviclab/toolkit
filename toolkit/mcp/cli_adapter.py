@@ -37,7 +37,12 @@ def _toolkit_json(args: list[str]) -> dict[str, Any]:
     if result.returncode != 0:
         stderr = (result.stderr or "").strip()
         stdout = (result.stdout or "").strip()
-        detail = stderr or stdout or f"exit code {result.returncode}"
+        if stderr:
+            detail = stderr
+        elif stdout:
+            detail = stdout
+        else:
+            detail = f"exit code {result.returncode}: {' '.join(cmd)}"
         raise ToolkitClientError(f"toolkit CLI fallita: {detail}")
 
     try:

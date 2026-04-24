@@ -30,3 +30,6 @@ tmp/
 # Generated pipeline outputs
 **/_smoke_out/
 **/_test_out/
+
+# Generated artifacts
+generated/

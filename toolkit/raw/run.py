@@ -26,7 +26,7 @@ def _format_args(args: dict, year: int) -> dict:
 
 
 def _infer_ext(stype: str, formatted_args: dict, origin: str | None = None) -> str:
-    if stype == "sdmx":
+    if stype in {"sdmx", "sparql"}:
         return ".csv"
     if stype in {"http_file", "ckan"}:
         url = origin or formatted_args.get("url", "")
@@ -85,6 +85,12 @@ def _fetch_payload(stype: str, client: dict, formatted_args: dict) -> tuple[byte
             str(formatted_args["flow"]),
             str(formatted_args["version"]),
             formatted_args.get("filters"),
+        )
+    elif stype == "sparql":
+        payload, origin = src.fetch(
+            str(formatted_args["endpoint"]),
+            str(formatted_args["query"]),
+            str(formatted_args.get("accept_format", "csv")),
         )
     elif stype == "http_file":
         payload = src.fetch(formatted_args["url"])

@@ -28,6 +28,8 @@ from toolkit.core.paths import layer_year_dir
 from toolkit.core.support import resolve_support_payloads
 from toolkit.profile.raw import build_profile_hints
 from toolkit.core.run_context import get_run_dir, latest_run
+from toolkit.core.exceptions import DownloadError
+from toolkit.plugins.sparql import SparqlSource
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -441,9 +443,67 @@ def url(
         typer.echo("candidate_links: none")
 
 
+def probe(
+    source: str = typer.Option(..., "--source", "-s", help="Source type (e.g. sparql)"),
+    endpoint: str | None = typer.Option(None, "--endpoint", help="SPARQL endpoint URL"),
+    query: str | None = typer.Option(None, "--query", "-q", help="SPARQL SELECT query"),
+    timeout: int = typer.Option(60, "--timeout", min=1, help="Timeout in seconds"),
+    limit: int = typer.Option(100, "--limit", min=1, help="Max rows for probe sample"),
+    as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
+) -> None:
+    """
+    Probe a source endpoint to infer schema and basic statistics.
+    Currently supports SPARQL endpoints.
+    """
+    if source != "sparql":
+        typer.echo(f"error: source '{source}' not supported. Only 'sparql' is available.", err=True)
+        raise typer.Exit(code=1)
+
+    if not endpoint:
+        typer.echo("error: --endpoint is required for sparql source.", err=True)
+        raise typer.Exit(code=1)
+
+    if not query:
+        typer.echo("error: --query/-q is required for sparql source.", err=True)
+        raise typer.Exit(code=1)
+
+    src = SparqlSource(timeout=timeout)
+    try:
+        result = src.probe(endpoint, query, limit=limit)
+    except DownloadError as exc:
+        typer.echo(f"error: {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if as_json:
+        typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+
+    typer.echo(f"endpoint: {result['endpoint']}")
+    typer.echo(f"query_time_ms: {result['query_time_ms']}")
+    typer.echo(f"variables ({len(result['variables'])}): {', '.join(result['variables'])}")
+    typer.echo(f"row_count: {result['row_count']}")
+    typer.echo("null_counts:")
+    for var, count in result["null_counts"].items():
+        if count > 0:
+            typer.echo(f"  {var}: {count}")
+    if not any(c > 0 for c in result["null_counts"].values()):
+        typer.echo("  (none)")
+
+    if result["warnings"]:
+        typer.echo("warnings:")
+        for w in result["warnings"]:
+            typer.echo(f"  - {w}")
+
+    if result["sample_rows"]:
+        typer.echo("sample_rows:")
+        for row in result["sample_rows"]:
+            typer.echo(f"  {row}")
+
+
 def register(app: typer.Typer) -> None:
     inspect_app = typer.Typer(no_args_is_help=True, add_completion=False)
     inspect_app.command("paths")(paths)
     inspect_app.command("schema-diff")(schema_diff)
     inspect_app.command("url")(url)
+    inspect_app.command("probe")(probe)
     app.add_typer(inspect_app, name="inspect")

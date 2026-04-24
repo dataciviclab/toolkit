@@ -18,7 +18,9 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 | artifact policy `minimal|standard|debug` | supported / advanced | tuning operativo |
 | `legacy_aliases` | compatibility only | non promuovere nei repo nuovi |
 | config legacy | compatibility only | usare `--strict-config` nei repo nuovi |
-| `scout_url` | experimental | scouting rapido di un URL pubblico — non fa parte del workflow canonico |
+| `scout_url` | deprecated | sostituito da `inspect url` |
+| `inspect url` | experimental | scouting rapido di un URL pubblico e generazione scaffold YAML |
+| `inspect probe` | experimental | probe schema+stats di un endpoint SPARQL pre-candidate |
 
 Lettura equivalente a livello package:
 
@@ -26,7 +28,7 @@ Lettura equivalente a livello package:
 - advanced tooling: `toolkit.profile`, `resume`, run parziali, `cross_year`, `inspect schema-diff`
 - compatibility only: config legacy e alias storici
 
-Sorgenti builtin supportate dal runtime canonico: `local_file`, `http_file`. Il runtime può conservare `.xlsx` e `.xls` in RAW e leggerli in CLEAN — il file originale resta l'artefatto sorgente.
+Sorgenti builtin supportate dal runtime canonico: `local_file`, `http_file`, `ckan`, `sdmx`, `sparql`. Il runtime può conservare `.xlsx` e `.xls` in RAW e leggerli in CLEAN — il file originale resta l'artefatto sorgente.
 
 Regola pratica:
 

@@ -29,7 +29,7 @@ toolkit status --dataset project_example --year 2022 --latest --config project-e
 
 Il toolkit risolve `dataset.yml` + `sql/` per produrre output auditabili.
 - **`root`**: Directory di output (fallback su cartella config).
-- **`raw`**: Sorgenti (local, generic_https, ckan, sdmx) e strategie di download.
+- **`raw`**: Sorgenti (local_file, http_file, ckan, sdmx, sparql) e strategie di download.
 - **`clean`**: Normalizzazione tramite `sql/clean.sql`.
 - **`mart`**: Tabelle analitiche aggregate via `sql/mart/*.sql`.
 - **`validation`**: Quality check per layer (`fail_on_error: true`).
@@ -38,6 +38,8 @@ Il toolkit risolve `dataset.yml` + `sql/` per produrre output auditabili.
 
 - `toolkit inspect paths --config dataset.yml --year 2024 --json`: Contratto path per notebook e script.
 - `toolkit inspect schema-diff`: Analisi diagnostica di drift tra anni nel RAW.
+- `toolkit inspect url <url>`: Probe URL pubblico e generazione scaffold YAML.
+- `toolkit inspect probe --source sparql --endpoint <url> --query <query>`: Probe schema e stats di un endpoint SPARQL.
 - `toolkit run all --config dataset.yml --dry-run --strict-config`: Valida config/SQL in modo stretto.
 - `toolkit status --dataset <name> --year <year> --latest --config dataset.yml`: Recupera l'ultimo run.
 - `toolkit batch`: esecuzione batch quando devi orchestrare più config.

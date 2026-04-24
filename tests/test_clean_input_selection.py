@@ -7,7 +7,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from toolkit.clean.input_selection import list_raw_candidates, select_inputs
+from toolkit.clean.input_selection import _metadata_candidates, list_raw_candidates, select_inputs
 from toolkit.clean.run import run_clean
 from toolkit.core.manifest import write_raw_manifest
 
@@ -475,3 +475,20 @@ def test_clean_manifest_points_missing_file_falls_back_and_warns(tmp_path: Path,
 
     assert seen["input_files"] == [large_file]
     assert "primary_output_file is missing or invalid: missing.csv; using legacy selection" in caplog.text
+
+
+# ── _metadata_candidates error handling ─────────────────────────────────────────
+
+def test_metadata_candidates_raises_on_malformed_json(tmp_path: Path) -> None:
+    raw_dir = tmp_path / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True)
+    metadata_path = raw_dir / "metadata.json"
+    metadata_path.write_text("{ invalid json }", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="metadata.json malformato"):
+        _metadata_candidates(raw_dir)
+
+
+def test_metadata_candidates_returns_empty_for_missing_file(tmp_path: Path) -> None:
+    raw_dir = tmp_path / "raw" / "demo" / "2024"
+    assert _metadata_candidates(raw_dir) == []

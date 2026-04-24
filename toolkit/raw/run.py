@@ -86,6 +86,12 @@ def _fetch_payload(stype: str, client: dict, formatted_args: dict) -> tuple[byte
             str(formatted_args["version"]),
             formatted_args.get("filters"),
         )
+    elif stype == "sparql":
+        payload, origin = src.fetch(
+            str(formatted_args["endpoint"]),
+            str(formatted_args["query"]),
+            str(formatted_args.get("accept_format", "csv")),
+        )
     elif stype == "http_file":
         payload = src.fetch(formatted_args["url"])
         origin = formatted_args["url"]

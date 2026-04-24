@@ -68,7 +68,14 @@ _BUILTIN_PLUGINS: tuple[dict[str, Any], ...] = (
         "module": "toolkit.plugins.local_file",
         "class_name": "LocalFileSource",
         "optional": False,
-        "factory": lambda cls: (lambda **client: cls()),
+        "factory": lambda cls: (lambda **client: cls(**client)),
+    },
+    {
+        "name": "sparql",
+        "module": "toolkit.plugins.sparql",
+        "class_name": "SparqlSource",
+        "optional": False,
+        "factory": lambda cls: (lambda **client: cls(**client)),
     },
 )
 

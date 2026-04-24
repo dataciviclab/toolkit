@@ -3,7 +3,7 @@ import toolkit.plugins as plugins_pkg
 import toolkit.profile as profile_pkg
 import toolkit.raw as raw_pkg
 from toolkit.clean import run_clean, run_clean_validation, validate_clean
-from toolkit.plugins import CkanSource, HttpFileSource, LocalFileSource, SdmxSource
+from toolkit.plugins import CkanSource, HttpFileSource, LocalFileSource, SdmxSource, SparqlSource
 from toolkit.profile import (
     RawProfile,
     build_profile_hints,
@@ -36,11 +36,12 @@ def test_raw_exports() -> None:
 
 
 def test_plugins_exports() -> None:
-    assert plugins_pkg.__all__ == ["LocalFileSource", "HttpFileSource", "CkanSource", "SdmxSource"]
+    assert plugins_pkg.__all__ == ["LocalFileSource", "HttpFileSource", "CkanSource", "SdmxSource", "SparqlSource"]
     assert LocalFileSource.__name__ == "LocalFileSource"
     assert HttpFileSource.__name__ == "HttpFileSource"
     assert CkanSource.__name__ == "CkanSource"
     assert SdmxSource.__name__ == "SdmxSource"
+    assert SparqlSource.__name__ == "SparqlSource"
 
 
 def test_profile_exports() -> None:

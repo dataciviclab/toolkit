@@ -8,18 +8,15 @@ import requests
 import typer
 
 from toolkit.cli.common import format_profile_preview, iter_years, load_layer_profile_summaries
-from toolkit.cli.cmd_scout_url import (  # noqa: F401 — re-exported for compatibility
+from toolkit.cli.cmd_scout_url import (
     _EXTENDED_EXTENSIONS,
     _MAX_PRINTED_LINKS,
-    _candidate_links,
     _DEFAULT_TIMEOUT,
     _DEFAULT_USER_AGENT,
     _detect_ckan,
     _discover_ckan_resources,
     _extract_ckan_dataset_id,
     _generate_yaml_scaffold,
-    _is_file_like,
-    _is_html,
     probe_url,
 )
 from toolkit.core.config import load_config

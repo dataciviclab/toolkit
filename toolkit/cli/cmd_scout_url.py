@@ -348,5 +348,10 @@ def scout_url(
         DeprecationWarning,
         stacklevel=2,
     )
-    typer.echo("[DEPRECATO] Usa 'toolkit inspect url' invece.", err=True)
+    typer.echo("[DEPRECATO] Usa 'toolkit inspect url' invece. Vedi: toolkit inspect url --help", err=True)
     raise typer.Exit(code=1)
+
+
+def register(app: typer.Typer) -> None:
+    """Deprecated: use 'toolkit inspect url' instead. Registration kept for deprecation message."""
+    app.command("scout-url")(scout_url)

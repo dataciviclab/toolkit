@@ -98,7 +98,8 @@ class SparqlSource:
         Args:
             endpoint: SPARQL endpoint URL.
             query: SPARQL SELECT query. A LIMIT will be appended if not present.
-            limit: Maximum rows to sample for stats (default 100).
+            limit: Maximum rows to fetch for stats (default 100). sample_rows is
+                capped at 5 regardless of this value.
 
         Returns:
             dict with keys: variables, row_count, null_counts, distinct_counts,

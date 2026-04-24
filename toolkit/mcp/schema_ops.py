@@ -2,6 +2,7 @@
 
 Provides read-only diagnostics on config, layers, and run records:
 - show_schema: schema of a raw/clean/mart layer
+- raw_profile: content of _profile/raw_profile.json
 - run_state: run directory state and latest run record
 - summary: layer-level overview with existence checks
 - blocker_hints: common mismatches between config and outputs
@@ -108,6 +109,58 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
         }
     )
     return payload
+
+
+def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
+    """Restituisce il contenuto di _profile/raw_profile.json se presente.
+
+    Il profilo contiene encoding, delimitatore, decimal suggestion, nomi colonna,
+    sample rows, missingness e mapping suggestions per il layer raw.
+    """
+    config = _safe_path(config_path)
+    paths = inspect_paths(str(config), year)
+    raw_dir = Path(paths["paths"]["raw"]["dir"])
+    profile_path = raw_dir / "_profile" / "raw_profile.json"
+
+    if not profile_path.exists():
+        raise ToolkitClientError(
+            f"raw_profile.json non trovato in {profile_path}. "
+            "Esegui 'toolkit run raw' prima di accedere al profilo."
+        )
+
+    try:
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ToolkitClientError(
+            f"raw_profile.json malformato in {profile_path}: {exc}"
+        ) from exc
+
+    # Ritorna un sottoinsieme leggibile: evita di restituire sample_rows intere
+    # se sono troppe (già incluse nel profilo per reference).
+    return {
+        "dataset": profile.get("dataset"),
+        "year": profile.get("year"),
+        "config_path": str(config),
+        "profile_path": str(profile_path),
+        "file_used": profile.get("file_used"),
+        "read_hints": {
+            "encoding": profile.get("encoding_suggested"),
+            "delimiter": profile.get("delim_suggested"),
+            "decimal": profile.get("decimal_suggested"),
+            "skip": profile.get("skip_suggested"),
+            "robust": profile.get("robust_read_suggested"),
+        },
+        "header_line": profile.get("header_line"),
+        "columns": {
+            "raw": profile.get("columns_raw", []),
+            "normalized": profile.get("columns_norm", []),
+            "count": len(profile.get("columns_raw", [])),
+        },
+        "missingness_top": profile.get("missingness_top", []),
+        "mapping_suggestions": profile.get("mapping_suggestions", {}),
+        "warnings": profile.get("warnings", []),
+        "profile_exists": True,
+    }
 
 
 def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:

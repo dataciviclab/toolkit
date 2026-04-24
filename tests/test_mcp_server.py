@@ -14,6 +14,7 @@ def test_mcp_server_registers_expected_tools() -> None:
     assert tool_names == {
         "toolkit_inspect_paths",
         "toolkit_show_schema",
+        "toolkit_raw_profile",
         "toolkit_run_state",
         "toolkit_summary",
         "toolkit_blocker_hints",
@@ -89,3 +90,19 @@ def test_toolkit_json_includes_cmd_in_error_on_empty_output(monkeypatch: pytest.
         cli_adapter._toolkit_json(["inspect", "paths", "--config", "dataset.yml"])
 
     assert "toolkit.cli.app" in str(exc_info.value)
+
+
+def test_toolkit_raw_profile_passes_config_and_year(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict[str, object] = {}
+
+    def fake_impl(config_path: str, year: int | None) -> dict[str, object]:
+        calls["config_path"] = config_path
+        calls["year"] = year
+        return {"profile_exists": True}
+
+    monkeypatch.setattr(mcp_server, "raw_profile_impl", fake_impl)
+
+    payload = mcp_server.toolkit_raw_profile("dataset.yml", 2024)
+
+    assert payload == {"profile_exists": True}
+    assert calls == {"config_path": "dataset.yml", "year": 2024}

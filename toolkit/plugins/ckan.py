@@ -232,9 +232,6 @@ class CkanSource:
                     )
                 if last_download_err:
                     raise DownloadError(str(last_download_err))
-                last_err = DownloadError(
-                    f"All resource formats failed for package {package_identifier}"
-                )
             except DownloadError:
                 raise
             except Exception as exc:

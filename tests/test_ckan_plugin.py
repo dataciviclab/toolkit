@@ -95,7 +95,8 @@ def test_ckan_fetch_requires_identifier():
         raise AssertionError("Expected DownloadError")
 
 
-def test_ckan_fetch_package_show_by_resource_name(monkeypatch):
+def test_ckan_fetch_falls_back_to_second_resource_when_first_fails(monkeypatch):
+    """First resource URL fails (404), second resource succeeds."""
     calls = []
 
     def _fake_get(url, params=None, timeout=None, headers=None):
@@ -108,39 +109,42 @@ def test_ckan_fetch_package_show_by_resource_name(monkeypatch):
                     "result": {
                         "resources": [
                             {
-                                "id": "other",
-                                "name": "auxiliary export",
+                                "id": "first-res",
+                                "name": "first csv",
                                 "format": "CSV",
-                                "url": "https://portal.example.org/export/aux.csv",
+                                "url": "http://portal.example.org/export/first.csv",
                             },
                             {
-                                "id": "wanted",
-                                "name": "target csv export",
+                                "id": "second-res",
+                                "name": "second csv",
                                 "format": "CSV",
-                                "url": "http://portal.example.org/export/target.csv",
+                                "url": "http://portal.example.org/export/second.csv",
                             },
                         ]
                     },
                 },
                 url=f"{url}?id=dataset-id",
             )
-        return _FakeResponse(
-            200,
-            content=b"a,b\n1,2\n",
-            url="https://portal.example.org/export/target.csv",
-        )
+        # Simulate first URL failing with 404, second succeeding
+        if "first.csv" in url:
+            return _FakeResponse(404, content=b"", url=url)
+        if "second.csv" in url:
+            return _FakeResponse(200, content=b"ok,second", url=url)
+        raise AssertionError(f"Unexpected request to {url}")
 
     monkeypatch.setattr("toolkit.plugins.ckan.requests.get", _fake_get)
 
     payload, origin = CkanSource().fetch(
         "https://portal.example.org/api/3",
         dataset_id="dataset-id",
-        resource_name="target csv export",
     )
 
-    assert payload == b"a,b\n1,2\n"
-    assert origin == "https://portal.example.org/export/target.csv"
-    assert any("package_show" in call[0] for call in calls)
+    assert payload == b"ok,second"
+    assert "second.csv" in origin
+    # Verify both resources were attempted (first failed, second succeeded)
+    attempted_urls = [c[0] for c in calls]
+    assert any("first.csv" in u for u in attempted_urls)
+    assert any("second.csv" in u for u in attempted_urls)
 
 
 def test_ckan_fetch_package_show_by_resource_name_raises_when_missing(monkeypatch):

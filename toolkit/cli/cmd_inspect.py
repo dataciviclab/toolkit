@@ -4,9 +4,24 @@ import json
 from pathlib import Path
 from typing import Any
 
+import requests
 import typer
 
 from toolkit.cli.common import format_profile_preview, iter_years, load_layer_profile_summaries
+from toolkit.cli.cmd_scout_url import (  # noqa: F401 — re-exported for compatibility
+    _EXTENDED_EXTENSIONS,
+    _MAX_PRINTED_LINKS,
+    _candidate_links,
+    _DEFAULT_TIMEOUT,
+    _DEFAULT_USER_AGENT,
+    _detect_ckan,
+    _discover_ckan_resources,
+    _extract_ckan_dataset_id,
+    _generate_yaml_scaffold,
+    _is_file_like,
+    _is_html,
+    probe_url,
+)
 from toolkit.core.config import load_config
 from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import layer_year_dir
@@ -360,8 +375,75 @@ def schema_diff(
         typer.echo("comparisons: none")
 
 
+def url(
+    url: str = typer.Argument(..., help="URL da ispezionare"),
+    scaffold: bool = typer.Option(False, "--scaffold", help="Genera scaffold YAML (blocchi dataset + raw)"),
+    timeout: int = typer.Option(_DEFAULT_TIMEOUT, "--timeout", min=1, help="Timeout HTTP in secondi"),
+    user_agent: str = typer.Option(_DEFAULT_USER_AGENT, "--user-agent"),
+    as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
+) -> None:
+    """
+    Ispeziona un URL per dataset scouting: probe HTTP e generazione scaffold YAML.
+    """
+    try:
+        result = probe_url(url, timeout=timeout, user_agent=user_agent, capture_html=scaffold)
+    except requests.RequestException as exc:
+        typer.echo(f"error: {type(exc).__name__}: {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if scaffold:
+        ckan_resources: list[dict[str, Any]] | None = None
+        candidate_file_links: list[str] | None = None
+
+        if result["kind"] == "html":
+            html_content = result.get("html_content", b"")
+            html_text = html_content.decode("utf-8", errors="replace") if html_content else ""
+            dataset_id = _extract_ckan_dataset_id(result["final_url"], html_text)
+            is_ckan = _detect_ckan(html_content) if html_content else False
+
+            if dataset_id and html_content and is_ckan:
+                ckan_resources = _discover_ckan_resources(
+                    result["final_url"],
+                    dataset_id,
+                    timeout=timeout,
+                    user_agent=user_agent,
+                )
+
+            if not ckan_resources and html_content:
+                candidate_file_links = [
+                    link for link in result.get("candidate_links", [])
+                    if any(ext in link.lower() for ext in _EXTENDED_EXTENSIONS)
+                ]
+
+        yaml_scaffold = _generate_yaml_scaffold(result, ckan_resources, candidate_file_links)
+        typer.echo(yaml_scaffold)
+        return
+
+    if as_json:
+        typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+
+    typer.echo(f"requested_url: {result['requested_url']}")
+    typer.echo(f"final_url: {result['final_url']}")
+    typer.echo(f"status_code: {result['status_code']}")
+    typer.echo(f"content_type: {result['content_type']}")
+    typer.echo(f"content_disposition: {result['content_disposition']}")
+    typer.echo(f"kind: {result['kind']}")
+
+    if result["candidate_links"]:
+        typer.echo("candidate_links:")
+        for link in result["candidate_links"][:_MAX_PRINTED_LINKS]:
+            typer.echo(f"  - {link}")
+        remaining = len(result["candidate_links"]) - _MAX_PRINTED_LINKS
+        if remaining > 0:
+            typer.echo(f"candidate_links_more: {remaining}")
+    else:
+        typer.echo("candidate_links: none")
+
+
 def register(app: typer.Typer) -> None:
     inspect_app = typer.Typer(no_args_is_help=True, add_completion=False)
     inspect_app.command("paths")(paths)
     inspect_app.command("schema-diff")(schema_diff)
+    inspect_app.command("url")(url)
     app.add_typer(inspect_app, name="inspect")

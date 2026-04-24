@@ -337,63 +337,16 @@ def scout_url(
     scaffold: bool = typer.Option(False, "--scaffold", help="Genera scaffold YAML (blocchi dataset + raw)"),
 ) -> None:
     """
-    Ispeziona un URL per dataset scouting minimale.
+    [DEPRECATO] Usa 'toolkit inspect url' invece.
+    Questo comando sarà rimosso in una versione futura.
     """
-    try:
-        result = probe_url(url, timeout=timeout, user_agent=user_agent, capture_html=scaffold)
-    except requests.RequestException as exc:
-        typer.echo(f"error: {type(exc).__name__}: {exc}")
-        raise typer.Exit(code=1) from exc
+    import warnings
 
-    if scaffold:
-        ckan_resources: list[dict[str, Any]] | None = None
-        candidate_file_links: list[str] | None = None
-
-        if result["kind"] == "html":
-            html_content = result.get("html_content", b"")
-            html_text = html_content.decode("utf-8", errors="replace") if html_content else ""
-            dataset_id = _extract_ckan_dataset_id(result["final_url"], html_text)
-            is_ckan = _detect_ckan(html_content) if html_content else False
-
-            if dataset_id and html_content and is_ckan:
-                ckan_resources = _discover_ckan_resources(
-                    result["final_url"],
-                    dataset_id,
-                    timeout=timeout,
-                    user_agent=user_agent,
-                )
-
-            # Se CKAN discovery ha trovato risorse, usa quelle.
-            # Altrimenti se è HTML (anche CKAN-like ma senza API funzionante),
-            # usa candidate_links per generare http_file per ogni link a file.
-            if not ckan_resources and html_content:
-                # Filtra candidate_links per estensioni file (non solo data links)
-                candidate_file_links = [
-                    link for link in result.get("candidate_links", [])
-                    if any(ext in link.lower() for ext in _EXTENDED_EXTENSIONS)
-                ]
-
-        yaml_scaffold = _generate_yaml_scaffold(result, ckan_resources, candidate_file_links)
-        typer.echo(yaml_scaffold)
-        return
-
-    typer.echo(f"requested_url: {result['requested_url']}")
-    typer.echo(f"final_url: {result['final_url']}")
-    typer.echo(f"status_code: {result['status_code']}")
-    typer.echo(f"content_type: {result['content_type']}")
-    typer.echo(f"content_disposition: {result['content_disposition']}")
-    typer.echo(f"kind: {result['kind']}")
-
-    if result["candidate_links"]:
-        typer.echo("candidate_links:")
-        for link in result["candidate_links"][:_MAX_PRINTED_LINKS]:
-            typer.echo(f"  - {link}")
-        remaining = len(result["candidate_links"]) - _MAX_PRINTED_LINKS
-        if remaining > 0:
-            typer.echo(f"candidate_links_more: {remaining}")
-    else:
-        typer.echo("candidate_links: none")
-
-
-def register(app: typer.Typer) -> None:
-    app.command("scout-url")(scout_url)
+    warnings.warn(
+        "scout-url è deprecato. Usa 'toolkit inspect url' invece. "
+        "Vedere 'toolkit inspect url --help'.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    typer.echo("[DEPRECATO] Usa 'toolkit inspect url' invece.", err=True)
+    raise typer.Exit(code=1)

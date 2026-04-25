@@ -4,15 +4,29 @@ import json
 from pathlib import Path
 from typing import Any
 
+import requests
 import typer
 
 from toolkit.cli.common import format_profile_preview, iter_years, load_layer_profile_summaries
+from toolkit.cli.cmd_scout_url import (
+    _EXTENDED_EXTENSIONS,
+    _MAX_PRINTED_LINKS,
+    _DEFAULT_TIMEOUT,
+    _DEFAULT_USER_AGENT,
+    _detect_ckan,
+    _discover_ckan_resources,
+    _extract_ckan_dataset_id,
+    _generate_yaml_scaffold,
+    probe_url,
+)
 from toolkit.core.config import load_config
 from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import layer_year_dir
 from toolkit.core.support import resolve_support_payloads
 from toolkit.profile.raw import build_profile_hints
 from toolkit.core.run_context import get_run_dir, latest_run
+from toolkit.core.exceptions import DownloadError
+from toolkit.plugins.sparql import SparqlSource
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -360,8 +374,133 @@ def schema_diff(
         typer.echo("comparisons: none")
 
 
+def url(
+    url: str = typer.Argument(..., help="URL da ispezionare"),
+    scaffold: bool = typer.Option(False, "--scaffold", help="Genera scaffold YAML (blocchi dataset + raw)"),
+    timeout: int = typer.Option(_DEFAULT_TIMEOUT, "--timeout", min=1, help="Timeout HTTP in secondi"),
+    user_agent: str = typer.Option(_DEFAULT_USER_AGENT, "--user-agent"),
+    as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
+) -> None:
+    """
+    Ispeziona un URL per dataset scouting: probe HTTP e generazione scaffold YAML.
+    """
+    try:
+        result = probe_url(url, timeout=timeout, user_agent=user_agent, capture_html=scaffold)
+    except requests.RequestException as exc:
+        typer.echo(f"error: {type(exc).__name__}: {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if scaffold:
+        ckan_resources: list[dict[str, Any]] | None = None
+        candidate_file_links: list[str] | None = None
+
+        if result["kind"] == "html":
+            html_content = result.get("html_content", b"")
+            html_text = html_content.decode("utf-8", errors="replace") if html_content else ""
+            dataset_id = _extract_ckan_dataset_id(result["final_url"], html_text)
+            is_ckan = _detect_ckan(html_content) if html_content else False
+
+            if dataset_id and html_content and is_ckan:
+                ckan_resources = _discover_ckan_resources(
+                    result["final_url"],
+                    dataset_id,
+                    timeout=timeout,
+                    user_agent=user_agent,
+                )
+
+            if not ckan_resources and html_content:
+                candidate_file_links = [
+                    link for link in result.get("candidate_links", [])
+                    if any(ext in link.lower() for ext in _EXTENDED_EXTENSIONS)
+                ]
+
+        yaml_scaffold = _generate_yaml_scaffold(result, ckan_resources, candidate_file_links)
+        typer.echo(yaml_scaffold)
+        return
+
+    if as_json:
+        typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+
+    typer.echo(f"requested_url: {result['requested_url']}")
+    typer.echo(f"final_url: {result['final_url']}")
+    typer.echo(f"status_code: {result['status_code']}")
+    typer.echo(f"content_type: {result['content_type']}")
+    typer.echo(f"content_disposition: {result['content_disposition']}")
+    typer.echo(f"kind: {result['kind']}")
+
+    if result["candidate_links"]:
+        typer.echo("candidate_links:")
+        for link in result["candidate_links"][:_MAX_PRINTED_LINKS]:
+            typer.echo(f"  - {link}")
+        remaining = len(result["candidate_links"]) - _MAX_PRINTED_LINKS
+        if remaining > 0:
+            typer.echo(f"candidate_links_more: {remaining}")
+    else:
+        typer.echo("candidate_links: none")
+
+
+def probe(
+    source: str = typer.Option(..., "--source", "-s", help="Source type (e.g. sparql)"),
+    endpoint: str | None = typer.Option(None, "--endpoint", help="SPARQL endpoint URL"),
+    query: str | None = typer.Option(None, "--query", "-q", help="SPARQL SELECT query"),
+    timeout: int = typer.Option(60, "--timeout", min=1, help="Timeout in seconds"),
+    limit: int = typer.Option(100, "--limit", min=1, help="Max rows for probe sample"),
+    as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
+) -> None:
+    """
+    Probe a source endpoint to infer schema and basic statistics.
+    Currently supports SPARQL endpoints.
+    """
+    if source != "sparql":
+        typer.echo(f"error: source '{source}' not supported. Only 'sparql' is available.", err=True)
+        raise typer.Exit(code=1)
+
+    if not endpoint:
+        typer.echo("error: --endpoint is required for sparql source.", err=True)
+        raise typer.Exit(code=1)
+
+    if not query:
+        typer.echo("error: --query/-q is required for sparql source.", err=True)
+        raise typer.Exit(code=1)
+
+    src = SparqlSource(timeout=timeout)
+    try:
+        result = src.probe(endpoint, query, limit=limit)
+    except DownloadError as exc:
+        typer.echo(f"error: {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if as_json:
+        typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+
+    typer.echo(f"endpoint: {result['endpoint']}")
+    typer.echo(f"query_time_ms: {result['query_time_ms']}")
+    typer.echo(f"variables ({len(result['variables'])}): {', '.join(result['variables'])}")
+    typer.echo(f"row_count: {result['row_count']}")
+    typer.echo("null_counts:")
+    for var, count in result["null_counts"].items():
+        if count > 0:
+            typer.echo(f"  {var}: {count}")
+    if not any(c > 0 for c in result["null_counts"].values()):
+        typer.echo("  (none)")
+
+    if result["warnings"]:
+        typer.echo("warnings:")
+        for w in result["warnings"]:
+            typer.echo(f"  - {w}")
+
+    if result["sample_rows"]:
+        typer.echo("sample_rows:")
+        for row in result["sample_rows"]:
+            typer.echo(f"  {row}")
+
+
 def register(app: typer.Typer) -> None:
     inspect_app = typer.Typer(no_args_is_help=True, add_completion=False)
     inspect_app.command("paths")(paths)
     inspect_app.command("schema-diff")(schema_diff)
+    inspect_app.command("url")(url)
+    inspect_app.command("probe")(probe)
     app.add_typer(inspect_app, name="inspect")

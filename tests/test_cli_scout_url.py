@@ -81,7 +81,7 @@ def test_scout_url_reports_file_headers_after_redirect() -> None:
     server, base_url = _serve()
     runner = CliRunner()
     try:
-        result = runner.invoke(app, ["scout-url", f"{base_url}/redirect-file"])
+        result = runner.invoke(app, ["inspect", "url", f"{base_url}/redirect-file"])
     finally:
         server.shutdown()
         server.server_close()
@@ -100,7 +100,7 @@ def test_scout_url_extracts_candidate_links_from_html() -> None:
     server, base_url = _serve()
     runner = CliRunner()
     try:
-        result = runner.invoke(app, ["scout-url", f"{base_url}/html"])
+        result = runner.invoke(app, ["inspect", "url", f"{base_url}/html"])
     finally:
         server.shutdown()
         server.server_close()
@@ -121,7 +121,7 @@ def test_scout_url_marks_opaque_non_html_response() -> None:
     server, base_url = _serve()
     runner = CliRunner()
     try:
-        result = runner.invoke(app, ["scout-url", f"{base_url}/opaque"])
+        result = runner.invoke(app, ["inspect", "url", f"{base_url}/opaque"])
     finally:
         server.shutdown()
         server.server_close()
@@ -332,7 +332,7 @@ def test_scout_url_scaffold_flag_http_file() -> None:
     server, base_url = _serve()
     runner = CliRunner()
     try:
-        result = runner.invoke(app, ["scout-url", "--scaffold", f"{base_url}/files/demo.csv"])
+        result = runner.invoke(app, ["inspect", "url", "--scaffold", f"{base_url}/files/demo.csv"])
     finally:
         server.shutdown()
         server.server_close()
@@ -349,7 +349,7 @@ def test_scout_url_scaffold_flag_html_uses_candidate_links() -> None:
     server, base_url = _serve()
     runner = CliRunner()
     try:
-        result = runner.invoke(app, ["scout-url", "--scaffold", f"{base_url}/html"])
+        result = runner.invoke(app, ["inspect", "url", "--scaffold", f"{base_url}/html"])
     finally:
         server.shutdown()
         server.server_close()

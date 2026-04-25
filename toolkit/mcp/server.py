@@ -8,6 +8,7 @@ from .toolkit_client import (
     ToolkitClientError,
     blocker_hints as blocker_hints_impl,
     inspect_paths as inspect_paths_impl,
+    raw_profile as raw_profile_impl,
     review_readiness as review_readiness_impl,
     run_state as run_state_impl,
     summary as summary_impl,
@@ -40,6 +41,14 @@ def toolkit_inspect_paths(config_path: str, year: int = 0) -> dict[str, Any]:
 @mcp.tool(description="Mostra lo schema di raw, clean o mart.", structured_output=True)
 def toolkit_show_schema(config_path: str, layer: str = "clean", year: int = 0) -> dict[str, Any]:
     return _guard(show_schema_impl, config_path, layer, year or None)
+
+
+@mcp.tool(
+    description="Mostra il profilo raw: encoding, delimiter, colonne, missingness e mapping suggestions.",
+    structured_output=True,
+)
+def toolkit_raw_profile(config_path: str, year: int = 0) -> dict[str, Any]:
+    return _guard(raw_profile_impl, config_path, year or None)
 
 
 @mcp.tool(

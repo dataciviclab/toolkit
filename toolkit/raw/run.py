@@ -21,7 +21,7 @@ from toolkit.raw.validate import validate_raw_output
 def _format_args(args: dict, year: int) -> dict:
     formatted = {}
     for k, v in (args or {}).items():
-        formatted[k] = v.format(year=year) if isinstance(v, str) else v
+        formatted[k] = v.format(year=year) if isinstance(v, str) and "{year}" in v else v
     # Handle url_suffix_by_year: append per-year suffix to the formatted URL
     if "url" in formatted and "url_suffix_by_year" in (args or {}):
         suffix_map = args["url_suffix_by_year"]

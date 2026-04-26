@@ -80,3 +80,14 @@ class TestFormatArgs:
         result = _format_args(args, 2023)
         assert result["other"] == "value"
         assert "url" not in result
+
+    def test_format_args_sparql_query_with_braces_no_year(self) -> None:
+        """SPARQL query containing {} but no {year} must not be formatted.
+
+        Regression test for issue #186: Python .format() treats {s} as a placeholder
+        and raises KeyError. Only strings containing {year} should be formatted.
+        """
+        sparql_query = "SELECT ?s WHERE { ?s ?p ?o }"
+        args = {"query": sparql_query}
+        result = _format_args(args, 2024)
+        assert result["query"] == sparql_query

@@ -386,8 +386,58 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
                 )
         except Exception:
             pass
-    if trusted_raw_cols:
-        raw_col_count = len(trusted_raw_cols)
+    # --- actual_raw_cols: column count from the raw parquet itself (not from config) ---
+    # When trusted_raw_cols is empty (no saved profile), read the raw parquet directly
+    # to get the physically present column count and detect config-vs-reality drift.
+    actual_raw_col_count: int | None = len(trusted_raw_cols) if trusted_raw_cols else None
+    raw_missing_columns: list[str] = []
+
+    if not trusted_raw_cols:
+        # Find raw file(s) to probe actual column count — parquet preferred, CSV fallback
+        _raw_file: Path | None = None
+        for _pattern in ("*.parquet", "*.csv"):
+            _candidates = list(raw_dir.glob(_pattern))
+            if _candidates:
+                _raw_file = _candidates[0]
+                break
+        if _raw_file is not None:
+            try:
+                _con = duckdb.connect(":memory:")
+                try:
+                    if _raw_file.suffix == ".parquet":
+                        _query = f'DESCRIBE SELECT * FROM read_parquet("{_raw_file.as_posix()}")'
+                    else:
+                        _csv_path = _raw_file.as_posix()
+                        _query = (
+                            f"DESCRIBE SELECT * FROM read_csv(\"{_csv_path}\", auto_detect=true)"
+                        )
+                    _col_rows = _con.execute(_query).fetchall()
+                    _actual_raw_col_names = [str(r[0]) for r in _col_rows]
+                    actual_raw_col_count = len(_actual_raw_col_names)
+
+                    # Infer expected columns from config: clean.read.columns or
+                    # clean.read.normalize_rows_to_columns + columns count hint
+                    _read_cfg = clean_cfg.get("read") or {}
+                    _expected_cols: list[str] = []
+                    if _read_cfg.get("normalize_rows_to_columns"):
+                        _col_defs = _read_cfg.get("columns") or {}
+                        if isinstance(_col_defs, dict) and not _col_defs:
+                            # Empty columns dict means auto: infer from clean_cols count
+                            _expected_cols = clean_cols
+                        elif isinstance(_col_defs, dict):
+                            _expected_cols = list(_col_defs.keys())
+                        elif isinstance(_col_defs, list):
+                            _expected_cols = _col_defs
+                    if _expected_cols:
+                        _actual_set = set(_actual_raw_col_names)
+                        raw_missing_columns = sorted(
+                            c for c in _expected_cols if c not in _actual_set
+                        )
+                finally:
+                    _con.close()
+            except Exception:
+                pass
+
     row_drop_pct = (
         round((raw_row_count - clean_row_count) / raw_row_count * 100, 2)
         if raw_row_count and clean_row_count is not None and raw_row_count > 0
@@ -414,6 +464,8 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
             "raw_cols": raw_col_count,
             "clean_cols": len(clean_cols),
             "col_drop_count": col_drop_count,
+            **({"actual_raw_cols": actual_raw_col_count} if actual_raw_col_count is not None else {}),
+            **({"raw_missing_columns": raw_missing_columns} if raw_missing_columns else {}),
         },
         "columns": clean_cols,
         **({"rules": rules} if rules else {}),

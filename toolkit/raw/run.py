@@ -22,6 +22,15 @@ def _format_args(args: dict, year: int) -> dict:
     formatted = {}
     for k, v in (args or {}).items():
         formatted[k] = v.format(year=year) if isinstance(v, str) else v
+    # Handle url_suffix_by_year: append per-year suffix to the formatted URL
+    if "url" in formatted and "url_suffix_by_year" in (args or {}):
+        suffix_map = args["url_suffix_by_year"]
+        if isinstance(suffix_map, dict):
+            suffix = suffix_map.get(year, "")
+            if isinstance(suffix, str):
+                formatted["url"] = formatted["url"] + suffix
+    # Remove url_suffix_by_year from output — internal config, not for consumers
+    formatted.pop("url_suffix_by_year", None)
     return formatted
 
 

@@ -112,7 +112,7 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
 
 
 def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
-    """Restituisce il contenuto di _profile/raw_profile.json se presente.
+    """Restituisce il contenuto di _profile/raw_profile.json (o suggested_read.yml come fallback).
 
     Il profilo contiene encoding, delimitatore, decimal suggestion, nomi colonna,
     sample rows, missingness e mapping suggestions per il layer raw.
@@ -120,20 +120,48 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
     config = _safe_path(config_path)
     paths = inspect_paths(str(config), year)
     raw_dir = Path(paths["paths"]["raw"]["dir"])
-    profile_path = raw_dir / "_profile" / "raw_profile.json"
+    profile_path = raw_dir / "_profile"
+    raw_profile_json = profile_path / "raw_profile.json"
+    suggested_read_yml = profile_path / "suggested_read.yml"
 
-    if not profile_path.exists():
+    if raw_profile_json.exists():
+        try:
+            profile = json.loads(raw_profile_json.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ToolkitClientError(
+                f"raw_profile.json malformato in {raw_profile_json}: {exc}"
+            ) from exc
+    elif suggested_read_yml.exists():
+        # Fallback: suggested_read.yml contains the same hints in YAML form
+        import yaml
+
+        try:
+            raw_yaml = yaml.safe_load(suggested_read_yml.read_text(encoding="utf-8"))
+        except yaml.YAMLError as exc:
+            raise ToolkitClientError(
+                f"suggested_read.yml non valido in {suggested_read_yml}: {exc}"
+            ) from exc
+        clean_section = raw_yaml.get("clean", {}) if isinstance(raw_yaml, dict) else {}
+        read_section = clean_section.get("read", {}) if isinstance(clean_section, dict) else {}
+        profile = {
+            "dataset": None,
+            "year": None,
+            "encoding_suggested": read_section.get("encoding"),
+            "delim_suggested": read_section.get("delim"),
+            "decimal_suggested": read_section.get("decimal"),
+            "skip_suggested": read_section.get("skip"),
+            "robust_read_suggested": None,
+            "columns_raw": None,
+            "columns_norm": None,
+            "missingness_top": [],
+            "mapping_suggestions": {},
+            "warnings": [],
+        }
+    else:
         raise ToolkitClientError(
-            f"raw_profile.json non trovato in {profile_path}. "
-            "Esegui 'toolkit run raw' prima di accedere al profilo."
+            f"Profilo raw non trovato in {profile_path}. "
+            "Nessun file raw_profile.json ne suggested_read.yml."
         )
-
-    try:
-        profile = json.loads(profile_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ToolkitClientError(
-            f"raw_profile.json malformato in {profile_path}: {exc}"
-        ) from exc
 
     # Ritorna un sottoinsieme leggibile: evita di restituire sample_rows intere
     # se sono troppe (già incluse nel profilo per reference).
@@ -152,9 +180,9 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
         },
         "header_line": profile.get("header_line"),
         "columns": {
-            "raw": profile.get("columns_raw", []),
-            "normalized": profile.get("columns_norm", []),
-            "count": len(profile.get("columns_raw", [])),
+            "raw": profile.get("columns_raw") or [],
+            "normalized": profile.get("columns_norm") or [],
+            "count": len(profile.get("columns_raw") or []),
         },
         "missingness_top": profile.get("missingness_top", []),
         "mapping_suggestions": profile.get("mapping_suggestions", {}),

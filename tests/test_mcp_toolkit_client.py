@@ -4,6 +4,8 @@ import json
 import shutil
 from pathlib import Path
 
+import pytest
+
 from toolkit.mcp.toolkit_client import (
     blocker_hints,
     inspect_paths,
@@ -239,3 +241,48 @@ def test_review_readiness_needs_review_with_single_failure(tmp_path: Path, monke
     payload = review_readiness(str(config_path), 2022)
     assert payload["readiness"] == "needs-review"
     assert payload["fail_count"] == 1
+
+
+def test_mcp_raw_profile_handles_suggested_read_yaml(tmp_path: Path, monkeypatch) -> None:
+    """raw_profile deve cadere su suggested_read.yml quando raw_profile.json non esiste."""
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    # Crea solo suggested_read.yml, nessun raw_profile.json
+    raw_dir = dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022" / "_profile"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "suggested_read.yml").write_text(
+        "clean:\n  read:\n    delim: ','\n    encoding: 'utf-8'\n",
+        encoding="utf-8",
+    )
+
+    from toolkit.mcp.toolkit_client import raw_profile
+
+    payload = raw_profile(str(config_path), 2022)
+    assert payload["profile_exists"] is True
+    assert payload["read_hints"]["delimiter"] == ","
+    assert payload["read_hints"]["encoding"] == "utf-8"
+
+
+def test_mcp_raw_profile_error_when_no_profile_file(tmp_path: Path, monkeypatch) -> None:
+    """raw_profile deve fallire con errore chiaro quando non c'e' nessun profilo."""
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    # Crea la dir _profile ma lasciala vuota
+    raw_dir = dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022" / "_profile"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+
+    from toolkit.mcp.toolkit_client import raw_profile
+    from toolkit.mcp.errors import ToolkitClientError
+
+    with pytest.raises(ToolkitClientError, match="Nessun file raw_profile.json ne suggested_read.yml"):
+        raw_profile(str(config_path), 2022)

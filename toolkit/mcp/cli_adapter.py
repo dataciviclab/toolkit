@@ -30,7 +30,10 @@ def _toolkit_json(args: list[str]) -> dict[str, Any]:
             errors="replace",
             env=env,
             check=False,
+            timeout=60,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise ToolkitClientError(f"toolkit CLI timeout (>60s): {exc}") from exc
     except Exception as exc:
         raise ToolkitClientError(f"Esecuzione toolkit CLI fallita: {exc}") from exc
 

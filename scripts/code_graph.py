@@ -16,7 +16,10 @@ from __future__ import annotations
 import ast
 import argparse
 import json
+import subprocess
 import sys
+import tempfile
+import shutil
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +27,8 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent.resolve()
 OUT_PATH = ROOT / "generated" / "code_graph.json"
 SUMMARY_PATH = ROOT / "generated" / "code_graph_summary.md"
+HOTSPOTS_PATH = ROOT / "generated" / "code_graph_hotspots.md"
+COVERAGE_PATH = ROOT / "generated" / "code_graph_tests_coverage.md"
 TEST_OUT_PATH = ROOT / "generated" / "code_graph_tests.json"
 TEST_SUMMARY_PATH = ROOT / "generated" / "code_graph_tests_summary.md"
 
@@ -539,12 +544,656 @@ def build_summary(graph: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def build_hotspots(graph: dict, *, top_n: int = 20) -> str:
+    """Build a focused hotspots artifact for human review.
+
+    Contains:
+    - Top file hotspots by composite score
+    - Top function/method hotspots by call volume
+    - Max ~80 lines — scannable in 2 minutes
+    """
+    nodes = graph["nodes"]
+    edges = graph["edges"]
+
+    node_file = {n["id"]: n["file"] for n in nodes}
+    node_type = {n["id"]: n["type"] for n in nodes}
+
+    file_stats: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"nodes": 0, "call_out": 0, "call_in": 0, "import_out": 0}
+    )
+    calls_out: Counter[str] = Counter()
+    calls_in: Counter[str] = Counter()
+
+    for node in nodes:
+        file_stats[node["file"]]["nodes"] += 1
+
+    for edge in edges:
+        src_file = node_file.get(edge["from"])
+        dst_file = node_file.get(edge["to"])
+
+        if edge["type"] == "calls":
+            calls_out[edge["from"]] += 1
+            calls_in[edge["to"]] += 1
+            if src_file:
+                file_stats[src_file]["call_out"] += 1
+            if dst_file:
+                file_stats[dst_file]["call_in"] += 1
+        else:
+            if src_file:
+                file_stats[src_file]["import_out"] += 1
+
+    # Top files by score
+    file_rows = []
+    for file_path, stats in file_stats.items():
+        score = stats["nodes"] + stats["call_out"] + stats["call_in"] + stats["import_out"]
+        file_rows.append((score, file_path, stats))
+    file_rows.sort(reverse=True)
+
+    # Top functions by call volume (calls_out + calls_in)
+    func_scores: dict[str, int] = {}
+    for sym in set(list(calls_out) + list(calls_in)):
+        func_scores[sym] = calls_out.get(sym, 0) + calls_in.get(sym, 0)
+
+    func_rows = sorted(func_scores.items(), key=lambda x: x[1], reverse=True)[:top_n]
+
+    generated = graph["metadata"]["generated_at"]
+
+    lines = [
+        "# Toolkit Code Graph — Hotspots",
+        "",
+        f"_Generated: {generated}_",
+        "",
+        "## Top Files by Score",
+        "",
+        "| Score | File | Nodes | Calls out | Calls in | Imports out |",
+        "|---|---|---:|---:|---:|---:|",
+    ]
+    for score, file_path, stats in file_rows[:top_n]:
+        lines.append(
+            f"| {score} | `{file_path}` | {stats['nodes']} | "
+            f"{stats['call_out']} | {stats['call_in']} | {stats['import_out']} |"
+        )
+
+    lines.extend([
+        "",
+        "## Top Functions/Methods by Call Volume",
+        "",
+        "| Volume | Out | In | Type | Symbol |",
+        "|---:|---:|---:|---|---|",
+    ])
+    for sym, total in func_rows:
+        out = calls_out.get(sym, 0)
+        inc = calls_in.get(sym, 0)
+        ntype = node_type.get(sym, "?")
+        lines.append(f"| {total} | {out} | {inc} | `{ntype}` | `{sym}` |")
+
+    return "\n".join(lines) + "\n"
+
+
+# Cached test graph — built once per session when needed for coverage
+_test_graph_cache: dict | None = None
+
+
+def _get_test_graph() -> dict:
+    global _test_graph_cache
+    if _test_graph_cache is None:
+        _test_graph_cache = build_graph(include_tests=True)
+    return _test_graph_cache
+
+
+def _file_test_coverage(toolkit_file: str) -> list[str]:
+    """Return sorted list of test files that directly reference a toolkit file.
+
+    A test file "covers" the toolkit file if:
+    1. It imports the exact module (e.g. from toolkit.cli.cmd_run import ...)
+    2. It imports a parent module that would transitively load the file
+    """
+    test_graph = _get_test_graph()
+    test_nodes = test_graph["nodes"]
+    test_edges = test_graph["edges"]
+
+    # Build set of modules covered by the toolkit file
+    # e.g. toolkit/cli/cmd_run.py → toolkit.cli.cmd_run
+    tk_module = toolkit_file.replace("toolkit/", "").replace("/", ".").replace(".py", "")
+    # Also include parent modules (importing cli.cmd_run also loads cli)
+    parts = tk_module.split(".")
+    parent_modules = {".".join(parts[:i]) for i in range(1, len(parts) + 1)}
+    # Map module to mod:toolkit. prefix
+    target_mods = {f"mod:toolkit.{m}" for m in parent_modules}
+
+    # Index test module nodes by their module id (for reverse lookup)
+    test_node_ids: set[str] = set()
+    test_nodes_by_file: dict[str, set[str]] = {}
+    for n in test_nodes:
+        f = n.get("file", "")
+        if "tests/" in f:
+            nid = n["id"]
+            test_node_ids.add(nid)
+            test_nodes_by_file.setdefault(f, set()).add(nid)
+
+    covered_by: set[str] = set()
+
+    for edge in test_edges:
+        if edge["type"] != "imports":
+            continue
+        to_mod = edge.get("to", "")
+        if to_mod not in target_mods:
+            continue
+        # This test module imports (or a parent of) the toolkit file
+        from_id = edge["from"]
+        for tf, node_ids in test_nodes_by_file.items():
+            if from_id in node_ids:
+                covered_by.add(tf.replace("tests/", ""))
+
+    return sorted(covered_by)
+
+
+def show_impact(graph: dict, symbol: str, include_coverage: bool = False) -> None:
+    """Print a human-readable impact report for a symbol.
+
+    Shows:
+    - Node type and file
+    - Call-in: who calls this symbol
+    - Call-out: what this symbol calls
+    - Risk classification
+    """
+    nodes = graph["nodes"]
+    edges = graph["edges"]
+
+    # Find node
+    node = None
+    for n in nodes:
+        if n["id"] == symbol:
+            node = n
+            break
+
+    if node is None:
+        print(f"[ERROR] Symbol '{symbol}' not found in graph.", file=sys.stderr)
+        print("  Run with --list to see available symbols.", file=sys.stderr)
+        return
+
+    node_type = node.get("type", "?")
+    node_file = node.get("file", "?")
+
+    # Build call-in and call-out sets
+    call_in: list[tuple[str, str]] = []  # (from_symbol, edge_type)
+    call_out: list[tuple[str, str]] = []  # (to_symbol, edge_type)
+
+    for edge in edges:
+        if edge["type"] != "calls":
+            continue
+        if edge["to"] == symbol:
+            call_in.append((edge["from"], edge["type"]))
+        elif edge["from"] == symbol:
+            call_out.append((edge["to"], edge["type"]))
+
+    # Count for risk classification
+    in_count = len(call_in)
+    out_count = len(call_out)
+
+    if in_count == 0 and out_count > 0:
+        risk = "STAR_EMITTER  — calls others, never called directly"
+    elif out_count == 0 and in_count > 0:
+        risk = "STAR_RECEIVER — called by many, calls nothing"
+    elif in_count == 0 and out_count == 0:
+        risk = "ISOLATED     — no call-graph edges (may be dead or only used via runtime dispatch)"
+    else:
+        risk = f"BALANCED      — {in_count} callers, {out_count} callees"
+
+    print()
+    print(f"  Symbol: {symbol}")
+    print(f"  Type:   {node_type}")
+    print(f"  File:   {node_file}")
+    print(f"  Risk:   {risk}")
+    print()
+
+    if call_in:
+        print(f"  Called by ({in_count}):")
+        # Deduplicate by from symbol (same symbol can appear multiple times from different paths)
+        seen_in: set[str] = set()
+        for from_sym, _ in call_in:
+            if from_sym not in seen_in:
+                seen_in.add(from_sym)
+                print(f"    -> {from_sym}")
+    else:
+        print("  Called by: (none)")
+
+    print()
+
+    if call_out:
+        print(f"  Calls ({out_count}):")
+        seen_out: set[str] = set()
+        for to_sym, _ in call_out:
+            if to_sym not in seen_out:
+                seen_out.add(to_sym)
+                print(f"    -> {to_sym}")
+    else:
+        print("  Calls: (none)")
+
+    print()
+
+    if include_coverage:
+        print("  Test Coverage:")
+        test_files = _file_test_coverage(node_file)
+        if test_files:
+            for tf in test_files:
+                print(f"    -> {tf}")
+        else:
+            print("    (no static test references found)")
+        print()
+
+
+def build_coverage() -> str:
+    """Build a test coverage cross-reference between test files and toolkit modules.
+
+    Uses import edges (test module -> toolkit module) from the tests graph
+    as a proxy for "which toolkit code is exercised by which test".
+
+    Output is a markdown table:
+    - Toolkit files sorted by hotspot score
+    - Test files that import or call into each toolkit file
+    - Uncovered toolkit files (no test references)
+    """
+    # Build toolkit-only graph
+    toolkit_graph = build_graph(include_tests=False)
+    toolkit_nodes = toolkit_graph["nodes"]
+    toolkit_node_file = {n["id"]: n["file"] for n in toolkit_nodes}
+
+    # Build graph with tests included
+    test_graph = build_graph(include_tests=True)
+    test_nodes = test_graph["nodes"]
+    test_edges = test_graph["edges"]
+
+    # Index test nodes by file
+    test_nodes_by_file: dict[str, list[dict]] = {}
+    for n in test_nodes:
+        f = n.get("file", "")
+        if "tests/" in f:
+            test_nodes_by_file.setdefault(f, []).append(n)
+
+    # For each test file, collect toolkit files it references via import edges
+    test_to_toolkit: dict[str, set[str]] = {}  # test_file -> set of toolkit files
+
+    for edge in test_edges:
+        if edge["type"] != "imports":
+            continue
+        from_mod = edge["from"]
+        to_mod = edge["to"]
+
+        # Check if source is a test file
+        from_file = None
+        for nf, nodes in test_nodes_by_file.items():
+            if any(n["id"] == from_mod for n in nodes):
+                from_file = nf
+                break
+
+        if not from_file or "tests/" not in from_file:
+            continue
+
+        # Check if target is a toolkit module
+        if to_mod.startswith("mod:toolkit."):
+            toolkit_mod = to_mod.replace("mod:toolkit.", "")
+            # Find the toolkit file for this module
+            toolkit_file = None
+            for n in toolkit_nodes:
+                if n["id"] == f"toolkit.{toolkit_mod}":
+                    toolkit_file = n.get("file", "")
+                    break
+            if toolkit_file:
+                test_to_toolkit.setdefault(from_file, set()).add(toolkit_file)
+
+    # Also look at call edges from test functions to toolkit functions
+    # (only intra-module calls are tracked, so this catches calls within test modules
+    # that call toolkit functions defined in the same module context)
+    for edge in test_edges:
+        if edge["type"] != "calls":
+            continue
+        from_id = edge["from"]
+        to_id = edge["to"]
+
+        # Find which test file contains from_id
+        from_file = None
+        for nf, nodes in test_nodes_by_file.items():
+            if any(n["id"] == from_id for n in nodes):
+                from_file = nf
+                break
+
+        if not from_file or "tests/" not in from_file:
+            continue
+
+        # Find toolkit file for to_id
+        to_node = None
+        for n in toolkit_nodes:
+            if n["id"] == to_id:
+                to_node = n
+                break
+
+        if to_node:
+            toolkit_file = to_node.get("file", "")
+            if toolkit_file:
+                test_to_toolkit.setdefault(from_file, set()).add(toolkit_file)
+
+    # Build hotspot-style score for toolkit files
+    file_stats: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"nodes": 0, "call_out": 0, "call_in": 0, "import_out": 0}
+    )
+    for node in toolkit_nodes:
+        file_stats[node["file"]]["nodes"] += 1
+
+    for edge in toolkit_graph["edges"]:
+        src_file = toolkit_node_file.get(edge["from"])
+        dst_file = toolkit_node_file.get(edge["to"])
+        if edge["type"] == "calls":
+            if src_file:
+                file_stats[src_file]["call_out"] += 1
+            if dst_file:
+                file_stats[dst_file]["call_in"] += 1
+        else:
+            if src_file:
+                file_stats[src_file]["import_out"] += 1
+
+    # Score each toolkit file
+    file_scores: dict[str, tuple[int, dict]] = {}
+    for fp, stats in file_stats.items():
+        score = stats["nodes"] + stats["call_out"] + stats["call_in"] + stats["import_out"]
+        file_scores[fp] = (score, stats)
+
+    # Reverse map: toolkit file -> test files
+    coverage: dict[str, list[str]] = defaultdict(list)
+    for test_file, tk_files in test_to_toolkit.items():
+        for tk_file in tk_files:
+            coverage[tk_file].append(test_file)
+
+    # Sort toolkit files by score
+    sorted_files = sorted(file_scores.items(), key=lambda x: x[1][0], reverse=True)
+
+    generated = datetime.now(timezone.utc).isoformat()
+    lines = [
+        "# Toolkit Code Graph — Test Coverage Cross-Reference",
+        "",
+        f"_Generated: {generated}_",
+        "",
+        "## How to Read",
+        "",
+        "- **Toolkit file** sorted by hotspot score (high score = more interconnected)",
+        "- **Test files** column shows which test files reference this toolkit file",
+        "- **No test listed** = no static reference found (may be uncovered or only used indirectly)",
+        "",
+        "## Coverage Table",
+        "",
+        "| Score | Toolkit File | Test Files |",
+        "|---:|---|---|",
+    ]
+
+    uncovered_count = 0
+    for fp, (score, stats) in sorted_files:
+        test_files = sorted(coverage.get(fp, []))
+        if test_files:
+            test_str = ", ".join(f"`{f.replace('tests/', '')}`" for f in test_files)
+        else:
+            test_str = "_no static reference_"
+            uncovered_count += 1
+        lines.append(f"| {score} | `{fp}` | {test_str} |")
+
+    lines.extend([
+        "",
+        "## Summary",
+        f"- Toolkit files analyzed: `{len(file_scores)}`",
+        f"- Files with test references: `{len(coverage)}`",
+        f"- Files without test references: `{uncovered_count}`",
+        "",
+        "_Note: 'no static reference' means the file is not directly imported or called",
+        "_by any test. It may still be covered indirectly via integration tests._",
+    ])
+
+    return "\n".join(lines) + "\n"
+
+
+def _build_graph_from_ref(ref: str) -> dict | None:
+    """Build a graph for a given git ref.
+
+    Strategy: use git archive to extract the toolkit/ subtree into a temp dir,
+    copy our code_graph.py there, then run the builder from that environment.
+    """
+    tmp_base = Path(tempfile.mkdtemp(prefix="cg_ref_"))
+    try:
+        # Extract just the directories we need from the ref
+        proc = subprocess.run(
+            [
+                "git", "archive",
+                "--prefix", "r/",
+                ref,
+                "toolkit/",
+                "tests/",
+                "scripts/",
+            ],
+            capture_output=True,
+            cwd=str(ROOT),
+        )
+        if proc.returncode != 0:
+            print(f"[ERROR] git archive failed: {proc.stderr.strip()}", file=sys.stderr)
+            return None
+
+        proc2 = subprocess.run(
+            ["tar", "-xf", "-", "-C", str(tmp_base)],
+            input=proc.stdout,
+            capture_output=True,
+        )
+        if proc2.returncode != 0:
+            print(f"[ERROR] tar failed: {proc2.stderr.decode().strip()}", file=sys.stderr)
+            return None
+
+        # Directory layout after extract: tmp_base/r/toolkit/, tmp_base/r/tests/, tmp_base/r/scripts/
+        ref_root = tmp_base / "r"
+        if not (ref_root / "toolkit").exists():
+            print(f"[ERROR] toolkit/ not found in archive for ref '{ref}'", file=sys.stderr)
+            return None
+
+        # Run the graph builder from the extracted environment.
+        # The code_graph.py from CURRENT HEAD is used for consistent analysis
+        # across both refs (avoids false positives from schema drift in the tool itself).
+        #
+        # Why this works: cwd=str(ref_root) makes '.' == ref_root, so
+        # sys.path.insert(0, '.') adds ref_root to sys.path. The imported
+        # OUT_PATH resolves via __file__ in scripts/code_graph.py (which lives at
+        # ref_root/scripts/code_graph.py), so OUT_PATH = ref_root / "generated" —
+        # exactly where we read it back from on line 1015.
+        proc3 = subprocess.run(
+            [
+                sys.executable, "-c",
+                """
+import sys
+sys.path.insert(0, str('.'))
+from scripts.code_graph import build_graph, OUT_PATH
+import json
+graph = build_graph(include_tests=False)
+OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+OUT_PATH.write_text(json.dumps(graph, indent=2, ensure_ascii=False))
+""",
+            ],
+            cwd=str(ref_root),
+        )
+        if proc3.returncode != 0:
+            print(f"[ERROR] graph build failed: {proc3.stderr.decode().strip()}", file=sys.stderr)
+            return None
+
+        graph_path = ref_root / "generated" / "code_graph.json"
+        if not graph_path.exists():
+            print("[ERROR] graph not produced", file=sys.stderr)
+            return None
+
+        with graph_path.open() as f:
+            return json.load(f)
+
+    finally:
+        shutil.rmtree(tmp_base, ignore_errors=True)
+
+
+def _file_score_map(graph: dict) -> dict[str, int]:
+    """Return a dict mapping file path -> hotspot score."""
+    nodes = graph["nodes"]
+    edges = graph["edges"]
+    node_file = {n["id"]: n["file"] for n in nodes}
+
+    file_stats: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"nodes": 0, "call_out": 0, "call_in": 0, "import_out": 0}
+    )
+    for node in nodes:
+        file_stats[node["file"]]["nodes"] += 1
+
+    for edge in edges:
+        src_file = node_file.get(edge["from"])
+        dst_file = node_file.get(edge["to"])
+        if edge["type"] == "calls":
+            if src_file:
+                file_stats[src_file]["call_out"] += 1
+            if dst_file:
+                file_stats[dst_file]["call_in"] += 1
+        else:
+            if src_file:
+                file_stats[src_file]["import_out"] += 1
+
+    scores = {}
+    for fp, stats in file_stats.items():
+        scores[fp] = stats["nodes"] + stats["call_out"] + stats["call_in"] + stats["import_out"]
+    return scores
+
+
+def show_compare(current: dict, ref: str, ref_graph: dict) -> None:
+    """Print a structural diff between current and ref graphs."""
+    current_scores = _file_score_map(current)
+    ref_scores = _file_score_map(ref_graph)
+
+    all_files = set(current_scores) | set(ref_scores)
+
+    # Categorize files
+    new_in_branch: list[tuple[int, str]] = []
+    deleted_in_branch: list[tuple[int, str]] = []
+    hotspot_delta: list[tuple[int, int, str]] = []  # (delta, score, file)
+
+    for fp in sorted(all_files):
+        curr_s = current_scores.get(fp, 0)
+        ref_s = ref_scores.get(fp, 0)
+        delta = curr_s - ref_s
+
+        if ref_s == 0 and curr_s > 0:
+            new_in_branch.append((curr_s, fp))
+        elif curr_s == 0 and ref_s > 0:
+            deleted_in_branch.append((ref_s, fp))
+        elif abs(delta) >= 2:  # Only show meaningful deltas
+            hotspot_delta.append((delta, curr_s, fp))
+
+    # Symbol-level diff
+    curr_nodes = {n["id"] for n in current["nodes"]}
+    ref_nodes = {n["id"] for n in ref_graph["nodes"]}
+
+    new_symbols = sorted(curr_nodes - ref_nodes)
+    deleted_symbols = sorted(ref_nodes - curr_nodes)
+
+    # Current metadata
+    curr_meta = current["metadata"]
+    ref_meta = ref_graph["metadata"]
+
+    print()
+    print(f"  Comparing: HEAD vs. {ref}")
+    print(f"  HEAD:    {curr_meta['python_files']} files, {curr_meta['total_nodes']} nodes, {curr_meta['total_edges']} edges")
+    print(f"  {ref}: {ref_meta['python_files']} files, {ref_meta['total_nodes']} nodes, {ref_meta['total_edges']} edges")
+    print()
+
+    # New files in branch
+    if new_in_branch:
+        print(f"  NEW files in branch ({len(new_in_branch)}):")
+        for score, fp in sorted(new_in_branch, reverse=True):
+            print(f"    + [{score}] {fp}")
+        print()
+
+    # Deleted files in branch
+    if deleted_in_branch:
+        print(f"  DELETED files in branch ({len(deleted_in_branch)}):")
+        for score, fp in sorted(deleted_in_branch, reverse=True):
+            print(f"    - [{score}] {fp}")
+        print()
+
+    # Hotspot score deltas
+    if hotspot_delta:
+        hotspot_delta.sort(reverse=True)
+        print(f"  HOTSPOT SCORE DELTA >={2} ({len(hotspot_delta)} files):")
+        for delta, score, fp in hotspot_delta:
+            sign = "+" if delta > 0 else ""
+            print(f"    {sign}{delta} ({sign}{score} vs. {ref_scores.get(fp, 0)}) {fp}")
+        print()
+
+    # New symbols
+    if new_symbols:
+        print(f"  NEW symbols in branch ({len(new_symbols)}):")
+        for sym in new_symbols[:20]:
+            print(f"    + {sym}")
+        if len(new_symbols) > 20:
+            print(f"    ... and {len(new_symbols) - 20} more")
+        print()
+
+    # Deleted symbols
+    if deleted_symbols:
+        print(f"  DELETED symbols in branch ({len(deleted_symbols)}):")
+        for sym in deleted_symbols[:20]:
+            print(f"    - {sym}")
+        if len(deleted_symbols) > 20:
+            print(f"    ... and {len(deleted_symbols) - 20} more")
+        print()
+
+    if not new_in_branch and not deleted_in_branch and not hotspot_delta and not new_symbols and not deleted_symbols:
+        print("  No structural changes detected.")
+        print()
+
+    # Overall verdict
+    total_delta = sum(abs(d) for d, _, _ in hotspot_delta)
+    max_delta = max(abs(d) for d, _, _ in hotspot_delta) if hotspot_delta else 0
+
+    print("  Summary:")
+    print(f"    New files: {len(new_in_branch)}, deleted: {len(deleted_in_branch)}")
+    print(f"    New symbols: {len(new_symbols)}, deleted: {len(deleted_symbols)}")
+    print(f"    Total hotspot score delta: {total_delta} (max single file: {max_delta})")
+
+    if max_delta >= 10:
+        print(f"  ⚠ HIGH structural change: max delta {max_delta} >= 10")
+    elif max_delta >= 5:
+        print(f"  ⚡ Moderate structural change: max delta {max_delta} >= 5")
+    else:
+        print(f"  ✓ Minimal structural change: max delta {max_delta} < 5")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate static code graph for toolkit.")
     parser.add_argument(
         "--include-tests",
         action="store_true",
         help="Include tests/ in a separate graph output.",
+    )
+    parser.add_argument(
+        "--hotspots",
+        action="store_true",
+        help="Also generate code_graph_hotspots.md (focused artifact for review).",
+    )
+    parser.add_argument(
+        "--impact",
+        metavar="SYMBOL",
+        help="Show call impact for a symbol (e.g. toolkit.raw.run::run_raw). Use with --coverage for test refs.",
+    )
+    parser.add_argument(
+        "--list",
+        "-l",
+        action="store_true",
+        help="List all symbol IDs in the graph (for use with --impact).",
+    )
+    parser.add_argument(
+        "--coverage",
+        action="store_true",
+        help="Generate code_graph_tests_coverage.md — test coverage cross-reference.",
+    )
+    parser.add_argument(
+        "--compare",
+        metavar="REF",
+        help="Compare current graph vs. REF (branch, tag, commit). Show structural diff.",
     )
     return parser.parse_args()
 
@@ -556,6 +1205,31 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+
+    # Query-only modes: no files written
+    if args.list:
+        graph = build_graph(include_tests=False)
+        for n in sorted(graph["nodes"], key=lambda x: x["id"]):
+            print(n["id"])
+        return
+
+    if args.impact:
+        graph = build_graph(include_tests=False)
+        show_impact(graph, args.impact, include_coverage=args.coverage)
+        return
+
+    if args.compare:
+        ref = args.compare
+        print("Building graph for HEAD...", file=sys.stderr)
+        current = build_graph(include_tests=False)
+        print(f"Building graph for {ref}...", file=sys.stderr)
+        ref_graph = _build_graph_from_ref(ref)
+        if ref_graph is None:
+            print("[ERROR] Failed to build reference graph.", file=sys.stderr)
+            sys.exit(1)
+        show_compare(current, ref, ref_graph)
+        return
+
     graph = build_graph(include_tests=False)
     summary = build_summary(graph)
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -567,6 +1241,14 @@ def main() -> None:
     print(f"  nodes: {graph['metadata']['total_nodes']}")
     print(f"  edges: {graph['metadata']['total_edges']}")
     print(f"  CLI commands: {graph['metadata']['cli_commands']}")
+    if args.hotspots:
+        hotspots = build_hotspots(graph)
+        HOTSPOTS_PATH.write_text(hotspots, encoding="utf-8")
+        print(f"code_graph_hotspots.md written to {HOTSPOTS_PATH}")
+    if args.coverage:
+        coverage = build_coverage()
+        COVERAGE_PATH.write_text(coverage, encoding="utf-8")
+        print(f"code_graph_tests_coverage.md written to {COVERAGE_PATH}")
     if args.include_tests:
         test_graph = build_graph(include_tests=True)
         test_summary = build_summary(test_graph)

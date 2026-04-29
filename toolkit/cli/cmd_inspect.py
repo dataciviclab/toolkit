@@ -8,7 +8,7 @@ import requests
 import typer
 
 from toolkit.cli.common import format_profile_preview, iter_years, load_layer_profile_summaries
-from toolkit.cli.cmd_scout_url import (
+from toolkit.cli.cmd_url_inspect import (
     _EXTENDED_EXTENSIONS,
     _MAX_PRINTED_LINKS,
     _DEFAULT_TIMEOUT,

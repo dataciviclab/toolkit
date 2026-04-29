@@ -215,6 +215,12 @@ def run_raw(
         name = source.get("name") or source.get("id") or f"source_{i + 1}"
         source_written: list[str] = []
 
+        # Skip source if year is specified and doesn't match the requested year
+        source_year = source.get("year")
+        if source_year is not None and int(source_year) != year:
+            logger.info(f"SKIP source '{name}' (year={source_year} != requested year={year})")
+            continue
+
         formatted_args = _format_args(args, year)
         payload, origin = _fetch_payload(stype, client, formatted_args)
         inputs.append(

@@ -68,3 +68,14 @@ def write_json_atomic(path: Path, data: dict[str, Any]) -> None:
 
 def read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def read_json_or_none(path: Path) -> dict[str, Any] | None:
+    """Read JSON file, returning None on any parse or I/O error.
+
+    Use for optional config files where absence is a valid state.
+    """
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None

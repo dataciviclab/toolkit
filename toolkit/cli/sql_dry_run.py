@@ -6,10 +6,9 @@ from typing import Any
 import duckdb
 
 from toolkit.clean.run import _load_clean_sql
+from toolkit.core.paths import resolve_sql_path as _resolve_mart_sql_path
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
-from toolkit.core.template import build_runtime_template_ctx
-from toolkit.core.template import render_template
-from toolkit.mart.run import _resolve_sql_path as _resolve_mart_sql_path
+from toolkit.core.template import build_runtime_template_ctx, render_template
 
 _QUOTED_IDENTIFIER_RE = re.compile(r'"([^"]+)"')
 _BINDER_MISSING_COLUMN_RE = re.compile(r'Referenced column "([^"]+)" not found in FROM clause')

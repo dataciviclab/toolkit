@@ -5,13 +5,11 @@ from typing import Any
 
 import duckdb
 
-
-def _q_ident(value: str) -> str:
-    return '"' + value.replace('"', '""') + '"'
+from toolkit.core.sql_utils import q_ident
 
 
 def profile_relation(con: duckdb.DuckDBPyConnection, relation_name: str) -> dict[str, Any]:
-    q_relation = _q_ident(relation_name)
+    q_relation = q_ident(relation_name)
     row_count = int(con.execute(f"SELECT COUNT(*) FROM {q_relation}").fetchone()[0])
     described = con.execute(f"DESCRIBE {q_relation}").fetchall()
     columns = [{"name": row[0], "type": row[1]} for row in described]

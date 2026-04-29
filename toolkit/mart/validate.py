@@ -9,6 +9,7 @@ import duckdb
 from toolkit.core.config_models import MartTableRuleConfig, MartValidationSpec
 from toolkit.core.metadata import write_layer_manifest
 from toolkit.core.paths import layer_year_dir, to_root_relative
+from toolkit.core.sql_utils import q_ident
 from toolkit.core.validation import (
     ValidationResult,
     build_validation_summary,
@@ -16,11 +17,6 @@ from toolkit.core.validation import (
     required_columns_check,
     write_validation_json,
 )
-
-
-def _q_ident(col: str) -> str:
-    """Quote identifier for DuckDB (handles reserved words / special chars)."""
-    return '"' + col.replace('"', '""') + '"'
 
 
 def validate_mart(
@@ -118,7 +114,7 @@ def validate_mart(
             if c not in cols:
                 warnings.append(f"[{name}] Not-null rule column missing: '{c}'")
                 continue
-            qc = _q_ident(c)
+            qc = q_ident(c)
             nnull = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {qc} IS NULL").fetchone()[0])
             if nnull > 0:
                 errors.append(f"[{name}] Column '{c}' has NULLs: {nnull}")
@@ -129,7 +125,7 @@ def validate_mart(
             if not all(c in cols for c in pk):
                 warnings.append(f"[{name}] Primary key columns not all present: {pk}")
             else:
-                key_expr = ", ".join(_q_ident(c) for c in pk)
+                key_expr = ", ".join(q_ident(c) for c in pk)
                 dup_groups = int(
                     con.execute(
                         f"""
@@ -151,7 +147,7 @@ def validate_mart(
                 warnings.append(f"[{name}] Range rule column missing: '{c}'")
                 continue
 
-            qc = _q_ident(c)
+            qc = q_ident(c)
             violations: list[str] = []
             if rule.min is not None:
                 violations.append(f"{qc} < {rule.min}")

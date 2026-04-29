@@ -49,3 +49,31 @@ def run_dir(root: str | os.PathLike[str], layer: str, dataset: str, year: int | 
 def ensure_dir(p: Path) -> Path:
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | None:
+    """Serialize a Path relative to rel_root for storage in metadata JSON.
+
+    Returns None if path is None.
+    Returns the path as posix string if rel_root is None (absolute path).
+    Returns the path relative to rel_root otherwise.
+    """
+    if path is None:
+        return None
+    if rel_root is None:
+        return path.as_posix()
+    return to_root_relative(path, rel_root)
+
+
+def resolve_sql_path(sql_ref: str | Path, *, base_dir: Path | None) -> Path:
+    """Resolve a SQL file reference to an absolute Path.
+
+    - Absolute Path: returned as-is.
+    - Relative Path: resolved relative to base_dir (if provided).
+    """
+    path = Path(sql_ref)
+    if path.is_absolute():
+        return path
+    if base_dir is None:
+        return path
+    return base_dir / path

@@ -7,25 +7,8 @@ import duckdb
 
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
 from toolkit.core.metadata import file_record, sha256_bytes, write_layer_manifest, write_metadata
-from toolkit.core.paths import layer_dataset_dir, layer_year_dir, resolve_root, to_root_relative
+from toolkit.core.paths import layer_dataset_dir, layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
 from toolkit.core.template import render_template
-
-
-def _serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | None:
-    if path is None:
-        return None
-    if rel_root is None:
-        return path.as_posix()
-    return to_root_relative(path, rel_root)
-
-
-def _resolve_sql_path(sql_ref: str | Path, *, base_dir: Path | None) -> Path:
-    path = Path(sql_ref)
-    if path.is_absolute():
-        return path
-    if base_dir is None:
-        return path
-    return base_dir / path
 
 
 def _config_hash(base_dir: Path | None) -> str | None:
@@ -130,7 +113,7 @@ def run_cross_year(
             files = _source_files(root, dataset, years, table)
             _bind_source_view(con, files, source_layer)
 
-            sql_path = _resolve_sql_path(sql_rel, base_dir=base_dir)
+            sql_path = resolve_sql_path(sql_rel, base_dir=base_dir)
             if not sql_path.exists():
                 raise FileNotFoundError(f"CROSS_YEAR SQL file not found: {sql_path}")
 
@@ -149,12 +132,12 @@ def run_cross_year(
             executed.append(
                 {
                     "name": name,
-                    "sql": _serialize_metadata_path(sql_path, base_dir),
-                    "sql_rendered": _serialize_metadata_path(rendered_sql_path, root_dir),
-                    "output": _serialize_metadata_path(out, root_dir),
+                    "sql": serialize_metadata_path(sql_path, base_dir),
+                    "sql_rendered": serialize_metadata_path(rendered_sql_path, root_dir),
+                    "output": serialize_metadata_path(out, root_dir),
                     "source_layer": source_layer,
                     "source_table": table.get("source_table"),
-                    "source_inputs": [_serialize_metadata_path(path, root_dir) for path in files],
+                    "source_inputs": [serialize_metadata_path(path, root_dir) for path in files],
                 }
             )
             if policy == ARTIFACT_POLICY_DEBUG:
@@ -176,7 +159,7 @@ def run_cross_year(
         "years": years,
         "config_hash": _config_hash(base_dir),
         "outputs": outputs,
-        "output_paths": [_serialize_metadata_path(path, root_dir) for path in written],
+        "output_paths": [serialize_metadata_path(path, root_dir) for path in written],
         "tables": executed,
     }
     if policy == ARTIFACT_POLICY_DEBUG:

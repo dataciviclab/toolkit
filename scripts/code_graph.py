@@ -16,7 +16,10 @@ from __future__ import annotations
 import ast
 import argparse
 import json
+import subprocess
 import sys
+import tempfile
+import shutil
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -878,6 +881,214 @@ def build_coverage() -> str:
     return "\n".join(lines) + "\n"
 
 
+def _build_graph_from_ref(ref: str) -> dict | None:
+    """Build a graph for a given git ref.
+
+    Strategy: use git archive to extract the toolkit/ subtree into a temp dir,
+    copy our code_graph.py there, then run the builder from that environment.
+    """
+    tmp_base = Path(tempfile.mkdtemp(prefix="cg_ref_"))
+    try:
+        # Extract just the directories we need from the ref
+        proc = subprocess.run(
+            [
+                "git", "archive",
+                "--prefix", "r/",
+                ref,
+                "toolkit/",
+                "tests/",
+                "scripts/",
+            ],
+            capture_output=True,
+            cwd=str(ROOT),
+        )
+        if proc.returncode != 0:
+            print(f"[ERROR] git archive failed: {proc.stderr.strip()}", file=sys.stderr)
+            return None
+
+        proc2 = subprocess.run(
+            ["tar", "-xf", "-", "-C", str(tmp_base)],
+            input=proc.stdout,
+            capture_output=True,
+        )
+        if proc2.returncode != 0:
+            print(f"[ERROR] tar failed: {proc2.stderr.decode().strip()}", file=sys.stderr)
+            return None
+
+        # Directory layout after extract: tmp_base/r/toolkit/, tmp_base/r/tests/, tmp_base/r/scripts/
+        ref_root = tmp_base / "r"
+        if not (ref_root / "toolkit").exists():
+            print(f"[ERROR] toolkit/ not found in archive for ref '{ref}'", file=sys.stderr)
+            return None
+
+        # Run the graph builder from the extracted environment
+        # The code_graph.py from CURRENT HEAD is used for consistent analysis
+        # sys.path: ref_root makes 'scripts' importable as a top-level module
+        proc3 = subprocess.run(
+            [
+                sys.executable, "-c",
+                """
+import sys
+sys.path.insert(0, str('.'))
+from scripts.code_graph import build_graph, OUT_PATH
+import json
+graph = build_graph(include_tests=False)
+OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+OUT_PATH.write_text(json.dumps(graph, indent=2, ensure_ascii=False))
+""",
+            ],
+            capture_output=True,
+            cwd=str(ref_root),
+        )
+        if proc3.returncode != 0:
+            print(f"[ERROR] graph build failed: {proc3.stderr.strip()}", file=sys.stderr)
+            return None
+
+        graph_path = ref_root / "generated" / "code_graph.json"
+        if not graph_path.exists():
+            print("[ERROR] graph not produced", file=sys.stderr)
+            return None
+
+        with graph_path.open() as f:
+            return json.load(f)
+
+    finally:
+        shutil.rmtree(tmp_base, ignore_errors=True)
+
+
+def _file_score_map(graph: dict) -> dict[str, int]:
+    """Return a dict mapping file path -> hotspot score."""
+    nodes = graph["nodes"]
+    edges = graph["edges"]
+    node_file = {n["id"]: n["file"] for n in nodes}
+
+    file_stats: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"nodes": 0, "call_out": 0, "call_in": 0, "import_out": 0}
+    )
+    for node in nodes:
+        file_stats[node["file"]]["nodes"] += 1
+
+    for edge in edges:
+        src_file = node_file.get(edge["from"])
+        dst_file = node_file.get(edge["to"])
+        if edge["type"] == "calls":
+            if src_file:
+                file_stats[src_file]["call_out"] += 1
+            if dst_file:
+                file_stats[dst_file]["call_in"] += 1
+        else:
+            if src_file:
+                file_stats[src_file]["import_out"] += 1
+
+    scores = {}
+    for fp, stats in file_stats.items():
+        scores[fp] = stats["nodes"] + stats["call_out"] + stats["call_in"] + stats["import_out"]
+    return scores
+
+
+def show_compare(current: dict, ref: str, ref_graph: dict) -> None:
+    """Print a structural diff between current and ref graphs."""
+    current_scores = _file_score_map(current)
+    ref_scores = _file_score_map(ref_graph)
+
+    all_files = set(current_scores) | set(ref_scores)
+
+    # Categorize files
+    new_in_branch: list[tuple[int, str]] = []
+    deleted_in_branch: list[tuple[int, str]] = []
+    hotspot_delta: list[tuple[int, int, str]] = []  # (delta, score, file)
+
+    for fp in sorted(all_files):
+        curr_s = current_scores.get(fp, 0)
+        ref_s = ref_scores.get(fp, 0)
+        delta = curr_s - ref_s
+
+        if ref_s == 0 and curr_s > 0:
+            new_in_branch.append((curr_s, fp))
+        elif curr_s == 0 and ref_s > 0:
+            deleted_in_branch.append((ref_s, fp))
+        elif abs(delta) >= 2:  # Only show meaningful deltas
+            hotspot_delta.append((delta, curr_s, fp))
+
+    # Symbol-level diff
+    curr_nodes = {n["id"] for n in current["nodes"]}
+    ref_nodes = {n["id"] for n in ref_graph["nodes"]}
+
+    new_symbols = sorted(curr_nodes - ref_nodes)
+    deleted_symbols = sorted(ref_nodes - curr_nodes)
+
+    # Current metadata
+    curr_meta = current["metadata"]
+    ref_meta = ref_graph["metadata"]
+
+    print()
+    print(f"  Comparing: HEAD vs. {ref}")
+    print(f"  HEAD:    {curr_meta['python_files']} files, {curr_meta['total_nodes']} nodes, {curr_meta['total_edges']} edges")
+    print(f"  {ref}: {ref_meta['python_files']} files, {ref_meta['total_nodes']} nodes, {ref_meta['total_edges']} edges")
+    print()
+
+    # New files in branch
+    if new_in_branch:
+        print(f"  NEW files in branch ({len(new_in_branch)}):")
+        for score, fp in sorted(new_in_branch, reverse=True):
+            print(f"    + [{score}] {fp}")
+        print()
+
+    # Deleted files in branch
+    if deleted_in_branch:
+        print(f"  DELETED files in branch ({len(deleted_in_branch)}):")
+        for score, fp in sorted(deleted_in_branch, reverse=True):
+            print(f"    - [{score}] {fp}")
+        print()
+
+    # Hotspot score deltas
+    if hotspot_delta:
+        hotspot_delta.sort(reverse=True)
+        print(f"  HOTSPOT SCORE DELTA >={2} ({len(hotspot_delta)} files):")
+        for delta, score, fp in hotspot_delta:
+            sign = "+" if delta > 0 else ""
+            print(f"    {sign}{delta} ({sign}{score} vs. {ref_scores.get(fp, 0)}) {fp}")
+        print()
+
+    # New symbols
+    if new_symbols:
+        print(f"  NEW symbols in branch ({len(new_symbols)}):")
+        for sym in new_symbols[:20]:
+            print(f"    + {sym}")
+        if len(new_symbols) > 20:
+            print(f"    ... and {len(new_symbols) - 20} more")
+        print()
+
+    # Deleted symbols
+    if deleted_symbols:
+        print(f"  DELETED symbols in branch ({len(deleted_symbols)}):")
+        for sym in deleted_symbols[:20]:
+            print(f"    - {sym}")
+        if len(deleted_symbols) > 20:
+            print(f"    ... and {len(deleted_symbols) - 20} more")
+        print()
+
+    if not new_in_branch and not deleted_in_branch and not hotspot_delta and not new_symbols and not deleted_symbols:
+        print("  No structural changes detected.")
+        print()
+
+    # Overall verdict
+    total_delta = sum(abs(d) for d, _, _ in hotspot_delta)
+    max_delta = max(abs(d) for d, _, _ in hotspot_delta) if hotspot_delta else 0
+
+    print("  Summary:")
+    print(f"    New files: {len(new_in_branch)}, deleted: {len(deleted_in_branch)}")
+    print(f"    New symbols: {len(new_symbols)}, deleted: {len(deleted_symbols)}")
+    print(f"    Total hotspot score delta: {total_delta} (max single file: {max_delta})")
+
+    if max_delta >= 10:
+        print(f"  ⚠ HIGH structural change: max delta {max_delta} >= 10")
+    elif max_delta >= 5:
+        print(f"  ⚡ Moderate structural change: max delta {max_delta} >= 5")
+    else:
+        print(f"  ✓ Minimal structural change: max delta {max_delta} < 5")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate static code graph for toolkit.")
     parser.add_argument(
@@ -906,6 +1117,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Generate code_graph_tests_coverage.md — test coverage cross-reference.",
     )
+    parser.add_argument(
+        "--compare",
+        metavar="REF",
+        help="Compare current graph vs. REF (branch, tag, commit). Show structural diff.",
+    )
     return parser.parse_args()
 
 
@@ -927,6 +1143,18 @@ def main() -> None:
     if args.impact:
         graph = build_graph(include_tests=False)
         show_impact(graph, args.impact)
+        return
+
+    if args.compare:
+        ref = args.compare
+        print("Building graph for HEAD...", file=sys.stderr)
+        current = build_graph(include_tests=False)
+        print(f"Building graph for {ref}...", file=sys.stderr)
+        ref_graph = _build_graph_from_ref(ref)
+        if ref_graph is None:
+            print("[ERROR] Failed to build reference graph.", file=sys.stderr)
+            sys.exit(1)
+        show_compare(current, ref, ref_graph)
         return
 
     graph = build_graph(include_tests=False)

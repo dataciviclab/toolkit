@@ -50,6 +50,7 @@ class RawSourceConfig(BaseModel):
 
     name: str | None = None
     type: str = "http_file"
+    year: int | None = None
     client: ClientConfig = Field(default_factory=ClientConfig)
     args: dict[str, Any] = Field(default_factory=dict)
     extractor: ExtractorConfig | None = None

@@ -233,3 +233,81 @@ def test_multisource_primary_selection(monkeypatch, tmp_path: Path):
         {"name": "beta", "output_file": "b.csv"},
     ]
     assert manifest["primary_output_file"] == "b.csv"
+
+
+def test_multisource_year_filter_skips_non_matching(monkeypatch, tmp_path: Path):
+    """Sources with a year field that doesn't match the requested year are skipped."""
+
+    def _fake_fetch_payload(_stype: str, _client: dict, formatted_args: dict):
+        return f"payload:{formatted_args['filename']}\n".encode("utf-8"), formatted_args["filename"]
+
+    monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
+
+    raw_cfg = {
+        "sources": [
+            {
+                "name": "source_2020",
+                "type": "http_file",
+                "year": 2020,
+                "args": {"url": "https://example.org/2020.csv", "filename": "source_2020.csv"},
+            },
+            {
+                "name": "source_2021",
+                "type": "http_file",
+                "year": 2021,
+                "args": {"url": "https://example.org/2021.csv", "filename": "source_2021.csv"},
+            },
+            {
+                "name": "source_2022",
+                "type": "http_file",
+                "year": 2022,
+                "args": {"url": "https://example.org/2022.csv", "filename": "source_2022.csv"},
+            },
+        ]
+    }
+
+    run_raw("demo", 2022, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-2022")
+
+    out_dir = tmp_path / "data" / "raw" / "demo" / "2022"
+    manifest = read_raw_manifest(out_dir)
+    assert manifest is not None
+    # Only the source with year=2022 should be fetched
+    assert manifest["sources"] == [{"name": "source_2022", "output_file": "source_2022.csv"}]
+    assert manifest["primary_output_file"] == "source_2022.csv"
+    # Other files must not exist
+    assert not (out_dir / "source_2020.csv").exists()
+    assert not (out_dir / "source_2021.csv").exists()
+
+
+def test_multisource_year_filter_all_matching(monkeypatch, tmp_path: Path):
+    """When no source has a year field, all sources are fetched (backward compatible)."""
+
+    def _fake_fetch_payload(_stype: str, _client: dict, formatted_args: dict):
+        return f"payload:{formatted_args['filename']}\n".encode("utf-8"), formatted_args["filename"]
+
+    monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
+
+    raw_cfg = {
+        "sources": [
+            {
+                "name": "alpha",
+                "type": "http_file",
+                "args": {"url": "https://example.org/a.csv", "filename": "a.csv"},
+            },
+            {
+                "name": "beta",
+                "type": "http_file",
+                "args": {"url": "https://example.org/b.csv", "filename": "b.csv"},
+            },
+        ]
+    }
+
+    run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-all")
+
+    out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    manifest = read_raw_manifest(out_dir)
+    assert manifest is not None
+    assert manifest["sources"] == [
+        {"name": "alpha", "output_file": "a.csv"},
+        {"name": "beta", "output_file": "b.csv"},
+    ]

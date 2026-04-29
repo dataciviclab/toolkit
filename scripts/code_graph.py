@@ -539,12 +539,199 @@ def build_summary(graph: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def build_hotspots(graph: dict, *, top_n: int = 20) -> str:
+    """Build a focused hotspots artifact for human review.
+
+    Contains:
+    - Top file hotspots by composite score
+    - Top function/method hotspots by call volume
+    - Max ~80 lines — scannable in 2 minutes
+    """
+    nodes = graph["nodes"]
+    edges = graph["edges"]
+
+    node_file = {n["id"]: n["file"] for n in nodes}
+    node_type = {n["id"]: n["type"] for n in nodes}
+
+    file_stats: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"nodes": 0, "call_out": 0, "call_in": 0, "import_out": 0}
+    )
+    calls_out: Counter[str] = Counter()
+    calls_in: Counter[str] = Counter()
+
+    for node in nodes:
+        file_stats[node["file"]]["nodes"] += 1
+
+    for edge in edges:
+        src_file = node_file.get(edge["from"])
+        dst_file = node_file.get(edge["to"])
+
+        if edge["type"] == "calls":
+            calls_out[edge["from"]] += 1
+            calls_in[edge["to"]] += 1
+            if src_file:
+                file_stats[src_file]["call_out"] += 1
+            if dst_file:
+                file_stats[dst_file]["call_in"] += 1
+        else:
+            if src_file:
+                file_stats[src_file]["import_out"] += 1
+
+    # Top files by score
+    file_rows = []
+    for file_path, stats in file_stats.items():
+        score = stats["nodes"] + stats["call_out"] + stats["call_in"] + stats["import_out"]
+        file_rows.append((score, file_path, stats))
+    file_rows.sort(reverse=True)
+
+    # Top functions by call volume (calls_out + calls_in)
+    func_scores: dict[str, int] = {}
+    for sym in set(list(calls_out) + list(calls_in)):
+        func_scores[sym] = calls_out.get(sym, 0) + calls_in.get(sym, 0)
+
+    func_rows = sorted(func_scores.items(), key=lambda x: x[1], reverse=True)[:top_n]
+
+    generated = graph["metadata"]["generated_at"]
+
+    lines = [
+        "# Toolkit Code Graph — Hotspots",
+        "",
+        f"_Generated: {generated}_",
+        "",
+        "## Top Files by Score",
+        "",
+        "| Score | File | Nodes | Calls out | Calls in | Imports out |",
+        "|---|---|---:|---:|---:|---:|",
+    ]
+    for score, file_path, stats in file_rows[:top_n]:
+        lines.append(
+            f"| {score} | `{file_path}` | {stats['nodes']} | "
+            f"{stats['call_out']} | {stats['call_in']} | {stats['import_out']} |"
+        )
+
+    lines.extend([
+        "",
+        "## Top Functions/Methods by Call Volume",
+        "",
+        "| Volume | Out | In | Type | Symbol |",
+        "|---:|---:|---:|---|---|",
+    ])
+    for sym, total in func_rows:
+        out = calls_out.get(sym, 0)
+        inc = calls_in.get(sym, 0)
+        ntype = node_type.get(sym, "?")
+        lines.append(f"| {total} | {out} | {inc} | `{ntype}` | `{sym}` |")
+
+    return "\n".join(lines) + "\n"
+
+
+def show_impact(graph: dict, symbol: str) -> None:
+    """Print a human-readable impact report for a symbol.
+
+    Shows:
+    - Node type and file
+    - Call-in: who calls this symbol
+    - Call-out: what this symbol calls
+    - Risk classification
+    """
+    nodes = graph["nodes"]
+    edges = graph["edges"]
+
+    # Find node
+    node = None
+    for n in nodes:
+        if n["id"] == symbol:
+            node = n
+            break
+
+    if node is None:
+        print(f"[ERROR] Symbol '{symbol}' not found in graph.", file=sys.stderr)
+        print("  Run with --list to see available symbols.", file=sys.stderr)
+        return
+
+    node_type = node.get("type", "?")
+    node_file = node.get("file", "?")
+
+    # Build call-in and call-out sets
+    call_in: list[tuple[str, str]] = []  # (from_symbol, edge_type)
+    call_out: list[tuple[str, str]] = []  # (to_symbol, edge_type)
+
+    for edge in edges:
+        if edge["type"] != "calls":
+            continue
+        if edge["to"] == symbol:
+            call_in.append((edge["from"], edge["type"]))
+        elif edge["from"] == symbol:
+            call_out.append((edge["to"], edge["type"]))
+
+    # Count for risk classification
+    in_count = len(call_in)
+    out_count = len(call_out)
+
+    if in_count == 0 and out_count > 0:
+        risk = "STAR_EMITTER  — calls others, never called directly"
+    elif out_count == 0 and in_count > 0:
+        risk = "STAR_RECEIVER — called by many, calls nothing"
+    elif in_count == 0 and out_count == 0:
+        risk = "ISOLATED     — no call-graph edges (may be dead or only used via runtime dispatch)"
+    else:
+        risk = f"BALANCED      — {in_count} callers, {out_count} callees"
+
+    print()
+    print(f"  Symbol: {symbol}")
+    print(f"  Type:   {node_type}")
+    print(f"  File:   {node_file}")
+    print(f"  Risk:   {risk}")
+    print()
+
+    if call_in:
+        print(f"  Called by ({in_count}):")
+        # Deduplicate by from symbol (same symbol can appear multiple times from different paths)
+        seen: set[str] = set()
+        for from_sym, _ in call_in:
+            if from_sym not in seen:
+                seen.add(from_sym)
+                print(f"    -> {from_sym}")
+    else:
+        print("  Called by: (none)")
+
+    print()
+
+    if call_out:
+        print(f"  Calls ({out_count}):")
+        seen: set[str] = set()
+        for to_sym, _ in call_out:
+            if to_sym not in seen:
+                seen.add(to_sym)
+                print(f"    -> {to_sym}")
+    else:
+        print("  Calls: (none)")
+
+    print()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate static code graph for toolkit.")
     parser.add_argument(
         "--include-tests",
         action="store_true",
         help="Include tests/ in a separate graph output.",
+    )
+    parser.add_argument(
+        "--hotspots",
+        action="store_true",
+        help="Also generate code_graph_hotspots.md (focused artifact for review).",
+    )
+    parser.add_argument(
+        "--impact",
+        metavar="SYMBOL",
+        help="Show call impact for a symbol (e.g. toolkit.raw.run::run_raw).",
+    )
+    parser.add_argument(
+        "--list",
+        "-l",
+        action="store_true",
+        help="List all symbol IDs in the graph (for use with --impact).",
     )
     return parser.parse_args()
 
@@ -556,6 +743,19 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+
+    # Query-only modes: no files written
+    if args.list:
+        graph = build_graph(include_tests=False)
+        for n in sorted(graph["nodes"], key=lambda x: x["id"]):
+            print(n["id"])
+        return
+
+    if args.impact:
+        graph = build_graph(include_tests=False)
+        show_impact(graph, args.impact)
+        return
+
     graph = build_graph(include_tests=False)
     summary = build_summary(graph)
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)

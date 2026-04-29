@@ -750,10 +750,10 @@ def show_impact(graph: dict, symbol: str, include_coverage: bool = False) -> Non
     if call_in:
         print(f"  Called by ({in_count}):")
         # Deduplicate by from symbol (same symbol can appear multiple times from different paths)
-        seen: set[str] = set()
+        seen_in: set[str] = set()
         for from_sym, _ in call_in:
-            if from_sym not in seen:
-                seen.add(from_sym)
+            if from_sym not in seen_in:
+                seen_in.add(from_sym)
                 print(f"    -> {from_sym}")
     else:
         print("  Called by: (none)")
@@ -762,10 +762,10 @@ def show_impact(graph: dict, symbol: str, include_coverage: bool = False) -> Non
 
     if call_out:
         print(f"  Calls ({out_count}):")
-        seen: set[str] = set()
+        seen_out: set[str] = set()
         for to_sym, _ in call_out:
-            if to_sym not in seen:
-                seen.add(to_sym)
+            if to_sym not in seen_out:
+                seen_out.add(to_sym)
                 print(f"    -> {to_sym}")
     else:
         print("  Calls: (none)")
@@ -989,9 +989,15 @@ def _build_graph_from_ref(ref: str) -> dict | None:
             print(f"[ERROR] toolkit/ not found in archive for ref '{ref}'", file=sys.stderr)
             return None
 
-        # Run the graph builder from the extracted environment
+        # Run the graph builder from the extracted environment.
         # The code_graph.py from CURRENT HEAD is used for consistent analysis
-        # sys.path: ref_root makes 'scripts' importable as a top-level module
+        # across both refs (avoids false positives from schema drift in the tool itself).
+        #
+        # Why this works: cwd=str(ref_root) makes '.' == ref_root, so
+        # sys.path.insert(0, '.') adds ref_root to sys.path. The imported
+        # OUT_PATH resolves via __file__ in scripts/code_graph.py (which lives at
+        # ref_root/scripts/code_graph.py), so OUT_PATH = ref_root / "generated" —
+        # exactly where we read it back from on line 1015.
         proc3 = subprocess.run(
             [
                 sys.executable, "-c",
@@ -1005,11 +1011,10 @@ OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 OUT_PATH.write_text(json.dumps(graph, indent=2, ensure_ascii=False))
 """,
             ],
-            capture_output=True,
             cwd=str(ref_root),
         )
         if proc3.returncode != 0:
-            print(f"[ERROR] graph build failed: {proc3.stderr.strip()}", file=sys.stderr)
+            print(f"[ERROR] graph build failed: {proc3.stderr.decode().strip()}", file=sys.stderr)
             return None
 
         graph_path = ref_root / "generated" / "code_graph.json"

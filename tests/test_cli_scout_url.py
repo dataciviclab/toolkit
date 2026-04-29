@@ -13,7 +13,6 @@ from toolkit.cli.cmd_scout_url import (
     _generate_yaml_scaffold,
     probe_url,
 )
-from toolkit.cli.cmd_url_inspect import requests
 
 
 class _ScoutHandler(BaseHTTPRequestHandler):

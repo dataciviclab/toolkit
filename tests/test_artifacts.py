@@ -1,5 +1,7 @@
 """Tests for toolkit/core/artifacts.py."""
 
+import pytest
+
 from toolkit.core.artifacts import (
     ARTIFACT_POLICIES,
     ARTIFACT_POLICY_DEBUG,
@@ -32,8 +34,6 @@ class TestResolveArtifactPolicy:
         assert resolve_artifact_policy({"artifacts": "DEBUG"}) == ARTIFACT_POLICY_DEBUG
 
     def test_invalid_raises_value_error(self) -> None:
-        import pytest
-
         with pytest.raises(ValueError) as exc_info:
             resolve_artifact_policy({"artifacts": "unknown"})
         assert "output.artifacts must be one of" in str(exc_info.value)

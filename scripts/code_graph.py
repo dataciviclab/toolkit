@@ -630,7 +630,65 @@ def build_hotspots(graph: dict, *, top_n: int = 20) -> str:
     return "\n".join(lines) + "\n"
 
 
-def show_impact(graph: dict, symbol: str) -> None:
+# Cached test graph — built once per session when needed for coverage
+_test_graph_cache: dict | None = None
+
+
+def _get_test_graph() -> dict:
+    global _test_graph_cache
+    if _test_graph_cache is None:
+        _test_graph_cache = build_graph(include_tests=True)
+    return _test_graph_cache
+
+
+def _file_test_coverage(toolkit_file: str) -> list[str]:
+    """Return sorted list of test files that directly reference a toolkit file.
+
+    A test file "covers" the toolkit file if:
+    1. It imports the exact module (e.g. from toolkit.cli.cmd_run import ...)
+    2. It imports a parent module that would transitively load the file
+    """
+    test_graph = _get_test_graph()
+    test_nodes = test_graph["nodes"]
+    test_edges = test_graph["edges"]
+
+    # Build set of modules covered by the toolkit file
+    # e.g. toolkit/cli/cmd_run.py → toolkit.cli.cmd_run
+    tk_module = toolkit_file.replace("toolkit/", "").replace("/", ".").replace(".py", "")
+    # Also include parent modules (importing cli.cmd_run also loads cli)
+    parts = tk_module.split(".")
+    parent_modules = {".".join(parts[:i]) for i in range(1, len(parts) + 1)}
+    # Map module to mod:toolkit. prefix
+    target_mods = {f"mod:toolkit.{m}" for m in parent_modules}
+
+    # Index test module nodes by their module id (for reverse lookup)
+    test_node_ids: set[str] = set()
+    test_nodes_by_file: dict[str, set[str]] = {}
+    for n in test_nodes:
+        f = n.get("file", "")
+        if "tests/" in f:
+            nid = n["id"]
+            test_node_ids.add(nid)
+            test_nodes_by_file.setdefault(f, set()).add(nid)
+
+    covered_by: set[str] = set()
+
+    for edge in test_edges:
+        if edge["type"] != "imports":
+            continue
+        to_mod = edge.get("to", "")
+        if to_mod not in target_mods:
+            continue
+        # This test module imports (or a parent of) the toolkit file
+        from_id = edge["from"]
+        for tf, node_ids in test_nodes_by_file.items():
+            if from_id in node_ids:
+                covered_by.add(tf.replace("tests/", ""))
+
+    return sorted(covered_by)
+
+
+def show_impact(graph: dict, symbol: str, include_coverage: bool = False) -> None:
     """Print a human-readable impact report for a symbol.
 
     Shows:
@@ -713,6 +771,16 @@ def show_impact(graph: dict, symbol: str) -> None:
         print("  Calls: (none)")
 
     print()
+
+    if include_coverage:
+        print("  Test Coverage:")
+        test_files = _file_test_coverage(node_file)
+        if test_files:
+            for tf in test_files:
+                print(f"    -> {tf}")
+        else:
+            print("    (no static test references found)")
+        print()
 
 
 def build_coverage() -> str:
@@ -1104,7 +1172,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--impact",
         metavar="SYMBOL",
-        help="Show call impact for a symbol (e.g. toolkit.raw.run::run_raw).",
+        help="Show call impact for a symbol (e.g. toolkit.raw.run::run_raw). Use with --coverage for test refs.",
     )
     parser.add_argument(
         "--list",
@@ -1142,7 +1210,7 @@ def main() -> None:
 
     if args.impact:
         graph = build_graph(include_tests=False)
-        show_impact(graph, args.impact)
+        show_impact(graph, args.impact, include_coverage=args.coverage)
         return
 
     if args.compare:

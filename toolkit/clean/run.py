@@ -7,26 +7,9 @@ from toolkit.clean.duckdb_read import SUPPORTED_INPUT_EXTS, resolve_clean_read_c
 from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
-from toolkit.core.paths import layer_year_dir, resolve_root, to_root_relative
+from toolkit.core.paths import layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 from toolkit.clean.sql_execute import _normalize_output_profile, _run_sql
-
-
-def _serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | None:
-    if path is None:
-        return None
-    if rel_root is None:
-        return path.as_posix()
-    return to_root_relative(path, rel_root)
-
-
-def _resolve_sql_path(sql_ref: str | Path, *, base_dir: Path | None) -> Path:
-    path = Path(sql_ref)
-    if path.is_absolute():
-        return path
-    if base_dir is None:
-        return path
-    return base_dir / path
 
 
 def _load_clean_sql(
@@ -41,7 +24,7 @@ def _load_clean_sql(
     if not sql_ref:
         raise ValueError("clean.sql missing in dataset.yml (expected: clean: { sql: 'sql/clean.sql' })")
 
-    sql_path_obj = _resolve_sql_path(sql_ref, base_dir=base_dir)
+    sql_path_obj = resolve_sql_path(sql_ref, base_dir=base_dir)
     if not sql_path_obj.exists():
         raise FileNotFoundError(f"CLEAN SQL file not found: {sql_path_obj}")
 
@@ -158,8 +141,8 @@ def _clean_metadata_payload(
         "layer": "clean",
         "dataset": dataset,
         "year": year,
-        "sql": _serialize_metadata_path(sql_path_obj, base_dir),
-        "sql_rendered": _serialize_metadata_path(rendered_sql_path, root_dir),
+        "sql": serialize_metadata_path(sql_path_obj, base_dir),
+        "sql_rendered": serialize_metadata_path(rendered_sql_path, root_dir),
         "template_ctx": public_template_ctx(template_ctx),
         "read": clean_cfg.get("read"),
         "read_mode": read_mode,

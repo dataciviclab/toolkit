@@ -7,7 +7,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from toolkit.core.io import write_json_atomic
+from toolkit.core.io import write_json_atomic, read_json_or_none as _read_json
 from toolkit.version import __version__
 
 
@@ -115,11 +115,7 @@ def read_layer_metadata(layer_dir: Path) -> dict[str, Any]:
     return meta
 
 
-def _read_json(path: Path) -> dict[str, Any] | None:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-        return None
+
 
 
 def merge_layer_manifest(

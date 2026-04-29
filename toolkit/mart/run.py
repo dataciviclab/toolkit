@@ -9,29 +9,12 @@ import duckdb
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
 from toolkit.core.layer_profile import compare_layer_profiles, profile_relation, profile_parquet_files
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
-from toolkit.core.paths import layer_year_dir, resolve_root, to_root_relative
+from toolkit.core.paths import layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 
 
 _CLEAN_INPUT_TOKEN_RE = re.compile(r"\bclean_input\b", re.IGNORECASE)
-
-
-def _serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | None:
-    if path is None:
-        return None
-    if rel_root is None:
-        return path.as_posix()
-    return to_root_relative(path, rel_root)
-
-
-def _resolve_sql_path(sql_ref: str | Path, *, base_dir: Path | None) -> Path:
-    path = Path(sql_ref)
-    if path.is_absolute():
-        return path
-    if base_dir is None:
-        return path
-    return base_dir / path
 
 
 def run_mart(
@@ -111,7 +94,7 @@ def run_mart(
             if not name or not sql_rel:
                 raise ValueError("Each mart.tables entry must include: name, sql")
 
-            sql_path = _resolve_sql_path(sql_rel, base_dir=base_dir)
+            sql_path = resolve_sql_path(sql_rel, base_dir=base_dir)
             if not sql_path.exists():
                 raise FileNotFoundError(f"MART SQL file not found: {sql_path}")
 
@@ -152,9 +135,9 @@ def run_mart(
             executed.append(
                 {
                     "name": name,
-                    "sql": _serialize_metadata_path(sql_path, base_dir),
-                    "sql_rendered": _serialize_metadata_path(rendered_sql_path, root_dir),
-                    "output": _serialize_metadata_path(out, root_dir),
+                    "sql": serialize_metadata_path(sql_path, base_dir),
+                    "sql_rendered": serialize_metadata_path(rendered_sql_path, root_dir),
+                    "output": serialize_metadata_path(out, root_dir),
                 }
             )
             if policy == ARTIFACT_POLICY_DEBUG:
@@ -178,7 +161,7 @@ def run_mart(
         "config_hash": config_hash_for_year(base_dir, year),
         "inputs": [file_record(p) for p in clean_files],
         "outputs": outputs,
-        "output_paths": [_serialize_metadata_path(p, root_dir) for p in written],
+        "output_paths": [serialize_metadata_path(p, root_dir) for p in written],
         "template_ctx": public_template_ctx(template_ctx),
         "tables": executed,
         "clean_input_profile": clean_input_profile,

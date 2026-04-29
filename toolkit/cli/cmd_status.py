@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
+
+from toolkit.core.io import read_json_or_none as _read_json
 
 import typer
 
@@ -11,13 +12,6 @@ from toolkit.core.config import load_config
 from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import layer_dataset_dir, layer_year_dir
 from toolkit.core.run_context import get_run_dir, latest_run, read_run_record
-
-
-def _read_json(path: Path) -> dict[str, object] | None:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-        return None
 
 
 def _raw_hints(root: Path, dataset: str, year: int) -> dict[str, Any]:

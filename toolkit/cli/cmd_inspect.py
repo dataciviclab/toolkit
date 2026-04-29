@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from toolkit.core.io import read_json_or_none as _read_json  # noqa: F401 — used by tests
+
 import requests
 import typer
 
@@ -27,13 +29,6 @@ from toolkit.profile.raw import build_profile_hints
 from toolkit.core.run_context import get_run_dir, latest_run
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.sparql import SparqlSource
-
-
-def _read_json(path: Path) -> dict[str, Any] | None:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-        return None
 
 
 def _raw_primary_file(raw_dir: Path, metadata: dict[str, Any]) -> Path | None:

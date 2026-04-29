@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from toolkit.core.io import read_json_or_none as _read_json
 
 from toolkit.core.config import load_config
 from toolkit.core.logging import get_logger
@@ -70,13 +71,6 @@ def iter_selected_years(
         raise ValueError(f"Year(s) not configured in dataset.yml: {listed}")
 
     return requested
-
-
-def _read_json(path: Path) -> dict | None:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-        return None
 
 
 def _profile_summary(profile: dict | None, *, max_columns: int = 6) -> dict | None:

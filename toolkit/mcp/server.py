@@ -8,6 +8,7 @@ from .toolkit_client import (
     ToolkitClientError,
     blocker_hints as blocker_hints_impl,
     inspect_paths as inspect_paths_impl,
+    list_runs as list_runs_impl,
     raw_profile as raw_profile_impl,
     review_readiness as review_readiness_impl,
     run_state as run_state_impl,
@@ -80,6 +81,23 @@ def toolkit_blocker_hints(config_path: str, year: int = 0) -> dict[str, Any]:
 )
 def toolkit_review_readiness(config_path: str, year: int = 0) -> dict[str, Any]:
     return _guard(review_readiness_impl, config_path, year or None)
+
+
+@mcp.tool(
+    description="Lista run records con filtri opzionali. Ritorna record completi (non solo metadata).",
+    structured_output=True,
+)
+def toolkit_list_runs(
+    config_path: str,
+    year: int = 0,
+    *,
+    since: str | None = None,
+    until: str | None = None,
+    status: str | None = None,
+    limit: int | None = None,
+    cross_year: bool = False,
+) -> dict[str, Any]:
+    return _guard(list_runs_impl, config_path, year or None, since=since, until=until, status=status, limit=limit, cross_year=cross_year)
 
 
 if __name__ == "__main__":

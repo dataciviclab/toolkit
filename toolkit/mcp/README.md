@@ -10,6 +10,7 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 - `toolkit_summary(config_path, year=0)`
 - `toolkit_blocker_hints(config_path, year=0)`
 - `toolkit_review_readiness(config_path, year=0)`
+- `toolkit_list_runs(config_path, year=0, since=None, until=None, status=None, limit=20, cross_year=False)`
 
 ## Boundary
 

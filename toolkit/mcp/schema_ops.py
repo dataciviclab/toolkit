@@ -20,6 +20,7 @@ import duckdb
 from toolkit.mcp.cli_adapter import _toolkit_json, inspect_paths
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import _load_cfg, _safe_path
+from toolkit.core.run_records import get_run_dir_dataset, list_runs
 
 
 def _sql_literal(value: str) -> str:
@@ -265,6 +266,85 @@ def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
         "years_seen": years_seen,
         "latest_run": latest_run,
         "latest_run_record": latest_payload,
+    }
+
+
+def list_runs(
+    config_path: str,
+    year: int | None = None,
+    *,
+    since: str | None = None,
+    until: str | None = None,
+    status: str | None = None,
+    limit: int | None = None,
+    cross_year: bool = False,
+) -> dict[str, Any]:
+    """List run records with optional filters.
+
+    Args:
+        config_path: path to dataset.yml
+        year: filter to specific year (default: all years)
+        since: ISO datetime string — only runs started after this moment
+        until: ISO datetime string — only runs started before this moment
+        status: filter by status (SUCCESS, FAILED, RUNNING, DRY_RUN)
+        limit: max records to return (default 20, None for all)
+        cross_year: if True, list runs across all years for this dataset
+    """
+    from datetime import datetime, timezone
+
+    config = _safe_path(config_path)
+    cfg, _ = _load_cfg(config)
+    root = cfg.root
+
+    if cross_year:
+        run_dir = get_run_dir_dataset(Path(root), cfg.dataset)
+    else:
+        if year is None:
+            year = cfg.years[0] if cfg.years else 0
+        run_dir = Path(root) / "data" / "_runs" / cfg.dataset / str(year)
+
+    since_dt = None
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+        except ValueError:
+            raise ToolkitClientError(f"since must be a valid ISO datetime, got: {since}")
+
+    until_dt = None
+    if until:
+        try:
+            until_dt = datetime.fromisoformat(until.replace("Z", "+00:00"))
+        except ValueError:
+            raise ToolkitClientError(f"until must be a valid ISO datetime, got: {until}")
+
+    valid_statuses = {"SUCCESS", "FAILED", "RUNNING", "DRY_RUN"}
+    if status and status not in valid_statuses:
+        raise ToolkitClientError(f"status must be one of: {', '.join(sorted(valid_statuses))}")
+
+    limit = limit if limit is not None else 20
+
+    records = list_runs(
+        run_dir,
+        since=since_dt,
+        until=until_dt,
+        status=status if status else None,
+        limit=limit,
+    )
+
+    return {
+        "dataset": cfg.dataset,
+        "config_path": str(config),
+        "requested_year": year,
+        "cross_year": cross_year,
+        "filters": {
+            "since": since,
+            "until": until,
+            "status": status,
+            "limit": limit,
+        },
+        "run_dir": str(run_dir),
+        "total_matches": len(records),
+        "runs": records,
     }
 
 

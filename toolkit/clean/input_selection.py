@@ -78,20 +78,21 @@ def _is_usable_input_file(path: Path) -> bool:
     )
 
 
-def _run_record_paths(root: str | None, dataset: str, year: int) -> list[Path]:
+def _run_record_paths(root: str | None, dataset: str, year: int) -> list[dict]:
+    """Return run records for the given dataset/year, most recent first."""
     return list_runs(get_run_dir(resolve_root(root), dataset, year))
 
 
-def _raw_layer_succeeded(run_path: Path) -> bool:
-    record = json.loads(run_path.read_text(encoding="utf-8"))
+def _raw_layer_succeeded(record: dict) -> bool:
     raw_layer = (record.get("layers") or {}).get("raw") or {}
     return raw_layer.get("status") == "SUCCESS"
 
 
 def _latest_raw_success_exists(root: str | None, dataset: str, year: int) -> bool:
-    runs = _run_record_paths(root, dataset, year)
-    for run_path in sorted(runs, key=lambda item: item.stat().st_mtime, reverse=True):
-        if _raw_layer_succeeded(run_path):
+    records = _run_record_paths(root, dataset, year)
+    # list_runs already returns records sorted by started_at desc
+    for record in records:
+        if _raw_layer_succeeded(record):
             return True
     return False
 

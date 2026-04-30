@@ -355,7 +355,7 @@ def run_summary(config_path: str, year: int | None = None) -> dict[str, Any]:
     avg_duration_seconds, last_30d_runs, status_breakdown.
     """
     config = _safe_path(config_path)
-    cfg, _ = _load_cfg(config)
+    _, cfg = _load_cfg(config)
     root = cfg.root
 
     from datetime import datetime, timezone, timedelta

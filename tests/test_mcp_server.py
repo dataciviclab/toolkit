@@ -15,7 +15,6 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_inspect_paths",
         "toolkit_show_schema",
         "toolkit_raw_profile",
-        "toolkit_run_state",
         "toolkit_run_summary",
         "toolkit_summary",
         "toolkit_blocker_hints",

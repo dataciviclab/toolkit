@@ -11,7 +11,6 @@ from .toolkit_client import (
     list_runs as list_runs_impl,
     raw_profile as raw_profile_impl,
     review_readiness as review_readiness_impl,
-    run_state as run_state_impl,
     run_summary as run_summary_impl,
     summary as summary_impl,
     show_schema as show_schema_impl,
@@ -51,13 +50,6 @@ def toolkit_show_schema(config_path: str, layer: str = "clean", year: int = 0) -
 )
 def toolkit_raw_profile(config_path: str, year: int = 0) -> dict[str, Any]:
     return _guard(raw_profile_impl, config_path, year or None)
-
-
-@mcp.tool(
-    description="Mostra lo stato minimo dei run per un dataset config.", structured_output=True
-)
-def toolkit_run_state(config_path: str, year: int = 0) -> dict[str, Any]:
-    return _guard(run_state_impl, config_path, year or None)
 
 
 @mcp.tool(

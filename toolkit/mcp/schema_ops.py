@@ -454,6 +454,15 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
     latest_run_path = latest_run.get("path")
 
     run_files = sorted(run_dir.glob("*.json")) if run_dir.exists() else []
+    run_file_count = paths.get("run_file_count", len(run_files))
+    years_seen = paths.get("years_seen", [])
+
+    latest_run_record: dict[str, Any] | None = None
+    if latest_run_path and Path(latest_run_path).exists():
+        try:
+            latest_run_record = json.loads(Path(latest_run_path).read_text(encoding="utf-8"))
+        except Exception:
+            pass
 
     warnings: list[str] = []
     if primary_output_file and not _exists(primary_output_path):
@@ -506,9 +515,10 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
         "run": {
             "run_dir": str(run_dir),
             "run_dir_exists": run_dir.exists(),
-            "run_file_count": len(run_files),
+            "run_file_count": run_file_count,
+            "years_seen": years_seen,
             "latest_run": latest_run or None,
-            "latest_run_record_exists": _exists(latest_run_path),
+            "latest_run_record": latest_run_record,
         },
         "warnings": warnings,
     }

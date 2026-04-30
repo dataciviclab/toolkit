@@ -76,9 +76,11 @@ def _read_validation_content(path: str | None) -> dict[str, Any] | None:
 
 
 def _validation_summary_for_layer(layer_dir: Path, validation_filename: str) -> dict[str, Any] | None:
-    """Extract summary + sections from a layer's validation JSON.
+    """Extract summary from a layer's validation JSON.
 
-    Adds: ok, errors_count, warnings_count, row_count, col_count, profile sections.
+    Adds: ok, errors_count, warnings_count, row_count, col_count, raw_row_count, clean_row_count.
+    Reads row/col counts from summary.stats (clean) or summary.row_counts (mart).
+    Falls back to sections.stats for layers that use that path.
     Returns None if the validation file does not exist.
     """
     validation_path = layer_dir / validation_filename
@@ -94,13 +96,19 @@ def _validation_summary_for_layer(layer_dir: Path, validation_filename: str) -> 
         "col_count": None,
     }
 
-    # Extract stats from sections (set by clean/mart validation)
+    # Extract stats from summary (clean layer: summary.stats.clean_rows/clean_cols)
+    summary = content.get("summary", {})
+    stats = summary.get("stats", {})
+    result["row_count"] = stats.get("clean_rows") or stats.get("row_count")
+    result["col_count"] = stats.get("clean_cols")
+
+    # Fallback: sections.stats (mart layer uses sections differently)
     sections = content.get("sections", {})
-    if "stats" in sections:
+    if result["row_count"] is None and "stats" in sections:
         result["row_count"] = sections["stats"].get("row_count")
         result["col_count"] = sections["stats"].get("col_count")
 
-    # Extract column profile from transition section (clean validation)
+    # Extract transition metadata (clean validation)
     if "transition" in sections:
         t = sections["transition"]
         if "clean_cols" in t:
@@ -109,6 +117,14 @@ def _validation_summary_for_layer(layer_dir: Path, validation_filename: str) -> 
             result["raw_row_count"] = t.get("raw_row_count")
         if "clean_row_count" in t:
             result["clean_row_count"] = t.get("clean_row_count")
+
+    # Extract row_counts from mart summary (mart layer)
+    if result["row_count"] is None:
+        row_counts = summary.get("row_counts", {})
+        if row_counts:
+            first_key = next(iter(row_counts), None)
+            if first_key:
+                result["row_count"] = row_counts[first_key]
 
     return result
 

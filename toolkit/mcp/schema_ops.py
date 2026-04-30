@@ -348,6 +348,76 @@ def list_runs(
     }
 
 
+def run_summary(config_path: str, year: int | None = None) -> dict[str, Any]:
+    """Aggregated run statistics for a dataset/year.
+
+    Returns: total_runs, success_count, failed_count, run_rate,
+    avg_duration_seconds, last_30d_runs, status_breakdown.
+    """
+    config = _safe_path(config_path)
+    cfg, _ = _load_cfg(config)
+    root = cfg.root
+
+    from datetime import datetime, timezone, timedelta
+    from toolkit.core.run_records import get_run_dir, list_runs
+
+    if year is None:
+        year = cfg.years[0] if cfg.years else 0
+    run_dir = get_run_dir(Path(root), cfg.dataset, year)
+
+    all_records = list_runs(run_dir, limit=None)
+
+    if not all_records:
+        return {
+            "dataset": cfg.dataset,
+            "year": year,
+            "run_dir": str(run_dir),
+            "total_runs": 0,
+            "success_count": 0,
+            "failed_count": 0,
+            "run_rate": None,
+            "avg_duration_seconds": None,
+            "last_30d_runs": 0,
+            "status_breakdown": {},
+        }
+
+    total = len(all_records)
+    success = sum(1 for r in all_records if r.get("status") == "SUCCESS")
+    failed = sum(1 for r in all_records if r.get("status") == "FAILED")
+    durations = [r.get("duration_seconds") for r in all_records if r.get("duration_seconds") is not None]
+    avg_duration = round(sum(durations) / len(durations), 1) if durations else None
+
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    last_30d = 0
+    for r in all_records:
+        started = r.get("started_at", "")
+        if started:
+            try:
+                dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+                if dt >= thirty_days_ago:
+                    last_30d += 1
+            except ValueError:
+                pass
+
+    status_breakdown: dict[str, int] = {}
+    for r in all_records:
+        s = r.get("status", "UNKNOWN")
+        status_breakdown[s] = status_breakdown.get(s, 0) + 1
+
+    return {
+        "dataset": cfg.dataset,
+        "year": year,
+        "run_dir": str(run_dir),
+        "total_runs": total,
+        "success_count": success,
+        "failed_count": failed,
+        "run_rate": round(success / total * 100, 1) if total > 0 else None,
+        "avg_duration_seconds": avg_duration,
+        "last_30d_runs": last_30d,
+        "status_breakdown": status_breakdown,
+    }
+
+
 def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
     config = _safe_path(config_path)
     paths = inspect_paths(str(config), year)

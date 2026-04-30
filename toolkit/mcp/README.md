@@ -7,6 +7,7 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 - `toolkit_inspect_paths(config_path, year=0)`
 - `toolkit_show_schema(config_path, layer="clean", year=0)`
 - `toolkit_run_state(config_path, year=0)`
+- `toolkit_run_summary(config_path, year=0)` — statistiche aggregate (totali, successi, durata media)
 - `toolkit_summary(config_path, year=0)`
 - `toolkit_blocker_hints(config_path, year=0)`
 - `toolkit_review_readiness(config_path, year=0)`

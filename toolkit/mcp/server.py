@@ -12,6 +12,7 @@ from .toolkit_client import (
     raw_profile as raw_profile_impl,
     review_readiness as review_readiness_impl,
     run_state as run_state_impl,
+    run_summary as run_summary_impl,
     summary as summary_impl,
     show_schema as show_schema_impl,
 )
@@ -57,6 +58,14 @@ def toolkit_raw_profile(config_path: str, year: int = 0) -> dict[str, Any]:
 )
 def toolkit_run_state(config_path: str, year: int = 0) -> dict[str, Any]:
     return _guard(run_state_impl, config_path, year or None)
+
+
+@mcp.tool(
+    description="Statistiche aggregate dei run: totali, successi, fallimenti, durata media.",
+    structured_output=True,
+)
+def toolkit_run_summary(config_path: str, year: int = 0) -> dict[str, Any]:
+    return _guard(run_summary_impl, config_path, year or None)
 
 
 @mcp.tool(

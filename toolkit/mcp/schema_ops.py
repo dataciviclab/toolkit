@@ -64,6 +64,54 @@ def _exists(path: str | None) -> bool:
     return Path(path).exists()
 
 
+def _read_validation_content(path: str | None) -> dict[str, Any] | None:
+    """Read a validation JSON file and return its content, or None if missing."""
+    if not path or not _exists(path):
+        return None
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _validation_summary_for_layer(layer_dir: Path, validation_filename: str) -> dict[str, Any] | None:
+    """Extract summary + sections from a layer's validation JSON.
+
+    Adds: ok, errors_count, warnings_count, row_count, col_count, profile sections.
+    Returns None if the validation file does not exist.
+    """
+    validation_path = layer_dir / validation_filename
+    content = _read_validation_content(str(validation_path))
+    if not content:
+        return None
+
+    result = {
+        "ok": content.get("ok"),
+        "errors_count": len(content.get("errors", [])),
+        "warnings_count": len(content.get("warnings", [])),
+        "row_count": None,
+        "col_count": None,
+    }
+
+    # Extract stats from sections (set by clean/mart validation)
+    sections = content.get("sections", {})
+    if "stats" in sections:
+        result["row_count"] = sections["stats"].get("row_count")
+        result["col_count"] = sections["stats"].get("col_count")
+
+    # Extract column profile from transition section (clean validation)
+    if "transition" in sections:
+        t = sections["transition"]
+        if "clean_cols" in t:
+            result["col_count"] = t.get("clean_cols")
+        if "raw_row_count" in t:
+            result["raw_row_count"] = t.get("raw_row_count")
+        if "clean_row_count" in t:
+            result["clean_row_count"] = t.get("clean_row_count")
+
+    return result
+
+
 def show_schema(config_path: str, layer: str = "clean", year: int | None = None) -> dict[str, Any]:
     config, _cfg = _load_cfg(config_path)
     safe_layer = (layer or "clean").strip().lower()
@@ -267,6 +315,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "suggested_read_exists": (paths.get("raw_hints") or {}).get(
                     "suggested_read_exists"
                 ),
+                "validation": _validation_summary_for_layer(raw_dir, "_validate/raw_validation.json"),
             },
             "clean": {
                 "dir": str(clean_dir),
@@ -275,6 +324,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "output_exists": _exists(clean_paths.get("output")),
                 "manifest_exists": _exists(clean_paths.get("manifest")),
                 "metadata_exists": _exists(clean_paths.get("metadata")),
+                "validation": _validation_summary_for_layer(clean_dir, "_validate/clean_validation.json"),
             },
             "mart": {
                 "dir": str(mart_dir),
@@ -285,6 +335,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "missing_outputs": missing_mart_outputs,
                 "manifest_exists": _exists(mart_paths.get("manifest")),
                 "metadata_exists": _exists(mart_paths.get("metadata")),
+                "validation": _validation_summary_for_layer(mart_dir, "_validate/mart_validation.json"),
             },
         },
         "run": {

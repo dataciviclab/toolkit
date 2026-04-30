@@ -20,7 +20,7 @@ import duckdb
 from toolkit.mcp.cli_adapter import _toolkit_json, inspect_paths
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import _load_cfg, _safe_path
-from toolkit.core.run_records import get_run_dir_dataset, list_runs
+from toolkit.core.run_records import get_run_dir_dataset, list_runs as _list_runs_records
 
 
 def _sql_literal(value: str) -> str:
@@ -154,7 +154,7 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
             "dataset": paths.get("dataset"),
             "year": paths.get("year"),
             "layer": safe_layer,
-            "config_path": str(config),
+"config_path": str(config_path),
         }
     )
     return payload
@@ -217,7 +217,7 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
     return {
         "dataset": profile.get("dataset"),
         "year": profile.get("year"),
-        "config_path": str(config),
+        "config_path": str(config_path),
         "profile_path": str(profile_path),
         "file_used": profile.get("file_used"),
         "read_hints": {
@@ -258,7 +258,7 @@ def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
     )
     return {
         "dataset": paths.get("dataset"),
-        "config_path": str(config),
+        "config_path": str(config_path),
         "requested_year": year,
         "run_dir": str(run_dir),
         "run_dir_exists": run_dir.exists(),
@@ -292,8 +292,7 @@ def list_runs(
     """
     from datetime import datetime, timezone
 
-    config = _safe_path(config_path)
-    cfg, _ = _load_cfg(config)
+    _, cfg = _load_cfg(str(config_path))
     root = cfg.root
 
     if cross_year:
@@ -323,7 +322,7 @@ def list_runs(
 
     limit = limit if limit is not None else 20
 
-    records = list_runs(
+    records = _list_runs_records(
         run_dir,
         since=since_dt,
         until=until_dt,
@@ -333,7 +332,7 @@ def list_runs(
 
     return {
         "dataset": cfg.dataset,
-        "config_path": str(config),
+        "config_path": str(config_path),
         "requested_year": year,
         "cross_year": cross_year,
         "filters": {
@@ -452,7 +451,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
 
     return {
         "dataset": paths.get("dataset"),
-        "config_path": str(config),
+        "config_path": str(config_path),
         "year": paths.get("year"),
         "layers": {
             "raw": {
@@ -615,7 +614,7 @@ def blocker_hints(config_path: str, year: int | None = None) -> dict[str, Any]:
 
     return {
         "dataset": s.get("dataset"),
-        "config_path": str(config),
+        "config_path": str(config_path),
         "year": s.get("year"),
         "hint_count": len(hints),
         "hints": hints,
@@ -761,7 +760,7 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
 
     return {
         "dataset": s.get("dataset"),
-        "config_path": str(config),
+        "config_path": str(config_path),
         "year": s.get("year"),
         "readiness": readiness,
         "check_count": len(checks),

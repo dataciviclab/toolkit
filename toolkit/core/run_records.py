@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -64,7 +64,25 @@ def write_run_record(run_dir: Path, run_id: str, payload: dict) -> Path:
     return path
 
 
-# --- Query ------------------------------------------------------------------
+# --- Query helpers -----------------------------------------------------------
+
+
+def _is_cross_year_run_dir(run_dir: Path) -> bool:
+    """Detect if run_dir is dataset-level (cross-year) vs year-level.
+
+    True when run_dir is data/_runs/{dataset} (no year subdir).
+    False when run_dir is data/_runs/{dataset}/{year}.
+    """
+    parts = run_dir.parts
+    try:
+        runs_idx = parts.index("_runs")
+    except ValueError:
+        return False
+    # dataset-level: data/_runs/{dataset} with no year subdir after
+    if len(parts) <= runs_idx + 2:
+        return True
+    after_dataset = parts[runs_idx + 2] if len(parts) > runs_idx + 2 else None
+    return after_dataset is not None and not after_dataset.isdigit()
 
 
 def list_runs(
@@ -88,7 +106,10 @@ def list_runs(
         return []
 
     all_records: list[dict[str, Any]] = []
-    for path in sorted(run_dir.glob("*.json")):
+    # cross_year=True: run_dir is dataset-level (data/_runs/{dataset}),
+    # need rglob to find JSON in year subdirectories
+    pattern = "**/*.json" if _is_cross_year_run_dir(run_dir) else "*.json"
+    for path in sorted(run_dir.glob(pattern)):
         try:
             record = _load_run_record(path)
         except Exception:

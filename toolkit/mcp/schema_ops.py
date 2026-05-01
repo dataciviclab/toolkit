@@ -170,7 +170,7 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
             "dataset": paths.get("dataset"),
             "year": paths.get("year"),
             "layer": safe_layer,
-"config_path": str(config_path),
+            "config_path": str(config_path),
         }
     )
     return payload
@@ -306,7 +306,7 @@ def list_runs(
         limit: max records to return (default 20, None for all)
         cross_year: if True, list runs across all years for this dataset
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     _, cfg = _load_cfg(str(config_path))
     root = cfg.root

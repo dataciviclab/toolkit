@@ -154,6 +154,13 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
     suggested_read_path = raw_dir / "_profile" / "suggested_read.yml"
     profile_hints = raw_meta.get("profile_hints") or {}
 
+    run_files = sorted(run_dir.glob("*.json")) if run_dir.exists() else []
+    years_seen = (
+        sorted({p.parent.name for p in run_dir.parent.glob("*/*.json") if p.parent.name.isdigit()})
+        if run_dir.parent.exists()
+        else []
+    )
+
     latest_payload: dict[str, Any] | None = None
     try:
         latest_record = latest_run(run_dir)
@@ -178,6 +185,8 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
             "support": resolve_support_payloads(cfg.support, require_exists=False),
             "run_dir": str(run_dir),
         },
+        "run_file_count": len(run_files),
+        "years_seen": years_seen,
         "raw_hints": {
             "primary_output_file": raw_meta.get("primary_output_file"),
             "suggested_read_path": str(suggested_read_path),

@@ -8,9 +8,10 @@ from .toolkit_client import (
     ToolkitClientError,
     blocker_hints as blocker_hints_impl,
     inspect_paths as inspect_paths_impl,
+    list_runs as list_runs_impl,
     raw_profile as raw_profile_impl,
     review_readiness as review_readiness_impl,
-    run_state as run_state_impl,
+    run_summary as run_summary_impl,
     summary as summary_impl,
     show_schema as show_schema_impl,
 )
@@ -52,10 +53,17 @@ def toolkit_raw_profile(config_path: str, year: int = 0) -> dict[str, Any]:
 
 
 @mcp.tool(
-    description="Mostra lo stato minimo dei run per un dataset config.", structured_output=True
+    description="Statistiche aggregate dei run: totali, successi, fallimenti, durata media.",
+    structured_output=True,
 )
-def toolkit_run_state(config_path: str, year: int = 0) -> dict[str, Any]:
-    return _guard(run_state_impl, config_path, year or None)
+def toolkit_run_summary(
+    config_path: str,
+    year: int = 0,
+    *,
+    since: str | None = None,
+    until: str | None = None,
+) -> dict[str, Any]:
+    return _guard(run_summary_impl, config_path, year or None, since=since, until=until)
 
 
 @mcp.tool(
@@ -80,6 +88,23 @@ def toolkit_blocker_hints(config_path: str, year: int = 0) -> dict[str, Any]:
 )
 def toolkit_review_readiness(config_path: str, year: int = 0) -> dict[str, Any]:
     return _guard(review_readiness_impl, config_path, year or None)
+
+
+@mcp.tool(
+    description="Lista run records con filtri opzionali. Ritorna record completi (non solo metadata).",
+    structured_output=True,
+)
+def toolkit_list_runs(
+    config_path: str,
+    year: int = 0,
+    *,
+    since: str | None = None,
+    until: str | None = None,
+    status: str | None = None,
+    limit: int | None = None,
+    cross_year: bool = False,
+) -> dict[str, Any]:
+    return _guard(list_runs_impl, config_path, year or None, since=since, until=until, status=status, limit=limit, cross_year=cross_year)
 
 
 if __name__ == "__main__":

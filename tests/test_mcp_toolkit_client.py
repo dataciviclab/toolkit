@@ -9,8 +9,10 @@ import pytest
 from toolkit.mcp.toolkit_client import (
     blocker_hints,
     inspect_paths,
+    list_runs,
     review_readiness,
     run_state,
+    run_summary,
     show_schema,
     summary,
 )
@@ -286,3 +288,104 @@ def test_mcp_raw_profile_error_when_no_profile_file(tmp_path: Path, monkeypatch)
 
     with pytest.raises(ToolkitClientError, match="Nessun file raw_profile.json ne suggested_read.yml"):
         raw_profile(str(config_path), 2022)
+
+
+def test_list_runs_accepts_naive_datetime_filter(tmp_path: Path, monkeypatch) -> None:
+    """Naive datetime in since/until must be normalized to UTC, not crash with TypeError."""
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    # Create a run record with UTC-aware started_at
+    run_dir = dst / "_smoke_out" / "data" / "_runs" / "project_example" / "2022"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    run_record = {
+        "dataset": "project_example",
+        "year": 2022,
+        "run_id": "20260101T120000Z_abc123",
+        "status": "SUCCESS",
+        "started_at": "2026-01-01T12:00:00+00:00",
+        "finished_at": "2026-01-01T12:01:00+00:00",
+        "layers": {
+            "raw": {"status": "SUCCESS"},
+            "clean": {"status": "SUCCESS"},
+        },
+    }
+    (run_dir / "20260101T120000Z_abc123.json").write_text(
+        json.dumps(run_record), encoding="utf-8"
+    )
+
+    # Naive datetime filter — must NOT raise TypeError
+    payload = list_runs(str(config_path), 2022, since="2025-12-01T00:00:00", limit=5)
+    run_ids = [r["run_id"] for r in payload["runs"]]
+    assert "20260101T120000Z_abc123" in run_ids
+
+    # Naive until — filter should exclude this run
+    payload2 = list_runs(str(config_path), 2022, until="2025-12-01T00:00:00", limit=5)
+    run_ids2 = [r["run_id"] for r in payload2["runs"]]
+    assert "20260101T120000Z_abc123" not in run_ids2
+
+    # Aware datetime still works
+    payload3 = list_runs(str(config_path), 2022, since="2025-12-01T00:00:00+00:00", limit=5)
+    run_ids3 = [r["run_id"] for r in payload3["runs"]]
+    assert "20260101T120000Z_abc123" in run_ids3
+
+
+def test_run_summary_accepts_since_until_filters(tmp_path: Path, monkeypatch) -> None:
+    """run_summary with since/until filters must normalize naive datetimes to UTC."""
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    # Clear any pre-existing run records
+    run_dir = dst / "_smoke_out" / "data" / "_runs" / "project_example" / "2022"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    for f in run_dir.glob("*.json"):
+        f.unlink()
+
+    # Create runs: Oct 10, Oct 20, Oct 25 — 2 SUCCESS, 1 FAILED
+    records = [
+        {"started_at": "2025-10-10T12:00:00+00:00", "status": "SUCCESS"},
+        {"started_at": "2025-10-20T12:00:00+00:00", "status": "SUCCESS"},
+        {"started_at": "2025-10-25T12:00:00+00:00", "status": "FAILED"},
+    ]
+    for i, rec in enumerate(records):
+        run_id = f"run_{i+1}"
+        run_record = {
+            "dataset": "project_example",
+            "year": 2022,
+            "run_id": run_id,
+            "status": rec["status"],
+            "started_at": rec["started_at"],
+            "finished_at": rec["started_at"].replace("T12:00", "T12:01"),
+            "duration_seconds": 60.0,
+            "layers": {"raw": {"status": "SUCCESS"}, "clean": {"status": "SUCCESS"}},
+        }
+        (run_dir / f"{run_id}.json").write_text(json.dumps(run_record), encoding="utf-8")
+
+    # Without filters — all 3 runs
+    p = run_summary(str(config_path), 2022)
+    assert p["total_runs"] == 3
+    assert p["success_count"] == 2
+
+    # Naive since — must not crash; Oct 16+ keeps Oct 20 and Oct 25 (2 runs, 1 SUCCESS)
+    p2 = run_summary(str(config_path), 2022, since="2025-10-16T00:00:00")
+    assert p2["total_runs"] == 2
+    assert p2["success_count"] == 1
+    assert p2["filters"]["since"] == "2025-10-16T00:00:00"
+
+    # Naive until — Oct 25 00:00 excludes Oct 25 (12:00 > 00:00), keeps Oct 10 and Oct 20
+    p3 = run_summary(str(config_path), 2022, until="2025-10-25T00:00:00")
+    assert p3["total_runs"] == 2
+    assert p3["success_count"] == 2
+    assert p3["filters"]["until"] == "2025-10-25T00:00:00"
+
+    # Aware datetime — same result as naive
+    p4 = run_summary(str(config_path), 2022, since="2025-10-16T00:00:00+00:00")
+    assert p4["total_runs"] == 2

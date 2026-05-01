@@ -164,16 +164,23 @@ def write_layer_manifest(
     warnings_count: int | None = None,
     filename: str = "manifest.json",
 ) -> Path:
-    merge_layer_manifest(
-        folder,
-        metadata_path=metadata_path,
-        validation_path=validation_path,
-        outputs=outputs,
-        ok=ok,
-        errors_count=errors_count,
-        warnings_count=warnings_count,
-    )
-    return write_manifest_alias(folder, filename, metadata_path, validation_path, outputs, ok, errors_count, warnings_count)
+    # Single write: compute payload once, write only manifest.json.
+    # metadata.json is NOT updated here — it stays as the run-time source of truth
+    # written by the run step. manifest.json is the validation-time alias that
+    # always reflects the latest validation outcome.
+    payload = {
+        "metadata": metadata_path,
+        "validation": validation_path,
+        "summary": {
+            "ok": ok,
+            "errors_count": errors_count,
+            "warnings_count": warnings_count,
+        },
+        "outputs": outputs,
+    }
+    out = folder / filename
+    write_json_atomic(out, payload)
+    return out
 
 
 def write_manifest_alias(

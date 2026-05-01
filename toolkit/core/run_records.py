@@ -81,8 +81,8 @@ def _is_cross_year_run_dir(run_dir: Path) -> bool:
     # dataset-level: data/_runs/{dataset} with no year subdir after
     if len(parts) <= runs_idx + 2:
         return True
-    after_dataset = parts[runs_idx + 2] if len(parts) > runs_idx + 2 else None
-    return after_dataset is not None and not after_dataset.isdigit()
+    after_dataset = parts[runs_idx + 2]
+    return not after_dataset.isdigit()
 
 
 def list_runs(
@@ -118,6 +118,8 @@ def list_runs(
         if started:
             try:
                 started_dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+                if started_dt.tzinfo is None:
+                    started_dt = started_dt.replace(tzinfo=timezone.utc)
             except ValueError:
                 started_dt = None
         else:

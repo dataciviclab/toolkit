@@ -418,26 +418,9 @@ def run_summary(
         except ValueError:
             raise ToolkitClientError(f"until must be a valid ISO datetime, got: {until}")
 
-    all_records = list_runs(run_dir, limit=None)
+    all_records = list_runs(run_dir, since=since_dt, until=until_dt, limit=None)
 
-    # Apply datetime filters (same logic as list_runs core)
-    filtered_records: list[dict[str, Any]] = []
-    for record in all_records:
-        started = record.get("started_at", "")
-        if started:
-            try:
-                started_dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
-            except ValueError:
-                started_dt = None
-        else:
-            started_dt = None
-        if since_dt and started_dt and started_dt < since_dt:
-            continue
-        if until_dt and started_dt and started_dt > until_dt:
-            continue
-        filtered_records.append(record)
-
-    if not filtered_records:
+    if not all_records:
         return {
             "dataset": cfg.dataset,
             "year": year,
@@ -451,15 +434,15 @@ def run_summary(
             "status_breakdown": {},
         }
 
-    total = len(filtered_records)
-    success = sum(1 for r in filtered_records if r.get("status") == "SUCCESS")
-    failed = sum(1 for r in filtered_records if r.get("status") == "FAILED")
-    durations = [r.get("duration_seconds") for r in filtered_records if r.get("duration_seconds") is not None]
+    total = len(all_records)
+    success = sum(1 for r in all_records if r.get("status") == "SUCCESS")
+    failed = sum(1 for r in all_records if r.get("status") == "FAILED")
+    durations = [r.get("duration_seconds") for r in all_records if r.get("duration_seconds") is not None]
     avg_duration = round(sum(durations) / len(durations), 1) if durations else None
 
     thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     last_30d = 0
-    for r in filtered_records:
+    for r in all_records:
         started = r.get("started_at", "")
         if started:
             try:
@@ -470,7 +453,7 @@ def run_summary(
                 pass
 
     status_breakdown: dict[str, int] = {}
-    for r in filtered_records:
+    for r in all_records:
         s = r.get("status", "UNKNOWN")
         status_breakdown[s] = status_breakdown.get(s, 0) + 1
 

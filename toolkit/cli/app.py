@@ -10,6 +10,7 @@ from toolkit.cli.cmd_validate import register as register_validate
 from toolkit.cli.cmd_inspect import register as register_inspect
 from toolkit.cli.cmd_scaffold import register as register_scaffold
 from toolkit.cli.cmd_batch import register as register_batch
+from toolkit.cli.cmd_blocker_hints import register as register_blocker_hints
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
@@ -22,6 +23,7 @@ register_validate(app)
 register_inspect(app)
 register_scaffold(app)
 register_batch(app)
+register_blocker_hints(app)
 
 
 def main():

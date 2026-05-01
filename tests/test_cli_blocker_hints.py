@@ -12,12 +12,16 @@ from toolkit.cli.app import app
 
 def test_blocker_hints_help() -> None:
     """--help works without config."""
+    import re
     runner = CliRunner()
     result = runner.invoke(app, ["blocker-hints", "--help"])
     assert result.exit_code == 0
-    assert "--config" in result.output
-    assert "--year" in result.output
-    assert "--json" in result.output
+    # Strip ANSI codes and check for key option names
+    raw = result.output
+    clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', raw)
+    assert "--config" in clean
+    assert "--year" in clean
+    assert "--json" in clean
 
 
 def test_blocker_hints_missing_config() -> None:

@@ -306,7 +306,7 @@ def list_runs(
         limit: max records to return (default 20, None for all)
         cross_year: if True, list runs across all years for this dataset
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     _, cfg = _load_cfg(str(config_path))
     root = cfg.root
@@ -321,14 +321,20 @@ def list_runs(
     since_dt = None
     if since:
         try:
-            since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+            raw = since.replace("Z", "+00:00")
+            since_dt = datetime.fromisoformat(raw)
+            if since_dt.tzinfo is None:
+                since_dt = since_dt.replace(tzinfo=timezone.utc)
         except ValueError:
             raise ToolkitClientError(f"since must be a valid ISO datetime, got: {since}")
 
     until_dt = None
     if until:
         try:
-            until_dt = datetime.fromisoformat(until.replace("Z", "+00:00"))
+            raw = until.replace("Z", "+00:00")
+            until_dt = datetime.fromisoformat(raw)
+            if until_dt.tzinfo is None:
+                until_dt = until_dt.replace(tzinfo=timezone.utc)
         except ValueError:
             raise ToolkitClientError(f"until must be a valid ISO datetime, got: {until}")
 

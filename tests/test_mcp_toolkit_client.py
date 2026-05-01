@@ -9,6 +9,7 @@ import pytest
 from toolkit.mcp.toolkit_client import (
     blocker_hints,
     inspect_paths,
+    list_runs,
     review_readiness,
     run_state,
     show_schema,
@@ -286,3 +287,47 @@ def test_mcp_raw_profile_error_when_no_profile_file(tmp_path: Path, monkeypatch)
 
     with pytest.raises(ToolkitClientError, match="Nessun file raw_profile.json ne suggested_read.yml"):
         raw_profile(str(config_path), 2022)
+
+
+def test_list_runs_accepts_naive_datetime_filter(tmp_path: Path, monkeypatch) -> None:
+    """Naive datetime in since/until must be normalized to UTC, not crash with TypeError."""
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    # Create a run record with UTC-aware started_at
+    run_dir = dst / "_smoke_out" / "data" / "_runs" / "project_example" / "2022"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    run_record = {
+        "dataset": "project_example",
+        "year": 2022,
+        "run_id": "20260101T120000Z_abc123",
+        "status": "SUCCESS",
+        "started_at": "2026-01-01T12:00:00+00:00",
+        "finished_at": "2026-01-01T12:01:00+00:00",
+        "layers": {
+            "raw": {"status": "SUCCESS"},
+            "clean": {"status": "SUCCESS"},
+        },
+    }
+    (run_dir / "20260101T120000Z_abc123.json").write_text(
+        json.dumps(run_record), encoding="utf-8"
+    )
+
+    # Naive datetime filter — must NOT raise TypeError
+    payload = list_runs(str(config_path), 2022, since="2025-12-01T00:00:00", limit=5)
+    run_ids = [r["run_id"] for r in payload["runs"]]
+    assert "20260101T120000Z_abc123" in run_ids
+
+    # Naive until — filter should exclude this run
+    payload2 = list_runs(str(config_path), 2022, until="2025-12-01T00:00:00", limit=5)
+    run_ids2 = [r["run_id"] for r in payload2["runs"]]
+    assert "20260101T120000Z_abc123" not in run_ids2
+
+    # Aware datetime still works
+    payload3 = list_runs(str(config_path), 2022, since="2025-12-01T00:00:00+00:00", limit=5)
+    run_ids3 = [r["run_id"] for r in payload3["runs"]]
+    assert "20260101T120000Z_abc123" in run_ids3

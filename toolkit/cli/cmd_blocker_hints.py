@@ -33,8 +33,6 @@ def blocker_hints(
         0 — hint generati (anche se ci sono blocker, il comando funziona)
         1 — config non trovato o errore nell'analisi
     """
-    strict_flag = strict_config if isinstance(strict_config, bool) else False
-
     try:
         result = _blocker_hints(config, year)
     except FileNotFoundError:
@@ -55,7 +53,6 @@ def blocker_hints(
     year_val = result.get("year", "?")
     blocker_count = result.get("blocker_count", 0)
     warning_count = result.get("warning_count", 0)
-    hint_count = result.get("hint_count", 0)
 
     typer.echo(f"dataset: {dataset}")
     typer.echo(f"config: {config_path}")

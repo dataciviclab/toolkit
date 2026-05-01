@@ -56,8 +56,14 @@ def toolkit_raw_profile(config_path: str, year: int = 0) -> dict[str, Any]:
     description="Statistiche aggregate dei run: totali, successi, fallimenti, durata media.",
     structured_output=True,
 )
-def toolkit_run_summary(config_path: str, year: int = 0) -> dict[str, Any]:
-    return _guard(run_summary_impl, config_path, year or None)
+def toolkit_run_summary(
+    config_path: str,
+    year: int = 0,
+    *,
+    since: str | None = None,
+    until: str | None = None,
+) -> dict[str, Any]:
+    return _guard(run_summary_impl, config_path, year or None, since=since, until=until)
 
 
 @mcp.tool(

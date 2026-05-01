@@ -369,8 +369,20 @@ def list_runs(
     }
 
 
-def run_summary(config_path: str, year: int | None = None) -> dict[str, Any]:
+def run_summary(
+    config_path: str,
+    year: int | None = None,
+    *,
+    since: str | None = None,
+    until: str | None = None,
+) -> dict[str, Any]:
     """Aggregated run statistics for a dataset/year.
+
+    Args:
+        config_path: path to dataset.yml
+        year: filter to specific year (default: first year in config)
+        since: ISO datetime string — only runs started after this moment
+        until: ISO datetime string — only runs started before this moment
 
     Returns: total_runs, success_count, failed_count, run_rate,
     avg_duration_seconds, last_30d_runs, status_breakdown.
@@ -386,9 +398,46 @@ def run_summary(config_path: str, year: int | None = None) -> dict[str, Any]:
         year = cfg.years[0] if cfg.years else 0
     run_dir = get_run_dir(Path(root), cfg.dataset, year)
 
+    since_dt: datetime | None = None
+    if since:
+        try:
+            raw = since.replace("Z", "+00:00")
+            since_dt = datetime.fromisoformat(raw)
+            if since_dt.tzinfo is None:
+                since_dt = since_dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            raise ToolkitClientError(f"since must be a valid ISO datetime, got: {since}")
+
+    until_dt: datetime | None = None
+    if until:
+        try:
+            raw = until.replace("Z", "+00:00")
+            until_dt = datetime.fromisoformat(raw)
+            if until_dt.tzinfo is None:
+                until_dt = until_dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            raise ToolkitClientError(f"until must be a valid ISO datetime, got: {until}")
+
     all_records = list_runs(run_dir, limit=None)
 
-    if not all_records:
+    # Apply datetime filters (same logic as list_runs core)
+    filtered_records: list[dict[str, Any]] = []
+    for record in all_records:
+        started = record.get("started_at", "")
+        if started:
+            try:
+                started_dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+            except ValueError:
+                started_dt = None
+        else:
+            started_dt = None
+        if since_dt and started_dt and started_dt < since_dt:
+            continue
+        if until_dt and started_dt and started_dt > until_dt:
+            continue
+        filtered_records.append(record)
+
+    if not filtered_records:
         return {
             "dataset": cfg.dataset,
             "year": year,
@@ -402,15 +451,15 @@ def run_summary(config_path: str, year: int | None = None) -> dict[str, Any]:
             "status_breakdown": {},
         }
 
-    total = len(all_records)
-    success = sum(1 for r in all_records if r.get("status") == "SUCCESS")
-    failed = sum(1 for r in all_records if r.get("status") == "FAILED")
-    durations = [r.get("duration_seconds") for r in all_records if r.get("duration_seconds") is not None]
+    total = len(filtered_records)
+    success = sum(1 for r in filtered_records if r.get("status") == "SUCCESS")
+    failed = sum(1 for r in filtered_records if r.get("status") == "FAILED")
+    durations = [r.get("duration_seconds") for r in filtered_records if r.get("duration_seconds") is not None]
     avg_duration = round(sum(durations) / len(durations), 1) if durations else None
 
     thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     last_30d = 0
-    for r in all_records:
+    for r in filtered_records:
         started = r.get("started_at", "")
         if started:
             try:
@@ -421,7 +470,7 @@ def run_summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 pass
 
     status_breakdown: dict[str, int] = {}
-    for r in all_records:
+    for r in filtered_records:
         s = r.get("status", "UNKNOWN")
         status_breakdown[s] = status_breakdown.get(s, 0) + 1
 
@@ -429,6 +478,7 @@ def run_summary(config_path: str, year: int | None = None) -> dict[str, Any]:
         "dataset": cfg.dataset,
         "year": year,
         "run_dir": str(run_dir),
+        "filters": {"since": since, "until": until},
         "total_runs": total,
         "success_count": success,
         "failed_count": failed,

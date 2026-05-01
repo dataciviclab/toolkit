@@ -187,5 +187,6 @@ def run_mart(
         warnings_count=None,
     )
     total_bytes = sum(p.stat().st_size for p in written if p.exists())
+    col_count = sum(len(tp.get("columns", [])) for tp in table_profiles.values()) if table_profiles else None
     logger.info(f"MART -> {mart_dir}")
-    return {"output_rows": total_rows, "output_bytes": total_bytes, "tables_count": len(written)}
+    return {"output_rows": total_rows, "output_bytes": total_bytes, "tables_count": len(written), "col_count": col_count}

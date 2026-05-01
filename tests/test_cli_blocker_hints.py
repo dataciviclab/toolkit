@@ -254,8 +254,8 @@ mart:
     )
 
     assert result.exit_code == 0
-    # Should flag this as a blocker
-    assert "clean_dir_missing" in result.output or "blocker" in result.output
+    # Should flag this as a blocker — check specific code, not just word "blocker"
+    assert "clean_dir_missing" in result.output
 
 
 def test_blocker_hints_exit_code_0_even_with_blockers(tmp_path: Path, monkeypatch) -> None:

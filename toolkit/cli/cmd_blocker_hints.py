@@ -19,12 +19,9 @@ def blocker_hints(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     year: int | None = typer.Option(None, "--year", "-y", help="Dataset year (default: last declared year)"),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
-    strict_config: bool = typer.Option(
-        False, "--strict-config", help="Treat deprecated config forms as errors"
-    ),
 ) -> None:
     """
-    Mostra hint diagnostici per mismatch comuni tra config dichiarato e output实际.
+    Mostra hint diagnostici per mismatch comuni tra config dichiarato e output.
 
     I blocker sono errori che impediscono al candidate di funzionare.
     I warning sono segnali di possibili problemi che non bloccano l'esecuzione.
@@ -79,7 +76,7 @@ def blocker_hints(
     if blocker_count > 0:
         typer.echo(f"🔴 {blocker_count} blocker(s) trovati — fix obbligatori prima del merge")
     else:
-        typer.echo("✅ nessun blocker — config看起来 ok")
+        typer.echo("✅ nessun blocker — config e output sono coerenti")
 
 
 def register(app: typer.Typer) -> None:

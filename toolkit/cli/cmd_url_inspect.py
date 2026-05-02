@@ -8,6 +8,22 @@ from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
 
+# Public API — functions used by cmd_inspect.py
+__all__ = [
+    "probe_url",
+    "_generate_yaml_scaffold",
+    "_detect_ckan",
+    "_discover_ckan_resources",
+    "_extract_ckan_dataset_id",
+    "_is_html",
+    "_is_file_like",
+    "_candidate_links",
+    # Constants used by cmd_inspect
+    "_EXTENDED_EXTENSIONS",
+    "_DEFAULT_TIMEOUT",
+    "_DEFAULT_USER_AGENT",
+]
+
 
 _CANDIDATE_EXTENSIONS = (".csv", ".xlsx", ".xls", ".zip", ".json", ".parquet", ".geojson")
 _EXTENDED_EXTENSIONS = _CANDIDATE_EXTENSIONS + (".sdmx", ".tds", ".xml")
@@ -30,13 +46,18 @@ class _AnchorParser(HTMLParser):
         super().__init__()
         self.hrefs: list[str] = []
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    # Implementation — called by public handle_starttag alias
+    def _handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag.lower() != "a":
             return
         for key, value in attrs:
             if key.lower() == "href" and value:
                 self.hrefs.append(value)
                 return
+
+    # Public alias for HTMLParser.feed() which calls handle_starttag by name
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        return self._handle_starttag(tag, attrs)
 
 
 def _is_html(content_type: str | None) -> bool:

@@ -1,11 +1,21 @@
+"""Clean layer validation — validate_clean, validate_promotion, run_clean_validation."""
+
 from __future__ import annotations
 
 import json
+import re as _re
 from pathlib import Path
 from typing import Any
 
 import duckdb
 
+from toolkit.clean._column_rules import (
+    _check_max_null_pct,
+    _check_not_null,
+    _check_primary_key,
+    _check_ranges,
+)
+from toolkit.clean._helpers import _input_files_from_clean_metadata, _profile_raw_input
 from toolkit.clean.duckdb_read import read_raw_to_relation
 from toolkit.core.config_models import CleanValidationSpec, RangeRuleConfig, TransitionConfig
 from toolkit.core.layer_profile import compare_layer_profiles, profile_relation
@@ -113,69 +123,22 @@ def validate_clean(
         if min_rows is not None and row_count < min_rows:
             errors.append(f"CLEAN row_count too small: {row_count} < {min_rows}")
 
-        for c in not_null:
-            if c not in cols:
-                warnings.append(f"Not-null rule column missing in data: '{c}'")
-                continue
-            qc = q_ident(c)
-            nnull = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {qc} IS NULL").fetchone()[0])
-            if nnull > 0:
-                errors.append(f"Column '{c}' has NULLs: {nnull}")
+        err_warn = _check_not_null(con, "t", not_null, cols)
+        errors.extend(err_warn[0])
+        warnings.extend(err_warn[1])
 
         if row_count > 0:
-            for c, thr in max_null_pct.items():
-                if c not in cols:
-                    warnings.append(f"Null-pct rule column missing in data: '{c}'")
-                    continue
-                qc = q_ident(c)
-                nnull = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {qc} IS NULL").fetchone()[0])
-                pct = nnull / row_count
-                if pct > thr:
-                    errors.append(f"Column '{c}' null_pct too high: {pct:.3%} > {thr:.3%}")
+            err_warn = _check_max_null_pct(con, "t", max_null_pct, cols, row_count)
+            errors.extend(err_warn[0])
+            warnings.extend(err_warn[1])
 
-        if primary_key:
-            if not all(c in cols for c in primary_key):
-                warnings.append(f"Primary key columns not all present: {primary_key}")
-            else:
-                key_expr = ", ".join(q_ident(c) for c in primary_key)
-                dup_groups = int(
-                    con.execute(
-                        f"""
-                        SELECT COUNT(*) FROM (
-                          SELECT {key_expr}, COUNT(*) AS n
-                          FROM t
-                          GROUP BY {key_expr}
-                          HAVING COUNT(*) > 1
-                        ) d
-                        """
-                    ).fetchone()[0]
-                )
-                if dup_groups > 0:
-                    errors.append(f"Primary key duplicates found for {primary_key}: groups={dup_groups}")
+        err_warn = _check_primary_key(con, "t", primary_key, cols)
+        errors.extend(err_warn[0])
+        warnings.extend(err_warn[1])
 
-        for c, rule in ranges.items():
-            if c not in cols:
-                warnings.append(f"Range rule column missing in data: '{c}'")
-                continue
-
-            qc = q_ident(c)
-            violations: list[str] = []
-            if rule.min is not None:
-                violations.append(f"{qc} < {rule.min}")
-            if rule.max is not None:
-                violations.append(f"{qc} > {rule.max}")
-
-            if not violations:
-                warnings.append(f"Range rule for '{c}' has no min/max, skipping")
-                continue
-
-            where = f"{qc} IS NOT NULL AND (" + " OR ".join(violations) + ")"
-            bad = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {where}").fetchone()[0])
-            if bad > 0:
-                errors.append(
-                    f"Range check failed for '{c}': bad_rows={bad} "
-                    f"rules={{'min': {rule.min}, 'max': {rule.max}}}"
-                )
+        err_warn = _check_ranges(con, "t", ranges, cols)
+        errors.extend(err_warn[0])
+        warnings.extend(err_warn[1])
     finally:
         con.close()
 
@@ -198,25 +161,6 @@ def validate_clean(
             "min_rows": min_rows,
         },
     )
-
-
-def _input_files_from_clean_metadata(raw_dir: Path, clean_metadata: dict[str, Any]) -> list[Path]:
-    input_files = clean_metadata.get("input_files") or []
-    return [raw_dir / str(name) for name in input_files]
-
-
-def _profile_raw_input(
-    input_files: list[Path],
-    read_cfg: dict[str, Any],
-    read_mode: str,
-    logger,
-) -> dict[str, Any]:
-    con = duckdb.connect(":memory:")
-    try:
-        read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
-        return profile_relation(con, "raw_input")
-    finally:
-        con.close()
 
 
 def validate_promotion(
@@ -364,7 +308,6 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
     trusted_raw_cols: list[str] = []
     if profile_path.exists():
         try:
-            import re as _re
             def _to_snake(n: str) -> str:
                 s = _re.sub(r"([a-z])([A-Z])", r"\1_\2", n.strip())
                 s = _re.sub(r"[^a-zA-Z0-9]+", "_", s)
@@ -382,9 +325,7 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
                 )
         except Exception:
             pass
-    # --- actual_raw_cols: column count from the raw parquet itself (not from config) ---
-    # When trusted_raw_cols is empty (no saved profile), read the raw parquet directly
-    # to get the physically present column count and detect config-vs-reality drift.
+
     actual_raw_col_count: int | None = len(trusted_raw_cols) if trusted_raw_cols else None
     raw_missing_columns: list[str] = []
 
@@ -411,14 +352,12 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
                     _actual_raw_col_names = [str(r[0]) for r in _col_rows]
                     actual_raw_col_count = len(_actual_raw_col_names)
 
-                    # Infer expected columns from config: clean.read.columns or
-                    # clean.read.normalize_rows_to_columns + columns count hint
+                    # Infer expected columns from config
                     _read_cfg = clean_cfg.get("read") or {}
                     _expected_cols: list[str] = []
                     if _read_cfg.get("normalize_rows_to_columns"):
                         _col_defs = _read_cfg.get("columns") or {}
                         if isinstance(_col_defs, dict) and not _col_defs:
-                            # Empty columns dict means auto: infer from clean_cols count
                             _expected_cols = clean_cols
                         elif isinstance(_col_defs, dict):
                             _expected_cols = list(_col_defs.keys())

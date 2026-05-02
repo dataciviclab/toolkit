@@ -62,6 +62,12 @@ def normalize_encoding(enc: str | None) -> str | None:
         return "utf-8"
     if e.lower() in {"win1252", "windows1252"}:
         return "CP1252"
+    # ISO-8859-1 variants — normalize to DuckDB's expected form
+    if e.lower() in {"iso-8859-1", "iso8859-1"}:
+        return "latin-1"
+    # ASCII normalization
+    if e.lower() == "ascii":
+        return "us-ascii"
     return e
 
 
@@ -71,8 +77,22 @@ def normalize_columns_spec(columns: object) -> dict[str, str] | None:
     if isinstance(columns, dict):
         normalized: dict[str, str] = {}
         for name, dtype in columns.items():
-            if not isinstance(name, str) or not isinstance(dtype, str):
-                raise ValueError("clean.read.columns mapping must be {name: duckdb_type}")
+            if not isinstance(name, str) and not isinstance(dtype, str):
+                raise ValueError(
+                    f"clean.read.columns mapping must be {{name: duckdb_type}}, "
+                    f"got column name={name!r} (type={type(name).__name__}) and "
+                    f"dtype={dtype!r} (type={type(dtype).__name__})"
+                )
+            if not isinstance(name, str):
+                raise ValueError(
+                    f"clean.read.columns mapping must be {{name: duckdb_type}}, "
+                    f"got column name={name!r} with type={type(name).__name__}"
+                )
+            if not isinstance(dtype, str):
+                raise ValueError(
+                    f"clean.read.columns mapping must be {{name: duckdb_type}}, "
+                    f"got dtype={dtype!r} with type={type(dtype).__name__} for column '{name}'"
+                )
             normalized[name] = dtype
         return normalized
     if isinstance(columns, list):
@@ -86,11 +106,37 @@ def normalize_columns_spec(columns: object) -> dict[str, str] | None:
             dtype = item.get("type")
             if not isinstance(name, str) or not isinstance(dtype, str):
                 raise ValueError(
-                    "clean.read.columns list entries must include string name and type"
+                    f"clean.read.columns list entries must include string name and type, "
+                    f"got name={name!r} with type={type(name).__name__}, "
+                    f"dtype={dtype!r} with type={type(dtype).__name__}"
                 )
             normalized[name] = dtype
         return normalized
     raise ValueError("clean.read.columns must be a mapping or a list of {name, type} mappings")
+
+
+def _validate_nullstr(value: object | None) -> None:
+    """Validate nullstr: must be a string or a list of strings.
+
+    None is allowed (no null marker). Numbers and other types are rejected
+    because they would be stringified incorrectly by DuckDB.
+    """
+    if value is None:
+        return
+    if isinstance(value, str):
+        return
+    if isinstance(value, list):
+        for i, item in enumerate(value):
+            if not isinstance(item, str):
+                raise ValueError(
+                    f"clean.read.nullstr list entries must be strings, "
+                    f"got item {i}: {item!r} with type={type(item).__name__}"
+                )
+        return
+    raise ValueError(
+        f"clean.read.nullstr must be a string or list of strings, "
+        f"got {value!r} with type={type(value).__name__}"
+    )
 
 
 def normalize_read_cfg(read_cfg: dict[str, Any] | None) -> dict[str, Any]:
@@ -104,6 +150,7 @@ def normalize_read_cfg(read_cfg: dict[str, Any] | None) -> dict[str, Any]:
             "Unsupported clean.read options for CSV reader: "
             f"{unknown_top}. Allowed keys: {sorted(ALLOWED_READ_CSV_KEYS)}"
         )
+    _validate_nullstr(cfg.get("nullstr"))
     cfg["columns"] = normalize_columns_spec(cfg.get("columns"))
     return cfg
 

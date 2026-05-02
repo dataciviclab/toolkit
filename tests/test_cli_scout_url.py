@@ -7,7 +7,7 @@ from typing import Any
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
-from toolkit.cli.cmd_scout_url import (
+from toolkit.cli.cmd_url_inspect import (
     _detect_ckan,
     _extract_ckan_dataset_id,
     _generate_yaml_scaffold,
@@ -167,7 +167,7 @@ def test_probe_url_uses_streaming_and_reads_body_only_for_html(monkeypatch) -> N
         calls.append(kwargs)
         return responses[len(calls) - 1]
 
-    monkeypatch.setattr("toolkit.cli.cmd_scout_url.requests.get", _fake_get)
+    monkeypatch.setattr("toolkit.cli.cmd_url_inspect.requests.get", _fake_get)
 
     opaque = probe_url("https://example.org/opaque", timeout=7)
     html = probe_url("https://example.org/html", timeout=7)
@@ -202,7 +202,7 @@ def test_probe_url_passes_custom_user_agent(monkeypatch) -> None:
         calls.append(kwargs)
         return _FakeResponse()
 
-    monkeypatch.setattr("toolkit.cli.cmd_scout_url.requests.get", _fake_get)
+    monkeypatch.setattr("toolkit.cli.cmd_url_inspect.requests.get", _fake_get)
 
     custom_ua = "Mozilla/5.0 (DataCivicLab Custom)"
     probe_url("https://example.org/test", user_agent=custom_ua)

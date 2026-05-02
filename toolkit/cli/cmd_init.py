@@ -13,7 +13,6 @@ from __future__ import annotations
 import typer
 
 from toolkit.cli.cmd_run import run_init as _run_init
-from toolkit.cli.common import iter_selected_years
 
 # Re-export run_init as the init command implementation
 # Both `toolkit init` and `toolkit run init` call the same function.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import requests
@@ -72,7 +73,7 @@ def url(
                 f.write(yaml_scaffold)
                 scaffold_path = f.name
             typer.echo(f"[inspect] Scaffold generato: {scaffold_path}")
-            typer.echo(f"[inspect] Avvio bootstrap...")
+            typer.echo("[inspect] Avvio bootstrap...")
             typer.echo("")
             from toolkit.cli.cmd_run import run_init
 
@@ -83,7 +84,7 @@ def url(
                 strict_config=False,
             )
             typer.echo("")
-            typer.echo(f"[inspect] Bootstrap completato. Prossimi passi:")
+            typer.echo("[inspect] Bootstrap completato. Prossimi passi:")
             typer.echo(f"  toolkit run clean --config {scaffold_path}")
             typer.echo(f"  toolkit run mart --config {scaffold_path}")
         else:

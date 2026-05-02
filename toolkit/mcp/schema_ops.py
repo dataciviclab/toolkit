@@ -15,14 +15,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-import duckdb
-
 from toolkit.mcp._schema_utils import (
     _exists,
     _read_parquet_row_count,
-    _read_validation_content,
     _schema_from_parquet,
-    _sql_literal,
     _validation_summary_for_layer,
 )
 from toolkit.mcp.cli_adapter import _toolkit_json, inspect_paths

@@ -16,12 +16,10 @@ from toolkit.clean._column_rules import (
     _check_ranges,
 )
 from toolkit.clean._helpers import _input_files_from_clean_metadata, _profile_raw_input
-from toolkit.clean.duckdb_read import read_raw_to_relation
 from toolkit.core.config_models import CleanValidationSpec, RangeRuleConfig, TransitionConfig
-from toolkit.core.layer_profile import compare_layer_profiles, profile_relation
+from toolkit.core.layer_profile import compare_layer_profiles
 from toolkit.core.metadata import write_layer_manifest
 from toolkit.core.paths import layer_year_dir, to_root_relative
-from toolkit.core.sql_utils import q_ident
 from toolkit.core.validation import (
     ValidationResult,
     build_validation_summary,

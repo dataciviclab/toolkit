@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -24,6 +25,7 @@ def url(
     url: str = typer.Argument(..., help="URL da ispezionare"),
     scaffold: bool = typer.Option(False, "--scaffold", "-s", help="Genera scaffold YAML (blocchi dataset + raw)"),
     run: bool = typer.Option(False, "--run", "-r", help="Bootstrap dal scaffold generato (implies --scaffold)"),
+    output: str | None = typer.Option(None, "--output", "-o", help="Path dove salvare lo scaffold (richiesto con --run)"),
     timeout: int = typer.Option(_DEFAULT_TIMEOUT, "--timeout", min=1, help="Timeout HTTP in secondi"),
     user_agent: str = typer.Option(_DEFAULT_USER_AGENT, "--user-agent"),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
@@ -34,6 +36,9 @@ def url(
     Con --run (alias -r): dopo il probe, scaffold YAML e avvia bootstrap init.
     Usa --run senza --scaffold per indicizzare URL e fare bootstrap in un solo comando.
     """
+    if run and not output:
+        typer.echo("error: --output/-o is required when using --run", err=True)
+        raise typer.Exit(code=1)
     try:
         result = probe_url(url, timeout=timeout, user_agent=user_agent, capture_html=scaffold or run)
     except requests.RequestException as exc:
@@ -67,12 +72,10 @@ def url(
         yaml_scaffold = _generate_yaml_scaffold(result, ckan_resources, candidate_file_links)
 
         if run:
-            import tempfile
-
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False, encoding="utf-8") as f:
-                f.write(yaml_scaffold)
-                scaffold_path = f.name
-            typer.echo(f"[inspect] Scaffold generato: {scaffold_path}")
+            scaffold_path = Path(output).resolve()
+            scaffold_path.parent.mkdir(parents=True, exist_ok=True)
+            scaffold_path.write_text(yaml_scaffold, encoding="utf-8")
+            typer.echo(f"[inspect] Scaffold salvato: {scaffold_path}")
             typer.echo("[inspect] Avvio bootstrap...")
             typer.echo("")
             from toolkit.cli.cmd_run import run_init

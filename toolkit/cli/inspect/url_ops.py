@@ -35,7 +35,7 @@ def url(
     Usa --run senza --scaffold per indicizzare URL e fare bootstrap in un solo comando.
     """
     try:
-        result = probe_url(url, timeout=timeout, user_agent=user_agent, capture_html=scaffold)
+        result = probe_url(url, timeout=timeout, user_agent=user_agent, capture_html=scaffold or run)
     except requests.RequestException as exc:
         typer.echo(f"error: {type(exc).__name__}: {exc}")
         raise typer.Exit(code=1) from exc

@@ -46,18 +46,13 @@ class _AnchorParser(HTMLParser):
         super().__init__()
         self.hrefs: list[str] = []
 
-    # Implementation — called by public handle_starttag alias
-    def _handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag.lower() != "a":
             return
         for key, value in attrs:
             if key.lower() == "href" and value:
                 self.hrefs.append(value)
                 return
-
-    # Public alias for HTMLParser.feed() which calls handle_starttag by name
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        return self._handle_starttag(tag, attrs)
 
 
 def _is_html(content_type: str | None) -> bool:

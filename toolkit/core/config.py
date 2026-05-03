@@ -6,7 +6,6 @@ from typing import Any
 
 from toolkit.core.config_models import (
     TimeCoverage,
-    ToolkitConfigModel,
     ensure_str_list as _ensure_str_list,
     load_config_model,
     parse_bool as _parse_bool,
@@ -47,41 +46,9 @@ def ensure_str_list(value: Any, field_name: str) -> list[str]:
     return _ensure_str_list(value, field_name)
 
 
-def _compat_clean(model: ToolkitConfigModel) -> dict[str, Any]:
-    return model.clean.model_dump(
-        mode="python",
-        by_alias=True,
-        exclude_none=True,
-        exclude_unset=True,
-    )
-
-
-def _compat_mart(model: ToolkitConfigModel) -> dict[str, Any]:
-    return model.mart.model_dump(
-        mode="python",
-        by_alias=True,
-        exclude_none=True,
-        exclude_unset=True,
-    )
-
-
-def _compat_cross_year(model: ToolkitConfigModel) -> dict[str, Any]:
-    return model.cross_year.model_dump(
-        mode="python",
-        exclude_none=True,
-        exclude_unset=True,
-    )
-
-
-def _compat_support(model: ToolkitConfigModel) -> list[dict[str, Any]]:
-    return [
-        item.model_dump(
-            mode="python",
-            exclude_none=True,
-            exclude_unset=True,
-        )
-        for item in model.support
-    ]
+def _model_dump(obj: Any) -> dict[str, Any]:
+    """Standardized model_dump: aliases resolved, clean output."""
+    return obj.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True)
 
 
 def load_config(
@@ -99,12 +66,12 @@ def load_config(
         dataset=model.dataset.name,
         years=list(model.dataset.years),
         time_coverage=model.dataset.time_coverage,
-        raw=model.raw.model_dump(mode="python", exclude_none=True, exclude_unset=True),
-        clean=_compat_clean(model),
-        mart=_compat_mart(model),
-        support=_compat_support(model),
-        cross_year=_compat_cross_year(model),
-        config=model.config.model_dump(mode="python"),
-        validation=model.validation.model_dump(mode="python"),
-        output=model.output.model_dump(mode="python"),
+        raw=_model_dump(model.raw),
+        clean=_model_dump(model.clean),
+        mart=_model_dump(model.mart),
+        support=[_model_dump(item) for item in model.support],
+        cross_year=_model_dump(model.cross_year),
+        config=_model_dump(model.config),
+        validation=_model_dump(model.validation),
+        output=_model_dump(model.output),
     )

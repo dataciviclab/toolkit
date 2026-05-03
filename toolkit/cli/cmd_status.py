@@ -212,30 +212,34 @@ def _print_layer_profiles(root: Path, dataset: str, year: int) -> None:
     typer.echo("layer_profiles:")
 
     clean_output = profiles.get("clean_output")
-    if clean_output is not None:
+    if isinstance(clean_output, dict):
         typer.echo(f"  clean_output: {format_profile_preview(clean_output)}")
 
     mart_clean_input = profiles.get("mart_clean_input")
-    if mart_clean_input is not None:
+    if isinstance(mart_clean_input, dict):
         typer.echo(f"  mart_clean_input: {format_profile_preview(mart_clean_input)}")
 
-    mart_tables = profiles.get("mart_tables") or []
+    mart_tables_raw = profiles.get("mart_tables")
+    mart_tables = mart_tables_raw if isinstance(mart_tables_raw, list) else []
     if mart_tables:
         typer.echo("  mart_tables:")
         for table in mart_tables:
-            typer.echo(f"    {table['name']}: {format_profile_preview(table)}")
+            if isinstance(table, dict):
+                typer.echo(f"    {table.get('name', '?')}: {format_profile_preview(table)}")
 
-    transitions = profiles.get("clean_to_mart") or []
+    transitions_raw = profiles.get("clean_to_mart")
+    transitions = transitions_raw if isinstance(transitions_raw, list) else []
     if transitions:
         typer.echo("  clean_to_mart:")
         for item in transitions:
-            typer.echo(
-                f"    {item['target_name']}: "
-                f"rows {item['source_row_count']} -> {item['target_row_count']} "
-                f"added={len(item['added_columns'])} "
-                f"removed={len(item['removed_columns'])} "
-                f"type_changes={item['type_change_count']}"
-            )
+            if isinstance(item, dict):
+                typer.echo(
+                    f"    {item.get('target_name', '?')}: "
+                    f"rows {item.get('source_row_count', '?')} -> {item.get('target_row_count', '?')} "
+                    f"added={len(item.get('added_columns', []))} "
+                    f"removed={len(item.get('removed_columns', []))} "
+                    f"type_changes={item.get('type_change_count', '?')}"
+                )
 
 
 def status(

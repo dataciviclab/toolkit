@@ -4,13 +4,15 @@ import pytest
 
 
 CORE_TESTS = {
-    "test_cli_all_commands.py",
+    "test_cli_blocker_hints.py",
     "test_cli_inspect_paths.py",
     "test_cli_path_contract.py",
     "test_cli_resume.py",
     "test_cli_scout_url.py",
     "test_cli_status.py",
-    "test_config.py",
+    "test_config_helpers.py",
+    "test_config_legacy.py",
+    "test_config_loading.py",
     "test_metadata_hash.py",
     "test_paths.py",
     "test_project_example_e2e.py",
@@ -23,7 +25,6 @@ CORE_TESTS = {
 }
 
 ADVANCED_TESTS = {
-    "test_artifacts_policy.py",
     "test_clean_csv_columns.py",
     "test_clean_duckdb_read.py",
     "test_clean_input_selection.py",

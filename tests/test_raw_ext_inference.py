@@ -1,7 +1,8 @@
 from pathlib import Path
 
 from toolkit.core.manifest import read_raw_manifest
-from toolkit.raw.run import _infer_ext, run_raw
+from toolkit.raw._fetch_utils import _infer_ext
+from toolkit.raw.run import run_raw
 
 
 class _NoopLogger:

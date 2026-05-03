@@ -227,7 +227,7 @@ def _sample_profile_rows(
 
     missingness_top: list[dict[str, Any]] = []
     for c in columns_raw[:200]:
-        n, nmiss = con.execute(
+        row = con.execute(
             f"""
             SELECT
               COUNT(*) AS n,
@@ -235,6 +235,9 @@ def _sample_profile_rows(
             FROM v
             """
         ).fetchone()
+        if row is None:
+            continue
+        n, nmiss = row
         if n:
             missingness_top.append({"column": c, "missing_pct": float(nmiss) / float(n) * 100.0})
 

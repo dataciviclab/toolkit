@@ -1,168 +1,27 @@
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
 
 from toolkit.core.artifacts import resolve_artifact_policy, should_write
-from toolkit.core.manifest import write_raw_manifest
 from toolkit.core.config import parse_bool
+from toolkit.core.manifest import write_raw_manifest
 from toolkit.core.metadata import config_hash_for_year, sha256_bytes, write_metadata
 from toolkit.core.paths import layer_year_dir, to_root_relative
-from toolkit.core.registry import register_builtin_plugins, registry
+from toolkit.core.registry import register_builtin_plugins
 from toolkit.core.validation import write_validation_json
 from toolkit.profile.raw import build_profile_hints, profile_raw, write_raw_profile, write_suggested_read_yml
 from toolkit.scaffold.clean import scaffold_clean_if_missing
+from toolkit.raw._fetch_utils import (
+    _choose_primary_output,
+    _fetch_payload,
+    _format_args,
+    _generate_run_id,
+    _infer_ext,
+    _resolve_output_path,
+)
 from toolkit.raw.extractors import get_extractor
 from toolkit.raw.validate import validate_raw_output
-
-
-def _format_args(args: dict, year: int) -> dict:
-    formatted = {}
-    for k, v in (args or {}).items():
-        formatted[k] = v.format(year=year) if isinstance(v, str) and "{year}" in v else v
-    # Handle url_suffix_by_year: append per-year suffix to the formatted URL
-    if "url" in formatted and "url_suffix_by_year" in (args or {}):
-        suffix_map = args["url_suffix_by_year"]
-        if isinstance(suffix_map, dict):
-            suffix = suffix_map.get(year, "")
-            if isinstance(suffix, str):
-                formatted["url"] = formatted["url"] + suffix
-    # Remove url_suffix_by_year from output — internal config, not for consumers
-    formatted.pop("url_suffix_by_year", None)
-    return formatted
-
-
-def _infer_ext(stype: str, formatted_args: dict, origin: str | None = None) -> str:
-    if stype in {"sdmx", "sparql"}:
-        return ".csv"
-    if stype in {"http_file", "ckan"}:
-        url = origin or formatted_args.get("url", "")
-        parsed = urlparse(url)
-        path = parsed.path or ""
-        low_path = path.lower()
-
-        # Some providers expose files behind php endpoints.
-        # Prefer the meaningful extension and never keep ".php".
-        if low_path.endswith(".csv.php"):
-            return ".csv"
-        if low_path.endswith(".zip.php"):
-            return ".zip"
-
-        suffix = Path(path).suffix.lower()
-        if suffix and suffix != ".php":
-            return suffix
-
-        # fallback heuristics on full URL/query
-        low = url.lower()
-        if ".csv" in low or "csv" in low:
-            return ".csv"
-        if ".zip" in low or "zip" in low:
-            return ".zip"
-
-        return ".bin"
-
-    if stype == "local_file":
-        p = Path(formatted_args["path"])
-        low_name = p.name.lower()
-        if low_name.endswith(".csv.php"):
-            return ".csv"
-        if low_name.endswith(".zip.php"):
-            return ".zip"
-
-        suffix = p.suffix.lower()
-        if suffix and suffix != ".php":
-            return suffix
-        return ".bin"
-
-    return ".bin"
-
-
-def _fetch_payload(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
-    src = registry.create(stype, **(client or {}))
-    if stype == "ckan":
-        payload, origin = src.fetch(
-            formatted_args["portal_url"],
-            str(formatted_args["resource_id"]) if formatted_args.get("resource_id") is not None else None,
-            str(formatted_args["dataset_id"]) if formatted_args.get("dataset_id") is not None else None,
-            str(formatted_args["resource_name"]) if formatted_args.get("resource_name") is not None else None,
-        )
-    elif stype == "sdmx":
-        payload, origin = src.fetch(
-            str(formatted_args.get("agency") or "IT1"),
-            str(formatted_args["flow"]),
-            str(formatted_args["version"]),
-            formatted_args.get("filters"),
-        )
-    elif stype == "sparql":
-        payload, origin = src.fetch(
-            str(formatted_args["endpoint"]),
-            str(formatted_args["query"]),
-            str(formatted_args.get("accept_format", "csv")),
-        )
-    elif stype == "http_file":
-        payload = src.fetch(formatted_args["url"])
-        origin = formatted_args["url"]
-    elif stype == "local_file":
-        payload = src.fetch(formatted_args["path"])
-        origin = formatted_args["path"]
-    else:
-        first_val = next(iter(formatted_args.values()))
-        payload = src.fetch(first_val)
-        origin = str(first_val)
-    return payload, origin
-
-
-def _next_available_path(out_dir: Path, fname: str) -> Path:
-    candidate = out_dir / fname
-    if not candidate.exists():
-        return candidate
-
-    stem = Path(fname).stem
-    suffix = Path(fname).suffix
-    i = 1
-    while True:
-        candidate = out_dir / f"{stem}_{i}{suffix}"
-        if not candidate.exists():
-            return candidate
-        i += 1
-
-
-def _generate_run_id() -> str:
-    return f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:8]}"
-
-
-def _resolve_output_path(out_dir: Path, fname: str, policy: str) -> Path:
-    candidate = out_dir / fname
-    if policy == "overwrite":
-        return candidate
-    if policy == "versioned":
-        return _next_available_path(out_dir, fname)
-    raise ValueError("raw.output_policy must be one of: overwrite, versioned")
-
-
-def _choose_primary_output(source_outputs: list[dict], logger) -> str:
-    available = [entry for entry in source_outputs if entry.get("output_file")]
-    if not available:
-        raise RuntimeError("RAW manifest cannot determine primary output file because no outputs were written.")
-
-    primary_marked = [entry for entry in available if entry.get("primary")]
-    if primary_marked:
-        if len(primary_marked) > 1:
-            logger.warning(
-                "RAW manifest found multiple sources with primary: true; using the first one."
-            )
-        return str(primary_marked[0]["output_file"])
-
-    if len(available) == 1:
-        return str(available[0]["output_file"])
-
-    logger.warning(
-        "RAW manifest primary_output_file defaulting to the first source. "
-        "Set raw.sources[].primary: true to choose explicitly."
-    )
-    return str(available[0]["output_file"])
 
 
 def run_raw(
@@ -308,7 +167,7 @@ def run_raw(
                     raw_profile.__dict__,
                     dataset,
                     year,
-                    base_dir,
+                    base_dir or Path("."),
                     clean_cfg,
                     logger,
                 )

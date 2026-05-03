@@ -25,19 +25,19 @@ def from_root_relative(rel: str, root: Path) -> Path:
     return Path(str(root_pure / rel_pure))
 
 
-def resolve_root(root: str | os.PathLike[str]) -> Path:
-    return Path(root).expanduser().resolve()
+def resolve_root(root: str | os.PathLike[str] | None) -> Path:
+    return Path(root or ".").expanduser().resolve()
 
 
-def dataset_dir(root: str | os.PathLike[str], layer: str, dataset: str) -> Path:
+def dataset_dir(root: str | os.PathLike[str] | None, layer: str, dataset: str) -> Path:
     return resolve_root(root) / "data" / layer / dataset
 
 
-def layer_year_dir(root: str | os.PathLike[str], layer: str, dataset: str, year: int | str) -> Path:
+def layer_year_dir(root: str | os.PathLike[str] | None, layer: str, dataset: str, year: int | str) -> Path:
     return dataset_dir(root, layer, dataset) / str(year)
 
 
-def layer_dataset_dir(root: str | os.PathLike[str], layer: str, dataset: str) -> Path:
+def layer_dataset_dir(root: str | os.PathLike[str] | None, layer: str, dataset: str) -> Path:
     return dataset_dir(root, layer, dataset)
 
 

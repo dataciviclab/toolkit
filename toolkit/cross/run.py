@@ -163,7 +163,7 @@ def run_cross_year(
         "tables": executed,
     }
     if policy == ARTIFACT_POLICY_DEBUG:
-        metadata_payload["debug"] = {
+        metadata_payload["debug"] = {  # type: ignore[assignment]
             "output_root_absolute": str(root_dir.resolve()),
             "tables": debug_tables,
         }

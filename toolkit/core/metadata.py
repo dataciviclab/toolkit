@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, is_dataclass
+from typing import cast
 from datetime import datetime, timezone
 import hashlib
 from pathlib import Path
@@ -13,7 +14,7 @@ from toolkit.version import __version__
 
 def _jsonable(x: Any) -> Any:
     if is_dataclass(x):
-        return asdict(x)
+        return asdict(cast(Any, x))
     if isinstance(x, Path):
         return str(x)
     return x

@@ -107,8 +107,9 @@ def _columns_spec(profile: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
             return select_exprs, columns_spec
         return ["*"], {}
 
-    select_exprs: list[str] = []
-    columns_spec: dict[str, str] = {}
+    # Reaching here means mapping was non-empty; define fresh.
+    select_exprs: list[str] = []  # type: ignore[no-redef]
+    columns_spec: dict[str, str] = {}  # type: ignore[no-redef]
 
     for raw_col, spec in mapping.items():
         raw_type = spec.get("type", "str")

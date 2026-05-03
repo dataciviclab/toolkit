@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from toolkit.clean.duckdb_read import SUPPORTED_INPUT_EXTS, resolve_clean_read_cfg
+from toolkit.clean.duckdb_read import SUPPORTED_INPUT_EXTS
+from toolkit.clean.read_config import resolve_clean_read_cfg
 from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata

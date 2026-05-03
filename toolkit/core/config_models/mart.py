@@ -86,7 +86,7 @@ class MartConfig(BaseModel):
         return ensure_str_list(value, "mart.required_tables")
 
     @property
-    def validate(self) -> MartValidateConfig:
+    def validate(self) -> MartValidateConfig:  # type: ignore[override]
         return self.validate_config
 
 
@@ -105,5 +105,5 @@ class MartValidationSpec(BaseModel):
         return ensure_str_list(value, "mart.required_tables")
 
     @property
-    def validate(self) -> MartValidateConfig:
+    def validate(self) -> MartValidateConfig:  # type: ignore[override]
         return self.validate_config

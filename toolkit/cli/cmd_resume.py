@@ -20,9 +20,12 @@ _LAYER_ORDER = ("raw", "clean", "mart")
 
 
 def _resume_layer(record: dict[str, object]) -> str | None:
-    layers = record.get("layers") or {}
+    layers_raw = record.get("layers")
+    layers = layers_raw if isinstance(layers_raw, dict) else {}
     for layer in _LAYER_ORDER:
-        status = (layers.get(layer) or {}).get("status")
+        layer_info = layers.get(layer)
+        layer_dict = layer_info if isinstance(layer_info, dict) else {}
+        status = layer_dict.get("status")
         if status != "SUCCESS":
             return layer
     return None
@@ -73,6 +76,7 @@ def _resolve_resume_start(
     requested_from_layer: str | None = None,
 ) -> tuple[str | None, list[str]]:
     notes: list[str] = []
+    start_layer: str | None
 
     if requested_from_layer is not None:
         start_layer = requested_from_layer

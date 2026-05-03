@@ -8,6 +8,7 @@ Provides:
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -19,10 +20,10 @@ TOOLKIT_ROOT = Path(__file__).resolve().parents[2]
 WORKSPACE_ROOT = Path(
     os.environ.get("DATACIVICLAB_WORKSPACE", str(TOOLKIT_ROOT.parent))
 ).expanduser()
-TOOLKIT_PYTHON = Path(os.environ.get("DATACIVICLAB_TOOLKIT_PYTHON", os.sys.executable))
+TOOLKIT_PYTHON = Path(os.environ.get("DATACIVICLAB_TOOLKIT_PYTHON", sys.executable))
 
 
-def _safe_path(config_path: str) -> Path:
+def _safe_path(config_path: str | Path) -> Path:
     path = Path(config_path).expanduser()
     if not path.is_absolute():
         path = (WORKSPACE_ROOT / path).resolve()
@@ -31,8 +32,8 @@ def _safe_path(config_path: str) -> Path:
     return path
 
 
-def _load_cfg(config_path: str) -> tuple[Path, Any]:
-    config = _safe_path(config_path)
+def _load_cfg(config_path: str | Path) -> tuple[Path, Any]:
+    config = _safe_path(str(config_path))
     try:
         cfg = load_config(str(config), strict_config=False)
     except Exception as exc:

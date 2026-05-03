@@ -16,9 +16,10 @@ def test_resolve_root_canonicalizes_relative_path(tmp_path, monkeypatch):
     assert root == (tmp_path / "out").resolve()
 
 
-def test_resolve_root_requires_explicit_value():
-    with pytest.raises(TypeError):
-        resolve_root(None)  # type: ignore[arg-type]
+def test_resolve_root_accepts_none():
+    """None resolves to the current working directory."""
+    root = resolve_root(None)
+    assert root.is_absolute()
 
 
 def test_layer_year_dir_with_explicit_root(tmp_path):

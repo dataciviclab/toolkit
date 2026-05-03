@@ -75,7 +75,7 @@ class RunContext:
             layer: {"status": "PENDING", "started_at": None, "finished_at": None, "metrics": _empty_layer_metrics()}
             for layer in _LAYER_NAMES
         }
-        self.validations = {layer: {} for layer in _LAYER_NAMES}
+        self.validations: dict[str, dict[str, Any]] = {layer: {} for layer in _LAYER_NAMES}
         self.source_urls: list[str] = []
         self.error: str | None = None
         self._runs_dir = get_run_dir(self.root, self.dataset, self.year)
@@ -91,7 +91,10 @@ class RunContext:
         for layer, info in self.layers.items():
             layers_out[layer] = {
                 **info,
-                "duration_seconds": _duration_seconds(info.get("started_at"), info.get("finished_at")),
+                "duration_seconds": _duration_seconds(
+                    info.get("started_at"),  # type: ignore[arg-type]
+                    info.get("finished_at"),  # type: ignore[arg-type]
+                ),
             }
         return {
             "dataset": self.dataset,

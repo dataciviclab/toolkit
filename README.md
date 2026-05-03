@@ -67,6 +67,21 @@ mart:
 
 Per la specifica completa: [config-schema.md](docs/config-schema.md).
 
+## 3.5 Struttura
+
+```text
+toolkit/
+  .github/workflows/      # CI (ci.yml)
+  toolkit/                # sorgente del package Python
+  tests/                  # pytest (unità e integrazione)
+  docs/                   # specifica config, convenzioni, workflow avanzati
+  scripts/                # script di supporto (smoke install, build)
+  examples/               # esempi d'uso
+  project-example/        # dataset.yml e SQL di esempio
+  smoke/                  # smoke test assets (_smoke_out/ non versionato)
+  generated/              # output generati (non versionati, cache locale)
+```
+
 ## 4. CLI — quale comando usare
 
 - **`run all`** — prima esecuzione di un dataset, o dopo aver cambiato fonte, anni o config
@@ -113,7 +128,8 @@ Contratti correlati:
 
 ## 7. Sviluppo e QA
 
-- **Test**: `pytest`
+- **CI**: `ci.yml` — test su Python 3.10–3.12, ruff check, coverage ≥70%, build pacchetto
+- **Test locale**: `pytest`
 - **Lint**: `ruff check .`
 - **Output runtime**: vivono in `out/` o `_smoke_out/` — non versionare mai dati
 

@@ -42,20 +42,20 @@ Matrice minima:
 | cambio `clean.sql` o `clean.read` | `toolkit run clean --config dataset.yml` poi `toolkit run mart --config dataset.yml` |
 | cambio solo `mart.sql` | `toolkit run mart --config dataset.yml` |
 | cambio solo `cross_year` | `toolkit run cross_year --config dataset.yml` |
-| run interrotto a meta' con run record/artifacts coerenti | `toolkit resume ... --config dataset.yml` |
+| run interrotto a metà con run record/artifacts coerenti | `toolkit resume ... --config dataset.yml` |
 | cambio solo notebook/docs | nessun rerun automatico |
 
 Il toolkit non impone di cancellare `raw/`, `clean/`, `mart/` o `cross/` tra un
 run e l'altro. Negli ambienti di lavoro questi output possono restare come
-cache locale finche' il loro perimetro e' ancora coerente con la config e con
+cache locale finché il loro perimetro è ancora coerente con la config e con
 il layer che stai rieseguendo.
 
 In pratica:
 
 - non trattare `run all` come default per ogni modifica minima
 - non cancellare gli output locali "per pulizia" se non hai cambiato il loro perimetro
-- usa i rerun parziali quando il punto di ingresso corretto e' chiaro
-- usa `resume` per recovery, non come scorciatoia generica a meta' sviluppo
+- usa i rerun parziali quando il punto di ingresso corretto è chiaro
+- usa `resume` per recovery, non come scorciatoia generica a metà sviluppo
 
 ## Step singoli
 
@@ -71,7 +71,7 @@ Questi comandi non sono il happy path raccomandato per i nuovi repo dataset, ma 
 
 ## Resume
 
-`resume` serve quando esiste gia` un run record e vuoi ripartire dal primo layer non `SUCCESS` oppure forzare una ripartenza da `raw|clean|mart`.
+`resume` serve quando esiste già un run record e vuoi ripartire dal primo layer non `SUCCESS` oppure forzare una ripartenza da `raw|clean|mart`.
 
 Esempi:
 
@@ -84,7 +84,7 @@ Il comando verifica anche gli artefatti minimi del layer precedente prima di rip
 
 ## Profile RAW
 
-`toolkit profile raw --config dataset.yml` genera hint utili per `clean.read` quando il RAW e` sporco, ambiguo o poco noto.
+`toolkit profile raw --config dataset.yml` genera hint utili per `clean.read` quando il RAW è sporco, ambiguo o poco noto.
 
 Artefatti principali:
 
@@ -93,10 +93,10 @@ Artefatti principali:
 
 Nota pratica:
 
-- `run raw` scrive gia` un `suggested_read.yml` leggero e conservativo quando il file primario e` profilabile
-- `profile raw` resta il comando da usare quando vuoi profiling piu` ricco, report diagnostici e `suggested_mapping.yml`
+- `run raw` scrive già un `suggested_read.yml` leggero e conservativo quando il file primario e` profilabile
+- `profile raw` resta il comando da usare quando vuoi profiling più ricco, report diagnostici e `suggested_mapping.yml`
 
-`profile.json` resta un alias legacy opzionale e non e` il nome canonico da promuovere nei nuovi repo.
+`profile.json` resta un alias legacy opzionale e non è il nome canonico da promuovere nei nuovi repo.
 
 ## CLEAN read e input selection
 
@@ -132,7 +132,7 @@ Regola pratica:
 - `minimal`: riduce artefatti opzionali
 - `debug`: conserva anche SQL renderizzate e dettagli di debug
 
-`legacy_aliases` resta supportato per compatibilita`, ma non va promosso nei nuovi repo dataset.
+`legacy_aliases` resta supportato per compatibilità, ma non va promosso nei nuovi repo dataset.
 
 
 ## ANAC Delta Ingestion (Spike aperto)

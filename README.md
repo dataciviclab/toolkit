@@ -1,78 +1,132 @@
 # DataCivicLab Toolkit
 
-Motore tecnico per trasformazioni riproducibili su dati pubblici tramite DuckDB. Gestisce i layer `raw`, `clean`, `mart` e `validation`.
+Motore tecnico per trasformazioni riproducibili su dati pubblici.
+Scarica file da internet (o da sorgenti locali), li normalizza e li aggrega in tabelle pronte per l'analisi.
 
 ## 1. Core Workflow
 
-1. `toolkit run all --config dataset.yml`: Scarica, pulisce e aggrega.
-2. `toolkit validate all --config dataset.yml`: Esegue gate di qualità (PK, null, custom).
-3. `toolkit status --dataset <name> --year <year> --latest --config dataset.yml`: Mostra l'ultimo run.
+```bash
+# Scarica, pulisce e aggrega
+toolkit run all --config dataset.yml
 
-Se `toolkit` non è nel `PATH`, usa il modulo:
+# Verifica che l'output sia valido
+toolkit validate all --config dataset.yml
+
+# Mostra l'ultimo run completato
+toolkit status --dataset <name> --year <year> --latest --config dataset.yml
+```
+
+Se `toolkit` non è nel `PATH`:
 
 ```bash
 python -m toolkit.cli.app run all --config dataset.yml
 ```
 
-## 2. Installazione Rapida
+## 2. Installazione
 
 Richiede Python 3.10+.
+
 ```bash
 pip install -e .[dev]
-# Smoke test (Windows/Linux)
+
+# Smoke test
 toolkit run all -c project-example/dataset.yml
 toolkit validate all -c project-example/dataset.yml
 toolkit status --dataset project_example --year 2022 --latest --config project-example/dataset.yml
 ```
 
-## 3. Struttura del Contratto (dataset.yml)
+## 3. Come funziona
+
+Il toolkit prende un file di configurazione (`dataset.yml`) e una serie di trasformazioni SQL,
+e produce tre livelli di output:
+
+| Layer | Cosa contiene | Chi lo legge |
+|---|---|---|
+| **RAW** | Il dato grezzo scaricato, senza modifiche | chi vuole verificare la fonte |
+| **CLEAN** | Il dato normalizzato e pulito | chi costruisce analisi |
+| **MART** | Il dato aggregato, pronto per l'analisi | chi legge i risultati |
+
+Il file `dataset.yml` dice al toolkit: dove trovare i dati sorgente,
+come chiamare i file SQL di trasformazione, e dove salvare l'output.
+
+**Esempio minimo di `dataset.yml`:**
+
+```yaml
+dataset:
+  name: mio_dataset
+  years: [2023]
+raw:
+  sources:
+    - type: http_file
+      url: https://example.com/dati.csv
+clean:
+  sql: sql/clean.sql
+mart:
+  sql: sql/mart.sql
+```
+
+Per la specifica completa: [config-schema.md](docs/config-schema.md).
+
+## 4. CLI — quale comando usare
+
+- **`run all`** — prima esecuzione di un dataset, o dopo aver cambiato fonte, anni o config
+- **`run clean` + `run mart`** — dopo aver modificato solo la logica SQL (più veloce di `run all`)
+- **`run mart`** — dopo aver modificato solo le aggregazioni finali
+- **`resume`** — riprende un run interrotto a metà senza rifare i layer già completati
+- **`inspect paths`** — mostra dove sono gli output generati (utile nei notebook)
+- **`inspect schema-diff`** — confronta la struttura del dato grezzo tra anni diversi
+
+```bash
+# Riprende da dove si era interrotto
+toolkit resume --dataset mio_dataset --year 2023 --latest --config dataset.yml
+
+# Trova i path degli output
+toolkit inspect paths --config dataset.yml --year 2023 --json
+
+# Confronta il dato grezzo tra anni
+toolkit inspect schema-diff --config dataset.yml
+```
+
+## 5. Struttura del Contratto (dataset.yml)
 
 Il toolkit risolve `dataset.yml` + `sql/` per produrre output auditabili.
-- **`root`**: Directory di output (fallback su cartella config).
-- **`raw`**: Sorgenti (local_file, http_file, ckan, sdmx, sparql) e strategie di download.
-- **`clean`**: Normalizzazione tramite `sql/clean.sql`.
-- **`mart`**: Tabelle analitiche aggregate via `sql/mart/*.sql`.
-- **`validation`**: Quality check per layer (`fail_on_error: true`).
 
-## 4. CLI Helper Operativi
-
-- `toolkit inspect paths --config dataset.yml --year 2024 --json`: Contratto path per notebook e script.
-- `toolkit inspect schema-diff`: Analisi diagnostica di drift tra anni nel RAW.
-- `toolkit inspect url <url>`: Probe URL pubblico e generazione scaffold YAML.
-- `toolkit inspect probe --source sparql --endpoint <url> --query <query>`: Probe schema e stats di un endpoint SPARQL.
-- `toolkit run all --config dataset.yml --dry-run --strict-config`: Valida config/SQL in modo stretto.
-- `toolkit status --dataset <name> --year <year> --latest --config dataset.yml`: Recupera l'ultimo run.
-- `toolkit batch`: esecuzione batch quando devi orchestrare più config.
-- `toolkit resume`: Riprende un run interrotto senza ricaricare i layer già validi.
+- **`root`**: Directory di output (default: directory del file config)
+- **`raw`**: Sorgenti — `http_file`, `local_file`, `ckan`, `sdmx`, `sparql`
+- **`clean`**: Normalizzazione tramite `sql/clean.sql`
+- **`mart`**: Aggregazione tramite `sql/mart/*.sql`
+- **`validation`**: Gate di qualità — fallisce al primo errore se `fail_on_error: true`
 
 Contratti correlati:
-- notebook e path runtime: [notebook-contract.md](docs/notebook-contract.md)
-- workflow avanzati, `--latest`, `--strict-config`, artifact policy: [advanced-workflows.md](docs/advanced-workflows.md)
-- schema config e legacy support: [config-schema.md](docs/config-schema.md)
+- [notebook-contract.md](docs/notebook-contract.md) — come leggere gli output nei notebook
+- [advanced-workflows.md](docs/advanced-workflows.md) — resume, profile, run parziali
 
-## 5. Riferimenti Tecnici
+## 6. Riferimenti
 
 | Documento | Contenuto |
-| --- | --- |
-| [config-schema.md](docs/config-schema.md) | Specifica completa YAML e legacy support |
-| [conventions.md](docs/conventions.md) | Policy su percorsi, metadata e manifest |
-| [advanced-workflows.md](docs/advanced-workflows.md) | Focus su `resume`, profile e run parziali |
-| [notebook-contract.md](docs/notebook-contract.md) | Come leggere gli output dal codice cliente |
+|---|---|
+| [config-schema.md](docs/config-schema.md) | Specifica completa YAML |
+| [conventions.md](docs/conventions.md) | Convenzioni su path, metadata, manifest |
+| [advanced-workflows.md](docs/advanced-workflows.md) | Resume, profile, run parziali |
+| [notebook-contract.md](docs/notebook-contract.md) | Come leggere gli output |
+| [feature-stability.md](docs/feature-stability.md) | Cosa è stabile, cosa è sperimentale |
 
-## 6. Sviluppo e QA
+## 7. Sviluppo e QA
 
-- **Test**: `pytest` (unit, CLI, E2E su `project-example`).
+- **Test**: `pytest`
 - **Lint**: `ruff check .`
-- **Hygiene**: Gli output in `out/` o `_smoke_out/` sono ignorati da git. Non versionare dati.
+- **Output runtime**: vivono in `out/` o `_smoke_out/` — non versionare mai dati
 
 ---
 
-## 7. Ruolo nell'ecosistema
+## 8. Ruolo nell'ecosistema
 
 ```
 dataset-incubator  →  toolkit  →  GCS (parquet clean/mart)  →  data-explorer
 ```
 
-Il toolkit non gestisce il deployment degli output: li scrive nella directory configurata via `root` o `DCL_ROOT`. La CI di `dataset-incubator` si occupa di caricarli su GCS dopo ogni run validato. Da lì, `data-explorer` li legge direttamente via DuckDB per la visualizzazione pubblica.
+Il toolkit non gestisce il deployment: scrive nella directory configurata via `root` o `DCL_ROOT`.
+La CI di `dataset-incubator` carica gli output su GCS dopo ogni run validato.
+`data-explorer` li legge via DuckDB per la visualizzazione pubblica.
 
 **Boundary**: questa repo è il motore. I contratti dataset reali vivono in `dataset-incubator`.

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from toolkit.raw.run import _format_args
+from toolkit.raw._fetch_utils import _format_args
 
 
 class TestFormatArgs:

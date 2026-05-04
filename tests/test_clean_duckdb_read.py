@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from toolkit.clean import duckdb_read
+from toolkit.clean.read_config import resolve_clean_read_cfg
 
 
 def test_read_raw_to_relation_fallback_invokes_robust_after_strict_failure(monkeypatch, tmp_path: Path):
@@ -356,7 +357,7 @@ def test_resolve_clean_read_cfg_uses_suggested_hints_in_auto_mode(tmp_path: Path
         encoding="utf-8",
     )
 
-    selection_cfg, relation_cfg, params_source = duckdb_read.resolve_clean_read_cfg(
+    selection_cfg, relation_cfg, params_source = resolve_clean_read_cfg(
         raw_dir,
         {"read": {"source": "auto"}},
         logging.getLogger("tests.clean.duckdb_read.auto"),
@@ -381,7 +382,7 @@ def test_resolve_clean_read_cfg_config_overrides_win_over_suggested(tmp_path: Pa
         encoding="utf-8",
     )
 
-    _, relation_cfg, params_source = duckdb_read.resolve_clean_read_cfg(
+    _, relation_cfg, params_source = resolve_clean_read_cfg(
         raw_dir,
         {"read": {"source": "auto", "delim": "|", "decimal": "."}},
         logging.getLogger("tests.clean.duckdb_read.override"),
@@ -404,7 +405,7 @@ def test_resolve_clean_read_cfg_config_only_ignores_suggested(tmp_path: Path):
         encoding="utf-8",
     )
 
-    _, relation_cfg, params_source = duckdb_read.resolve_clean_read_cfg(
+    _, relation_cfg, params_source = resolve_clean_read_cfg(
         raw_dir,
         {"read": {"source": "config_only"}},
         logging.getLogger("tests.clean.duckdb_read.config_only"),
@@ -437,7 +438,7 @@ def test_filter_suggested_read_excludes_robustness_keys(tmp_path: Path):
         encoding="utf-8",
     )
 
-    _, relation_cfg, _ = duckdb_read.resolve_clean_read_cfg(
+    _, relation_cfg, _ = resolve_clean_read_cfg(
         raw_dir,
         {"read": {"source": "auto"}},
         logging.getLogger("tests.clean.duckdb_read.filter"),

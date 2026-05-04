@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
-from toolkit.clean.read_config import resolve_clean_read_cfg as _resolve_clean_read_cfg
 from toolkit.clean.read_csv_normalized import _execute_normalized_csv_read
 from toolkit.clean.read_sql_utils import (
     csv_trim_projection,
@@ -21,10 +20,6 @@ from toolkit.core.csv_read import (
     normalize_read_cfg,
     robust_preset,
 )
-
-# Re-exported for backward compat — consumers import resolve_clean_read_cfg from duckdb_read
-resolve_clean_read_cfg = _resolve_clean_read_cfg
-
 
 SUPPORTED_INPUT_EXTS = {
     ".csv",

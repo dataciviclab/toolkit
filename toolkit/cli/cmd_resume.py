@@ -20,9 +20,12 @@ _LAYER_ORDER = ("raw", "clean", "mart")
 
 
 def _resume_layer(record: dict[str, object]) -> str | None:
-    layers = record.get("layers") or {}
+    layers_raw = record.get("layers")
+    layers = layers_raw if isinstance(layers_raw, dict) else {}
     for layer in _LAYER_ORDER:
-        status = (layers.get(layer) or {}).get("status")
+        layer_info = layers.get(layer)
+        layer_dict = layer_info if isinstance(layer_info, dict) else {}
+        status = layer_dict.get("status")
         if status != "SUCCESS":
             return layer
     return None
@@ -73,6 +76,7 @@ def _resolve_resume_start(
     requested_from_layer: str | None = None,
 ) -> tuple[str | None, list[str]]:
     notes: list[str] = []
+    start_layer: str | None
 
     if requested_from_layer is not None:
         start_layer = requested_from_layer
@@ -106,14 +110,19 @@ def resume(
     year: int = typer.Option(..., "--year", help="Dataset year"),
     run_id: str | None = typer.Option(None, "--run-id", help="Specific run id"),
     latest: bool = typer.Option(False, "--latest", help="Resume latest run"),
-    compat: bool = typer.Option(False, "--compat", help="Allow resume from non-portable legacy run records"),
+    compat: bool = typer.Option(False, "--compat", help="Deprecated: non ha più effetto"),
     from_layer: str | None = typer.Option(None, "--from-layer", help="Force restart from raw | clean | mart"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
     """
     Riprende un run dal primo layer non SUCCESS.
+
+    Il flag --compat è deprecato e non ha più effetto: i record non portabili
+    non bloccano più il resume.
     """
+    if compat:
+        typer.echo("warning: --compat è deprecato e non serve più", err=True)
     if run_id and latest:
         raise typer.BadParameter("Use either --run-id or --latest, not both")
     if from_layer is not None and from_layer not in _LAYER_ORDER:
@@ -131,17 +140,6 @@ def resume(
         record = read_run_record(run_dir, run_id) if run_id else latest_run(run_dir)
     except FileNotFoundError as exc:
         raise typer.BadParameter(str(exc)) from exc
-
-    portability = record.get("_portability") or {}
-    if not portability.get("portable", True):
-        warning = (
-            "Run record contains absolute paths outside the current root and is non-portable. "
-            "Use --compat to resume anyway."
-        )
-        if not compat:
-            typer.echo(warning, err=True)
-            raise typer.Exit(code=2)
-        typer.echo(f"warning: {warning}")
 
     start_from_layer, notes = _resolve_resume_start(
         cfg,

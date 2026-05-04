@@ -6,6 +6,7 @@ from typing import Any
 import duckdb
 
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
+from toolkit.core.config import ensure_dict
 from toolkit.core.metadata import file_record, sha256_bytes, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_dataset_dir, layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
 from toolkit.core.template import render_template
@@ -74,6 +75,8 @@ def run_cross_year(
     base_dir: Path | None = None,
     output_cfg: dict[str, Any] | None = None,
 ) -> None:
+    cross_year_cfg = ensure_dict(cross_year_cfg)
+    output_cfg = ensure_dict(output_cfg)
     policy = resolve_artifact_policy(output_cfg)
     root_dir = resolve_root(root)
     cross_dir = layer_dataset_dir(root, "cross", dataset)
@@ -163,7 +166,7 @@ def run_cross_year(
         "tables": executed,
     }
     if policy == ARTIFACT_POLICY_DEBUG:
-        metadata_payload["debug"] = {
+        metadata_payload["debug"] = {  # type: ignore[assignment]
             "output_root_absolute": str(root_dir.resolve()),
             "tables": debug_tables,
         }

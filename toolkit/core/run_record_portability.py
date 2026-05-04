@@ -9,8 +9,8 @@ Handles:
 
 from __future__ import annotations
 
-import json
 import re
+import json
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 from typing import Any
 
@@ -45,7 +45,7 @@ def _migrate_path_value(value: str, root: Path) -> tuple[str, bool]:
         return value, False
 
     try:
-        relative = to_root_relative(_to_pure_path(value), _to_pure_path(str(root)))
+        relative = to_root_relative(Path(_to_pure_path(value)), Path(_to_pure_path(str(root))))
         return relative, True
     except Exception:
         return value, False

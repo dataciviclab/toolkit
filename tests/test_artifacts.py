@@ -47,11 +47,11 @@ class TestResolveArtifactPolicy:
 
 
 class TestLegacyAliasesEnabled:
-    def test_none_returns_true(self) -> None:
-        assert legacy_aliases_enabled(None) is True
+    def test_none_returns_false(self) -> None:
+        assert legacy_aliases_enabled(None) is False
 
-    def test_empty_dict_returns_true(self) -> None:
-        assert legacy_aliases_enabled({}) is True
+    def test_empty_dict_returns_false(self) -> None:
+        assert legacy_aliases_enabled({}) is False
 
     def test_explicit_true(self) -> None:
         assert legacy_aliases_enabled({"legacy_aliases": True}) is True

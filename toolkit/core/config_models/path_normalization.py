@@ -87,9 +87,9 @@ def _set_nested_value(container: Any, tokens: tuple[str, ...], value: Any) -> An
 
     if isinstance(container, list):
         index = int(head)
-        updated = list(container)
-        updated[index] = _set_nested_value(updated[index], tuple(tail), value)
-        return updated
+        updated_list: list[Any] = list(container)
+        updated_list[index] = _set_nested_value(updated_list[index], tuple(tail), value)
+        return updated_list
 
     raise TypeError(f"Cannot set nested value at {tokens!r} on {type(container).__name__}")
 

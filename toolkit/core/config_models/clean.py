@@ -100,7 +100,7 @@ class CleanConfig(BaseModel):
         return ensure_str_list(value, "clean.required_columns")
 
     @property
-    def validate(self) -> CleanValidateConfig:
+    def validate(self) -> CleanValidateConfig:  # type: ignore[override]
         return self.validate_config
 
 
@@ -119,5 +119,5 @@ class CleanValidationSpec(BaseModel):
         return ensure_str_list(value, "clean.required_columns")
 
     @property
-    def validate(self) -> CleanValidateConfig:
+    def validate(self) -> CleanValidateConfig:  # type: ignore[override]
         return self.validate_config

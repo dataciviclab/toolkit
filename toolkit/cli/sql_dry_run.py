@@ -6,6 +6,7 @@ from typing import Any
 import duckdb
 
 from toolkit.clean.run import _load_clean_sql
+from toolkit.core.config import ensure_dict
 from toolkit.core.paths import resolve_sql_path as _resolve_mart_sql_path
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
 from toolkit.core.template import build_runtime_template_ctx, render_template
@@ -77,15 +78,17 @@ def _build_clean_preview(
     year: int,
     con: duckdb.DuckDBPyConnection,
 ) -> None:
+    clean_cfg_ = ensure_dict(cfg.clean)
     clean_sql_path, clean_sql, _ = _load_clean_sql(
-        cfg.clean,
+        clean_cfg_,
         dataset=cfg.dataset,
         year=year,
         root=cfg.root,
         base_dir=cfg.base_dir,
     )
+
     clean_sql = _normalize_sql(clean_sql)
-    columns = _placeholder_columns(cfg.clean, clean_sql)
+    columns = _placeholder_columns(clean_cfg_, clean_sql)
 
     # Fallback incrementale: se il clean.sql usa colonne raw non quotate e non
     # dichiarate in clean.read.columns, il binder di DuckDB ci dice il nome
@@ -109,12 +112,14 @@ def _build_clean_preview(
 
 
 def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection) -> None:
-    if cfg.clean.get("sql"):
+    clean_cfg_ = ensure_dict(cfg.clean)
+    mart_cfg_ = ensure_dict(cfg.mart)
+    if clean_cfg_.get("sql"):
         con.execute("CREATE OR REPLACE VIEW clean_input AS SELECT * FROM __dry_run_clean_preview")
         con.execute("CREATE OR REPLACE VIEW clean AS SELECT * FROM clean_input")
 
-    tables = cfg.mart.get("tables") or []
-    support_payloads = resolve_support_payloads(cfg.support, require_exists=True)
+    tables = mart_cfg_.get("tables") or []
+    support_payloads = resolve_support_payloads(ensure_dict(cfg.support), require_exists=True)
     template_ctx = build_runtime_template_ctx(
         dataset=cfg.dataset,
         year=year,
@@ -135,8 +140,6 @@ def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection) -> Non
 
 
 def validate_sql_dry_run(cfg, *, year: int, layers: list[str]) -> None:
-    # Oggi il check copre solo CLEAN e MART. cross_year resta fuori perche'
-    # ha un contratto di input diverso e richiede una validazione dedicata.
     if not any(layer in {"clean", "mart"} for layer in layers):
         return
 

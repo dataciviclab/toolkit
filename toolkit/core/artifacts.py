@@ -22,7 +22,7 @@ def resolve_artifact_policy(output_cfg: dict[str, Any] | None) -> str:
 
 
 def legacy_aliases_enabled(output_cfg: dict[str, Any] | None) -> bool:
-    return bool((output_cfg or {}).get("legacy_aliases", True))
+    return bool((output_cfg or {}).get("legacy_aliases", False))
 
 
 def profile_required(cfg: Any) -> bool:

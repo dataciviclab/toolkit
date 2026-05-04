@@ -73,10 +73,12 @@ def validate_cross_outputs(
 
 def run_cross_validation(cfg, years: list[int], logger) -> dict[str, Any]:
     cross_dir = layer_dataset_dir(cfg.root, "cross", cfg.dataset)
+    cross_year_cfg = cfg.cross_year
+    tables = cross_year_cfg.get("tables") if hasattr(cross_year_cfg, "get") else cross_year_cfg.get("tables", [])
     required_tables = [
-        table.get("name")
-        for table in (cfg.cross_year or {}).get("tables", [])
-        if isinstance(table, dict) and table.get("name")
+        getattr(table, "name", None) or table.get("name")
+        for table in (tables or [])
+        if hasattr(table, "name") and table.name
     ]
 
     result = validate_cross_outputs(

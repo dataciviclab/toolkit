@@ -72,6 +72,7 @@ def url(
         yaml_scaffold = _generate_yaml_scaffold(result, ckan_resources, candidate_file_links)
 
         if run:
+            assert output is not None  # guaranteed by check above
             scaffold_path = Path(output).resolve()
             scaffold_path.parent.mkdir(parents=True, exist_ok=True)
             scaffold_path.write_text(yaml_scaffold, encoding="utf-8")
@@ -81,7 +82,7 @@ def url(
             from toolkit.cli.cmd_run import run_init
 
             run_init(
-                config=scaffold_path,
+                config=str(scaffold_path),
                 years=None,
                 dry_run=False,
                 strict_config=False,

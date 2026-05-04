@@ -246,7 +246,7 @@ def list_runs(
         run_dir,
         since=since_dt,
         until=until_dt,
-        status=status if status else None,
+        status=status if status else None,  # type: ignore[arg-type]
         limit=limit,
     )
 
@@ -336,7 +336,7 @@ def run_summary(
     success = sum(1 for r in all_records if r.get("status") == "SUCCESS")
     failed = sum(1 for r in all_records if r.get("status") == "FAILED")
     durations = [r.get("duration_seconds") for r in all_records if r.get("duration_seconds") is not None]
-    avg_duration = round(sum(durations) / len(durations), 1) if durations else None
+    avg_duration = round(sum(d for d in durations if d is not None) / len(durations), 1) if durations else None
 
     thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     last_30d = 0

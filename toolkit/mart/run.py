@@ -7,6 +7,7 @@ from typing import Any
 import duckdb
 
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
+from toolkit.core.config import ensure_dict
 from toolkit.core.layer_profile import compare_layer_profiles, profile_relation, profile_parquet_files
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
@@ -29,6 +30,10 @@ def run_mart(
     output_cfg: dict[str, Any] | None = None,
     support_cfg: list[dict[str, Any]] | None = None,
 ):
+    mart_cfg = ensure_dict(mart_cfg)
+    clean_cfg = ensure_dict(clean_cfg)
+    output_cfg = ensure_dict(output_cfg)
+    support_cfg = ensure_dict(support_cfg)
     policy = resolve_artifact_policy(output_cfg)
     root_dir = resolve_root(root)
     clean_dir = layer_year_dir(root, "clean", dataset, year)

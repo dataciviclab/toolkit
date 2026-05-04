@@ -109,12 +109,18 @@ def _clean_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
     }
 
 
-def _mart_output_paths(root: Path, year_dir: Path, tables: list[dict[str, Any]]) -> list[Path]:
-    return [
-        year_dir / f"{table['name']}.parquet"
-        for table in tables
-        if isinstance(table, dict) and table.get("name")
-    ]
+def _mart_output_paths(root: Path, year_dir: Path, tables: list[Any]) -> list[Path]:
+    result: list[Path] = []
+    for table in tables:
+        if isinstance(table, dict):
+            name = table.get("name")
+        elif hasattr(table, "name"):
+            name = table.name
+        else:
+            continue
+        if name:
+            result.append(year_dir / f"{name}.parquet")
+    return result
 
 
 def _mart_paths(

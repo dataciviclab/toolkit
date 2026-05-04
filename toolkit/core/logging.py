@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import MutableMapping
 from pathlib import Path
 from typing import Any
 
@@ -30,9 +31,10 @@ def safe_console_text(text: str, encoding: str | None = None) -> str:
 
 
 class ContextAdapter(logging.LoggerAdapter):
-    def process(self, msg: str, kwargs: dict[str, Any]):
+    def process(self, msg: str, kwargs: MutableMapping[str, Any]):
+        base_extra = self.extra or {}
         extra = dict(kwargs.get("extra") or {})
-        extra.update({k: v for k, v in self.extra.items() if v is not None})
+        extra.update({k: v for k, v in base_extra.items() if v is not None})
         kwargs["extra"] = extra
 
         ctx = " ".join([f"{k}={v}" for k, v in extra.items() if v is not None])
@@ -64,7 +66,8 @@ def get_logger(name: str = "toolkit", level: str | int = "INFO", log_file: str |
 def bind_logger(logger: logging.Logger | logging.LoggerAdapter, **context):
     if isinstance(logger, logging.LoggerAdapter):
         base_logger = logger.logger
-        merged_context = {**logger.extra, **context}
+        extra = logger.extra or {}
+        merged_context = {**extra, **context}
     else:
         base_logger = logger
         merged_context = context

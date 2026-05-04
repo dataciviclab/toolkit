@@ -159,7 +159,7 @@ class OutputConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     artifacts: Literal["minimal", "standard", "debug"] = "standard"
-    legacy_aliases: bool = True
+    legacy_aliases: bool = False
 
 
 class GlobalValidationConfig(BaseModel):

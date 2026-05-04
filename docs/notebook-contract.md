@@ -30,13 +30,13 @@ Per evitare duplicazione di path logic nei notebook:
 
 Nota pratica:
 
-- `inspect paths` restituisce path assoluti della macchina locale: e' pensato per notebook e script nello stesso ambiente, non come formato portabile tra macchine diverse.
+- `inspect paths` restituisce path assoluti della macchina locale: è pensato per notebook e script nello stesso ambiente, non come formato portabile tra macchine diverse.
 
 ## Contratto operativo di `inspect paths`
 
-`inspect paths` e' il comando da usare quando il problema e':
+`inspect paths` è il comando da usare quando il problema è:
 
-- trovare i path runtime gia` risolti dal toolkit
+- trovare i path runtime già risolti dal toolkit
 - evitare di ricostruire a mano `root/data/...`
 - leggere l'ultimo run disponibile per un anno
 - recuperare i principali hint RAW senza aprire a mano i metadata
@@ -68,11 +68,11 @@ Regola pratica:
 
 - notebook e script locali: usa sempre `inspect paths --json`
 - CI che deve validare `effective_root` o path contract: usa `inspect paths --json`
-- se non passi `--year`, il payload puo` essere una lista multi-anno
+- se non passi `--year`, il payload può essere una lista multi-anno
 
 ## Differenza rispetto a `inspect schema-diff`
 
-`inspect schema-diff` non e' un helper per notebook.
+`inspect schema-diff` non è un helper per notebook.
 
 Serve invece quando vuoi:
 
@@ -89,4 +89,4 @@ Regola pratica:
 
 - il toolkit produce
 - i notebook ispezionano
-- `dataset.yml` resta la fonte di verita` per root, dataset, anni e path relativi
+- `dataset.yml` resta la fonte di verità per root, dataset, anni e path relativi

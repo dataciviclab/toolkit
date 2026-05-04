@@ -12,9 +12,12 @@ def _support_expected_mart_outputs(cfg, year: int) -> list[Path]:
     mart_dir = layer_year_dir(cfg.root, "mart", cfg.dataset, year)
     outputs: list[Path] = []
     for table in tables:
-        if not isinstance(table, dict):
+        if isinstance(table, dict):
+            name = table.get("name")
+        elif hasattr(table, "name"):
+            name = table.name
+        else:
             continue
-        name = table.get("name")
         if not name:
             continue
         outputs.append(mart_dir / f"{name}.parquet")

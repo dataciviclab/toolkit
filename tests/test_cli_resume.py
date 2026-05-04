@@ -311,9 +311,32 @@ def test_resume_finds_latest_run(tmp_path: Path, monkeypatch) -> None:
     assert calls["mart"] == 1
 
 
-def test_cli_resume_denies_non_portable_record_without_compat(tmp_path: Path) -> None:
+def test_cli_resume_non_portable_record_warns_and_proceeds(tmp_path: Path) -> None:
+    """Non-portable records warn but no longer block (--compat flag removed)."""
     config_path = tmp_path / "dataset.yml"
-    _write_config(config_path)
+    # Write config with a working local file source so resume can proceed
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "dati.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+    config_path.write_text(
+        "\n".join([
+            f'root: "{(tmp_path / "out").as_posix()}"',
+            "dataset:",
+            '  name: "demo_ds"',
+            "  years: [2022]",
+            "raw:",
+            "  sources:",
+            "    - type: local_file",
+            f'      args: {{ path: "{data_dir / "dati.csv"}" }}',
+            "clean:",
+            '  sql: "sql/clean.sql"',
+            "mart:",
+            "  tables:",
+            '    - name: "mart_example"',
+            '      sql: "sql/mart/mart_example.sql"',
+        ]),
+        encoding="utf-8",
+    )
 
     sql_dir = tmp_path / "sql" / "mart"
     sql_dir.mkdir(parents=True, exist_ok=True)
@@ -340,8 +363,8 @@ def test_cli_resume_denies_non_portable_record_without_compat(tmp_path: Path) ->
         ],
     )
 
-    assert result.exit_code != 0
-    assert "Use --compat to resume anyway." in result.output
+    # Non-portable records warn but don't block; resume proceeds
+    assert result.exit_code == 0, result.output
 
 
 def test_cli_resume_falls_back_to_raw_when_raw_success_artifacts_are_missing(tmp_path: Path, monkeypatch) -> None:

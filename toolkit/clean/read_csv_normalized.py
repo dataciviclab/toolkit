@@ -93,7 +93,7 @@ def _execute_normalized_csv_read(
     if read_cfg.get("encoding") is not None:
         params_used["encoding"] = normalize_encoding(read_cfg.get("encoding"))
     if read_cfg.get("skip") is not None:
-        params_used["skip"] = int(read_cfg.get("skip"))
+        params_used["skip"] = int(read_cfg.get("skip"))  # type: ignore[arg-type]
     if read_cfg.get("quote") is not None:
         params_used["quote"] = read_cfg.get("quote")
     if read_cfg.get("escape") is not None:

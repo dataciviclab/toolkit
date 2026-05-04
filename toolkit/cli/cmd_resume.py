@@ -110,7 +110,6 @@ def resume(
     year: int = typer.Option(..., "--year", help="Dataset year"),
     run_id: str | None = typer.Option(None, "--run-id", help="Specific run id"),
     latest: bool = typer.Option(False, "--latest", help="Resume latest run"),
-    compat: bool = typer.Option(False, "--compat", help="Allow resume from non-portable legacy run records"),
     from_layer: str | None = typer.Option(None, "--from-layer", help="Force restart from raw | clean | mart"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
@@ -135,17 +134,6 @@ def resume(
         record = read_run_record(run_dir, run_id) if run_id else latest_run(run_dir)
     except FileNotFoundError as exc:
         raise typer.BadParameter(str(exc)) from exc
-
-    portability = record.get("_portability") or {}
-    if not portability.get("portable", True):
-        warning = (
-            "Run record contains absolute paths outside the current root and is non-portable. "
-            "Use --compat to resume anyway."
-        )
-        if not compat:
-            typer.echo(warning, err=True)
-            raise typer.Exit(code=2)
-        typer.echo(f"warning: {warning}")
 
     start_from_layer, notes = _resolve_resume_start(
         cfg,

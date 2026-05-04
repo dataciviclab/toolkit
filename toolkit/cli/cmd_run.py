@@ -19,6 +19,15 @@ from toolkit.raw.run import run_raw
 from toolkit.raw.validate import run_raw_validation
 
 
+def _dump(cfg_section):
+    """Convert _CompatModel to dict for functions still expecting dicts."""
+    if hasattr(cfg_section, 'model_dump'):
+        return cfg_section.model_dump()
+    if hasattr(cfg_section, '__iter__') and not isinstance(cfg_section, str):
+        return [_dump(item) for item in cfg_section]
+    return cfg_section
+
+
 class ValidationGateError(RuntimeError):
     pass
 
@@ -78,9 +87,7 @@ def _validate_execution_plan(cfg, step: str) -> list[str]:
         if not isinstance(tables, list) or not tables:
             raise ValueError("mart.tables missing or empty in dataset.yml")
         for table in tables:
-            if not isinstance(table, dict):
-                raise ValueError("Each entry in mart.tables must be a mapping (dict).")
-            sql_path = _resolve_sql_path(cfg, table.get("sql"))
+            sql_path = _resolve_sql_path(cfg, table.get("sql") if hasattr(table, "get") else getattr(table, "sql", None))
             if not sql_path.exists():
                 raise FileNotFoundError(f"MART SQL file not found: {sql_path}")
 
@@ -89,12 +96,13 @@ def _validate_execution_plan(cfg, step: str) -> list[str]:
         if not isinstance(tables, list) or not tables:
             raise ValueError("cross_year.tables missing or empty in dataset.yml")
         for table in tables:
-            if not isinstance(table, dict):
-                raise ValueError("Each entry in cross_year.tables must be a mapping (dict).")
-            sql_path = _resolve_sql_path(cfg, table.get("sql"))
+            table_sql = table.get("sql") if hasattr(table, "get") else getattr(table, "sql", None)
+            sql_path = _resolve_sql_path(cfg, table_sql)
             if not sql_path.exists():
                 raise FileNotFoundError(f"CROSS_YEAR SQL file not found: {sql_path}")
-            if table.get("source_layer", "clean") == "mart" and not table.get("source_table"):
+            source_layer = table.get("source_layer", "clean") if hasattr(table, "get") else getattr(table, "source_layer", "clean")
+            source_table = table.get("source_table") if hasattr(table, "get") else getattr(table, "source_table", None)
+            if source_layer == "mart" and not source_table:
                 raise ValueError("cross_year.tables[].source_table is required when source_layer = mart")
 
     return layers
@@ -256,12 +264,12 @@ def run_year(
             cfg.dataset,
             year,
             cfg.root,
-            cfg.raw,
+            _dump(cfg.raw),
             base_dir=cfg.base_dir,
             run_id=context.run_id,
-            strict_plugins=bool((getattr(cfg, "config", {}) or {}).get("strict", False)),
-            output_cfg=cfg.output,
-            clean_cfg=cfg.clean,
+            strict_plugins=bool((cfg.config.get("strict", False))),
+            output_cfg=_dump(cfg.output),
+            clean_cfg=_dump(cfg.clean),
         )
 
     if "clean" in layers_to_run:
@@ -271,9 +279,9 @@ def run_year(
             cfg.dataset,
             year,
             cfg.root,
-            cfg.clean,
+            _dump(cfg.clean),
             base_dir=cfg.base_dir,
-            output_cfg=cfg.output,
+            output_cfg=_dump(cfg.output),
         )
 
     if "mart" in layers_to_run:
@@ -283,11 +291,11 @@ def run_year(
             cfg.dataset,
             year,
             cfg.root,
-            cfg.mart,
+            _dump(cfg.mart),
             base_dir=cfg.base_dir,
-            clean_cfg=cfg.clean,
-            output_cfg=cfg.output,
-            support_cfg=cfg.support,
+            clean_cfg=_dump(cfg.clean),
+            output_cfg=_dump(cfg.output),
+            support_cfg=_dump(cfg.support),
         )
 
     context.complete_run(success_with_warnings=run_has_validation_warnings)

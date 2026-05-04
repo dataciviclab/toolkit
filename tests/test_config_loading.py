@@ -175,10 +175,10 @@ cross_year:
     assert cfg.base_dir == project_dir.resolve()
     assert cfg.root == (project_dir / "out").resolve()
     assert cfg.root_source == "yml"
-    assert cfg.raw["sources"][0]["args"]["path"] == (project_dir / "data" / "raw.csv").resolve()
-    assert cfg.clean["sql"] == (project_dir / "sql" / "clean.sql").resolve()
-    assert cfg.mart["tables"][0]["sql"] == (project_dir / "sql" / "mart" / "demo.sql").resolve()
-    assert cfg.cross_year["tables"][0]["sql"] == (project_dir / "sql" / "cross" / "demo_cross.sql").resolve()
+    assert cfg.raw.sources[0].args["path"] == (project_dir / "data" / "raw.csv").resolve()
+    assert cfg.clean.sql == (project_dir / "sql" / "clean.sql").resolve()
+    assert cfg.mart.tables[0].sql == (project_dir / "sql" / "mart" / "demo.sql").resolve()
+    assert cfg.cross_year.tables[0].sql == (project_dir / "sql" / "cross" / "demo_cross.sql").resolve()
 
 
 def test_load_config_resolves_support_config_paths_from_dataset_dir(tmp_path: Path):
@@ -275,10 +275,10 @@ mart:
 
     cfg = load_config(yml)
 
-    assert cfg.raw["sources"][0]["args"]["path"] == (project_dir / "data" / "raw.csv").resolve()
-    assert cfg.raw["sources"][0]["args"]["filename"] == "nested/raw.csv"
-    assert cfg.clean["note_path"] == "docs/clean.md"
-    assert cfg.mart["label_path"] == "labels/mart.txt"
+    assert cfg.raw.sources[0].args["path"] == (project_dir / "data" / "raw.csv").resolve()
+    assert cfg.raw.sources[0].args["filename"] == "nested/raw.csv"
+    assert cfg.clean.note_path == "docs/clean.md"
+    assert cfg.mart.label_path == "labels/mart.txt"
 
 
 def test_load_config_preserves_year_template_in_raw_local_file_path(tmp_path: Path):
@@ -306,8 +306,8 @@ mart: {}
 
     cfg = load_config(yml)
 
-    assert cfg.raw["sources"][0]["args"]["path"] == str((project_dir / "data" / "raw_{year}.csv").resolve())
-    assert cfg.raw["sources"][0]["args"]["filename"] == "raw_{year}.csv"
+    assert cfg.raw.sources[0].args["path"] == str((project_dir / "data" / "raw_{year}.csv").resolve())
+    assert cfg.raw.sources[0].args["filename"] == "raw_{year}.csv"
 
 
 def test_load_config_logs_normalized_whitelist_fields(tmp_path: Path, caplog, monkeypatch):
@@ -347,9 +347,9 @@ mart:
         cfg = load_config(yml)
 
     assert cfg.root == (project_dir / "out").resolve()
-    assert cfg.raw["sources"][0]["args"]["path"] == (project_dir / "data" / "raw_a.csv").resolve()
-    assert cfg.clean["sql"] == (project_dir / "sql" / "clean.sql").resolve()
-    assert cfg.mart["tables"][0]["sql"] == (project_dir / "sql" / "mart" / "demo.sql").resolve()
+    assert cfg.raw.sources[0].args["path"] == (project_dir / "data" / "raw_a.csv").resolve()
+    assert cfg.clean.sql == (project_dir / "sql" / "clean.sql").resolve()
+    assert cfg.mart.tables[0].sql == (project_dir / "sql" / "mart" / "demo.sql").resolve()
 
     assert "Normalized config paths:" in caplog.text
     assert "root=" in caplog.text

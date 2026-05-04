@@ -111,16 +111,16 @@ output:
 
     cfg = load_config(yml)
 
-    assert cfg.validation["fail_on_error"] is False
-    assert cfg.output["legacy_aliases"] is False
-    assert cfg.raw["sources"][0]["primary"] is False
-    assert cfg.clean["required_columns"] == ["comune"]
-    assert cfg.clean["validate"]["primary_key"] == ["id"]
-    assert cfg.clean["validate"]["not_null"] == ["valore"]
-    assert cfg.mart["required_tables"] == ["mart_ok"]
-    assert cfg.mart["validate"]["table_rules"]["mart_ok"]["required_columns"] == ["regione"]
-    assert cfg.mart["validate"]["table_rules"]["mart_ok"]["not_null"] == ["totale"]
-    assert cfg.mart["validate"]["table_rules"]["mart_ok"]["primary_key"] == ["key_id"]
+    assert cfg.validation.fail_on_error is False
+    assert cfg.output.legacy_aliases is False
+    assert cfg.raw.sources[0].primary is False
+    assert cfg.clean.required_columns == ["comune"]
+    assert cfg.clean.validate.primary_key == ["id"]
+    assert cfg.clean.validate.not_null == ["valore"]
+    assert cfg.mart.required_tables == ["mart_ok"]
+    assert cfg.mart.validate.table_rules["mart_ok"].required_columns == ["regione"]
+    assert cfg.mart.validate.table_rules["mart_ok"].not_null == ["totale"]
+    assert cfg.mart.validate.table_rules["mart_ok"].primary_key == ["key_id"]
 
 
 def test_load_config_rejects_removed_bq_field(tmp_path: Path):

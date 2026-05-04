@@ -4,6 +4,14 @@ import re
 from pathlib import Path
 from typing import Any
 
+
+def _ensure_dict(cfg: Any) -> Any:
+    if hasattr(cfg, 'model_dump'):
+        return cfg.model_dump()
+    if isinstance(cfg, list):
+        return [_ensure_dict(item) for item in cfg]
+    return cfg
+
 import duckdb
 
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
@@ -29,6 +37,10 @@ def run_mart(
     output_cfg: dict[str, Any] | None = None,
     support_cfg: list[dict[str, Any]] | None = None,
 ):
+    mart_cfg = _ensure_dict(mart_cfg)
+    clean_cfg = _ensure_dict(clean_cfg)
+    output_cfg = _ensure_dict(output_cfg)
+    support_cfg = _ensure_dict(support_cfg)
     policy = resolve_artifact_policy(output_cfg)
     root_dir = resolve_root(root)
     clean_dir = layer_year_dir(root, "clean", dataset, year)

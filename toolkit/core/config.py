@@ -1,15 +1,71 @@
+"""Config loading and typed access.
+
+ToolkitConfig exposes both typed attribute access (cfg.raw.sources) and
+dict-style backward compat (cfg.raw.get("sources")) for gradual migration.
+"""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel
+
 from toolkit.core.config_models import (
     TimeCoverage,
+    ToolkitConfigModel,
     ensure_str_list as _ensure_str_list,
     load_config_model,
     parse_bool as _parse_bool,
 )
+
+
+class _CompatModel:
+    """Wraps a Pydantic model to support both attribute and dict-style access.
+
+    During migration, consumers can use either:
+      cfg.raw.sources        (typed, preferred)
+      cfg.raw.get("sources") (backward compat)
+      cfg.raw["sources"]     (backward compat)
+    """
+
+    def __init__(self, model: BaseModel) -> None:
+        self._model = model
+
+    def __getattr__(self, name: str) -> Any:
+        # Attribute access: cfg.raw.sources
+        # Only called for attributes NOT on _CompatModel itself
+        return getattr(self._model, name)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Dict-style access: cfg.clean.get("sql")"""
+        return getattr(self._model, key, default)
+
+    def __eq__(self, other: object) -> bool:
+        """Compare against dict or model for backward compat."""
+        if isinstance(other, dict):
+            return self._model.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True) == other
+        if isinstance(other, BaseModel):
+            return self._model == other
+        return NotImplemented
+
+    def __getitem__(self, key: str) -> Any:
+        """Dict-style item access: cfg.clean["sql"]"""
+        value = getattr(self._model, key)
+        if isinstance(value, BaseModel):
+            return _CompatModel(value)
+        return value
+
+    def __contains__(self, key: str) -> bool:
+        return hasattr(self._model, key)
+
+    def model_dump(self, **kwargs) -> dict[str, Any]:
+        return self._model.model_dump(**kwargs)
+
+
+def _wrap_model(obj: BaseModel) -> _CompatModel:
+    return _CompatModel(obj)
 
 
 @dataclass(frozen=True)
@@ -21,14 +77,43 @@ class ToolkitConfig:
     dataset: str
     years: list[int]
     time_coverage: TimeCoverage | None
-    raw: dict[str, Any]
-    clean: dict[str, Any]
-    mart: dict[str, Any]
-    support: list[dict[str, Any]]
-    cross_year: dict[str, Any]
-    config: dict[str, Any]
-    validation: dict[str, Any]
-    output: dict[str, Any]
+
+    # Internal: the typed model (used by typed properties below)
+    _model: ToolkitConfigModel = field(repr=False, compare=False)
+
+    # --- Typed accessors (return _CompatModel for gradual migration) ---
+
+    @property
+    def raw(self) -> _CompatModel:
+        return _wrap_model(self._model.raw)
+
+    @property
+    def clean(self) -> _CompatModel:
+        return _wrap_model(self._model.clean)
+
+    @property
+    def mart(self) -> _CompatModel:
+        return _wrap_model(self._model.mart)
+
+    @property
+    def cross_year(self) -> _CompatModel:
+        return _wrap_model(self._model.cross_year)
+
+    @property
+    def config(self) -> _CompatModel:
+        return _wrap_model(self._model.config)
+
+    @property
+    def validation(self) -> _CompatModel:
+        return _wrap_model(self._model.validation)
+
+    @property
+    def output(self) -> _CompatModel:
+        return _wrap_model(self._model.output)
+
+    @property
+    def support(self) -> list[_CompatModel]:
+        return [_wrap_model(item) for item in self._model.support]
 
     def resolve(self, rel_path: str | Path) -> Path:
         p = Path(rel_path)
@@ -46,11 +131,6 @@ def ensure_str_list(value: Any, field_name: str) -> list[str]:
     return _ensure_str_list(value, field_name)
 
 
-def _model_dump(obj: Any) -> dict[str, Any]:
-    """Standardized model_dump: aliases resolved, clean output."""
-    return obj.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True)
-
-
 def load_config(
     path: str | Path,
     *,
@@ -66,12 +146,5 @@ def load_config(
         dataset=model.dataset.name,
         years=list(model.dataset.years),
         time_coverage=model.dataset.time_coverage,
-        raw=_model_dump(model.raw),
-        clean=_model_dump(model.clean),
-        mart=_model_dump(model.mart),
-        support=[_model_dump(item) for item in model.support],
-        cross_year=_model_dump(model.cross_year),
-        config=_model_dump(model.config),
-        validation=_model_dump(model.validation),
-        output=_model_dump(model.output),
+        _model=model,
     )

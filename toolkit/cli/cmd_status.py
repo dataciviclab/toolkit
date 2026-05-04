@@ -262,7 +262,7 @@ def status(
     cfg = load_config(config, strict_config=strict_config_flag)
     run_dir = get_run_dir(cfg.root, dataset, year)
     record = read_run_record(run_dir, run_id) if run_id else latest_run(run_dir)
-    has_cross_year = bool((cfg.cross_year or {}).get("tables"))
+    has_cross_year = bool(cfg.cross_year.get("tables"))
 
     typer.echo(f"dataset: {record.get('dataset')}")
     typer.echo(f"year: {record.get('year')}")

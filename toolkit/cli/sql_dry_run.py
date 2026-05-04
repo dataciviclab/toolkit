@@ -14,6 +14,15 @@ _QUOTED_IDENTIFIER_RE = re.compile(r'"([^"]+)"')
 _BINDER_MISSING_COLUMN_RE = re.compile(r'Referenced column "([^"]+)" not found in FROM clause')
 
 
+def _ensure_dict(cfg):
+    """Convert _CompatModel to dict for functions expecting dicts."""
+    if hasattr(cfg, 'model_dump'):
+        return cfg.model_dump()
+    if isinstance(cfg, list):
+        return [_ensure_dict(item) for item in cfg]
+    return cfg
+
+
 def _dedupe_preserve_order(items: list[str]) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
@@ -77,15 +86,16 @@ def _build_clean_preview(
     year: int,
     con: duckdb.DuckDBPyConnection,
 ) -> None:
+    clean_cfg = _ensure_dict(cfg.clean)
     clean_sql_path, clean_sql, _ = _load_clean_sql(
-        cfg.clean,
+        clean_cfg,
         dataset=cfg.dataset,
         year=year,
         root=cfg.root,
         base_dir=cfg.base_dir,
     )
     clean_sql = _normalize_sql(clean_sql)
-    columns = _placeholder_columns(cfg.clean, clean_sql)
+    columns = _placeholder_columns(clean_cfg, clean_sql)
 
     # Fallback incrementale: se il clean.sql usa colonne raw non quotate e non
     # dichiarate in clean.read.columns, il binder di DuckDB ci dice il nome
@@ -109,12 +119,14 @@ def _build_clean_preview(
 
 
 def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection) -> None:
-    if cfg.clean.get("sql"):
+    clean_cfg = _ensure_dict(cfg.clean)
+    mart_cfg = _ensure_dict(cfg.mart)
+    if clean_cfg.get("sql"):
         con.execute("CREATE OR REPLACE VIEW clean_input AS SELECT * FROM __dry_run_clean_preview")
         con.execute("CREATE OR REPLACE VIEW clean AS SELECT * FROM clean_input")
 
-    tables = cfg.mart.get("tables") or []
-    support_payloads = resolve_support_payloads(cfg.support, require_exists=True)
+    tables = mart_cfg.get("tables") or []
+    support_payloads = resolve_support_payloads(_ensure_dict(cfg.support), require_exists=True)
     template_ctx = build_runtime_template_ctx(
         dataset=cfg.dataset,
         year=year,
@@ -135,8 +147,6 @@ def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection) -> Non
 
 
 def validate_sql_dry_run(cfg, *, year: int, layers: list[str]) -> None:
-    # Oggi il check copre solo CLEAN e MART. cross_year resta fuori perche'
-    # ha un contratto di input diverso e richiede una validazione dedicata.
     if not any(layer in {"clean", "mart"} for layer in layers):
         return
 

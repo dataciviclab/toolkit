@@ -63,9 +63,11 @@ ignore_missing_imports = true
 disallow_any_unimported = false
 disallow_untyped_defs = false
 
-# Modules affected by the dual Pydantic/dict config pattern.
-# Suppress known error codes until the dual config is resolved (tracked in audit).
-# TODO: remove these overrides after propagating Pydantic models through validate pipeline.
+# Validate modules use union types (dict[str, X | dict[str, Any]]) internally
+# because _ensure_dict conversion at entry points. The dual type signature
+# creates variance issues with nested dict types that need a larger refactor
+# of the validate pipeline signatures.
+# TODO: clean up after validate module signatures are simplified.
 [[tool.mypy.overrides]]
 module = [
   "toolkit.mart.validate",
@@ -79,14 +81,6 @@ disable_error_code = [
   "index",
   "arg-type",
   "assignment",
-]
-
-[[tool.mypy.overrides]]
-module = [
-  "toolkit.cli.cmd_status",
-]
-disable_error_code = [
-  "attr-defined",
 ]
 
 [project.scripts]

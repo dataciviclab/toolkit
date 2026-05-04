@@ -39,8 +39,21 @@ class _CompatModel:
         return getattr(self._model, name)
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Dict-style access: cfg.clean.get("sql")"""
-        return getattr(self._model, key, default)
+        """Dict-style access: cfg.clean.get("sql")
+
+        Returns nested Pydantic models as plain dicts to maintain
+        full dict-style compatibility for existing consumers.
+        """
+        value = getattr(self._model, key, default)
+        if isinstance(value, BaseModel):
+            return value.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True)
+        if isinstance(value, list):
+            return [
+                item.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True)
+                if isinstance(item, BaseModel) else item
+                for item in value
+            ]
+        return value
 
     def __eq__(self, other: object) -> bool:
         """Compare against dict or model for backward compat."""

@@ -131,6 +131,20 @@ def ensure_str_list(value: Any, field_name: str) -> list[str]:
     return _ensure_str_list(value, field_name)
 
 
+def ensure_dict(cfg: Any) -> Any:
+    """Convert _CompatModel or Pydantic model to dict, preserving aliases.
+
+    Uses by_alias=True so that fields like validate_config are serialized
+    as "validate" (matching the YAML alias). Excludes unset fields to
+    keep the dict lean — consumers use .get(key, default) for missing keys.
+    """
+    if hasattr(cfg, 'model_dump'):
+        return cfg.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True)
+    if isinstance(cfg, list):
+        return [ensure_dict(item) for item in cfg]
+    return cfg
+
+
 def load_config(
     path: str | Path,
     *,

@@ -7,18 +7,11 @@ from toolkit.clean.duckdb_read import SUPPORTED_INPUT_EXTS
 from toolkit.clean.read_config import resolve_clean_read_cfg
 from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
+from toolkit.core.config import ensure_dict
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 from toolkit.clean.sql_execute import _normalize_output_profile, _run_sql
-
-
-def _ensure_dict(cfg: Any) -> Any:
-    if hasattr(cfg, 'model_dump'):
-        return cfg.model_dump()
-    if isinstance(cfg, list):
-        return [_ensure_dict(item) for item in cfg]
-    return cfg
 
 
 def _load_clean_sql(
@@ -182,8 +175,8 @@ def run_clean(
     base_dir: Path | None = None,
     output_cfg: dict[str, Any] | None = None,
 ):
-    clean_cfg = _ensure_dict(clean_cfg)
-    output_cfg = _ensure_dict(output_cfg)
+    clean_cfg = ensure_dict(clean_cfg)
+    output_cfg = ensure_dict(output_cfg)
     policy = resolve_artifact_policy(output_cfg)
     root_dir = resolve_root(root)
     raw_dir = layer_year_dir(root, "raw", dataset, year)

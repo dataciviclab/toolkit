@@ -7,19 +7,12 @@ from typing import Any
 import duckdb
 
 from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
+from toolkit.core.config import ensure_dict
 from toolkit.core.layer_profile import compare_layer_profiles, profile_relation, profile_parquet_files
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
-
-
-def _ensure_dict(cfg: Any) -> Any:
-    if hasattr(cfg, 'model_dump'):
-        return cfg.model_dump()
-    if isinstance(cfg, list):
-        return [_ensure_dict(item) for item in cfg]
-    return cfg
 
 
 _CLEAN_INPUT_TOKEN_RE = re.compile(r"\bclean_input\b", re.IGNORECASE)
@@ -37,10 +30,10 @@ def run_mart(
     output_cfg: dict[str, Any] | None = None,
     support_cfg: list[dict[str, Any]] | None = None,
 ):
-    mart_cfg = _ensure_dict(mart_cfg)
-    clean_cfg = _ensure_dict(clean_cfg)
-    output_cfg = _ensure_dict(output_cfg)
-    support_cfg = _ensure_dict(support_cfg)
+    mart_cfg = ensure_dict(mart_cfg)
+    clean_cfg = ensure_dict(clean_cfg)
+    output_cfg = ensure_dict(output_cfg)
+    support_cfg = ensure_dict(support_cfg)
     policy = resolve_artifact_policy(output_cfg)
     root_dir = resolve_root(root)
     clean_dir = layer_year_dir(root, "clean", dataset, year)

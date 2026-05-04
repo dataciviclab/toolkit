@@ -340,3 +340,46 @@ def test_run_clean_validation_uses_columns_raw_from_raw_profile(tmp_path: Path):
 
     assert summary["stats"]["raw_cols"] == len(real_columns)
     assert summary["stats"]["col_drop_count"] == len(real_columns) - 2
+
+
+def test_ensure_dict_preserves_validate_alias() -> None:
+    """Verify ensure_dict converts validate_config -> validate (by_alias=True)."""
+    from toolkit.core.config import ensure_dict
+    from toolkit.core.config_models import ToolkitConfigModel
+
+    model = ToolkitConfigModel(
+        base_dir=Path("/tmp"),
+        root=Path("/tmp/out"),
+        root_source="test",
+        dataset={"name": "test", "years": [2024]},
+        clean={
+            "sql": "sql/clean.sql",
+            "validate": {
+                "primary_key": "id",
+                "not_null": "val",
+                "ranges": {"a": {"min": 0, "max": 100}},
+            },
+        },
+        mart={
+            "tables": [{"name": "m1", "sql": "sql/mart/m1.sql"}],
+            "validate": {
+                "transition": {"max_row_drop_pct": 10},
+            },
+        },
+    )
+
+    clean_dict = ensure_dict(model.clean)
+    assert "validate" in clean_dict, (
+        f"expected 'validate' key in clean_dict, got keys: {list(clean_dict.keys())}"
+    )
+    v = clean_dict["validate"]
+    assert v["primary_key"] == ["id"], f"validate.primary_key={v.get('primary_key')}"
+    assert v["not_null"] == ["val"]
+    assert v["ranges"]["a"]["min"] == 0
+
+    mart_dict = ensure_dict(model.mart)
+    assert "validate" in mart_dict, (
+        f"expected 'validate' key in mart_dict, got keys: {list(mart_dict.keys())}"
+    )
+    mv = mart_dict["validate"]
+    assert mv["transition"]["max_row_drop_pct"] == 10

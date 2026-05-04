@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 from toolkit.core.artifacts import resolve_artifact_policy, should_write
-from toolkit.core.config import parse_bool
+from toolkit.core.config import ensure_dict, parse_bool
 from toolkit.core.manifest import write_raw_manifest
 from toolkit.core.metadata import config_hash_for_year, sha256_bytes, write_metadata
 from toolkit.core.paths import layer_year_dir, to_root_relative
@@ -23,15 +22,6 @@ from toolkit.raw._fetch_utils import (
 )
 from toolkit.raw.extractors import get_extractor
 from toolkit.raw.validate import validate_raw_output
-
-
-def _ensure_dict(cfg: Any) -> Any:
-    """Convert _CompatModel to dict if needed."""
-    if hasattr(cfg, 'model_dump'):
-        return cfg.model_dump()
-    if isinstance(cfg, list):
-        return [_ensure_dict(item) for item in cfg]
-    return cfg
 
 
 def run_raw(
@@ -60,9 +50,9 @@ def run_raw(
     """
 
     # Normalize from _CompatModel to dict if needed
-    raw_cfg = _ensure_dict(raw_cfg)
-    output_cfg = _ensure_dict(output_cfg)
-    clean_cfg = _ensure_dict(clean_cfg)
+    raw_cfg = ensure_dict(raw_cfg)
+    output_cfg = ensure_dict(output_cfg)
+    clean_cfg = ensure_dict(clean_cfg)
 
     register_builtin_plugins(strict=strict_plugins)
 

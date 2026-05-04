@@ -6,21 +6,13 @@ from typing import Any
 import duckdb
 
 from toolkit.clean.run import _load_clean_sql
+from toolkit.core.config import ensure_dict
 from toolkit.core.paths import resolve_sql_path as _resolve_mart_sql_path
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
 from toolkit.core.template import build_runtime_template_ctx, render_template
 
 _QUOTED_IDENTIFIER_RE = re.compile(r'"([^"]+)"')
 _BINDER_MISSING_COLUMN_RE = re.compile(r'Referenced column "([^"]+)" not found in FROM clause')
-
-
-def _ensure_dict(cfg):
-    """Convert _CompatModel to dict for functions expecting dicts."""
-    if hasattr(cfg, 'model_dump'):
-        return cfg.model_dump()
-    if isinstance(cfg, list):
-        return [_ensure_dict(item) for item in cfg]
-    return cfg
 
 
 def _dedupe_preserve_order(items: list[str]) -> list[str]:
@@ -86,16 +78,17 @@ def _build_clean_preview(
     year: int,
     con: duckdb.DuckDBPyConnection,
 ) -> None:
-    clean_cfg = _ensure_dict(cfg.clean)
+    clean_cfg_ = ensure_dict(cfg.clean)
     clean_sql_path, clean_sql, _ = _load_clean_sql(
-        clean_cfg,
+        clean_cfg_,
         dataset=cfg.dataset,
         year=year,
         root=cfg.root,
         base_dir=cfg.base_dir,
     )
+
     clean_sql = _normalize_sql(clean_sql)
-    columns = _placeholder_columns(clean_cfg, clean_sql)
+    columns = _placeholder_columns(clean_cfg_, clean_sql)
 
     # Fallback incrementale: se il clean.sql usa colonne raw non quotate e non
     # dichiarate in clean.read.columns, il binder di DuckDB ci dice il nome
@@ -119,14 +112,14 @@ def _build_clean_preview(
 
 
 def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection) -> None:
-    clean_cfg = _ensure_dict(cfg.clean)
-    mart_cfg = _ensure_dict(cfg.mart)
-    if clean_cfg.get("sql"):
+    clean_cfg_ = ensure_dict(cfg.clean)
+    mart_cfg_ = ensure_dict(cfg.mart)
+    if clean_cfg_.get("sql"):
         con.execute("CREATE OR REPLACE VIEW clean_input AS SELECT * FROM __dry_run_clean_preview")
         con.execute("CREATE OR REPLACE VIEW clean AS SELECT * FROM clean_input")
 
-    tables = mart_cfg.get("tables") or []
-    support_payloads = resolve_support_payloads(_ensure_dict(cfg.support), require_exists=True)
+    tables = mart_cfg_.get("tables") or []
+    support_payloads = resolve_support_payloads(ensure_dict(cfg.support), require_exists=True)
     template_ctx = build_runtime_template_ctx(
         dataset=cfg.dataset,
         year=year,

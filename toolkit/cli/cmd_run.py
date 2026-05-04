@@ -22,7 +22,7 @@ from toolkit.raw.validate import run_raw_validation
 def _dump(cfg_section):
     """Convert _CompatModel to dict for functions still expecting dicts."""
     if hasattr(cfg_section, 'model_dump'):
-        return cfg_section.model_dump()
+        return cfg_section.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True)
     if hasattr(cfg_section, '__iter__') and not isinstance(cfg_section, str):
         return [_dump(item) for item in cfg_section]
     return cfg_section

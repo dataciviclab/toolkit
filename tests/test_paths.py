@@ -1,6 +1,5 @@
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
-import pytest
 
 from toolkit.core.paths import from_root_relative, layer_year_dir, resolve_root, to_root_relative
 

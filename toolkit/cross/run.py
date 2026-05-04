@@ -3,6 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import duckdb
+
+from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
+from toolkit.core.metadata import file_record, sha256_bytes, write_layer_manifest, write_metadata
+from toolkit.core.paths import layer_dataset_dir, layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
+from toolkit.core.template import render_template
+
 
 def _ensure_dict(cfg: Any) -> Any:
     if hasattr(cfg, 'model_dump'):
@@ -10,13 +17,6 @@ def _ensure_dict(cfg: Any) -> Any:
     if isinstance(cfg, list):
         return [_ensure_dict(item) for item in cfg]
     return cfg
-
-import duckdb
-
-from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
-from toolkit.core.metadata import file_record, sha256_bytes, write_layer_manifest, write_metadata
-from toolkit.core.paths import layer_dataset_dir, layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
-from toolkit.core.template import render_template
 
 
 def _config_hash(base_dir: Path | None) -> str | None:

@@ -33,3 +33,4 @@ tmp/
 
 # Generated artifacts
 generated/
+/sql/

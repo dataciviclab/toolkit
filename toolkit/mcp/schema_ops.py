@@ -7,6 +7,7 @@ Provides read-only diagnostics on config, layers, and run records:
 - summary: layer-level overview with existence checks
 - blocker_hints: common mismatches between config and outputs
 - review_readiness: readiness check for candidate review
+- schema_diff: compare RAW schema signals across configured years
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from toolkit.cli.inspect._helpers import _compare_schema_entries, _raw_schema_payload
 from toolkit.mcp._schema_utils import (
     _exists,
     _read_parquet_row_count,
@@ -730,4 +732,27 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
         "ok_count": ok_count,
         "fail_count": fail_count,
         "checks": checks,
+    }
+
+
+def schema_diff(config_path: str) -> dict[str, Any]:
+    """Compare RAW schema signals across the years configured for a dataset.
+
+    Returns entries per year (encoding, delim, columns, etc.) and pairwise
+    comparisons showing added/removed columns between consecutive years.
+    """
+    config, cfg = _load_cfg(config_path)
+
+    from toolkit.cli.common import iter_years
+
+    years = iter_years(cfg, None)
+    entries = [_raw_schema_payload(cfg, selected_year) for selected_year in years]
+    comparisons = _compare_schema_entries(entries)
+
+    return {
+        "dataset": cfg.dataset,
+        "config_path": str(config_path),
+        "years": [entry["year"] for entry in entries],
+        "entries": entries,
+        "comparisons": comparisons,
     }

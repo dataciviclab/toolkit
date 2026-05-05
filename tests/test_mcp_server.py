@@ -21,6 +21,7 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_review_readiness",
         "toolkit_list_runs",
         "toolkit_schema_diff",
+        "toolkit_csv_preview",
     }
 
 

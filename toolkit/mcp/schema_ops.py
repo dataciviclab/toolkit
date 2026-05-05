@@ -8,6 +8,7 @@ Provides read-only diagnostics on config, layers, and run records:
 - blocker_hints: common mismatches between config and outputs
 - review_readiness: readiness check for candidate review
 - schema_diff: compare RAW schema signals across configured years
+- csv_preview: schema + preview of a CSV file via DuckDB auto-detect
 """
 
 from __future__ import annotations
@@ -756,3 +757,67 @@ def schema_diff(config_path: str) -> dict[str, Any]:
         "entries": entries,
         "comparisons": comparisons,
     }
+
+
+def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
+    """Read a CSV file with DuckDB auto-detect and return schema + data preview.
+
+    Useful for quick inspection of raw files without running the full pipeline.
+    DuckDB auto-detects delimiter, encoding, header, and column types.
+
+    Args:
+        csv_path: path to the CSV file (absolute or relative to workspace root)
+        limit: max rows to return in preview (default 20)
+
+    Returns:
+        dict with keys: path, encoding_hint, delimiter_hint, header, column_count,
+        row_count_estimate, columns (name + inferred_type), preview (list of rows)
+    """
+    import duckdb
+
+    from toolkit.mcp.path_safety import _safe_path
+
+    path = _safe_path(csv_path)
+    if not path.exists():
+        raise ToolkitClientError(f"CSV non trovato: {path}")
+
+    def _sql_literal(value: str) -> str:
+        return value.replace("'", "''")
+
+    try:
+        with duckdb.connect(database=":memory:") as conn:
+            conn.execute("PRAGMA disable_progress_bar")
+            # Auto-detect all options; sample to infer types properly
+            conn.execute(
+                f"CREATE VIEW csv_preview AS SELECT * FROM read_csv("
+                f"'{_sql_literal(str(path))}', "
+                f"auto_detect=true, header=true)"
+            )
+            describe_rows = conn.execute("DESCRIBE csv_preview").fetchall()
+            columns = [{"name": row[0], "inferred_type": row[1]} for row in describe_rows]
+
+            # Row count estimate without loading full file
+            count_result = conn.execute(
+                f"SELECT COUNT(*) FROM read_csv("
+                f"'{_sql_literal(str(path))}', "
+                f"auto_detect=true, header=true)"
+            ).fetchone()
+            row_count_estimate = int(count_result[0]) if count_result else None
+
+            # Fetch preview rows
+            preview_rows = conn.execute(
+                f"SELECT * FROM csv_preview LIMIT {int(limit)}"
+            ).fetchall()
+            col_names = [row[0] for row in describe_rows]
+            preview = [dict(zip(col_names, row)) for row in preview_rows]
+
+            return {
+                "path": str(path),
+                "column_count": len(columns),
+                "columns": columns,
+                "row_count_estimate": row_count_estimate,
+                "preview": preview,
+                "note": "type inference via DuckDB auto_detect on full file",
+            }
+    except Exception as exc:
+        raise ToolkitClientError(f"Lettura CSV fallita per {path}: {exc}") from exc

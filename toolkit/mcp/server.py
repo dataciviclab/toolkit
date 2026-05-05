@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 from .toolkit_client import (
     ToolkitClientError,
     blocker_hints as blocker_hints_impl,
+    csv_preview as csv_preview_impl,
     inspect_paths as inspect_paths_impl,
     list_runs as list_runs_impl,
     raw_profile as raw_profile_impl,
@@ -114,6 +115,16 @@ def toolkit_list_runs(
     cross_year: bool = False,
 ) -> dict[str, Any]:
     return _guard(list_runs_impl, config_path, year or None, since=since, until=until, status=status, limit=limit, cross_year=cross_year)
+
+
+@mcp.tool(
+    description="Legge un CSV con DuckDB auto-detect e restituisce schema e preview. "
+    "Utile per ispezionare rapidamente il contenuto di un file raw senza runnare la pipeline. "
+    "Inferisce tipi, delimitatore, encoding e header in automatico.",
+    structured_output=True,
+)
+def toolkit_csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
+    return _guard(csv_preview_impl, csv_path, limit)
 
 
 if __name__ == "__main__":

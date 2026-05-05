@@ -12,6 +12,7 @@ from .toolkit_client import (
     raw_profile as raw_profile_impl,
     review_readiness as review_readiness_impl,
     run_summary as run_summary_impl,
+    schema_diff as schema_diff_impl,
     summary as summary_impl,
     show_schema as show_schema_impl,
 )
@@ -88,6 +89,14 @@ def toolkit_blocker_hints(config_path: str, year: int = 0) -> dict[str, Any]:
 )
 def toolkit_review_readiness(config_path: str, year: int = 0) -> dict[str, Any]:
     return _guard(review_readiness_impl, config_path, year or None)
+
+
+@mcp.tool(
+    description="Confronta i segnali di schema raw (encoding, colonne, ecc.) tra gli anni configurati per un dataset.",
+    structured_output=True,
+)
+def toolkit_schema_diff(config_path: str) -> dict[str, Any]:
+    return _guard(schema_diff_impl, config_path)
 
 
 @mcp.tool(

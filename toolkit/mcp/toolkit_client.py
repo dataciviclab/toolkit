@@ -23,6 +23,7 @@ from toolkit.mcp.schema_ops import (
     review_readiness,
     run_state,
     run_summary,
+    schema_diff,
     show_schema,
     summary,
 )

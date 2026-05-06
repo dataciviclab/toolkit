@@ -9,6 +9,41 @@ from toolkit.core.config import load_config
 from toolkit.core.config_models import load_config_model
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+YAML_BASE = {
+    "dataset": {"name": "demo", "years": [2022]},
+    "raw": {},
+    "clean": {},
+    "mart": {},
+}
+
+
+def _yml(path: Path, **overrides) -> Path:
+    """Write a dataset.yml merging YAML_BASE with per-test overrides.
+
+    Top-level keys in overrides replace their YAML_BASE counterparts.
+    """
+    import copy
+    import yaml
+
+    merged = copy.deepcopy(YAML_BASE)
+    merged.update(overrides)
+    path.write_text(yaml.safe_dump(merged, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def _yml_str(path: Path, body: str) -> Path:
+    """Write a dataset.yml from an explicit multi-line YAML string.
+
+    Use for complex nested structures that are easier to express inline.
+    """
+    path.write_text(body.strip() + "\n", encoding="utf-8")
+    return path
+
+
 def _bind_config_logger(caplog, monkeypatch):
     module_logger = logging.getLogger("toolkit.core.config")
     monkeypatch.setattr(module_logger, "handlers", [caplog.handler])
@@ -21,7 +56,8 @@ def test_load_config_rejects_legacy_clean_read_csv_shape(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     yml = project_dir / "dataset.yml"
-    yml.write_text(
+    _yml_str(
+        yml,
         """
 dataset:
   name: demo
@@ -35,8 +71,7 @@ clean:
         amount: DOUBLE
       delim: ";"
 mart: {}
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     with pytest.raises(ValueError) as exc:
@@ -46,10 +81,9 @@ mart: {}
 
 
 def test_load_config_canonical_clean_read_has_no_deprecation_warning(tmp_path: Path, caplog):
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    yml = project_dir / "dataset.yml"
-    yml.write_text(
+    yml = tmp_path / "dataset.yml"
+    _yml_str(
+        yml,
         """
 dataset:
   name: demo
@@ -62,8 +96,7 @@ clean:
       amount: DOUBLE
     delim: ";"
 mart: {}
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
@@ -79,7 +112,8 @@ mart: {}
 
 def test_load_config_normalizes_bool_and_string_list_fields(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    yml.write_text(
+    _yml_str(
+        yml,
         """
 dataset:
   name: demo
@@ -105,8 +139,7 @@ validation:
   fail_on_error: "false"
 output:
   legacy_aliases: "0"
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     cfg = load_config(yml)
@@ -125,19 +158,7 @@ output:
 
 def test_load_config_rejects_removed_bq_field(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    yml.write_text(
-        """
-dataset:
-  name: demo
-  years: [2022]
-raw: {}
-bq:
-  dataset: ignored
-clean: {}
-mart: {}
-""".strip(),
-        encoding="utf-8",
-    )
+    _yml(yml, bq={"dataset": "ignored"})
 
     with pytest.raises(ValueError) as exc:
         load_config(yml)
@@ -147,18 +168,7 @@ mart: {}
 
 def test_load_config_rejects_clean_sql_path(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    yml.write_text(
-        """
-dataset:
-  name: demo
-  years: [2022]
-raw: {}
-clean:
-  sql_path: sql/legacy_clean.sql
-mart: {}
-""".strip(),
-        encoding="utf-8",
-    )
+    _yml(yml, clean={"sql_path": "sql/legacy_clean.sql"})
 
     with pytest.raises(ValueError) as exc:
         load_config(yml)
@@ -168,18 +178,7 @@ mart: {}
 
 def test_load_config_rejects_mart_sql_dir(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    yml.write_text(
-        """
-dataset:
-  name: demo
-  years: [2022]
-raw: {}
-clean: {}
-mart:
-  sql_dir: sql/mart
-""".strip(),
-        encoding="utf-8",
-    )
+    _yml(yml, mart={"sql_dir": "sql/mart"})
 
     with pytest.raises(ValueError) as exc:
         load_config(yml)
@@ -189,7 +188,8 @@ mart:
 
 def test_load_config_model_rejects_legacy_raw_source_plugin_id_shape(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    yml.write_text(
+    _yml_str(
+        yml,
         """
 dataset:
   name: demo
@@ -202,8 +202,7 @@ raw:
       path: data/raw.csv
 clean: {}
 mart: {}
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     with pytest.raises(ValueError) as exc:
@@ -214,7 +213,8 @@ mart: {}
 
 def test_load_config_model_rejects_legacy_raw_sources_plugin_id_fields(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    yml.write_text(
+    _yml_str(
+        yml,
         """
 dataset:
   name: demo
@@ -227,8 +227,7 @@ raw:
         path: data/raw.csv
 clean: {}
 mart: {}
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     with pytest.raises(ValueError) as exc:
@@ -239,17 +238,7 @@ mart: {}
 
 def test_load_config_rejects_legacy_clean_read_scalar_form(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    yml.write_text(
-        """
-dataset:
-  name: demo
-  years: [2022]
-clean:
-  read: auto
-mart: {}
-""".strip(),
-        encoding="utf-8",
-    )
+    _yml(yml, clean={"read": "auto"})
 
     with pytest.raises(ValueError) as exc:
         load_config(yml)
@@ -259,18 +248,7 @@ mart: {}
 
 def test_load_config_warns_on_unknown_top_level_keys_in_non_strict_mode(tmp_path: Path, caplog, monkeypatch):
     yml = tmp_path / "dataset.yml"
-    yml.write_text(
-        """
-dataset:
-  name: demo
-  years: [2022]
-raw: {}
-clean: {}
-mart: {}
-unknown_top: true
-""".strip(),
-        encoding="utf-8",
-    )
+    _yml(yml, unknown_top=True)
 
     _bind_config_logger(caplog, monkeypatch)
 
@@ -284,18 +262,7 @@ unknown_top: true
 
 def test_load_config_model_rejects_unknown_top_level_keys_in_strict_mode(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    yml.write_text(
-        """
-dataset:
-  name: demo
-  years: [2022]
-raw: {}
-clean: {}
-mart: {}
-unknown_top: true
-""".strip(),
-        encoding="utf-8",
-    )
+    _yml(yml, unknown_top=True)
 
     with pytest.raises(ValueError) as exc:
         load_config_model(yml, strict_config=True)
@@ -306,18 +273,7 @@ unknown_top: true
 
 def test_load_config_model_rejects_non_mapping_config_block(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    yml.write_text(
-        """
-dataset:
-  name: demo
-  years: [2022]
-config: true
-raw: {}
-clean: {}
-mart: {}
-""".strip(),
-        encoding="utf-8",
-    )
+    _yml(yml, config=True)
 
     with pytest.raises(ValueError) as exc:
         load_config_model(yml)
@@ -626,7 +582,8 @@ def test_load_config_model_errors_are_explicit(tmp_path: Path, yaml_text: str, e
 
 def test_load_config_model_accepts_boolean_and_string_list_legacy_inputs(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    yml.write_text(
+    _yml_str(
+        yml,
         """
 dataset:
   name: demo
@@ -652,8 +609,7 @@ validation:
   fail_on_error: "false"
 output:
   legacy_aliases: "0"
-""".strip(),
-        encoding="utf-8",
+""",
     )
 
     model = load_config_model(yml)

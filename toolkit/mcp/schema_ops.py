@@ -28,6 +28,7 @@ from toolkit.mcp.cli_adapter import _toolkit_json, inspect_paths
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import _load_cfg, _safe_path
 from toolkit.core.run_records import get_run_dir_dataset, list_runs as _list_runs_records
+from toolkit.core.csv_read import sql_str
 
 
 def show_schema(config_path: str, layer: str = "clean", year: int | None = None) -> dict[str, Any]:
@@ -760,10 +761,17 @@ def schema_diff(config_path: str) -> dict[str, Any]:
 
 
 def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
-    """Read a CSV file with DuckDB auto-detect and return schema + data preview.
+    """Read a CSV file using the same profiling pipeline as ``profile_raw``.
 
-    Useful for quick inspection of raw files without running the full pipeline.
-    DuckDB auto-detects delimiter, encoding, header, and column types.
+    Uses ``sniff_source_file`` for explicit parameter detection (encoding,
+    delimiter, decimal, skip) and ``profile_with_read_cfg`` to build
+    ``mapping_suggestions`` with those exact parameters — the same pipeline
+    used by the CLI profiler and scaffold generator.
+
+    Output is aligned with the profiler contract: same ``mapping_suggestions``
+    format, plus ``delim_suggested``, ``encoding_suggested``,
+    ``decimal_suggested``, ``skip_suggested``, and ``robust_read_suggested``
+    fields that describe the detected parse parameters.
 
     Args:
         csv_path: path to the CSV file (absolute or relative to workspace root)
@@ -772,57 +780,78 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     Returns:
         dict with keys: path, column_count, columns (name + inferred_type),
         row_count_estimate, preview (list of rows), mapping_suggestions
-        (same format as RawProfile.mapping_suggestions — compatible with clean.sql config)
+        (same format as RawProfile.mapping_suggestions — compatible with
+        clean.sql config), delim_suggested, encoding_suggested,
+        decimal_suggested, skip_suggested, robust_read_suggested
     """
     import duckdb
 
+    from toolkit.core.csv_read import csv_read_option_strings, robust_preset
     from toolkit.mcp.path_safety import _safe_path
-    from toolkit.profile._column_profile import _build_mapping_suggestions
+    from toolkit.profile.raw import (
+        profile_with_read_cfg,
+        sniff_source_file,
+    )
 
     path = _safe_path(csv_path)
     if not path.exists():
         raise ToolkitClientError(f"CSV non trovato: {path}")
 
-    def _sql_literal(value: str) -> str:
-        return value.replace("'", "''")
+    # Phase 1: pure sniff — same pipeline as profile_raw
+    sniff_hints = sniff_source_file(path)
+
+    enc = sniff_hints["encoding_suggested"]
+    delim = sniff_hints["delim_suggested"]
+    dec = sniff_hints["decimal_suggested"]
+    skip_n = sniff_hints["skip_suggested"]
+
+    # Phase 2: profiling with explicit params — same pipeline as profile_raw
+    effective_read_cfg = {
+        "encoding": enc,
+        "delim": delim,
+        "decimal": dec,
+        "skip": skip_n,
+        "header": True,
+    }
+
+    runtime_result = profile_with_read_cfg(path, sniff_hints, effective_read_cfg)
+
+    mapping_suggestions = runtime_result["mapping_suggestions"]
+    robust_read_suggested = runtime_result["robust_read_suggested"]
+
+    # Phase 3: preview rows and count via DuckDB
+    # Use robust fallback if the profiling phase needed it (ragged/IRPEF-like CSV)
+    if robust_read_suggested:
+        preview_cfg = robust_preset(effective_read_cfg)
+        preview_cfg.setdefault("auto_detect", False)
+    else:
+        preview_cfg = effective_read_cfg
+
+    read_opts = csv_read_option_strings(preview_cfg)
+    header_opt = "header=true"
+    opt_sql = f"union_by_name=true, {', '.join(read_opts)}, {header_opt}"
 
     try:
         with duckdb.connect(database=":memory:") as conn:
             conn.execute("PRAGMA disable_progress_bar")
-            # Auto-detect all options; DuckDB infers types from full file
             conn.execute(
                 f"CREATE VIEW csv_preview AS SELECT * FROM read_csv("
-                f"'{_sql_literal(str(path))}', "
-                f"auto_detect=true, header=true)"
+                f"'{sql_str(str(path))}', {opt_sql})"
             )
+
             describe_rows = conn.execute("DESCRIBE csv_preview").fetchall()
+            col_names = [str(row[0]) for row in describe_rows]
+            duckdb_type_map = {str(row[0]): str(row[1]) for row in describe_rows}
 
-            # Build DuckDB type map (raw_name -> type)
-            duckdb_type_map: dict[str, str] = {}
-            columns_raw: list[str] = []
-            columns_info: list[dict[str, str]] = []
-            for row in describe_rows:
-                raw_name = str(row[0])
-                dtype = str(row[1])
-                columns_raw.append(raw_name)
-                duckdb_type_map[raw_name] = dtype
-                columns_info.append({"name": raw_name, "inferred_type": dtype})
+            columns_info = [
+                {"name": name, "inferred_type": dtype}
+                for name, dtype in zip(col_names, [duckdb_type_map[c] for c in col_names])
+            ]
 
-            # Fetch sample rows for nullify/normalize suggestions
-            sample_rows = conn.execute(
-                "SELECT * FROM csv_preview LIMIT 50"
-            ).fetchdf().to_dict(orient="records")
-
-            # Build mapping_suggestions using DuckDB-inferred types
-            mapping_suggestions = _build_mapping_suggestions(
-                columns_raw, sample_rows, duckdb_types=duckdb_type_map
-            )
-
-            # Row count estimate
+            # Row count using the same explicit params
             count_result = conn.execute(
                 f"SELECT COUNT(*) FROM read_csv("
-                f"'{_sql_literal(str(path))}', "
-                f"auto_detect=true, header=true)"
+                f"'{sql_str(str(path))}', {opt_sql})"
             ).fetchone()
             row_count_estimate = int(count_result[0]) if count_result else None
 
@@ -830,7 +859,6 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
             preview_rows = conn.execute(
                 f"SELECT * FROM csv_preview LIMIT {int(limit)}"
             ).fetchall()
-            col_names = [row[0] for row in describe_rows]
             preview = [dict(zip(col_names, row)) for row in preview_rows]
 
             return {
@@ -840,7 +868,15 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
                 "row_count_estimate": row_count_estimate,
                 "preview": preview,
                 "mapping_suggestions": mapping_suggestions,
-                "note": "type inference via DuckDB auto_detect on full file; mapping_suggestions use DuckDB types",
+                "delim_suggested": delim,
+                "encoding_suggested": enc,
+                "decimal_suggested": dec,
+                "skip_suggested": skip_n,
+                "robust_read_suggested": robust_read_suggested,
+                "note": (
+                    "type inference via DuckDB with explicit sniff parameters; "
+                    "mapping_suggestions use the same pipeline as profile_raw"
+                ),
             }
     except Exception as exc:
         raise ToolkitClientError(f"Lettura CSV fallita per {path}: {exc}") from exc

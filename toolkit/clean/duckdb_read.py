@@ -149,9 +149,9 @@ def _execute_csv_read(
             f"SELECT * FROM read_csv([{paths}], {opt_sql});"
         )
         if trim_whitespace:
-            # original_columns has compact values for rename; source_columns
-            # has only types (set by _csv_read_options mutation)
-            projection = csv_trim_projection(original_columns)
+            # original_columns may be None if no columns key; in that case
+            # use source_columns (the already-parsed dict with types only).
+            projection = csv_trim_projection(original_columns or source_columns)
         else:
             projection = ", ".join(q_ident(name) for name in source_columns)
         con.execute(

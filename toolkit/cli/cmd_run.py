@@ -338,6 +338,7 @@ def _make_step_cmd(step: str):
 
     def cmd(
         config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+        year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
         years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
         dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
         strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
@@ -346,7 +347,8 @@ def _make_step_cmd(step: str):
         cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag)
         dry_flag = dry_run if isinstance(dry_run, bool) else False
         years_arg = years if isinstance(years, str) else None
-        selected_years = iter_selected_years(cfg, years_arg=years_arg)
+        year_arg = year if isinstance(year, int) else None
+        selected_years = iter_selected_years(cfg, year_arg=year_arg, years_arg=years_arg)
 
         if _step == "cross_year":
             run_cross_year_step(cfg, years=selected_years, dry_run=dry_flag, logger=logger)
@@ -369,6 +371,7 @@ run_cross_year_cmd = _make_step_cmd("cross_year")
 
 def run_init(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without executing"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
@@ -383,7 +386,8 @@ def run_init(
     cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag)
     dry_run_flag = dry_run if isinstance(dry_run, bool) else False
     years_arg = years if isinstance(years, str) else None
-    selected_years = iter_selected_years(cfg, years_arg=years_arg)
+    year_arg = year if isinstance(year, int) else None
+    selected_years = iter_selected_years(cfg, year_arg=year_arg, years_arg=years_arg)
 
     if dry_run_flag:
         # Validate the execution plan before showing the dry-run plan.

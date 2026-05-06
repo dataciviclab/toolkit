@@ -10,6 +10,8 @@ Usage:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from toolkit.mcp.schema_ops import blocker_hints as _blocker_hints
 from toolkit.core.config import load_config
 
@@ -35,10 +37,11 @@ def blocker_hints(
         # Use load_config like other CLI commands (run, init, status) so that
         # relative paths are resolved from the config file's base_dir, not from
         # WORKSPACE_ROOT. This matches the behavior of `toolkit run all` etc.
-        cfg = load_config(config, strict_config=False)
-        config_path_resolved = str(cfg.base_dir / "dataset.yml")
+        load_config(config, strict_config=False)
+        # Pass the resolved path of the actual config file, not a reconstructed name.
+        config_path_resolved = str(Path(config).resolve())
         result = _blocker_hints(config_path_resolved, year)
-    except FileNotFoundError as exc:
+    except FileNotFoundError:
         typer.echo(f"error: config file not found: {config}", err=True)
         raise typer.Exit(code=1)
     except Exception as exc:

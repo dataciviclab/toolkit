@@ -303,6 +303,7 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
     profile_path = _profile_dir / "raw_profile.json"
     if not profile_path.exists():
         profile_path = _profile_dir / "profile.json"
+    profile_parse_error: bool = False
     trusted_raw_cols: list[str] = []
     if profile_path.exists():
         try:
@@ -322,10 +323,23 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
                     f"(drop senza -- DROP: <motivo>?): {unmapped}"
                 )
         except Exception:
+            profile_parse_error = True
             pass
 
     actual_raw_col_count: int | None = len(trusted_raw_cols) if trusted_raw_cols else None
     raw_missing_columns: list[str] = []
+    raw_probe_source: str | None = None
+    raw_probe_reason: str | None = None
+
+    if trusted_raw_cols:
+        raw_probe_source = "raw_profile"
+    elif profile_parse_error:
+        raw_probe_reason = "profile_parse_failed"
+    elif not profile_path.exists():
+        raw_probe_reason = "no_profile_found"
+    else:
+        # profile exists and parsed OK but columns_raw is missing/empty
+        raw_probe_reason = "profile_missing_columns_raw"
 
     if not trusted_raw_cols:
         # Find raw file(s) to probe actual column count — parquet preferred, CSV fallback
@@ -346,9 +360,16 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
                         _query = (
                             f"DESCRIBE SELECT * FROM read_csv(\"{_csv_path}\", auto_detect=true)"
                         )
+                        raw_probe_source = "legacy_autodetect"
+                        if raw_probe_reason:
+                            merged_warnings.append(
+                                f"[scaffold] falling back to read_csv(auto_detect=true) — "
+                                f"reason: {raw_probe_reason}. Run 'toolkit run init' to generate a profile."
+                            )
                     _col_rows = _con.execute(_query).fetchall()
                     _actual_raw_col_names = [str(r[0]) for r in _col_rows]
                     actual_raw_col_count = len(_actual_raw_col_names)
+                    raw_probe_source = raw_probe_source or "runtime_profile"
 
                     # Infer expected columns from config
                     _read_cfg = clean_cfg.get("read") or {}
@@ -370,6 +391,13 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
                     _con.close()
             except Exception:
                 pass
+
+    if actual_raw_col_count is None:
+        raw_probe_source = "unavailable"
+        merged_warnings.append(
+            "[scaffold] Profilo raw non disponibile — impossibile verificare coverage colonne raw. "
+            "Considera eseguire 'toolkit run init' per generare il profilo."
+        )
 
     row_drop_pct = (
         round((raw_row_count - clean_row_count) / raw_row_count * 100, 2)
@@ -399,6 +427,7 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
             "col_drop_count": col_drop_count,
             **({"actual_raw_cols": actual_raw_col_count} if actual_raw_col_count is not None else {}),
             **({"raw_missing_columns": raw_missing_columns} if raw_missing_columns else {}),
+            **({"raw_probe_source": raw_probe_source} if raw_probe_source else {}),
         },
         "columns": clean_cols,
         **({"rules": rules} if rules else {}),

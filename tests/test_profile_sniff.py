@@ -7,9 +7,11 @@ from toolkit.profile.raw import (
     _build_read_csv_opts,
     build_suggested_read_cfg,
     profile_raw,
+    profile_with_read_cfg,
     sniff_delim,
     sniff_decimal,
     sniff_encoding,
+    sniff_source_file,
     suggest_skip,
 )
 
@@ -176,3 +178,135 @@ def test_profile_raw_mismatch_header_data_cols_triggers_null_padding(tmp_path: P
 
     # columns_raw reflects 4 data columns from DESCRIBE
     assert len(profile.columns_raw) == 4
+
+
+def test_sniff_source_file_returns_all_keys(tmp_path: Path):
+    """sniff_source_file must return the full set of keys used by consumers."""
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("col1;col2\n1;2\n", encoding="utf-8")
+
+    hints = sniff_source_file(csv_path)
+
+    expected_keys = {
+        "file_used",
+        "encoding_suggested",
+        "delim_suggested",
+        "decimal_suggested",
+        "skip_suggested",
+        "header_line",
+        "true_header_line",
+        "columns_preview",
+        "warnings",
+    }
+    assert set(hints.keys()) == expected_keys
+    assert hints["delim_suggested"] == ";"
+    assert hints["header_line"] == "col1;col2"
+    assert "col1" in hints["columns_preview"]
+
+
+def test_sniff_source_file_true_header_line_preserved(tmp_path: Path):
+    """true_header_line is always read at line 0, independent of skip offset."""
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text(
+        "Title row\ncol1;col2\n1;2\n", encoding="utf-8"
+    )
+
+    hints = sniff_source_file(csv_path)
+
+    # true_header_line is the real line-0 header
+    assert hints["true_header_line"] == "Title row"
+    # header_line respects the skip offset
+    assert hints["header_line"] == "col1;col2"
+    assert hints["skip_suggested"] == 1
+
+
+def test_profile_with_read_cfg_overrides_sniff(tmp_path: Path):
+    """When read_cfg is passed to profile_raw, it overrides sniff suggestions.
+
+    The sniff phase still returns delim_suggested from the raw bytes,
+    but the DuckDB profiling phase uses effective_read_cfg which has
+    the user override.  The practical proof is in columns_raw.
+    """
+    csv_path = tmp_path / "raw" / "data.csv"
+    csv_path.parent.mkdir()
+    csv_path.write_text("a,b\n1,2\n", encoding="utf-8")
+
+    # sniff would auto-detect delim=","
+    # explicitly pass delim=";" → should override sniff for DuckDB read
+    profile = profile_raw(
+        csv_path.parent,
+        "demo",
+        2024,
+        read_cfg={"delim": ";", "encoding": "utf-8"},
+    )
+
+    # sniff still reports what it saw
+    assert profile.delim_suggested == ","
+    # but DuckDB read used semicolon, so "a,b" is ONE column (no semicolons in data)
+    assert len(profile.columns_raw) == 1
+    assert "a,b" in profile.columns_raw
+
+
+def test_profile_with_read_cfg_reads_exactly_like_runtime(tmp_path: Path):
+    """profile_with_read_cfg reads the file exactly as clean.read would."""
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("id;value\nA;1.234,56\nB;7.890,12\n", encoding="utf-8")
+
+    effective_cfg = {
+        "delim": ";",
+        "decimal": ",",
+        "encoding": "utf-8",
+        "header": True,
+        "skip": 0,
+    }
+
+    # sniff would detect decimal="," from the data values
+    sniff_hints = sniff_source_file(csv_path)
+    # Override decimal to prove profile_with_read_cfg uses effective_cfg directly
+    result = profile_with_read_cfg(csv_path, sniff_hints, effective_cfg)
+
+    assert result["columns_raw"] == ["id", "value"]
+    assert result["robust_read_suggested"] is False
+    # mapping_suggestions should be present
+    assert "id" in result["mapping_suggestions"]
+
+
+def test_profile_with_read_cfg_retry_sets_robust_read_suggested(tmp_path: Path, monkeypatch):
+    """When first DuckDB read fails but retry with robust preset succeeds, flag must be True.
+
+    Regression test: before the fix, retry-success kept robust_read_suggested=False
+    because the flag was initialised after the retry logic.
+    """
+    import toolkit.profile.raw as raw_mod
+
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("col1;col2\n1;2\n", encoding="utf-8")
+
+    sniff_hints = sniff_source_file(csv_path)
+    effective_cfg = {
+        "delim": ";",
+        "encoding": "utf-8",
+        "header": True,
+        "skip": 0,
+    }
+
+    _original_profile_view = raw_mod._profile_view
+    call_count = 0
+
+    def failing_profile_view(con, file0, *, effective_read_cfg):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise RuntimeError("first read fails")
+        # retry succeeds — call the real function directly (not via module, to avoid loop)
+        _original_profile_view(con, file0, effective_read_cfg=effective_read_cfg)
+
+    monkeypatch.setattr(raw_mod, "_profile_view", failing_profile_view)
+
+    result = profile_with_read_cfg(csv_path, sniff_hints, effective_cfg)
+
+    assert call_count == 2, f"Expected exactly 2 calls (fail + retry), got {call_count}"
+    assert result["robust_read_suggested"] is True, (
+        "robust_read_suggested must be True after retry-success"
+    )
+    assert "profile_read_retry" in result["warnings"][-1]

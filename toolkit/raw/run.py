@@ -10,7 +10,7 @@ from toolkit.core.metadata import config_hash_for_year, sha256_bytes, write_meta
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.registry import register_builtin_plugins
 from toolkit.core.validation import write_validation_json
-from toolkit.profile.raw import build_profile_hints, profile_raw, write_raw_profile, write_suggested_read_yml
+from toolkit.profile.raw import sniff_source_file, profile_raw, write_raw_profile, write_suggested_read_yml
 from toolkit.scaffold.clean import scaffold_clean_if_missing
 from toolkit.raw._fetch_utils import (
     _choose_primary_output,
@@ -150,7 +150,7 @@ def run_raw(
     policy = resolve_artifact_policy(output_cfg)
     if primary_output_path.exists() and primary_output_path.suffix.lower() in {".csv", ".tsv", ".txt"}:
         try:
-            profile_hints = build_profile_hints(primary_output_path)
+            profile_hints = sniff_source_file(primary_output_path)
             if should_write("profile", "suggested_read", policy, profile_ctx):
                 conservative_hints = dict(profile_hints)
                 conservative_hints["decimal_suggested"] = None

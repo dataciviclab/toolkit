@@ -196,16 +196,19 @@ class TestProposeCleanRead:
         assert result["delim"] == ","
 
     def test_skip_bumped_with_header(self):
-        """When header_line present and columns explicit, skip is bumped by 1."""
+        """When header_line present and mapping keys match, skip is bumped by 1."""
         profile = {
             "delim_suggested": ";",
             "header_line": "col1;col2",
             "skip_suggested": 1,
             "mapping_suggestions": {
                 "col1": {"from": "col1", "type": "str"},
+                "col2": {"from": "col2", "type": "str"},
             },
         }
         result = propose_clean_read(profile)
+        # header names match mapping keys → header=false, skip bumped
+        assert result["header"] is False
         assert result["skip"] == 2  # 1 + 1
 
     def test_skip_preserved_without_header(self):
@@ -241,7 +244,7 @@ class TestProposeCleanRead:
             "delim_suggested": ",",
             "encoding_suggested": "utf-8",
             "decimal_suggested": ",",
-            "header_line": "col1;col2;col3",
+            "header_line": "col1,col2,col3",
             "skip_suggested": 0,
             "mapping_suggestions": {
                 "col1": {"from": "col1", "type": "str"},
@@ -274,6 +277,44 @@ class TestProposeCleanRead:
         assert cols["date_col"] == "DATE"
         assert cols["bool_col"] == "BOOLEAN"
         assert cols["str_col"] == "VARCHAR"
+
+    def test_header_detected_when_names_differ_from_mapping(self):
+        """When header_line has real names but mapping has generic columnXX,
+        propose header:true and drop the generic columns mapping.
+        This is the real bug: profiler read header as data with header=false."""
+        profile = {
+            "delim_suggested": ";",
+            "header_line": "CodiceEnte;Importo",
+            "skip_suggested": 0,
+            "mapping_suggestions": {
+                "column01": {"from": "column01", "type": "str"},
+                "column02": {"from": "column02", "type": "str"},
+            },
+        }
+        result = propose_clean_read(profile)
+        # Header has real names that differ from generic columnXX → header=true
+        assert result["header"] is True
+        # columns should be dropped since we now use real header
+        assert "columns" not in result
+        # skip stays 0 (no bump needed, header line is now recognized as header)
+        assert result.get("skip", 0) == 0
+
+    def test_header_detected_with_column_prefix_mapping(self):
+        """Same as above but with 'col' prefix instead of 'column' prefix."""
+        profile = {
+            "delim_suggested": ";",
+            "header_line": "Regione;Provincia;Comune",
+            "skip_suggested": 0,
+            "mapping_suggestions": {
+                "col1": {"from": "col1", "type": "str"},
+                "col2": {"from": "col2", "type": "str"},
+                "col3": {"from": "col3", "type": "str"},
+            },
+        }
+        result = propose_clean_read(profile)
+        # "Regione" != "col1" after normalization → header detected
+        assert result["header"] is True
+        assert "columns" not in result
 
 
 # --- CLI integration tests ---

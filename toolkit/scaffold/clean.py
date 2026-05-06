@@ -4,6 +4,17 @@ from pathlib import Path
 from typing import Any
 
 
+def _normalize_colname(name: str) -> str:
+    """Normalize a column name for comparison (same logic as _snake_case)."""
+    import re
+
+    s = name.strip()
+    s = re.sub(r"([a-z])([A-Z])", r"\1_\2", s)
+    s = re.sub(r"[^a-zA-Z0-9]+", "_", s)
+    s = re.sub(r"_+", "_", s).lower().strip("_")
+    return s or name
+
+
 def _snake_case(name: str) -> str:
     """Convert a column name to snake_case (best-effort)."""
     import re
@@ -212,6 +223,22 @@ def generate_clean_sql(
     return "\n".join(sql_lines)
 
 
+def _header_names_from_line(header_line: str | None, delim: str | None) -> list[str]:
+    """Extract stripped column names from a header line string."""
+    if not header_line or not delim:
+        return []
+    return [c.strip() for c in header_line.split(delim)]
+
+
+def _names_match(keys: list[str], header_names: list[str]) -> bool:
+    """Check if mapping keys and header names refer to the same columns after normalization."""
+    if len(keys) != len(header_names):
+        return False
+    norm_keys = [_normalize_colname(k) for k in keys]
+    norm_hdr = [_normalize_colname(h) for h in header_names]
+    return norm_keys == norm_hdr
+
+
 def propose_clean_read(profile: dict[str, Any]) -> dict[str, Any]:
     """Build a suggested ``clean.read`` config section from a raw profile.
 
@@ -236,19 +263,41 @@ def propose_clean_read(profile: dict[str, Any]) -> dict[str, Any]:
     # --- Columns: raw_name -> DuckDB type ---
     mapping = profile.get("mapping_suggestions", {})
     has_columns = bool(mapping)
+    raw_header = profile.get("header_line") is not None
 
     if has_columns:
-        columns: dict[str, str] = {}
-        for raw_col, spec in mapping.items():
-            raw_type = spec.get("type", "str")
-            columns[raw_col] = _map_duckdb_type(raw_type)
-        read["columns"] = columns
+        # When mapping exists, check whether it reflects a real header or was built
+        # with header=false (profiler read the first data row as column names).
+        # Scenario: header_line="CodiceEnte;Importo" but mapping has {column01, column02}
+        # → real header exists, propose header:true and drop the generic columns.
+        header_line = profile.get("header_line")
+        header_names = _header_names_from_line(header_line, delim)
+        keys = list(mapping.keys())
 
-    # --- Header / skip logic (mirrors runtime in duckdb_read._csv_read_options) ---
-    raw_header = profile.get("header_line") is not None
-    effective_header = raw_header and not has_columns
-    raw_skip = profile.get("skip_suggested", 0)
-    effective_skip = raw_skip + 1 if (has_columns and raw_header) else raw_skip
+        if header_names and not _names_match(keys, header_names):
+            # Header names differ from mapping keys → file has a real header
+            effective_header = True
+            columns: dict[str, str] | None = None
+            # skip stays as-is (no bump needed, header line is now real)
+            effective_skip = profile.get("skip_suggested", 0)
+        else:
+            # Mapping keys match header names (or no header available)
+            # → use the explicit columns mapping as before.
+            effective_header = False
+            columns = {}
+            for raw_col, spec in mapping.items():
+                raw_type = spec.get("type", "str")
+                columns[raw_col] = _map_duckdb_type(raw_type)
+            raw_skip = profile.get("skip_suggested", 0)
+            effective_skip = raw_skip + 1 if raw_header else raw_skip
+    else:
+        # No mapping → auto-detect header
+        effective_header = raw_header
+        columns = None
+        effective_skip = profile.get("skip_suggested", 0)
+
+    if columns is not None:
+        read["columns"] = columns
 
     read["header"] = effective_header
     if effective_skip > 0:

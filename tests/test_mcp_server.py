@@ -148,3 +148,29 @@ def test_csv_preview_returns_profiler_aligned_fields(tmp_path: Path) -> None:
     assert result["column_count"] == 2
     assert len(result["preview"]) == 2
     assert result["row_count_estimate"] == 2
+
+
+def test_csv_preview_ragged_csv_succeeds_with_robust_read(tmp_path: Path) -> None:
+    """csv_preview must succeed on ragged/IRPEF-like CSV (header < data cols).
+
+    When profile_with_read_cfg retries with robust fallback (null_padding),
+    csv_preview preview/count phase must also use the robust fallback,
+    not the original cfg that would fail on ragged rows.
+    Regression test for the fix: preview phase must use robust_preset
+    when robust_read_suggested=True.
+    """
+    from toolkit.mcp.schema_ops import csv_preview
+
+    # Ragged CSV: header has 2 cols, data rows have 3 cols
+    csv_path = tmp_path / "ragged.csv"
+    csv_path.write_text("a;b\n1;2;3\n4;5;6\n", encoding="utf-8")
+
+    result = csv_preview(str(csv_path), limit=10)
+
+    # Must succeed without raising ToolkitClientError
+    assert "preview" in result
+    assert "mapping_suggestions" in result
+    # robust_read_suggested must be True since ragged rows need null_padding
+    assert result["robust_read_suggested"] is True
+    # Preview still returns data
+    assert len(result["preview"]) == 2

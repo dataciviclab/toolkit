@@ -786,7 +786,7 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     """
     import duckdb
 
-    from toolkit.core.csv_read import csv_read_option_strings
+    from toolkit.core.csv_read import csv_read_option_strings, robust_preset
     from toolkit.mcp.path_safety import _safe_path
     from toolkit.profile.raw import (
         profile_with_read_cfg,
@@ -819,8 +819,15 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     mapping_suggestions = runtime_result["mapping_suggestions"]
     robust_read_suggested = runtime_result["robust_read_suggested"]
 
-    # Phase 3: preview rows and count via DuckDB with the same explicit params
-    read_opts = csv_read_option_strings(effective_read_cfg)
+    # Phase 3: preview rows and count via DuckDB
+    # Use robust fallback if the profiling phase needed it (ragged/IRPEF-like CSV)
+    if robust_read_suggested:
+        preview_cfg = robust_preset(effective_read_cfg)
+        preview_cfg.setdefault("auto_detect", False)
+    else:
+        preview_cfg = effective_read_cfg
+
+    read_opts = csv_read_option_strings(preview_cfg)
     header_opt = "header=true"
     opt_sql = f"union_by_name=true, {', '.join(read_opts)}, {header_opt}"
 

@@ -80,7 +80,12 @@ def _validate_execution_plan(cfg, step: str) -> list[str]:
             )
         clean_sql = _resolve_sql_path(cfg, cfg.clean.get("sql"))
         if not clean_sql.exists():
-            raise FileNotFoundError(f"CLEAN SQL file not found: {clean_sql}")
+            raise ValueError(
+                f"CLEAN SQL file not found: {clean_sql}\n"
+                f"This config is not bootstrapped yet.\n"
+                f"Run: toolkit run init --config <config> --years <year>\n"
+                f"Then review sql/clean.sql and run: toolkit run all ..."
+            )
 
     if "mart" in layers:
         tables = cfg.mart.get("tables") or []

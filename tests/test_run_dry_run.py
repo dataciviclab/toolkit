@@ -640,3 +640,42 @@ def test_run_all_fails_readably_on_mart_only_config(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "run all is not supported for mart-only / compose-only configs" in str(result.exception)
+
+
+def test_run_all_fails_with_bootstrap_hint_when_clean_sql_missing(tmp_path: Path) -> None:
+    """When clean.sql does not exist, run all fails with a clear message pointing to init."""
+    # No clean.sql created — only raw dir (which exists but has no profile).
+    # Config has clean.sql declared but file does not exist.
+    raw_dir = tmp_path / "data" / "raw" / "demo_ds" / "2022"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "demo_ds_2022.csv").write_text("col1;col2\nval1;val2\n", encoding="utf-8")
+
+    config_path = tmp_path / "dataset.yml"
+    root_dir = tmp_path / "out"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'root: "{root_dir.as_posix()}"',
+                "dataset:",
+                "  name: demo_ds",
+                "  years: [2022]",
+                "raw:",
+                "  sources:",
+                "    - type: local_file",
+                "      args:",
+                "        path: data/raw/demo_ds/2022/demo_ds_2022.csv",
+                "clean:",
+                "  sql: sql/clean.sql",  # file does not exist
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    # Profiling is NOT pre-created; clean.sql does NOT exist.
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "all", "--config", str(config_path)])
+
+    assert result.exit_code != 0
+    exc_text = str(result.exception)
+    assert "CLEAN SQL file not found" in exc_text
+    assert "toolkit run init" in exc_text

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 import toolkit.profile.raw as profile_raw_module
 from toolkit.cli.cmd_profile import write_suggested_read_yml
 from toolkit.profile._column_profile import _build_mapping_suggestions
@@ -16,16 +17,19 @@ from toolkit.profile.raw import (
 )
 
 
+@pytest.mark.policy
 def test_sniff_delim_tab():
     sample = "a\tb\tc\n1\t2\t3\n4\t5\t6\n"
     assert sniff_delim(sample) == "\t"
 
 
+@pytest.mark.policy
 def test_sniff_decimal_it_comma():
     sample = "val\n1.234,56\n7.890,12\n"
     assert sniff_decimal(sample) == ","
 
 
+@pytest.mark.policy
 def test_sniff_encoding_latin1(tmp_path: Path):
     p = tmp_path / "latin1.csv"
     p.write_bytes("nome\ncittà\n".encode("latin-1"))
@@ -34,6 +38,7 @@ def test_sniff_encoding_latin1(tmp_path: Path):
     assert "citt" in txt.lower()
 
 
+@pytest.mark.policy
 def test_suggest_skip_for_preamble_line():
     sample = (
         "Produzione e raccolta differenziata su scala comunale anno 2022 (ISPRA)\n"
@@ -43,6 +48,7 @@ def test_suggest_skip_for_preamble_line():
     assert suggest_skip(sample, ";") == 1
 
 
+@pytest.mark.policy
 def test_profile_raw_suggests_robust_read_options_for_dirty_csv(tmp_path: Path):
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
@@ -62,6 +68,7 @@ def test_profile_raw_suggests_robust_read_options_for_dirty_csv(tmp_path: Path):
     assert "ignore_errors: true" in suggested
 
 
+@pytest.mark.policy
 def test_profile_raw_writes_suggested_read_even_when_duckdb_sniff_fails(
     tmp_path: Path, monkeypatch
 ):
@@ -101,6 +108,7 @@ def test_profile_raw_writes_suggested_read_even_when_duckdb_sniff_fails(
     assert "header: true" in suggested
 
 
+@pytest.mark.policy
 def test_build_read_csv_opts_keeps_header_and_skip_for_profiler():
     opts = _build_read_csv_opts(
         {
@@ -120,6 +128,7 @@ def test_build_read_csv_opts_keeps_header_and_skip_for_profiler():
     assert "skip=2" in opts
 
 
+@pytest.mark.policy
 def test_build_mapping_suggestions_varchar_falls_back_to_heuristics():
     """When DuckDB reports VARCHAR (generic), regex heuristics must surface.
 
@@ -143,6 +152,7 @@ def test_build_mapping_suggestions_varchar_falls_back_to_heuristics():
     )
 
 
+@pytest.mark.policy
 def test_profile_raw_mismatch_header_data_cols_triggers_null_padding(tmp_path: Path):
     """When DESCRIBE columns != true header token count, retry with null_padding.
 
@@ -180,6 +190,7 @@ def test_profile_raw_mismatch_header_data_cols_triggers_null_padding(tmp_path: P
     assert len(profile.columns_raw) == 4
 
 
+@pytest.mark.policy
 def test_sniff_source_file_returns_all_keys(tmp_path: Path):
     """sniff_source_file must return the full set of keys used by consumers."""
     csv_path = tmp_path / "data.csv"
@@ -204,6 +215,7 @@ def test_sniff_source_file_returns_all_keys(tmp_path: Path):
     assert "col1" in hints["columns_preview"]
 
 
+@pytest.mark.policy
 def test_sniff_source_file_true_header_line_preserved(tmp_path: Path):
     """true_header_line is always read at line 0, independent of skip offset."""
     csv_path = tmp_path / "data.csv"
@@ -220,6 +232,7 @@ def test_sniff_source_file_true_header_line_preserved(tmp_path: Path):
     assert hints["skip_suggested"] == 1
 
 
+@pytest.mark.policy
 def test_profile_with_read_cfg_overrides_sniff(tmp_path: Path):
     """When read_cfg is passed to profile_raw, it overrides sniff suggestions.
 
@@ -247,6 +260,7 @@ def test_profile_with_read_cfg_overrides_sniff(tmp_path: Path):
     assert "a,b" in profile.columns_raw
 
 
+@pytest.mark.policy
 def test_profile_with_read_cfg_reads_exactly_like_runtime(tmp_path: Path):
     """profile_with_read_cfg reads the file exactly as clean.read would."""
     csv_path = tmp_path / "data.csv"
@@ -271,6 +285,7 @@ def test_profile_with_read_cfg_reads_exactly_like_runtime(tmp_path: Path):
     assert "id" in result["mapping_suggestions"]
 
 
+@pytest.mark.policy
 def test_profile_with_read_cfg_retry_sets_robust_read_suggested(tmp_path: Path, monkeypatch):
     """When first DuckDB read fails but retry with robust preset succeeds, flag must be True.
 
@@ -312,6 +327,7 @@ def test_profile_with_read_cfg_retry_sets_robust_read_suggested(tmp_path: Path, 
     assert "profile_read_retry" in result["warnings"][-1]
 
 
+@pytest.mark.policy
 def test_profile_raw_respects_primary_file_override(tmp_path: Path):
     """When primary_file is passed, profile_raw uses it instead of glob alphabetical.
 

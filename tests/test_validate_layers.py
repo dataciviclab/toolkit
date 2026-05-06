@@ -4,6 +4,7 @@ import re
 from types import SimpleNamespace
 
 import duckdb
+import pytest
 
 from toolkit.raw.validate import validate_raw_output
 from toolkit.clean.validate import validate_clean, run_clean_validation
@@ -32,6 +33,7 @@ def _assert_portable_json_report(path: Path, *, root: Path, field: str, expected
     assert payload["summary"][field] == expected
 
 
+@pytest.mark.policy
 def test_validate_raw_detects_html_in_csv(tmp_path: Path):
     out_dir = tmp_path / "raw"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -47,6 +49,7 @@ def test_validate_raw_detects_html_in_csv(tmp_path: Path):
     assert any("contain HTML" in e for e in res.errors)
 
 
+@pytest.mark.policy
 def test_validate_clean_ok_and_missing_required(tmp_path: Path):
     p = tmp_path / "clean.parquet"
     _write_parquet(p, "CREATE TABLE t AS SELECT 1 AS a, 'x' AS b")
@@ -60,6 +63,7 @@ def test_validate_clean_ok_and_missing_required(tmp_path: Path):
     assert any("Missing required columns" in e for e in bad.errors)
 
 
+@pytest.mark.policy
 def test_validate_clean_report_uses_root_relative_path(tmp_path: Path):
     root = tmp_path / "root"
     parquet = root / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
@@ -77,6 +81,7 @@ def test_validate_clean_report_uses_root_relative_path(tmp_path: Path):
     )
 
 
+@pytest.mark.policy
 def test_validate_mart_required_tables(tmp_path: Path):
     d = tmp_path / "mart"
     d.mkdir(parents=True, exist_ok=True)
@@ -88,6 +93,7 @@ def test_validate_mart_required_tables(tmp_path: Path):
     assert any("Missing required MART tables" in e for e in res.errors)
 
 
+@pytest.mark.policy
 def test_validate_mart_min_rows_rule(tmp_path: Path):
     d = tmp_path / "mart"
     d.mkdir(parents=True, exist_ok=True)
@@ -102,6 +108,7 @@ def test_validate_mart_min_rows_rule(tmp_path: Path):
     assert ok.ok is True
 
 
+@pytest.mark.policy
 def test_validate_mart_warns_on_orphan_table_rules_against_declared_tables(tmp_path: Path):
     d = tmp_path / "mart"
     d.mkdir(parents=True, exist_ok=True)
@@ -120,6 +127,7 @@ def test_validate_mart_warns_on_orphan_table_rules_against_declared_tables(tmp_p
     assert result.summary["orphan_table_rules"] == ["bar"]
 
 
+@pytest.mark.policy
 def test_validate_mart_report_uses_root_relative_dir(tmp_path: Path):
     root = tmp_path / "root"
     mart_dir = root / "data" / "mart" / "demo" / "2024"
@@ -137,6 +145,7 @@ def test_validate_mart_report_uses_root_relative_dir(tmp_path: Path):
     )
 
 
+@pytest.mark.policy
 def test_check_transitions_warns_on_row_drop_over_threshold_and_removed_columns() -> None:
     transition_profiles = [
         {
@@ -161,6 +170,7 @@ def test_check_transitions_warns_on_row_drop_over_threshold_and_removed_columns(
     assert any(item["kind"] == "removed_columns" for item in report["warnings"])
 
 
+@pytest.mark.policy
 def test_check_transitions_respects_optional_threshold_and_removed_columns_toggle() -> None:
     transition_profiles = [
         {
@@ -187,6 +197,7 @@ def test_check_transitions_respects_optional_threshold_and_removed_columns_toggl
     assert "columns removed from clean" in removed_only["warning_messages"][0]
 
 
+@pytest.mark.policy
 def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Path):
     root = tmp_path / "root"
     mart_dir = root / "data" / "mart" / "demo" / "2024"
@@ -245,6 +256,7 @@ def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Pa
 
 
 
+@pytest.mark.policy
 def test_validate_cross_outputs_required_tables(tmp_path: Path):
     d = tmp_path / "cross"
     d.mkdir(parents=True, exist_ok=True)
@@ -257,6 +269,7 @@ def test_validate_cross_outputs_required_tables(tmp_path: Path):
     assert res.summary["years"] == [2022, 2023]
 
 
+@pytest.mark.policy
 def test_run_cross_validation_does_not_require_metadata_json(tmp_path: Path):
     root = tmp_path / "root"
     cross_dir = root / "data" / "cross" / "demo"
@@ -282,6 +295,7 @@ def test_run_cross_validation_does_not_require_metadata_json(tmp_path: Path):
     assert manifest_payload["summary"]["ok"] is True
 
 
+@pytest.mark.policy
 def test_run_clean_validation_uses_columns_raw_from_raw_profile(tmp_path: Path):
     """Regression test for issue #145: raw_col_count must come from columns_raw in
     raw_profile.json, not from _profile_raw_input which may read the CSV with
@@ -345,6 +359,7 @@ def test_run_clean_validation_uses_columns_raw_from_raw_profile(tmp_path: Path):
     assert summary["stats"].get("raw_probe_source") == "raw_profile"
 
 
+@pytest.mark.policy
 def test_run_clean_validation_raw_probe_source_legacy_autodetect(tmp_path: Path):
     """When no profile exists and a CSV raw file is present, validation falls back
     to read_csv(auto_detect=true) and sets raw_probe_source = 'legacy_autodetect'."""
@@ -398,6 +413,7 @@ def test_run_clean_validation_raw_probe_source_legacy_autodetect(tmp_path: Path)
     assert "falling back to read_csv(auto_detect=true)" in warning_texts
 
 
+@pytest.mark.policy
 def test_run_clean_validation_raw_probe_source_unavailable_when_no_raw_file(
     tmp_path: Path,
 ):
@@ -450,6 +466,7 @@ def _read_warnings_from_validation_report(clean_dir: Path) -> list[str]:
     return []
 
 
+@pytest.mark.policy
 def test_ensure_dict_preserves_validate_alias() -> None:
     """Verify ensure_dict converts validate_config -> validate (by_alias=True)."""
     from toolkit.core.config import ensure_dict

@@ -3,3 +3,10 @@ tests/test_cmd_url_inspect.py
 tests/test_config_loading.py
 tests/test_sql_dry_run.py
 tests/test_clean_duckdb_read.py
+tests/test_run_dry_run.py
+tests/test_validate_layers.py
+tests/test_paths.py
+tests/test_csv_read.py
+tests/test_profile_sniff.py
+tests/test_clean_csv_columns.py
+tests/test_validate_rules.py

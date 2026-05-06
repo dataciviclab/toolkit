@@ -10,7 +10,10 @@ Usage:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from toolkit.mcp.schema_ops import blocker_hints as _blocker_hints
+from toolkit.core.config import load_config
 
 import typer
 
@@ -31,12 +34,24 @@ def blocker_hints(
         1 — config non trovato o errore nell'analisi
     """
     try:
-        result = _blocker_hints(config, year)
+        # Use load_config like other CLI commands (run, init, status) so that
+        # relative paths are resolved from the config file's base_dir, not from
+        # WORKSPACE_ROOT. This matches the behavior of `toolkit run all` etc.
+        load_config(config, strict_config=False)
+        # Pass the resolved path of the actual config file, not a reconstructed name.
+        config_path_resolved = str(Path(config).resolve())
+        result = _blocker_hints(config_path_resolved, year)
     except FileNotFoundError:
         typer.echo(f"error: config file not found: {config}", err=True)
         raise typer.Exit(code=1)
     except Exception as exc:
-        typer.echo(f"error: {type(exc).__name__}: {exc}", err=True)
+        # Surface file-not-found errors (YAML read failure due to missing file)
+        # with a clear message rather than a raw exception type.
+        exc_msg = str(exc).lower()
+        if "no such file or directory" in exc_msg or "non trovata" in exc_msg:
+            typer.echo(f"error: config file not found: {config}", err=True)
+        else:
+            typer.echo(f"error: {type(exc).__name__}: {exc}", err=True)
         raise typer.Exit(code=1)
 
     if as_json:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import typer
 import yaml
@@ -47,6 +48,8 @@ def scaffold_clean(
     raw_profile_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, selected_year) / "_profile"
     profile_path = raw_profile_dir / "profile.json"
     suggested_read_yml = raw_profile_dir / "suggested_read.yml"
+
+    profile: dict[str, Any]
 
     if not profile_path.exists():
         # Also check raw_profile.json as fallback

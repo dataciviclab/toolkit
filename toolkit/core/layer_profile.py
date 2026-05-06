@@ -53,18 +53,39 @@ def compare_layer_profiles(
     source_columns = {item["name"]: item["type"] for item in source.get("columns", [])}
     target_columns = {item["name"]: item["type"] for item in target.get("columns", [])}
 
-    source_names = set(source_columns.keys())
-    target_names = set(target_columns.keys())
-    shared_names = sorted(source_names & target_names)
+    # Build UPPER-mapped views for case-insensitive comparison.
+    # This handles SQL renames like "ANNOCORSO AS annocorso" where raw has
+    # uppercase names and clean has lowercase — they are the same column.
+    source_upper_to_orig = {name.upper(): name for name in source_columns}
+    target_upper_to_orig = {name.upper(): name for name in target_columns}
+
+    source_upper = set(source_upper_to_orig.keys())
+    target_upper = set(target_upper_to_orig.keys())
+
+    # Columns present in both (case-insensitive match).
+    # Use target's casing as the canonical name.
+    shared_upper = sorted(source_upper & target_upper)
+
+    # Added: in target but not in source (case-insensitive).
+    # Map back to original target casing.
+    added_upper = sorted(target_upper - source_upper)
+    added_columns = [target_upper_to_orig[u] for u in added_upper]
+
+    # Removed: in source but not in target (case-insensitive).
+    # Map back to original source casing.
+    removed_upper = sorted(source_upper - target_upper)
+    removed_columns = [source_upper_to_orig[u] for u in removed_upper]
 
     type_changes = []
-    for name in shared_names:
-        if source_columns[name] != target_columns[name]:
+    for name_upper in shared_upper:
+        src_name = source_upper_to_orig[name_upper]
+        tgt_name = target_upper_to_orig[name_upper]
+        if source_columns[src_name] != target_columns[tgt_name]:
             type_changes.append(
                 {
-                    "column": name,
-                    "from": source_columns[name],
-                    "to": target_columns[name],
+                    "column": tgt_name,  # use target's casing as canonical
+                    "from": source_columns[src_name],
+                    "to": target_columns[tgt_name],
                 }
             )
 
@@ -74,8 +95,8 @@ def compare_layer_profiles(
         "source_row_count": source.get("row_count"),
         "target_row_count": target.get("row_count"),
         "row_count_delta": (target.get("row_count") or 0) - (source.get("row_count") or 0),
-        "added_columns": sorted(target_names - source_names),
-        "removed_columns": sorted(source_names - target_names),
+        "added_columns": added_columns,
+        "removed_columns": removed_columns,
         "type_changes": type_changes,
     }
     if target_name is not None:

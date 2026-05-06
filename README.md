@@ -166,7 +166,7 @@ esegue le trasformazioni SQL su DuckDB e produce output in `root/data/`.
 ## MCP Server
 
 Il toolkit espone un server **MCP (Model Context Protocol)** per integrazione con agenti AI e IDE.
-Espone 7 tool read-only per ispezione rapida:
+Espone 9 tool read-only per ispezione rapida:
 
 | Tool | Cosa fa |
 |---|---|
@@ -177,6 +177,8 @@ Espone 7 tool read-only per ispezione rapida:
 | `toolkit_blocker_hints` | Mismatch tra config e output |
 | `toolkit_review_readiness` | Check di prontezza per review |
 | `toolkit_list_runs` | Run records con filtri |
+| `toolkit_schema_diff` | Confronto schema raw cross-year |
+| `toolkit_csv_preview` | Schema + preview CSV via profiler pipeline |
 
 Config esempio per IDE (`.mcp.json`):
 

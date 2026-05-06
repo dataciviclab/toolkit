@@ -153,7 +153,21 @@ def _execute_csv_read(
             # use source_columns (the already-parsed dict with types only).
             projection = csv_trim_projection(original_columns or source_columns)
         else:
-            projection = ", ".join(q_ident(name) for name in source_columns)
+            # Even without trim, we must apply the clean-name rename from
+            # compact format (original_columns). Build "raw_name AS clean_name"
+            # for each column that has a rename.
+            parts = []
+            for raw_name in source_columns:
+                value = original_columns.get(raw_name) if original_columns else None
+                if value is not None:
+                    clean_name, _ = _parse_column_value(raw_name, value)
+                else:
+                    clean_name = raw_name
+                if clean_name != raw_name:
+                    parts.append(f"{q_ident(raw_name)} AS {q_ident(clean_name)}")
+                else:
+                    parts.append(q_ident(raw_name))
+            projection = ", ".join(parts)
         con.execute(
             f"CREATE OR REPLACE VIEW raw_input AS SELECT {projection} FROM raw_input_source;"
         )

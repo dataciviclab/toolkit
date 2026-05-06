@@ -277,3 +277,49 @@ def test_run_clean_compact_columns_format_with_int_type(tmp_path: Path):
     ).fetchall()
     con.close()
     assert rows == [(2024, 42)]
+
+
+def test_run_clean_compact_columns_format_no_trim_whitespace(tmp_path: Path):
+    """Compact format rename is applied even when trim_whitespace=False.
+
+    When trim_whitespace=False the code must still produce the clean-name
+    projection (raw_name AS clean_name), not just raw_name columns.
+    Regression: projection fell back to raw names only.
+    """
+    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = raw_dir / "data.csv"
+    csv_path.write_text("anno;valore\n2024;42\n", encoding="utf-8")
+
+    sql_path = tmp_path / "clean.sql"
+    sql_path.write_text("SELECT anno_clean, valore_clean FROM raw_input", encoding="utf-8")
+
+    run_clean(
+        "demo",
+        2024,
+        str(tmp_path),
+        {
+            "sql": str(sql_path),
+            "read": {
+                "mode": "latest",
+                "delim": ";",
+                "header": True,
+                "trim_whitespace": False,  # key: no TRIM, but rename must work
+                "columns": {
+                    "anno": "anno_clean:BIGINT",
+                    "valore": "valore_clean:BIGINT",
+                },
+            },
+        },
+        _NoopLogger(),
+    )
+
+    out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
+    assert out.exists()
+
+    con = duckdb.connect(":memory:")
+    rows = con.execute(
+        f"SELECT anno_clean, valore_clean FROM read_parquet('{out.as_posix()}')"
+    ).fetchall()
+    con.close()
+    assert rows == [(2024, 42)]

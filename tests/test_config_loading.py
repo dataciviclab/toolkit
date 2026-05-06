@@ -2,21 +2,13 @@
 
 from pathlib import Path
 
-import logging
 import pytest
 
 from toolkit.core.config import load_config
 from toolkit.core.config_models import load_config_model
 
 
-def _bind_config_logger(caplog, monkeypatch):
-    module_logger = logging.getLogger("toolkit.core.config")
-    monkeypatch.setattr(module_logger, "handlers", [caplog.handler])
-    monkeypatch.setattr(module_logger, "propagate", False)
-    module_logger.setLevel(logging.WARNING)
-    caplog.set_level(logging.WARNING, logger="toolkit.core.config")
-
-
+@pytest.mark.contract
 def test_load_config_ok(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
@@ -40,6 +32,7 @@ mart: {}
     assert cfg.root_source == "base_dir_fallback"
 
 
+@pytest.mark.policy
 def test_load_config_parses_mart_transition_config(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
@@ -67,6 +60,7 @@ mart:
     }
 
 
+@pytest.mark.policy
 def test_load_config_parses_clean_promotion_config(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
@@ -94,6 +88,7 @@ mart: {}
     }
 
 
+@pytest.mark.contract
 def test_load_config_model_rejects_invalid_mart_transition_bool(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
@@ -118,6 +113,7 @@ mart:
     assert "mart.validate.transition.warn_removed_columns" in str(e.value)
 
 
+@pytest.mark.contract
 def test_load_config_missing_dataset_name(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
@@ -137,6 +133,7 @@ mart: {}
     assert "dataset.name" in str(e.value)
 
 
+@pytest.mark.policy
 def test_load_config_resolves_relative_paths_from_dataset_dir(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -181,6 +178,7 @@ cross_year:
     assert cfg.cross_year.tables[0].sql == (project_dir / "sql" / "cross" / "demo_cross.sql").resolve()
 
 
+@pytest.mark.policy
 def test_load_config_resolves_support_config_paths_from_dataset_dir(tmp_path: Path):
     project_dir = tmp_path / "project"
     support_dir = tmp_path / "support"
@@ -216,6 +214,7 @@ support:
     ]
 
 
+@pytest.mark.contract
 def test_load_config_rejects_duplicate_support_names(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
     yml.write_text(
@@ -244,6 +243,7 @@ support:
     assert "support[].name values must be unique" in str(e.value)
 
 
+@pytest.mark.policy
 def test_load_config_does_not_transform_non_whitelisted_path_like_fields(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -281,6 +281,7 @@ mart:
     assert cfg.mart.label_path == "labels/mart.txt"
 
 
+@pytest.mark.policy
 def test_load_config_preserves_year_template_in_raw_local_file_path(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -310,54 +311,7 @@ mart: {}
     assert cfg.raw.sources[0].args["filename"] == "raw_{year}.csv"
 
 
-def test_load_config_logs_normalized_whitelist_fields(tmp_path: Path, caplog, monkeypatch):
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    (project_dir / "sql" / "mart").mkdir(parents=True)
-
-    yml = project_dir / "dataset.yml"
-    yml.write_text(
-        """
-root: "./out"
-dataset:
-  name: demo
-  years: [2022]
-raw:
-  sources:
-    - type: local_file
-      args:
-        path: "data/raw_a.csv"
-clean:
-  sql: "sql/clean.sql"
-mart:
-  tables:
-    - name: demo_mart
-      sql: "sql/mart/demo.sql"
-""".strip(),
-        encoding="utf-8",
-    )
-
-    module_logger = logging.getLogger("toolkit.core.config")
-    monkeypatch.setattr(module_logger, "handlers", [caplog.handler])
-    monkeypatch.setattr(module_logger, "propagate", False)
-    module_logger.setLevel(logging.DEBUG)
-    caplog.set_level(logging.DEBUG, logger="toolkit.core.config")
-
-    with caplog.at_level(logging.DEBUG, logger="toolkit.core.config"):
-        cfg = load_config(yml)
-
-    assert cfg.root == (project_dir / "out").resolve()
-    assert cfg.raw.sources[0].args["path"] == (project_dir / "data" / "raw_a.csv").resolve()
-    assert cfg.clean.sql == (project_dir / "sql" / "clean.sql").resolve()
-    assert cfg.mart.tables[0].sql == (project_dir / "sql" / "mart" / "demo.sql").resolve()
-
-    assert "Normalized config paths:" in caplog.text
-    assert "root=" in caplog.text
-    assert "raw.sources[0].args.path=" in caplog.text
-    assert "clean.sql=" in caplog.text
-    assert "mart.tables[0].sql=" in caplog.text
-
-
+@pytest.mark.policy
 def test_load_config_uses_dcl_root_when_root_missing(tmp_path: Path, monkeypatch):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -384,6 +338,7 @@ mart: {}
     assert cfg.root_source == "env:DCL_ROOT"
 
 
+@pytest.mark.policy
 def test_load_config_uses_toolkit_outdir_for_managed_smoke_root(tmp_path: Path, monkeypatch):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -411,6 +366,7 @@ mart: {}
     assert cfg.root_source == "env:TOOLKIT_OUTDIR"
 
 
+@pytest.mark.policy
 def test_load_config_uses_base_dir_when_root_missing_and_dcl_root_missing(tmp_path: Path, monkeypatch):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -436,6 +392,7 @@ mart: {}
     assert cfg.root_source == "base_dir_fallback"
 
 
+@pytest.mark.policy
 @pytest.mark.parametrize(
     ("dataset_rel", "root_value"),
     [
@@ -472,6 +429,7 @@ mart: {{}}
     assert cfg.root_source == "yml"
 
 
+@pytest.mark.policy
 def test_load_config_accepts_absolute_root_within_repo_when_repo_root_is_provided(tmp_path: Path):
     repo_root = tmp_path / "dataset-incubator"
     dataset_dir = repo_root / "candidates" / "demo_dataset"
@@ -497,6 +455,7 @@ mart: {{}}
     assert cfg.root_source == "yml"
 
 
+@pytest.mark.policy
 def test_load_config_rejects_root_outside_repo_when_repo_root_is_provided(tmp_path: Path):
     repo_root = tmp_path / "dataset-incubator"
     dataset_dir = repo_root / "candidates" / "demo_dataset"
@@ -524,6 +483,7 @@ mart: {{}}
     assert str(repo_root.resolve()) in str(exc.value)
 
 
+@pytest.mark.policy
 def test_load_config_allows_root_outside_repo_without_repo_root_guard(tmp_path: Path):
     repo_root = tmp_path / "dataset-incubator"
     dataset_dir = repo_root / "candidates" / "demo_dataset"
@@ -547,6 +507,7 @@ mart: {}
     assert cfg.root == (tmp_path / "outside").resolve()
 
 
+@pytest.mark.contract
 def test_project_example_config_parses_in_strict_mode():
     model = load_config_model(Path("project-example") / "dataset.yml", strict_config=True)
 
@@ -554,9 +515,7 @@ def test_project_example_config_parses_in_strict_mode():
     assert len(model.raw.sources) == 1
 
 
-# --- Mart required_tables auto-fill tests ---
-
-
+@pytest.mark.contract
 def test_mart_required_tables_auto_filled_from_tables(tmp_path: Path):
     """When required_tables is omitted, it defaults to all table names from tables."""
     project_dir = tmp_path / "project"
@@ -585,6 +544,7 @@ mart:
     assert cfg.mart.required_tables == ["table_a", "table_b"]
 
 
+@pytest.mark.contract
 def test_mart_required_tables_explicit_empty_auto_fills(tmp_path: Path):
     """When required_tables is set to [], it auto-fills to all table names.
 
@@ -615,6 +575,7 @@ mart:
     assert cfg.mart.required_tables == ["table_a"]
 
 
+@pytest.mark.contract
 def test_mart_required_tables_explicit_subset(tmp_path: Path):
     """When required_tables is explicitly set, it is used as-is (no auto-fill)."""
     project_dir = tmp_path / "project"

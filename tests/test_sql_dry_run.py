@@ -65,55 +65,67 @@ class _FakeConfig:
 
 
 class TestDedupePreserveOrder:
+    @pytest.mark.pure_unit
     def test_removes_duplicates(self):
         assert _dedupe_preserve_order(["a", "b", "a", "c", "b"]) == ["a", "b", "c"]
 
+    @pytest.mark.pure_unit
     def test_skips_empty(self):
         assert _dedupe_preserve_order(["", "a", "", "b"]) == ["a", "b"]
 
+    @pytest.mark.pure_unit
     def test_preserves_order(self):
         assert _dedupe_preserve_order(["z", "a", "z", "m"]) == ["z", "a", "m"]
 
 
 class TestNormalizeSql:
+    @pytest.mark.pure_unit
     def test_strips_whitespace(self):
         assert _normalize_sql("  select 1  ") == "select 1"
 
+    @pytest.mark.pure_unit
     def test_removes_trailing_semicolon(self):
         assert _normalize_sql("select 1;") == "select 1"
 
+    @pytest.mark.pure_unit
     def test_removes_semicolon_then_space(self):
         assert _normalize_sql("select 1;  ") == "select 1"
 
 
 class TestExtractMissingBinderColumn:
+    @pytest.mark.pure_unit
     def test_matches_duckdb_error(self):
         exc = Exception('Referenced column "my_col" not found in FROM clause')
         assert _extract_missing_binder_column(exc) == "my_col"
 
+    @pytest.mark.pure_unit
     def test_returns_none_for_unrelated_error(self):
         exc = Exception("syntax error at or near SELECT")
         assert _extract_missing_binder_column(exc) is None
 
 
 class TestPlaceholderColumns:
+    @pytest.mark.pure_unit
     def test_uses_read_columns(self):
         clean_cfg = {"read": {"columns": {"col_a": "VARCHAR", "col_b": "INT"}}}
         cols = _placeholder_columns(clean_cfg, "")
         assert cols == ["col_a", "col_b"]
 
+    @pytest.mark.pure_unit
     def test_falls_back_to_quoted_identifiers(self):
         clean_cfg = {"read": {}}
         sql = 'select "foo", "bar" from raw_input'
         cols = _placeholder_columns(clean_cfg, sql)
         assert cols == ["foo", "bar"]
 
+    @pytest.mark.pure_unit
     def test_combines_read_columns_and_identifiers(self):
         clean_cfg = {"read": {"columns": {"a": "VARCHAR"}}}
         sql = 'select a, "b" from raw_input'
         cols = _placeholder_columns(clean_cfg, sql)
         assert cols == ["a", "b"]
 
+    @pytest.mark.pure_unit
     def test_dedupes(self):
         clean_cfg = {"read": {"columns": {"a": "VARCHAR"}}}
         sql = 'select "a", "b", "a" from raw_input'
@@ -122,6 +134,7 @@ class TestPlaceholderColumns:
 
 
 class TestCreatePlaceholderRawInput:
+    @pytest.mark.policy
     def test_creates_view_with_columns(self):
         con = duckdb.connect(":memory:")
         try:
@@ -132,6 +145,7 @@ class TestCreatePlaceholderRawInput:
         finally:
             con.close()
 
+    @pytest.mark.policy
     def test_creates_fallback_placeholder(self):
         con = duckdb.connect(":memory:")
         try:
@@ -142,6 +156,7 @@ class TestCreatePlaceholderRawInput:
         finally:
             con.close()
 
+    @pytest.mark.policy
     def test_infers_columns_from_sql(self):
         con = duckdb.connect(":memory:")
         try:
@@ -159,6 +174,7 @@ class TestCreatePlaceholderRawInput:
 
 
 class TestBuildCleanPreview:
+    @pytest.mark.policy
     def test_simple_sql_passes_immediately(self, tmp_path: Path):
         cfg = _FakeConfig(tmp_path, clean_sql="select 1 as value")
         con = duckdb.connect(":memory:")
@@ -169,6 +185,7 @@ class TestBuildCleanPreview:
         finally:
             con.close()
 
+    @pytest.mark.policy
     def test_sql_with_unquoted_column_infers_incrementally(self, tmp_path: Path):
         """Clean SQL uses unquoted column name not in read.columns."""
         cfg = _FakeConfig(tmp_path, clean_sql="select x from raw_input")
@@ -179,6 +196,7 @@ class TestBuildCleanPreview:
         finally:
             con.close()
 
+    @pytest.mark.policy
     def test_sql_with_read_columns(self, tmp_path: Path):
         cfg = _FakeConfig(
             tmp_path,
@@ -192,6 +210,7 @@ class TestBuildCleanPreview:
         finally:
             con.close()
 
+    @pytest.mark.policy
     def test_sql_with_multiple_columns_and_casts(self, tmp_path: Path):
         sql = (
             'select TRY_CAST("id" AS BIGINT) AS id, '
@@ -210,6 +229,7 @@ class TestBuildCleanPreview:
         finally:
             con.close()
 
+    @pytest.mark.policy
     def test_non_binder_error_raises_clean_dry_run_failure(self, tmp_path: Path):
         """Non-binder SQL errors should surface as CLEAN SQL dry-run failures."""
         cfg = _FakeConfig(tmp_path, clean_sql="select from raw_input")
@@ -220,6 +240,7 @@ class TestBuildCleanPreview:
         finally:
             con.close()
 
+    @pytest.mark.policy
     def test_missing_column_error_includes_path(self, tmp_path: Path):
         """SQL syntax error should include file path in the message."""
         cfg = _FakeConfig(tmp_path, clean_sql="select from raw_input")
@@ -238,6 +259,7 @@ class TestBuildCleanPreview:
 
 
 class TestValidateMartSql:
+    @pytest.mark.policy
     def test_simple_mart_sql_passes(self, tmp_path: Path):
         mart_sql_dir = tmp_path / "sql" / "mart"
         mart_sql_dir.mkdir(parents=True, exist_ok=True)
@@ -256,6 +278,7 @@ class TestValidateMartSql:
         finally:
             con.close()
 
+    @pytest.mark.policy
     def test_mart_sql_with_missing_column_fails(self, tmp_path: Path):
         mart_sql_dir = tmp_path / "sql" / "mart"
         mart_sql_dir.mkdir(parents=True, exist_ok=True)
@@ -276,6 +299,7 @@ class TestValidateMartSql:
         finally:
             con.close()
 
+    @pytest.mark.policy
     def test_mart_sql_with_template_placeholder_resolved(self, tmp_path: Path):
         """Mart SQL with {year} placeholder should be resolved by template rendering."""
         mart_sql_dir = tmp_path / "sql" / "mart"
@@ -296,6 +320,7 @@ class TestValidateMartSql:
         finally:
             con.close()
 
+    @pytest.mark.policy
     def test_mart_sql_with_unresolved_placeholder_fails(self, tmp_path: Path):
         """Mart SQL with unresolved placeholder should fail."""
         mart_sql_dir = tmp_path / "sql" / "mart"
@@ -323,6 +348,7 @@ class TestValidateMartSql:
 
 
 class TestValidateSqlDryRun:
+    @pytest.mark.policy
     def test_clean_and_mart_pass(self, tmp_path: Path):
         mart_sql_dir = tmp_path / "sql" / "mart"
         mart_sql_dir.mkdir(parents=True, exist_ok=True)
@@ -336,6 +362,7 @@ class TestValidateSqlDryRun:
         # Should not raise
         validate_sql_dry_run(cfg, year=2022, layers=["clean", "mart"])
 
+    @pytest.mark.policy
     def test_mart_only_pass(self, tmp_path: Path):
         """Without clean.sql, mart validation skips clean preview."""
         mart_sql_dir = tmp_path / "sql" / "mart"
@@ -349,17 +376,20 @@ class TestValidateSqlDryRun:
         )
         validate_sql_dry_run(cfg, year=2022, layers=["mart"])
 
+    @pytest.mark.policy
     def test_no_matching_layers_returns_early(self, tmp_path: Path):
         """If layers don't include clean or mart, function returns without doing anything."""
         cfg = _FakeConfig(tmp_path)
         # Should not raise even though no SQL files exist
         validate_sql_dry_run(cfg, year=2022, layers=["cross_year"])
 
+    @pytest.mark.policy
     def test_fails_on_clean_sql_error(self, tmp_path: Path):
         cfg = _FakeConfig(tmp_path, clean_sql="select from raw_input")
         with pytest.raises(ValueError, match="CLEAN SQL dry-run failed"):
             validate_sql_dry_run(cfg, year=2022, layers=["clean"])
 
+    @pytest.mark.policy
     def test_fails_on_mart_sql_error(self, tmp_path: Path):
         mart_sql_dir = tmp_path / "sql" / "mart"
         mart_sql_dir.mkdir(parents=True, exist_ok=True)

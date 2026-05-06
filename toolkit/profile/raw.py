@@ -318,6 +318,7 @@ def profile_with_read_cfg(
     """
     true_header_line: str | None = sniff_hints.get("true_header_line")
     warnings = list(sniff_hints.get("warnings") or [])
+    robust_read_suggested = False
 
     con = duckdb.connect(":memory:")
     try:
@@ -329,6 +330,7 @@ def profile_with_read_cfg(
             )
         except Exception as e:
             warnings.append(f"profile_read_retry: {type(e).__name__}: {e}")
+            robust_read_suggested = True
             fallback_cfg = robust_preset(effective_read_cfg)
             fallback_cfg.setdefault("auto_detect", False)
             _profile_view(
@@ -344,7 +346,6 @@ def profile_with_read_cfg(
         # than what DESCRIBE returns, the file has more columns in data
         # rows than in the header row (IRPEF comunale pattern:
         # header=50 cols, data rows=52 cols).
-        robust_read_suggested = False
         if true_header_line is not None:
             true_header_tokens = true_header_line.count(effective_read_cfg.get("delim") or ";") + 1
             if len(columns_raw) > true_header_tokens:

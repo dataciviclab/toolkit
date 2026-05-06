@@ -269,3 +269,44 @@ def test_profile_with_read_cfg_reads_exactly_like_runtime(tmp_path: Path):
     assert result["robust_read_suggested"] is False
     # mapping_suggestions should be present
     assert "id" in result["mapping_suggestions"]
+
+
+def test_profile_with_read_cfg_retry_sets_robust_read_suggested(tmp_path: Path, monkeypatch):
+    """When first DuckDB read fails but retry with robust preset succeeds, flag must be True.
+
+    Regression test: before the fix, retry-success kept robust_read_suggested=False
+    because the flag was initialised after the retry logic.
+    """
+    import toolkit.profile.raw as raw_mod
+
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("col1;col2\n1;2\n", encoding="utf-8")
+
+    sniff_hints = sniff_source_file(csv_path)
+    effective_cfg = {
+        "delim": ";",
+        "encoding": "utf-8",
+        "header": True,
+        "skip": 0,
+    }
+
+    _original_profile_view = raw_mod._profile_view
+    call_count = 0
+
+    def failing_profile_view(con, file0, *, effective_read_cfg):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise RuntimeError("first read fails")
+        # retry succeeds — call the real function directly (not via module, to avoid loop)
+        _original_profile_view(con, file0, effective_read_cfg=effective_read_cfg)
+
+    monkeypatch.setattr(raw_mod, "_profile_view", failing_profile_view)
+
+    result = profile_with_read_cfg(csv_path, sniff_hints, effective_cfg)
+
+    assert call_count == 2, f"Expected exactly 2 calls (fail + retry), got {call_count}"
+    assert result["robust_read_suggested"] is True, (
+        "robust_read_suggested must be True after retry-success"
+    )
+    assert "profile_read_retry" in result["warnings"][-1]

@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 
 import duckdb
+import pytest
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
@@ -12,6 +13,7 @@ from toolkit.cli.cmd_run import run_year
 from toolkit.core.config import load_config
 
 
+@pytest.mark.policy
 def test_run_dry_run_prints_plan_and_creates_only_run_record(tmp_path: Path) -> None:
     sql_dir = tmp_path / "sql" / "mart"
     sql_dir.mkdir(parents=True, exist_ok=True)
@@ -61,6 +63,7 @@ def test_run_dry_run_prints_plan_and_creates_only_run_record(tmp_path: Path) -> 
     assert not (root_dir / "data" / "mart" / "demo_ds" / "2022").exists()
 
 
+@pytest.mark.policy
 def test_run_dry_run_fails_on_clean_sql_syntax_error(tmp_path: Path) -> None:
     sql_dir = tmp_path / "sql" / "mart"
     sql_dir.mkdir(parents=True, exist_ok=True)
@@ -95,6 +98,7 @@ def test_run_dry_run_fails_on_clean_sql_syntax_error(tmp_path: Path) -> None:
     assert "CLEAN SQL dry-run failed" in str(result.exception)
 
 
+@pytest.mark.policy
 def test_run_dry_run_fails_on_mart_sql_binding_error(tmp_path: Path) -> None:
     sql_dir = tmp_path / "sql" / "mart"
     sql_dir.mkdir(parents=True, exist_ok=True)
@@ -132,6 +136,7 @@ def test_run_dry_run_fails_on_mart_sql_binding_error(tmp_path: Path) -> None:
     assert "MART SQL dry-run failed" in str(result.exception)
 
 
+@pytest.mark.policy
 def test_run_dry_run_accepts_unquoted_raw_columns_without_read_columns(tmp_path: Path) -> None:
     sql_dir = tmp_path / "sql" / "mart"
     sql_dir.mkdir(parents=True, exist_ok=True)
@@ -166,6 +171,7 @@ def test_run_dry_run_accepts_unquoted_raw_columns_without_read_columns(tmp_path:
     assert "sql_validation: OK" in result.output
 
 
+@pytest.mark.policy
 def test_run_dry_run_accepts_mart_sql_with_root_posix_placeholder(tmp_path: Path) -> None:
     sql_dir = tmp_path / "sql" / "mart"
     sql_dir.mkdir(parents=True, exist_ok=True)
@@ -209,6 +215,7 @@ def test_run_dry_run_accepts_mart_sql_with_root_posix_placeholder(tmp_path: Path
     assert "sql_validation: OK" in result.output
 
 
+@pytest.mark.policy
 def test_run_dry_run_accepts_mart_sql_with_support_placeholder(tmp_path: Path) -> None:
     sql_dir = tmp_path / "sql" / "mart"
     sql_dir.mkdir(parents=True, exist_ok=True)
@@ -277,6 +284,7 @@ def test_run_dry_run_accepts_mart_sql_with_support_placeholder(tmp_path: Path) -
     assert "sql_validation: OK" in result.output
 
 
+@pytest.mark.policy
 def test_run_dry_run_fails_when_support_output_is_missing(tmp_path: Path) -> None:
     sql_dir = tmp_path / "sql" / "mart"
     sql_dir.mkdir(parents=True, exist_ok=True)
@@ -339,6 +347,7 @@ def test_run_dry_run_fails_when_support_output_is_missing(tmp_path: Path) -> Non
     assert "Support dataset output mancante" in str(result.exception)
 
 
+@pytest.mark.policy
 def test_run_dry_run_fails_when_support_outputs_are_only_partially_present(tmp_path: Path) -> None:
     sql_dir = tmp_path / "sql" / "mart"
     sql_dir.mkdir(parents=True, exist_ok=True)
@@ -409,6 +418,7 @@ def test_run_dry_run_fails_when_support_outputs_are_only_partially_present(tmp_p
     assert "Support dataset output mancante" in str(result.exception)
 
 
+@pytest.mark.policy
 def test_run_year_logs_effective_root_context(tmp_path: Path, caplog) -> None:
     sql_dir = tmp_path / "sql" / "mart"
     sql_dir.mkdir(parents=True, exist_ok=True)
@@ -451,6 +461,7 @@ def test_run_year_logs_effective_root_context(tmp_path: Path, caplog) -> None:
     assert "root_source=yml" in caplog.text
 
 
+@pytest.mark.policy
 def test_run_dry_run_accepts_mart_only_config(tmp_path: Path) -> None:
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)
@@ -493,6 +504,7 @@ def test_run_dry_run_accepts_mart_only_config(tmp_path: Path) -> None:
     assert "sql_validation: OK" in result.output
 
 
+@pytest.mark.policy
 def test_run_dry_run_all_fails_readably_on_mart_only_config(tmp_path: Path) -> None:
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)
@@ -524,6 +536,7 @@ def test_run_dry_run_all_fails_readably_on_mart_only_config(tmp_path: Path) -> N
     assert "run all is not supported for mart-only / compose-only configs" in str(result.exception)
 
 
+@pytest.mark.policy
 def test_run_mart_executes_mart_only_config(tmp_path: Path) -> None:
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)
@@ -567,6 +580,7 @@ def test_run_mart_executes_mart_only_config(tmp_path: Path) -> None:
     assert not (root_dir / "data" / "clean" / "compose_demo" / "2022").exists()
 
 
+@pytest.mark.policy
 def test_run_mart_mart_only_ignores_stale_clean_dir(tmp_path: Path) -> None:
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)
@@ -611,6 +625,7 @@ def test_run_mart_mart_only_ignores_stale_clean_dir(tmp_path: Path) -> None:
     assert not mart_output.exists()
 
 
+@pytest.mark.policy
 def test_run_all_fails_readably_on_mart_only_config(tmp_path: Path) -> None:
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)
@@ -642,6 +657,7 @@ def test_run_all_fails_readably_on_mart_only_config(tmp_path: Path) -> None:
     assert "run all is not supported for mart-only / compose-only configs" in str(result.exception)
 
 
+@pytest.mark.policy
 def test_run_all_fails_with_bootstrap_hint_when_clean_sql_missing(tmp_path: Path) -> None:
     """When clean.sql does not exist, run all fails with a clear message pointing to init."""
     # No clean.sql created — only raw dir (which exists but has no profile).

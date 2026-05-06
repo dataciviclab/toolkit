@@ -2,9 +2,7 @@ test_artifacts.py
 test_batch_cli.py
 test_ckan_plugin.py
 test_clean_csv_columns.py
-
 test_clean_input_selection.py
-test_cli_blocker_hints.py
 test_cli_inspect_paths.py
 test_cli_inspect_schema_diff.py
 test_cli_json_helpers.py
@@ -18,10 +16,8 @@ test_cli_smoke_e2e.py
 test_cli_status.py
 test_cli_years_filter.py
 test_cmd_batch.py
-test_cmd_url_inspect.py
 test_config_helpers.py
 test_config_legacy.py
-
 test_cross_year.py
 test_csv_read.py
 test_csv_read_option_strings.py
@@ -46,7 +42,7 @@ test_run_validation_gate.py
 test_sdmx_plugin.py
 test_smoke_tiny_e2e.py
 test_sparql_plugin.py
-
+test_sql_dry_run.py
 test_sql_utils.py
 test_support.py
 test_template.py

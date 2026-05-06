@@ -7,7 +7,7 @@ import typer
 
 from toolkit.cli.common import iter_years, load_cfg_and_logger
 from toolkit.core.paths import layer_year_dir
-from toolkit.scaffold.clean import generate_clean_sql
+from toolkit.scaffold.clean import generate_clean_sql, propose_clean_read
 
 
 def scaffold_clean(
@@ -77,6 +77,22 @@ def scaffold_clean(
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(sql, encoding="utf-8")
     logger.info(f"clean.sql scritto in {target_path}")
+
+    # Log proposed clean.read config (manual formatting to avoid yaml dependency in CLI)
+    proposed = propose_clean_read(profile)
+    if proposed:
+        lines = ["clean:"]
+        lines.append("  read:")
+        for k, v in proposed.items():
+            lines.append(f"    {k}: {v}")
+        logger.info("Configurazione clean.read suggerita (da aggiungere a dataset.yml):\n%s", "\n".join(lines))
+
+    # Log proposed read_mode separately (it's a top-level clean field, not inside clean.read)
+    if profile.get("robust_read_suggested"):
+        logger.info(
+            "Suggerito anche: aggiungi 'read_mode: robust' a 'clean:' in dataset.yml"
+            " (non dentro clean.read)"
+        )
 
 
 def register(app: typer.Typer) -> None:

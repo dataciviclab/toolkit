@@ -21,7 +21,7 @@ test_cmd_batch.py
 test_cmd_url_inspect.py
 test_config_helpers.py
 test_config_legacy.py
-test_config_loading.py
+
 test_cross_year.py
 test_csv_read.py
 test_csv_read_option_strings.py

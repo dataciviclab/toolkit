@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from toolkit.core.config_models.common import (
     RangeRuleConfig,
@@ -84,6 +84,13 @@ class MartConfig(BaseModel):
     @classmethod
     def _normalize_required_tables(cls, value: Any) -> list[str]:
         return ensure_str_list(value, "mart.required_tables")
+
+    @model_validator(mode="after")
+    def _default_required_tables_from_tables(self) -> MartConfig:
+        """If required_tables is empty, default to all table names from tables."""
+        if not self.required_tables and self.tables:
+            object.__setattr__(self, "required_tables", [t.name for t in self.tables])
+        return self
 
     @property
     def validate(self) -> MartValidateConfig:  # type: ignore[override]

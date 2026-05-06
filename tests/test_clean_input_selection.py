@@ -110,11 +110,24 @@ def test_select_inputs_all_returns_all_in_name_order(tmp_path: Path) -> None:
 
 # Canonical config behavior
 
-def test_run_clean_accepts_csv_gz_inputs(tmp_path: Path, monkeypatch):
+# Parametric test: all accepted raw file types are passed through to _run_sql
+ACCEPTED_RAW_FILE_TYPES = [
+    # (filename, file_bytes)
+    ("data.csv.gz", b"fake-gzip-content"),
+    ("bathw_2024.nt.gz", b"fake-nt-gz-content"),
+    ("data.xlsx", b"fake-xlsx-content"),
+    ("data.xls", b"fake-xls-content"),
+]
+
+
+@pytest.mark.policy
+@pytest.mark.parametrize("filename, file_bytes", ACCEPTED_RAW_FILE_TYPES)
+def test_run_clean_accepts_raw_file_types(tmp_path: Path, monkeypatch, filename: str, file_bytes: bytes):
+    """GZ, NT-GZ, XLSX, XLS files are accepted and passed to _run_sql."""
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     raw_dir.mkdir(parents=True, exist_ok=True)
-    gz_file = raw_dir / "data.csv.gz"
-    gz_file.write_bytes(b"fake-gzip-content")
+    raw_file = raw_dir / filename
+    raw_file.write_bytes(file_bytes)
 
     sql_path = _write_clean_sql(tmp_path)
     seen = _run_clean_capture_inputs(
@@ -123,55 +136,7 @@ def test_run_clean_accepts_csv_gz_inputs(tmp_path: Path, monkeypatch):
         {"sql": str(sql_path), "read": {}},
     )
 
-    assert seen["input_files"] == [gz_file]
-
-
-def test_run_clean_accepts_nt_gz_inputs(tmp_path: Path, monkeypatch):
-    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    nt_gz_file = raw_dir / "bathw_2024.nt.gz"
-    nt_gz_file.write_bytes(b"fake-nt-gz-content")
-
-    sql_path = _write_clean_sql(tmp_path)
-    seen = _run_clean_capture_inputs(
-        monkeypatch,
-        tmp_path,
-        {"sql": str(sql_path), "read": {}},
-    )
-
-    assert seen["input_files"] == [nt_gz_file]
-
-
-def test_run_clean_accepts_xlsx_inputs(tmp_path: Path, monkeypatch):
-    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    xlsx_file = raw_dir / "data.xlsx"
-    xlsx_file.write_bytes(b"fake-xlsx-content")
-
-    sql_path = _write_clean_sql(tmp_path)
-    seen = _run_clean_capture_inputs(
-        monkeypatch,
-        tmp_path,
-        {"sql": str(sql_path), "read": {}},
-    )
-
-    assert seen["input_files"] == [xlsx_file]
-
-
-def test_run_clean_accepts_xls_inputs(tmp_path: Path, monkeypatch):
-    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    xls_file = raw_dir / "data.xls"
-    xls_file.write_bytes(b"fake-xls-content")
-
-    sql_path = _write_clean_sql(tmp_path)
-    seen = _run_clean_capture_inputs(
-        monkeypatch,
-        tmp_path,
-        {"sql": str(sql_path), "read": {}},
-    )
-
-    assert seen["input_files"] == [xls_file]
+    assert seen["input_files"] == [raw_file]
 
 
 def test_run_clean_include_pattern_restricts_to_matching_input(tmp_path: Path, monkeypatch):

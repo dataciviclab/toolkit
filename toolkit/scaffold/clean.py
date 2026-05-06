@@ -130,12 +130,11 @@ def scaffold_clean_if_missing(
 
     # Log suggested clean.read config if not already present
     if not clean_cfg.get("read"):
-        proposed = propose_clean_read(profile)
-        if proposed:
-            logger.info(
-                "Aggiungi clean.read a dataset.yml per il parsing CSV:\n  "
-                + "\n  ".join(f"{k}: {v}" for k, v in proposed.items())
-            )
+        proposal = format_clean_read_proposal(profile)
+        logger.info(
+            "Proposta clean.read (da aggiungere a dataset.yml):\n%s",
+            proposal,
+        )
     return str(clean_sql_path)
 
 
@@ -256,3 +255,31 @@ def propose_clean_read(profile: dict[str, Any]) -> dict[str, Any]:
         read["skip"] = effective_skip
 
     return read
+
+
+def format_clean_read_proposal(profile: dict[str, Any]) -> str:
+    """Format a raw profile into a YAML-formatted clean.read proposal.
+
+    The output is ready to paste under ``clean:`` in dataset.yml.
+    Validates the proposed dict against CleanReadConfig before formatting.
+    Includes ``read_mode: robust`` as a top-level ``clean`` field when
+    ``robust_read_suggested`` is set (not inside ``clean.read``).
+    """
+    import yaml
+
+    from toolkit.core.config_models.clean import CleanReadConfig
+
+    proposed = propose_clean_read(profile)
+    if not proposed:
+        return "# Nessuna config read suggerita (nessun mapping o columns_raw disponibile)"
+
+    # Validate: raises ValidationError if keys are invalid or types wrong
+    CleanReadConfig(**proposed)
+
+    result: dict[str, Any] = {"clean": {"read": proposed}}
+
+    # read_mode: robust goes outside clean.read (it's a clean-level field)
+    if profile.get("robust_read_suggested"):
+        result["clean"]["read_mode"] = "robust"
+
+    return yaml.safe_dump(result, default_flow_style=False, sort_keys=False)

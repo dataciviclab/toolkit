@@ -552,3 +552,92 @@ def test_project_example_config_parses_in_strict_mode():
 
     assert model.dataset.name == "project_example"
     assert len(model.raw.sources) == 1
+
+
+# --- Mart required_tables auto-fill tests ---
+
+
+def test_mart_required_tables_auto_filled_from_tables(tmp_path: Path):
+    """When required_tables is omitted, it defaults to all table names from tables."""
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    yml = project_dir / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
+mart:
+  tables:
+    - name: table_a
+      sql: sql/mart/a.sql
+    - name: table_b
+      sql: sql/mart/b.sql
+""".strip(),
+        encoding="utf-8",
+    )
+    cfg = load_config(yml)
+    assert cfg.mart.tables[0].name == "table_a"
+    assert cfg.mart.tables[1].name == "table_b"
+    # Auto-filled because not specified
+    assert cfg.mart.required_tables == ["table_a", "table_b"]
+
+
+def test_mart_required_tables_explicit_empty_auto_fills(tmp_path: Path):
+    """When required_tables is set to [], it auto-fills to all table names.
+
+    Note: YAML cannot distinguish "field absent" from "field set to []".
+    The semantic is: if you declare tables, you want them required.
+    To opt out, simply don't declare any tables in mart.tables.
+    """
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    yml = project_dir / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
+mart:
+  tables:
+    - name: table_a
+      sql: sql/mart/a.sql
+  required_tables: []
+""".strip(),
+        encoding="utf-8",
+    )
+    cfg = load_config(yml)
+    # Empty required_tables (absent or explicit []) auto-fills to all table names
+    assert cfg.mart.required_tables == ["table_a"]
+
+
+def test_mart_required_tables_explicit_subset(tmp_path: Path):
+    """When required_tables is explicitly set, it is used as-is (no auto-fill)."""
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    yml = project_dir / "dataset.yml"
+    yml.write_text(
+        """
+dataset:
+  name: demo
+  years: [2022]
+raw: {}
+clean: {}
+mart:
+  tables:
+    - name: table_a
+      sql: sql/mart/a.sql
+    - name: table_b
+      sql: sql/mart/b.sql
+  required_tables:
+    - table_a
+""".strip(),
+        encoding="utf-8",
+    )
+    cfg = load_config(yml)
+    # Explicit list is used
+    assert cfg.mart.required_tables == ["table_a"]

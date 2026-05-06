@@ -14,140 +14,114 @@ from toolkit.core.artifacts import (
 )
 
 
-class TestResolveArtifactPolicy:
-    def test_standard_default(self) -> None:
-        assert resolve_artifact_policy(None) == ARTIFACT_POLICY_STANDARD
+# resolve_artifact_policy
 
-    def test_explicit_standard(self) -> None:
-        assert resolve_artifact_policy({"artifacts": "standard"}) == ARTIFACT_POLICY_STANDARD
-
-    def test_explicit_minimal(self) -> None:
-        assert resolve_artifact_policy({"artifacts": "minimal"}) == ARTIFACT_POLICY_MINIMAL
-
-    def test_explicit_debug(self) -> None:
-        assert resolve_artifact_policy({"artifacts": "debug"}) == ARTIFACT_POLICY_DEBUG
-
-    def test_whitespace_stripped(self) -> None:
-        assert resolve_artifact_policy({"artifacts": "  standard  "}) == ARTIFACT_POLICY_STANDARD
-
-    def test_case_insensitive(self) -> None:
-        assert resolve_artifact_policy({"artifacts": "DEBUG"}) == ARTIFACT_POLICY_DEBUG
-
-    def test_invalid_raises_value_error(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            resolve_artifact_policy({"artifacts": "unknown"})
-        assert "output.artifacts must be one of" in str(exc_info.value)
-
-    def test_empty_dict_defaults_to_standard(self) -> None:
-        assert resolve_artifact_policy({}) == ARTIFACT_POLICY_STANDARD
-
-    def test_all_policies_are_valid(self) -> None:
-        for policy in ARTIFACT_POLICIES:
-            assert resolve_artifact_policy({"artifacts": policy}) == policy
+@pytest.mark.policy
+@pytest.mark.parametrize("cfg, expected", [
+    (None, ARTIFACT_POLICY_STANDARD),
+    ({}, ARTIFACT_POLICY_STANDARD),
+    ({"artifacts": "standard"}, ARTIFACT_POLICY_STANDARD),
+    ({"artifacts": "  standard  "}, ARTIFACT_POLICY_STANDARD),
+    ({"artifacts": "STANDARD"}, ARTIFACT_POLICY_STANDARD),
+    ({"artifacts": "minimal"}, ARTIFACT_POLICY_MINIMAL),
+    ({"artifacts": "debug"}, ARTIFACT_POLICY_DEBUG),
+    ({"artifacts": "DEBUG"}, ARTIFACT_POLICY_DEBUG),
+])
+def test_resolve_artifact_policy_valid(cfg, expected) -> None:
+    assert resolve_artifact_policy(cfg) == expected
 
 
-class TestLegacyAliasesEnabled:
-    def test_none_returns_false(self) -> None:
-        assert legacy_aliases_enabled(None) is False
-
-    def test_empty_dict_returns_false(self) -> None:
-        assert legacy_aliases_enabled({}) is False
-
-    def test_explicit_true(self) -> None:
-        assert legacy_aliases_enabled({"legacy_aliases": True}) is True
-
-    def test_explicit_false(self) -> None:
-        assert legacy_aliases_enabled({"legacy_aliases": False}) is False
-
-    def test_returns_bool(self) -> None:
-        assert isinstance(legacy_aliases_enabled({"legacy_aliases": "yes"}), bool)
+@pytest.mark.policy
+@pytest.mark.parametrize("policy", sorted(ARTIFACT_POLICIES))
+def test_resolve_artifact_policy_all_policies_valid(policy) -> None:
+    assert resolve_artifact_policy({"artifacts": policy}) == policy
 
 
-class TestProfileRequired:
-    def test_dict_cfg_auto_source(self) -> None:
-        cfg = {"clean": {"read": {"source": "auto"}}}
-        assert profile_required(cfg) is True
-
-    def test_dict_cfg_explicit_source(self) -> None:
-        cfg = {"clean": {"read": {"source": "duckdb"}}}
-        assert profile_required(cfg) is False
-
-    def test_dict_cfg_string_read(self) -> None:
-        cfg = {"clean": {"read": "duckdb"}}
-        assert profile_required(cfg) is False
-
-    def test_dict_cfg_read_source_fallback(self) -> None:
-        cfg = {"clean": {"read_source": "duckdb"}}
-        assert profile_required(cfg) is False
-
-    def test_dict_cfg_no_read(self) -> None:
-        cfg = {"clean": {}}
-        assert profile_required(cfg) is True
-
-    def test_empty_dict(self) -> None:
-        assert profile_required({}) is True
-
-    def test_none(self) -> None:
-        assert profile_required(None) is True
-
-    def test_attribute_access_dict(self) -> None:
-        # simulate object with attributes
-        class Cfg:
-            pass
-
-        obj = Cfg()
-        obj.clean = {"read": {"source": "duckdb"}}
-        assert profile_required(obj) is False
+@pytest.mark.policy
+def test_resolve_artifact_policy_invalid_raises() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        resolve_artifact_policy({"artifacts": "unknown"})
+    assert "output.artifacts must be one of" in str(exc_info.value)
 
 
-class TestShouldWrite:
-    def test_debug_policy_always_true(self) -> None:
-        assert should_write("clean", "any_artifact", ARTIFACT_POLICY_DEBUG, {}) is True
-        assert should_write("mart", "any_artifact", ARTIFACT_POLICY_DEBUG, {}) is True
-        assert should_write("profile", "raw_profile", ARTIFACT_POLICY_DEBUG, {}) is True
+# legacy_aliases_enabled
 
-    def test_minimal_policy_suppresses_optional_clean_artifacts(self) -> None:
-        assert should_write("clean", "rendered_sql", ARTIFACT_POLICY_MINIMAL, {}) is False
-        assert should_write("mart", "rendered_sql", ARTIFACT_POLICY_MINIMAL, {}) is False
+@pytest.mark.policy
+@pytest.mark.parametrize("cfg, expected", [
+    (None, False),
+    ({}, False),
+    ({"legacy_aliases": True}, True),
+    ({"legacy_aliases": False}, False),
+])
+def test_legacy_aliases_enabled(cfg, expected) -> None:
+    assert legacy_aliases_enabled(cfg) is expected
 
-    def test_minimal_policy_keeps_required_artifacts(self) -> None:
-        assert should_write("clean", "data_parquet", ARTIFACT_POLICY_MINIMAL, {}) is True
-        assert should_write("mart", "aggregated_parquet", ARTIFACT_POLICY_MINIMAL, {}) is True
 
-    def test_profile_raw_profile_minimal_suppressed(self) -> None:
-        assert (
-            should_write("profile", "raw_profile", ARTIFACT_POLICY_MINIMAL, {}) is False
-        )
+@pytest.mark.policy
+def test_legacy_aliases_enabled_returns_bool() -> None:
+    assert isinstance(legacy_aliases_enabled({"legacy_aliases": "yes"}), bool)
 
-    def test_profile_suggested_read_auto(self) -> None:
-        cfg = {"clean": {"read": {"source": "auto"}}}
-        assert should_write("profile", "suggested_read", ARTIFACT_POLICY_STANDARD, cfg) is True
 
-    def test_profile_suggested_read_explicit_source(self) -> None:
-        cfg = {"clean": {"read": {"source": "duckdb"}}}
-        assert should_write("profile", "suggested_read", ARTIFACT_POLICY_STANDARD, cfg) is False
+# profile_required
 
-    def test_profile_md_never_written_non_debug(self) -> None:
-        # DEBUG short-circuits to True at line 49; non-DEBUG policies suppress profile_md
-        assert should_write("profile", "profile_md", ARTIFACT_POLICY_STANDARD, {}) is False
-        assert should_write("profile", "profile_md", ARTIFACT_POLICY_MINIMAL, {}) is False
+@pytest.mark.policy
+@pytest.mark.parametrize("cfg, expected", [
+    (None, True),
+    ({}, True),
+    ({"clean": {}}, True),
+    ({"clean": {"read": {"source": "auto"}}}, True),
+    ({"clean": {"read": {"source": "duckdb"}}}, False),
+    ({"clean": {"read": "duckdb"}}, False),
+    ({"clean": {"read_source": "duckdb"}}, False),
+])
+def test_profile_required(cfg, expected) -> None:
+    assert profile_required(cfg) is expected
 
-    def test_profile_suggested_mapping_never_written_non_debug(self) -> None:
-        assert should_write("profile", "suggested_mapping", ARTIFACT_POLICY_STANDARD, {}) is False
-        assert should_write("profile", "suggested_mapping", ARTIFACT_POLICY_DEBUG, {}) is True  # DEBUG short-circuits
 
-    def test_profile_md_debug_short_circuits(self) -> None:
-        # DEBUG policy returns True immediately, before the layer-specific checks
-        assert should_write("profile", "profile_md", ARTIFACT_POLICY_DEBUG, {}) is True
+@pytest.mark.policy
+def test_profile_required_object_attribute_access() -> None:
+    class Cfg:
+        pass
+    obj = Cfg()
+    obj.clean = {"read": {"source": "duckdb"}}
+    assert profile_required(obj) is False
 
-    def test_standard_policy_keeps_optional_artifacts(self) -> None:
-        cfg = {"output": {"artifacts": "standard", "legacy_aliases": True}}
-        assert should_write("profile", "profile_alias", ARTIFACT_POLICY_STANDARD, cfg) is True
 
-    def test_minimal_policy_suppresses_profile_alias(self) -> None:
-        cfg = {"output": {"artifacts": "minimal", "legacy_aliases": True}}
-        assert should_write("profile", "profile_alias", ARTIFACT_POLICY_MINIMAL, cfg) is False
+# should_write
 
-    def test_profile_alias_without_legacy(self) -> None:
-        cfg = {"output": {"artifacts": "standard", "legacy_aliases": False}}
-        assert should_write("profile", "profile_alias", ARTIFACT_POLICY_STANDARD, cfg) is False
+@pytest.mark.policy
+@pytest.mark.parametrize("layer, artifact, policy, cfg, expected", [
+    ("clean", "any_artifact", ARTIFACT_POLICY_DEBUG, {}, True),
+    ("mart", "any_artifact", ARTIFACT_POLICY_DEBUG, {}, True),
+    ("profile", "raw_profile", ARTIFACT_POLICY_DEBUG, {}, True),
+    ("profile", "profile_md", ARTIFACT_POLICY_DEBUG, {}, True),
+    ("profile", "profile_md", ARTIFACT_POLICY_STANDARD, {}, False),
+    ("profile", "profile_md", ARTIFACT_POLICY_MINIMAL, {}, False),
+    ("profile", "suggested_read", ARTIFACT_POLICY_STANDARD, {"clean": {"read": {"source": "auto"}}}, True),
+    ("profile", "suggested_read", ARTIFACT_POLICY_STANDARD, {"clean": {"read": {"source": "duckdb"}}}, False),
+    ("profile", "suggested_mapping", ARTIFACT_POLICY_DEBUG, {}, True),
+    ("profile", "suggested_mapping", ARTIFACT_POLICY_STANDARD, {}, False),
+    ("profile", "profile_alias", ARTIFACT_POLICY_STANDARD, {"output": {"artifacts": "standard", "legacy_aliases": True}}, True),
+    ("profile", "profile_alias", ARTIFACT_POLICY_MINIMAL, {"output": {"artifacts": "minimal", "legacy_aliases": True}}, False),
+    ("profile", "profile_alias", ARTIFACT_POLICY_STANDARD, {"output": {"artifacts": "standard", "legacy_aliases": False}}, False),
+])
+def test_should_write(layer, artifact, policy, cfg, expected) -> None:
+    assert should_write(layer, artifact, policy, cfg) is expected
+
+
+@pytest.mark.policy
+@pytest.mark.parametrize("layer, artifact", [
+    ("clean", "rendered_sql"),
+    ("mart", "rendered_sql"),
+])
+def test_should_write_minimal_policy_suppresses_optional(layer, artifact) -> None:
+    assert should_write(layer, artifact, ARTIFACT_POLICY_MINIMAL, {}) is False
+
+
+@pytest.mark.policy
+@pytest.mark.parametrize("layer, artifact", [
+    ("clean", "data_parquet"),
+    ("mart", "aggregated_parquet"),
+])
+def test_should_write_minimal_policy_keeps_required(layer, artifact) -> None:
+    assert should_write(layer, artifact, ARTIFACT_POLICY_MINIMAL, {}) is True

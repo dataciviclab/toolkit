@@ -3,6 +3,33 @@ from __future__ import annotations
 import pytest
 
 
+# ---- Test policy markers (Lab-wide) ----------------------------------------
+# Every test must declare ONE of these markers. See lab-ops/operations/test-policy.md
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers", "contract: public API, artifact format, CLI stable output"
+    )
+    config.addinivalue_line(
+        "markers", "policy: non-obvious Lab rule not derivable from source"
+    )
+    config.addinivalue_line(
+        "markers", "regression: documented bug fix (requires issue/PR link in docstring)"
+    )
+    config.addinivalue_line(
+        "markers", "adapter: external service adapter (our logic around external calls)"
+    )
+    config.addinivalue_line(
+        "markers", "pure_unit: non-trivial pure logic (no side effects)"
+    )
+    config.addinivalue_line(
+        "markers", "smoke: end-to-end golden-path smoke only"
+    )
+
+
+# ---- Existing Lab markers ---------------------------------------------------
+
 CORE_TESTS = {
     "test_cli_blocker_hints.py",
     "test_cli_inspect_paths.py",

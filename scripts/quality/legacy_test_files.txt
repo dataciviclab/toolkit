@@ -46,7 +46,7 @@ test_run_validation_gate.py
 test_sdmx_plugin.py
 test_smoke_tiny_e2e.py
 test_sparql_plugin.py
-test_sql_dry_run.py
+
 test_sql_utils.py
 test_support.py
 test_template.py

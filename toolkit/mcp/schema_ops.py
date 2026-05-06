@@ -770,12 +770,14 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
         limit: max rows to return in preview (default 20)
 
     Returns:
-        dict with keys: path, encoding_hint, delimiter_hint, header, column_count,
-        row_count_estimate, columns (name + inferred_type), preview (list of rows)
+        dict with keys: path, column_count, columns (name + inferred_type),
+        row_count_estimate, preview (list of rows), mapping_suggestions
+        (same format as RawProfile.mapping_suggestions — compatible with clean.sql config)
     """
     import duckdb
 
     from toolkit.mcp.path_safety import _safe_path
+    from toolkit.profile._column_profile import _build_mapping_suggestions
 
     path = _safe_path(csv_path)
     if not path.exists():
@@ -787,16 +789,36 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     try:
         with duckdb.connect(database=":memory:") as conn:
             conn.execute("PRAGMA disable_progress_bar")
-            # Auto-detect all options; sample to infer types properly
+            # Auto-detect all options; DuckDB infers types from full file
             conn.execute(
                 f"CREATE VIEW csv_preview AS SELECT * FROM read_csv("
                 f"'{_sql_literal(str(path))}', "
                 f"auto_detect=true, header=true)"
             )
             describe_rows = conn.execute("DESCRIBE csv_preview").fetchall()
-            columns = [{"name": row[0], "inferred_type": row[1]} for row in describe_rows]
 
-            # Row count estimate without loading full file
+            # Build DuckDB type map (raw_name -> type)
+            duckdb_type_map: dict[str, str] = {}
+            columns_raw: list[str] = []
+            columns_info: list[dict[str, str]] = []
+            for row in describe_rows:
+                raw_name = str(row[0])
+                dtype = str(row[1])
+                columns_raw.append(raw_name)
+                duckdb_type_map[raw_name] = dtype
+                columns_info.append({"name": raw_name, "inferred_type": dtype})
+
+            # Fetch sample rows for nullify/normalize suggestions
+            sample_rows = conn.execute(
+                "SELECT * FROM csv_preview LIMIT 50"
+            ).fetchdf().to_dict(orient="records")
+
+            # Build mapping_suggestions using DuckDB-inferred types
+            mapping_suggestions = _build_mapping_suggestions(
+                columns_raw, sample_rows, duckdb_types=duckdb_type_map
+            )
+
+            # Row count estimate
             count_result = conn.execute(
                 f"SELECT COUNT(*) FROM read_csv("
                 f"'{_sql_literal(str(path))}', "
@@ -813,11 +835,12 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
 
             return {
                 "path": str(path),
-                "column_count": len(columns),
-                "columns": columns,
+                "column_count": len(columns_info),
+                "columns": columns_info,
                 "row_count_estimate": row_count_estimate,
                 "preview": preview,
-                "note": "type inference via DuckDB auto_detect on full file",
+                "mapping_suggestions": mapping_suggestions,
+                "note": "type inference via DuckDB auto_detect on full file; mapping_suggestions use DuckDB types",
             }
     except Exception as exc:
         raise ToolkitClientError(f"Lettura CSV fallita per {path}: {exc}") from exc

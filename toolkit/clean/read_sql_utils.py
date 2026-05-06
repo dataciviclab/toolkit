@@ -52,7 +52,7 @@ def csv_trim_projection(columns: dict[str, str]) -> str:
         qclean = q_ident(clean_name)
         dtype_upper = dtype.upper()
         if "CHAR" in dtype_upper or "TEXT" in dtype_upper or "STRING" in dtype_upper:
-            exprs.append(f"TRIM({qraw}, ' \t\\r\\n') AS {qclean}")
+            exprs.append(f"TRIM({qraw}, ' \t\r\n') AS {qclean}")
         else:
             exprs.append(f"{qraw} AS {qclean}")
     return ", ".join(exprs)

@@ -95,7 +95,30 @@ def _read_csv_params(profile: dict[str, Any]) -> str:
     return ", ".join(params)
 
 
-def _columns_spec(profile: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
+def _has_anno_column(profile: dict[str, Any]) -> bool:
+    """Check if any raw column name looks like a year column after normalization.
+
+    Checks both mapping_suggestions (explicit config) and columns_raw (raw file
+    header) so we don't inject a duplicate anno even when the raw CSV has the
+    column but the candidate hasn't mapped it yet.
+    """
+    # Collect candidate column names from both sources
+    mapping = profile.get("mapping_suggestions", {})
+    if mapping:
+        col_names = list(mapping.keys())
+    else:
+        col_names = profile.get("columns_raw", [])
+
+    for col in col_names:
+        normalized = _snake_case(col).lower()
+        if normalized in ("anno", "anno_di_imposta", "anno_imposta", "year", "tax_year"):
+            return True
+    return False
+
+
+def _columns_spec(
+    profile: dict[str, Any], year: int
+) -> tuple[list[str], dict[str, str]]:
     """Build SELECT expressions and read_csv columns spec from mapping_suggestions."""
     mapping = profile.get("mapping_suggestions", {})
     if not mapping:
@@ -164,8 +187,17 @@ def generate_clean_sql(
     file_used = profile.get("file_used", "")
 
     # Build SELECT expressions and columns spec
-    select_exprs, columns_spec = _columns_spec(profile)
+    select_exprs, columns_spec = _columns_spec(profile, year)
     has_columns = bool(columns_spec)
+
+    # If the CSV doesn't have a column named "anno" (after normalization),
+    # inject {year}::INTEGER AS anno so the clean layer has it without requiring
+    # a special mapping.  Using generic name "anno" —
+    # candidates that need domain-specific names (e.g. "anno_di_imposta" for
+    # fiscal data) can rename in clean.sql or config after scaffolding.
+    # The runtime will resolve {year} via render_template.
+    if not _has_anno_column(profile):
+        select_exprs.insert(0, "{year}::INTEGER AS anno")
 
     # Build read_csv parameters (unified list, includes columns when present)
     read_params = _read_csv_params_list(profile, has_columns=has_columns)

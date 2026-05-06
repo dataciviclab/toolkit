@@ -89,17 +89,43 @@ def _suggest_normalize(colname: str, detected_type: str) -> Optional[List[str]]:
 
 
 def _build_mapping_suggestions(
-    columns: List[str], sample_rows: List[Dict[str, Any]]
-) -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
+    columns: list[str],
+    sample_rows: list[dict[str, Any]],
+    duckdb_types: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Build mapping suggestions for each column.
+
+    When duckdb_types is provided (raw_name -> DuckDB type string), those types
+    are used instead of regex-based type inference. This produces more accurate
+    type suggestions since DuckDB has already inferred types from the full file.
+
+    Each entry: {"from": col, "type": duckdb_type_or_inferred, ...}
+    """
+    out: dict[str, Any] = {}
     for col in columns:
         vals = _sample_values(sample_rows, col, limit=30)
         parse_kind = _detect_parse_kind(vals)
-        dtype = _detect_type(vals, parse_kind)
+
+        # Use DuckDB-inferred type when available and specific.
+        # DuckDB VARCHAR is too generic — only use it as definitive when DuckDB
+        # found a specific type (int/float/date/bool).  For VARCHAR fall back to
+        # regex-based _detect_type so that heuristics like number_it/percent_it
+        # can surface (DuckDB doesn't detect Italian decimal/comma formats).
+        if duckdb_types and col in duckdb_types:
+            duckdb_t = duckdb_types[col].upper()
+            is_varchar = duckdb_t in ("VARCHAR", "CHAR", "TEXT", "STRING", "UUID")
+            if not is_varchar:
+                # DuckDB found a specific type — use it
+                dtype = _duckdb_type_to_mapping_type(duckdb_types[col])
+            else:
+                # DuckDB says VARCHAR — fall back to regex inference for more detail
+                dtype = _detect_type(vals, parse_kind)
+        else:
+            dtype = _detect_type(vals, parse_kind)
+
         nullify = _suggest_nullify(vals)
         normalize = _suggest_normalize(col, dtype)
-
-        spec: Dict[str, Any] = {"from": col, "type": dtype}
+        spec: dict[str, Any] = {"from": col, "type": dtype}
 
         if nullify:
             spec["nullify"] = nullify
@@ -110,3 +136,23 @@ def _build_mapping_suggestions(
 
         out[col] = spec
     return out
+
+
+def _duckdb_type_to_mapping_type(duckdb_type: str) -> str:
+    """Map DuckDB DESCRIBE type to mapping suggestion type.
+
+    DuckDB types: VARCHAR, BIGINT, DOUBLE, DATE, TIMESTAMP, BOOLEAN, etc.
+    Mapping types: str, int, float, date, bool.
+    """
+    t = duckdb_type.upper()
+    if t in ("VARCHAR", "CHAR", "TEXT", "STRING", "UUID"):
+        return "str"
+    if t in ("INTEGER", "BIGINT", "SMALLINT", "TINYINT", "UBIGINT", "UINTEGER", "USMALLINT", "UTINYINT", "HUGEINT", "UHUGEINT"):
+        return "int"
+    if t in ("DOUBLE", "FLOAT", "REAL", "DECIMAL", "NUMERIC", "UHUGGINT"):
+        return "float"
+    if t in ("DATE", "TIMESTAMP", "TIMESTAMP_NS", "TIMESTAMP_S", "TIMESTAMP_MS", "TIMESTAMP_US"):
+        return "date"
+    if t in ("BOOLEAN", "BOOL"):
+        return "bool"
+    return "str"

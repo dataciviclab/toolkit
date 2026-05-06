@@ -118,9 +118,9 @@ def toolkit_list_runs(
 
 
 @mcp.tool(
-    description="Legge un CSV con DuckDB auto-detect e restituisce schema e preview. "
-    "Utile per ispezionare rapidamente il contenuto di un file raw senza runnare la pipeline. "
-    "Inferisce tipi, delimitatore, encoding e header in automatico.",
+    description="Legge un CSV usando la stessa pipeline di profile_raw (sniff_source_file + profile_with_read_cfg). "
+    "Restituisce schema, preview, mapping_suggestions e parametri sniff (delim, encoding, decimal, skip). "
+    "Utile per ispezionare rapidamente il contenuto di un file raw senza runnare la pipeline.",
     structured_output=True,
 )
 def toolkit_csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:

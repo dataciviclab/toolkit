@@ -4,28 +4,7 @@ import pytest
 
 
 # ---- Test policy markers (Lab-wide) ----------------------------------------
-# Every test must declare ONE of these markers. See lab-ops/operations/test-policy.md
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    config.addinivalue_line(
-        "markers", "contract: public API, artifact format, CLI stable output"
-    )
-    config.addinivalue_line(
-        "markers", "policy: non-obvious Lab rule not derivable from source"
-    )
-    config.addinivalue_line(
-        "markers", "regression: documented bug fix (requires issue/PR link in docstring)"
-    )
-    config.addinivalue_line(
-        "markers", "adapter: external service adapter (our logic around external calls)"
-    )
-    config.addinivalue_line(
-        "markers", "pure_unit: non-trivial pure logic (no side effects)"
-    )
-    config.addinivalue_line(
-        "markers", "smoke: end-to-end golden-path smoke only"
-    )
+# Marker are declared in pytest.ini. See lab-ops/operations/test-policy.md.
 
 
 # ---- Existing Lab markers ---------------------------------------------------

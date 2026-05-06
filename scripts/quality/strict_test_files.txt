@@ -2,3 +2,4 @@ tests/test_cli_blocker_hints.py
 tests/test_cmd_url_inspect.py
 tests/test_config_loading.py
 tests/test_sql_dry_run.py
+tests/test_clean_duckdb_read.py

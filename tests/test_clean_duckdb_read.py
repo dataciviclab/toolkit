@@ -12,6 +12,7 @@ from toolkit.clean import duckdb_read
 from toolkit.clean.read_config import resolve_clean_read_cfg
 
 
+@pytest.mark.policy
 def test_read_raw_to_relation_fallback_invokes_robust_after_strict_failure(monkeypatch, tmp_path: Path):
     input_file = tmp_path / "dirty.csv"
     input_file.write_text("a;b\n1;2;3\n", encoding="utf-8")
@@ -49,6 +50,7 @@ def test_read_raw_to_relation_fallback_invokes_robust_after_strict_failure(monke
     con.close()
 
 
+@pytest.mark.policy
 def test_read_raw_to_relation_strict_returns_strict_info(tmp_path: Path):
     input_file = tmp_path / "ok.csv"
     input_file.write_text("a;b\n1;2\n", encoding="utf-8")
@@ -71,6 +73,7 @@ def test_read_raw_to_relation_strict_returns_strict_info(tmp_path: Path):
     con.close()
 
 
+@pytest.mark.policy
 def test_read_raw_to_relation_passes_parallel_flag(tmp_path: Path):
     input_file = tmp_path / "ok.csv"
     input_file.write_text("a;b\n1;2\n", encoding="utf-8")
@@ -91,6 +94,7 @@ def test_read_raw_to_relation_passes_parallel_flag(tmp_path: Path):
     con.close()
 
 
+@pytest.mark.policy
 def test_read_raw_to_relation_keeps_explicit_columns_unchanged(tmp_path: Path):
     input_file = tmp_path / "ok.csv"
     input_file.write_text("a;b\n1;2\n", encoding="utf-8")
@@ -116,6 +120,7 @@ def test_read_raw_to_relation_keeps_explicit_columns_unchanged(tmp_path: Path):
     con.close()
 
 
+@pytest.mark.policy
 def test_read_raw_to_relation_strict_error_message_uses_current_config_keys(tmp_path: Path):
     input_file = tmp_path / "bad.csv"
     input_file.write_text("a;b\n1;2;3\n", encoding="utf-8")
@@ -144,6 +149,7 @@ def test_read_raw_to_relation_strict_error_message_uses_current_config_keys(tmp_
     con.close()
 
 
+@pytest.mark.policy
 def test_read_raw_to_relation_handles_no_header_fixed_schema_without_extra_column(tmp_path: Path):
     input_file = tmp_path / "fixed.csv"
     input_file.write_text("A,2024,1,123,45.6\nB,2024,2,456,78.9\n", encoding="utf-8")
@@ -177,6 +183,7 @@ def test_read_raw_to_relation_handles_no_header_fixed_schema_without_extra_colum
     con.close()
 
 
+@pytest.mark.policy
 def test_read_raw_to_relation_normalizes_short_rows_to_fixed_schema(tmp_path: Path):
     input_file = tmp_path / "ragged.csv"
     input_file.write_text("A;B;C\n1;2\n3;4;5\n", encoding="utf-8")
@@ -209,6 +216,7 @@ def test_read_raw_to_relation_normalizes_short_rows_to_fixed_schema(tmp_path: Pa
     con.close()
 
 
+@pytest.mark.policy
 def test_read_raw_to_relation_normalize_rows_skips_header_when_configured(tmp_path: Path):
     input_file = tmp_path / "ragged_header.csv"
     input_file.write_text("h0;h1;h2\n1;2\n", encoding="utf-8")
@@ -240,6 +248,7 @@ def test_read_raw_to_relation_normalize_rows_skips_header_when_configured(tmp_pa
     con.close()
 
 
+@pytest.mark.policy
 def test_read_raw_to_relation_reads_xlsx_first_sheet(tmp_path: Path):
     input_file = tmp_path / "ok.xlsx"
     pd.DataFrame(
@@ -267,6 +276,7 @@ def test_read_raw_to_relation_reads_xlsx_first_sheet(tmp_path: Path):
     con.close()
 
 
+@pytest.mark.policy
 def test_read_raw_to_relation_reads_xlsx_with_explicit_sheet_and_columns(tmp_path: Path):
     input_file = tmp_path / "sheeted.xlsx"
     with pd.ExcelWriter(input_file, engine="openpyxl") as writer:
@@ -301,6 +311,7 @@ def test_read_raw_to_relation_reads_xlsx_with_explicit_sheet_and_columns(tmp_pat
     con.close()
 
 
+@pytest.mark.policy
 def test_read_raw_to_relation_reads_xls_with_xlrd_engine(tmp_path: Path):
     """Test that .xls files use the xlrd engine."""
     import xlwt
@@ -337,6 +348,7 @@ def test_read_raw_to_relation_reads_xls_with_xlrd_engine(tmp_path: Path):
     con.close()
 
 
+@pytest.mark.policy
 def test_resolve_clean_read_cfg_uses_suggested_hints_in_auto_mode(tmp_path: Path):
     raw_dir = tmp_path / "raw" / "demo" / "2024"
     profile_dir = raw_dir / "_profile"
@@ -370,6 +382,7 @@ def test_resolve_clean_read_cfg_uses_suggested_hints_in_auto_mode(tmp_path: Path
     assert params_source == ["defaults", "suggested"]
 
 
+@pytest.mark.policy
 def test_resolve_clean_read_cfg_config_overrides_win_over_suggested(tmp_path: Path):
     raw_dir = tmp_path / "raw" / "demo" / "2024"
     profile_dir = raw_dir / "_profile"
@@ -393,6 +406,7 @@ def test_resolve_clean_read_cfg_config_overrides_win_over_suggested(tmp_path: Pa
     assert params_source == ["defaults", "suggested", "config_overrides"]
 
 
+@pytest.mark.policy
 def test_resolve_clean_read_cfg_config_only_ignores_suggested(tmp_path: Path):
     raw_dir = tmp_path / "raw" / "demo" / "2024"
     profile_dir = raw_dir / "_profile"
@@ -415,6 +429,7 @@ def test_resolve_clean_read_cfg_config_only_ignores_suggested(tmp_path: Path):
     assert params_source == ["defaults"]
 
 
+@pytest.mark.policy
 def test_filter_suggested_read_excludes_robustness_keys(tmp_path: Path):
     raw_dir = tmp_path / "raw" / "demo" / "2024"
     profile_dir = raw_dir / "_profile"

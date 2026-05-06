@@ -2,7 +2,7 @@ test_artifacts.py
 test_batch_cli.py
 test_ckan_plugin.py
 test_clean_csv_columns.py
-test_clean_duckdb_read.py
+
 test_clean_input_selection.py
 test_cli_blocker_hints.py
 test_cli_inspect_paths.py

@@ -7,6 +7,7 @@ All functions are private (underscore-prefixed) — not part of the public API.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -86,7 +87,7 @@ def _infer_from_url(url: str) -> str:
 # Source fetching
 # ---------------------------------------------------------------------------
 
-_FETCH_DISPATCH = {}
+_FETCH_DISPATCH: dict[str, Callable[..., tuple[bytes, str]]] = {}
 
 
 def _register_fetch(stype: str):

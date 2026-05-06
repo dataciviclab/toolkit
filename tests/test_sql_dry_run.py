@@ -134,7 +134,7 @@ class TestPlaceholderColumns:
 
 
 class TestCreatePlaceholderRawInput:
-    @pytest.mark.pure_unit
+    @pytest.mark.policy
     def test_creates_view_with_columns(self):
         con = duckdb.connect(":memory:")
         try:
@@ -145,7 +145,7 @@ class TestCreatePlaceholderRawInput:
         finally:
             con.close()
 
-    @pytest.mark.pure_unit
+    @pytest.mark.policy
     def test_creates_fallback_placeholder(self):
         con = duckdb.connect(":memory:")
         try:
@@ -156,7 +156,7 @@ class TestCreatePlaceholderRawInput:
         finally:
             con.close()
 
-    @pytest.mark.pure_unit
+    @pytest.mark.policy
     def test_infers_columns_from_sql(self):
         con = duckdb.connect(":memory:")
         try:

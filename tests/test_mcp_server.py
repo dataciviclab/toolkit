@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -109,3 +110,41 @@ def test_toolkit_raw_profile_passes_config_and_year(monkeypatch: pytest.MonkeyPa
 
     assert payload == {"profile_exists": True}
     assert calls == {"config_path": "dataset.yml", "year": 2024}
+
+
+def test_csv_preview_returns_profiler_aligned_fields(tmp_path: Path) -> None:
+    """csv_preview output must include sniff params and be compatible with profiler.
+
+    Regression test: ensures csv_preview reuses sniff_source_file and
+    profile_with_read_cfg so mapping_suggestions, delim_suggested,
+    encoding_suggested, decimal_suggested, skip_suggested, and
+    robust_read_suggested are all present and consistent with profile_raw.
+    """
+    from toolkit.mcp.schema_ops import csv_preview
+
+    # Italian decimal CSV: semicolon delim, comma decimal
+    csv_path = tmp_path / "italian.csv"
+    csv_path.write_text("Regione;Valore\nLombardia;1.234,56\nLazio;7.890,12\n", encoding="utf-8")
+
+    result = csv_preview(str(csv_path), limit=10)
+
+    # Must have profiler alignment fields
+    assert "delim_suggested" in result
+    assert "encoding_suggested" in result
+    assert "decimal_suggested" in result
+    assert "skip_suggested" in result
+    assert "robust_read_suggested" in result
+    assert result["delim_suggested"] == ";"
+    assert result["decimal_suggested"] == ","
+    assert result["encoding_suggested"] is not None
+
+    # mapping_suggestions must be present and valid
+    assert "mapping_suggestions" in result
+    mapping = result["mapping_suggestions"]
+    assert "Regione" in mapping or "Valore" in mapping
+
+    # Basic schema fields still present
+    assert result["path"] == str(csv_path)
+    assert result["column_count"] == 2
+    assert len(result["preview"]) == 2
+    assert result["row_count_estimate"] == 2

@@ -5,6 +5,8 @@ from toolkit.profile.raw import (
     build_profile_hints,
     build_suggested_read_cfg,
     profile_raw,
+    profile_with_read_cfg,
+    sniff_source_file,
     write_raw_profile,
     write_suggested_read_yml,
 )
@@ -14,6 +16,8 @@ __all__ = [
     "build_profile_hints",
     "build_suggested_read_cfg",
     "profile_raw",
+    "profile_with_read_cfg",
+    "sniff_source_file",
     "write_raw_profile",
     "write_suggested_read_yml",
 ]

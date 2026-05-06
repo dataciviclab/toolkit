@@ -13,7 +13,7 @@ from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import layer_year_dir
 from toolkit.core.run_context import get_run_dir, latest_run
 from toolkit.core.support import resolve_support_payloads
-from toolkit.profile.raw import build_profile_hints
+from toolkit.profile.raw import sniff_source_file
 
 
 def _raw_primary_file(raw_dir: Path, metadata: dict[str, Any]) -> Path | None:
@@ -37,7 +37,7 @@ def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
 
     if not profile_hints and primary_file is not None:
         try:
-            profile_hints = build_profile_hints(primary_file)
+            profile_hints = sniff_source_file(primary_file)
             profile_source = "sniff"
         except Exception as exc:
             sniff_error = f"{type(exc).__name__}: {exc}"

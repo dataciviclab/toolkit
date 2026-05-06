@@ -40,7 +40,25 @@ def _preview_columns(header_line: str | None, delim: str | None) -> list[str]:
     return [_normalize_colname(part) for part in parts if part.strip()]
 
 
-def build_profile_hints(filepath: Path) -> Dict[str, Any]:
+def sniff_source_file(filepath: Path) -> Dict[str, Any]:
+    """Pure source sniffing: encoding, delimiter, decimal, skip, header.
+
+    Does not read the file with DuckDB — only inspects raw bytes/text to
+    produce suggested parse parameters and the header line at the skip offset.
+
+    Returns
+    -------
+    dict with keys:
+        - file_used (str): filename
+        - encoding_suggested (str): detected encoding
+        - delim_suggested (str): detected delimiter
+        - decimal_suggested (str): detected decimal separator
+        - skip_suggested (int): suggested skip rows
+        - header_line (str | None): header text at skip offset
+        - true_header_line (str | None): header text at line 0 (for mismatch detection)
+        - columns_preview (list[str]): normalised column names from header_line
+        - warnings (list[str]): issues detected during sniffing
+    """
     enc, txt = sniff_encoding(filepath)
     delim = sniff_delim(txt)
     dec = sniff_decimal(txt)
@@ -53,6 +71,10 @@ def build_profile_hints(filepath: Path) -> Dict[str, Any]:
         )
 
     header_line: str | None = None
+    true_header_line: str | None = None
+
+    # Read header at skip offset (where DuckDB would start reading data).
+    # This preserves backward-compatible header_line for suggested_read.
     try:
         with filepath.open("r", encoding=enc, errors="replace") as f:
             for _ in range(skip):
@@ -61,6 +83,16 @@ def build_profile_hints(filepath: Path) -> Dict[str, Any]:
     except Exception as exc:
         warnings.append(f"header_read_failed: {type(exc).__name__}: {exc}")
 
+    # Also read the true file header from line 0 (independent of skip).
+    # This is the ground-truth header row used for mismatch detection:
+    # if header at line 0 has fewer tokens than data columns returned by
+    # DESCRIBE, the file has extra cols in data rows (IRPEF comunale pattern).
+    try:
+        with filepath.open("r", encoding=enc, errors="replace") as f:
+            true_header_line = f.readline().rstrip("\n\r")
+    except Exception:
+        pass  # already logged above; degrade gracefully
+
     return {
         "file_used": filepath.name,
         "encoding_suggested": enc,
@@ -68,9 +100,14 @@ def build_profile_hints(filepath: Path) -> Dict[str, Any]:
         "decimal_suggested": dec,
         "skip_suggested": skip,
         "header_line": header_line,
+        "true_header_line": true_header_line,
         "columns_preview": _preview_columns(header_line, delim),
         "warnings": warnings,
     }
+
+
+# Backward-compatible alias — new code should use sniff_source_file directly.
+build_profile_hints = sniff_source_file
 
 
 def _build_read_csv_opts(read_cfg: Dict[str, Any]) -> str:
@@ -246,6 +283,118 @@ def _sample_profile_rows(
     return sample_rows, missingness_top
 
 
+def profile_with_read_cfg(
+    file0: Path,
+    sniff_hints: Dict[str, Any],
+    effective_read_cfg: dict[str, Any],
+) -> Dict[str, Any]:
+    """Profile a file using DuckDB with a specific read configuration.
+
+    This is the "runtime" half of profiling: it reads the file exactly as
+    ``clean.read`` would and returns column-level statistics.
+
+    Parameters
+    ----------
+    file0:
+        Path to the data file.
+    sniff_hints:
+        Output of ``sniff_source_file`` — provides ``true_header_line`` for
+        mismatch detection and carries the sniff-level warnings.
+    effective_read_cfg:
+        Fully-resolved read configuration (encoding, delim, skip, etc.)
+        to pass to DuckDB's ``read_csv``.
+
+    Returns
+    -------
+    dict with keys:
+        - columns_raw (list[str])
+        - columns_norm (list[str])
+        - duckdb_types (list[str])
+        - sample_rows (list[dict])
+        - missingness_top (list[dict])
+        - mapping_suggestions (dict)
+        - warnings (list[str]): extended with runtime-specific warnings
+        - robust_read_suggested (bool): True if robust preset was needed
+    """
+    true_header_line: str | None = sniff_hints.get("true_header_line")
+    warnings = list(sniff_hints.get("warnings") or [])
+
+    con = duckdb.connect(":memory:")
+    try:
+        try:
+            _profile_view(
+                con,
+                file0,
+                effective_read_cfg=effective_read_cfg,
+            )
+        except Exception as e:
+            warnings.append(f"profile_read_retry: {type(e).__name__}: {e}")
+            fallback_cfg = robust_preset(effective_read_cfg)
+            fallback_cfg.setdefault("auto_detect", False)
+            _profile_view(
+                con,
+                file0,
+                effective_read_cfg=fallback_cfg,
+            )
+
+        columns_raw, columns_norm, duckdb_types = _describe_columns(con)
+
+        # Detect column-count mismatch between header and data.
+        # When true_header_line (ground truth at line 0) has fewer tokens
+        # than what DESCRIBE returns, the file has more columns in data
+        # rows than in the header row (IRPEF comunale pattern:
+        # header=50 cols, data rows=52 cols).
+        robust_read_suggested = False
+        if true_header_line is not None:
+            true_header_tokens = true_header_line.count(effective_read_cfg.get("delim") or ";") + 1
+            if len(columns_raw) > true_header_tokens:
+                warnings.append(
+                    f"header_data_cols_mismatch: header has {true_header_tokens} tokens, "
+                    f"data has {len(columns_raw)} columns; retrying with null_padding=true"
+                )
+                robust_read_suggested = True
+                fallback_cfg = robust_preset(effective_read_cfg)
+                fallback_cfg.setdefault("auto_detect", False)
+                fallback_cfg.setdefault("null_padding", True)
+                _profile_view(
+                    con,
+                    file0,
+                    effective_read_cfg=fallback_cfg,
+                )
+                columns_raw, columns_norm, duckdb_types = _describe_columns(con)
+
+        duckdb_type_map: dict[str, str] = {
+            raw: dtype for raw, dtype in zip(columns_raw, duckdb_types)
+        }
+        sample_rows, missingness_top = _sample_profile_rows(con, columns_raw)
+        mapping_suggestions = _build_mapping_suggestions(
+            columns_raw, sample_rows, duckdb_types=duckdb_type_map
+        )
+
+    except Exception as e:
+        warnings.append(f"profile_failed: {type(e).__name__}: {e}")
+        warnings.append(
+            "python_fallback_used: suggested_read generated from lightweight sniffing only"
+        )
+        columns_raw, columns_norm, duckdb_types = [], [], []
+        sample_rows, missingness_top = [], []
+        mapping_suggestions = {}
+        robust_read_suggested = True
+    finally:
+        con.close()
+
+    return {
+        "columns_raw": columns_raw,
+        "columns_norm": columns_norm,
+        "duckdb_types": duckdb_types,
+        "sample_rows": sample_rows,
+        "missingness_top": missingness_top,
+        "mapping_suggestions": mapping_suggestions,
+        "warnings": warnings,
+        "robust_read_suggested": robust_read_suggested,
+    }
+
+
 @dataclass
 class RawProfile:
     dataset: str
@@ -272,15 +421,44 @@ class RawProfile:
 def profile_raw(
     raw_dir: Path, dataset: str, year: int, read_cfg: Optional[Dict[str, Any]] = None
 ) -> RawProfile:
+    """Profile a RAW directory.
+
+    This is a facade that firstsniffs the source file (encoding, delimiter,
+    skip, header) then profiles it with DuckDB using the resolved read
+    configuration.
+
+    Parameters
+    ----------
+    raw_dir:
+        Directory containing RAW files.
+    dataset:
+        Dataset slug.
+    year:
+        Year of the dataset.
+    read_cfg:
+        Optional explicit read configuration. Values here override the
+        sniffed suggestions.
+
+    Returns
+    -------
+    RawProfile
+    """
     files = _raw_files(raw_dir)
     if not files:
         raise FileNotFoundError(f"No RAW files found in {raw_dir}")
 
     file0 = _pick_data_file(files)
-    enc, txt = sniff_encoding(file0)
-    delim = sniff_delim(txt)
-    dec = sniff_decimal(txt)
-    skip = suggest_skip(txt, delim)
+
+    # Phase 1: pure source sniffing
+    sniff_hints = sniff_source_file(file0)
+
+    enc = sniff_hints["encoding_suggested"]
+    delim = sniff_hints["delim_suggested"]
+    dec = sniff_hints["decimal_suggested"]
+    skip = sniff_hints["skip_suggested"]
+    header_line = sniff_hints["header_line"]
+
+    # Phase 2: resolve effective read cfg (sniff + user override)
     effective_read_cfg = _effective_profile_read_cfg(
         read_cfg,
         encoding=enc,
@@ -289,97 +467,8 @@ def profile_raw(
         skip=skip,
     )
 
-    warnings: List[str] = []
-    header_line: Optional[str] = None
-    columns_raw: List[str] = []
-    columns_norm: List[str] = []
-    sample_rows: List[Dict[str, Any]] = []
-    missingness_top: List[Dict[str, Any]] = []
-    mapping_suggestions: Dict[str, Any] = {}
-    robust_read_suggested = False
-
-    if skip:
-        warnings.append(
-            "header_preamble_detected: first non-empty line looks like a title row, consider skip: 1"
-        )
-
-    # Read header line at skip offset (where DuckDB starts reading data).
-    # This preserves backward-compatible header_line for suggested_read.
-    skip_n = int(effective_read_cfg.get("skip") or 0)
-    header_line = _read_header_line(
-        file0,
-        encoding=effective_read_cfg.get("encoding") or enc,
-        skip_n=skip_n,
-    )
-    if header_line is None:
-        warnings.append("header_read_failed: could not read header line")
-
-    # Also read the true file header from line 0 (independent of skip).
-    # This is the ground-truth header row used for mismatch detection:
-    # if header at line 0 has fewer tokens than data columns returned by
-    # DESCRIBE, the file has extra cols in data rows (IRPEF comunale pattern).
-    true_header_line = _read_header_line(file0, encoding=enc, skip_n=0)
-
-    con = duckdb.connect(":memory:")
-    try:
-        try:
-            _profile_view(
-                con,
-                file0,
-                effective_read_cfg=effective_read_cfg,
-            )
-        except Exception as e:
-            warnings.append(f"profile_read_retry: {type(e).__name__}: {e}")
-            robust_read_suggested = True
-            fallback_cfg = robust_preset(effective_read_cfg)
-            fallback_cfg.setdefault("auto_detect", False)
-            _profile_view(
-                con,
-                file0,
-                effective_read_cfg=fallback_cfg,
-            )
-
-        columns_raw, columns_norm, duckdb_types = _describe_columns(con)
-
-        # Detect column-count mismatch between header and data.
-        # When true_header_line has fewer tokens than what DESCRIBE returns, the file
-        # has more columns in data rows than in the header row (IRPEF comunale pattern:
-        # header=50 cols, data rows=52 cols).  Retry with null_padding=true so
-        # DuckDB accepts the wider rows without failing.
-        if true_header_line is not None:
-            true_header_tokens = true_header_line.count(effective_read_cfg.get("delim") or ";") + 1
-            if len(columns_raw) > true_header_tokens:
-                warnings.append(
-                    f"header_data_cols_mismatch: header has {true_header_tokens} tokens, "
-                    f"data has {len(columns_raw)} columns; retrying with null_padding=true"
-                )
-                robust_read_suggested = True
-                fallback_cfg = robust_preset(effective_read_cfg)
-                fallback_cfg.setdefault("auto_detect", False)
-                fallback_cfg.setdefault("null_padding", True)
-                _profile_view(
-                    con,
-                    file0,
-                    effective_read_cfg=fallback_cfg,
-                )
-                columns_raw, columns_norm, duckdb_types = _describe_columns(con)
-
-        # Build dict of raw_name -> duckdb_type for _build_mapping_suggestions
-        duckdb_type_map: dict[str, str] = {
-            raw: dtype for raw, dtype in zip(columns_raw, duckdb_types)
-        }
-        sample_rows, missingness_top = _sample_profile_rows(con, columns_raw)
-        mapping_suggestions = _build_mapping_suggestions(
-            columns_raw, sample_rows, duckdb_types=duckdb_type_map
-        )
-
-    except Exception as e:
-        warnings.append(f"profile_failed: {type(e).__name__}: {e}")
-        warnings.append(
-            "python_fallback_used: suggested_read generated from lightweight sniffing only"
-        )
-    finally:
-        con.close()
+    # Phase 3: DuckDB runtime profiling
+    runtime_result = profile_with_read_cfg(file0, sniff_hints, effective_read_cfg)
 
     return RawProfile(
         dataset=dataset,
@@ -389,14 +478,14 @@ def profile_raw(
         delim_suggested=delim,
         decimal_suggested=dec,
         skip_suggested=skip,
-        robust_read_suggested=robust_read_suggested,
+        robust_read_suggested=runtime_result["robust_read_suggested"],
         header_line=header_line,
-        columns_raw=columns_raw,
-        columns_norm=columns_norm,
-        missingness_top=missingness_top,
-        sample_rows=sample_rows,
-        mapping_suggestions=mapping_suggestions,
-        warnings=warnings,
+        columns_raw=runtime_result["columns_raw"],
+        columns_norm=runtime_result["columns_norm"],
+        missingness_top=runtime_result["missingness_top"],
+        sample_rows=runtime_result["sample_rows"],
+        mapping_suggestions=runtime_result["mapping_suggestions"],
+        warnings=runtime_result["warnings"],
     )
 
 

@@ -6,6 +6,7 @@ from typing import Any
 
 import pandas as pd
 
+from toolkit.clean.read_sql_utils import _parse_column_value
 from toolkit.core.csv_read import normalize_encoding
 
 
@@ -31,7 +32,14 @@ def _load_normalized_csv_frame(
     trim_whitespace = bool(read_cfg.get("trim_whitespace", True))
     header = bool(read_cfg.get("header", True))
     skip = int(read_cfg.get("skip") or 0)
-    expected_names = list(columns.keys())
+    # Build list of raw column names from columns dict, parsing compact format
+    # ("clean_name:DUCKDB_TYPE") to extract only the raw name for CSV reading.
+    # The projection/copy step applies the rename separately.
+    raw_names: list[str] = []
+    for raw_name, value in columns.items():
+        actual_raw, _ = _parse_column_value(raw_name, value)
+        raw_names.append(actual_raw)
+    expected_names = raw_names
     expected_len = len(expected_names)
     skip_rows = skip + (1 if header else 0)
 

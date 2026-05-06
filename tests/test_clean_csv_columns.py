@@ -189,3 +189,91 @@ def test_run_clean_positional_csv_empty_rows(tmp_path: Path):
     # Le righe vuote producono righe con colonne vuote
     assert len(df) == 4
     assert df.iloc[2].tolist() == ["", ""]  # riga con solo ';'
+
+
+def test_run_clean_compact_columns_format_renames_and_types(tmp_path: Path):
+    """Compact format 'clean_name:DUCKDB_TYPE' in columns: renames + passes only type to DuckDB.
+
+    The DuckDB columns={} option must receive only the raw name and DuckDB type.
+    The projection (csv_trim_projection) handles the rename separately.
+    """
+    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = raw_dir / "data.csv"
+    csv_path.write_text(
+        "a;b\n  val_a ; val_b \n", encoding="utf-8"
+    )
+
+    sql_path = tmp_path / "clean.sql"
+    sql_path.write_text("SELECT a_renamed, b_renamed FROM raw_input", encoding="utf-8")
+
+    run_clean(
+        "demo",
+        2024,
+        str(tmp_path),
+        {
+            "sql": str(sql_path),
+            "read": {
+                "mode": "latest",
+                "delim": ";",
+                "header": True,
+                "trim_whitespace": True,
+                "columns": {
+                    "a": "a_renamed:VARCHAR",  # compact: raw=a, clean=a_renamed, type=VARCHAR
+                    "b": "b_renamed:VARCHAR",
+                },
+            },
+        },
+        _NoopLogger(),
+    )
+
+    out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
+    assert out.exists()
+
+    con = duckdb.connect(":memory:")
+    rows = con.execute(
+        f"SELECT a_renamed, b_renamed FROM read_parquet('{out.as_posix()}')"
+    ).fetchall()
+    con.close()
+    # Spaces trimmed by TRIM in projection
+    assert rows == [("val_a", "val_b")]
+
+
+def test_run_clean_compact_columns_format_with_int_type(tmp_path: Path):
+    """Compact format with non-VARCHAR type (e.g. BIGINT) passes type to DuckDB columns={}."""
+    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = raw_dir / "data.csv"
+    csv_path.write_text("anno;valore\n2024;42\n", encoding="utf-8")
+
+    sql_path = tmp_path / "clean.sql"
+    sql_path.write_text("SELECT anno_clean, valore_clean FROM raw_input", encoding="utf-8")
+
+    run_clean(
+        "demo",
+        2024,
+        str(tmp_path),
+        {
+            "sql": str(sql_path),
+            "read": {
+                "mode": "latest",
+                "delim": ";",
+                "header": True,
+                "columns": {
+                    "anno": "anno_clean:BIGINT",
+                    "valore": "valore_clean:BIGINT",
+                },
+            },
+        },
+        _NoopLogger(),
+    )
+
+    out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
+    assert out.exists()
+
+    con = duckdb.connect(":memory:")
+    rows = con.execute(
+        f"SELECT anno_clean, valore_clean FROM read_parquet('{out.as_posix()}')"
+    ).fetchall()
+    con.close()
+    assert rows == [(2024, 42)]

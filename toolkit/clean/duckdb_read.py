@@ -7,14 +7,14 @@ from typing import Any
 
 import duckdb
 from toolkit.clean.read_csv_normalized import _execute_normalized_csv_read
+from toolkit.clean.read_excel import _execute_excel_read
 from toolkit.clean.read_sql_utils import (
+    _parse_column_value,
     csv_trim_projection,
     q_ident,
     quote_list,
     sql_path,
 )
-
-from toolkit.clean.read_excel import _execute_excel_read
 from toolkit.core.csv_read import (
     csv_read_option_strings,
     normalize_read_cfg,
@@ -59,7 +59,19 @@ def _csv_read_options(
     skip = read_cfg.get("skip")
     columns = read_cfg.get("columns")
 
-    source_columns = dict(columns) if columns else None
+    # Parse compact column values ("clean_name:DUCKDB_TYPE") and separate
+    # raw names from types.  DuckDB's columns={} option needs raw names + types;
+    # the projection (csv_trim_projection) handles the rename using the original
+    # columns values which may contain "clean_name:DUCKDB_TYPE".
+    source_columns: dict[str, str] | None = None
+    if columns:
+        columns_csv: dict[str, str] = {}  # raw_name -> dtype for DuckDB columns={}
+        for raw_name, value in columns.items():
+            _, dtype = _parse_column_value(raw_name, value)
+            columns_csv[raw_name] = dtype
+        source_columns = columns_csv
+        # Mutate read_cfg["columns"] so csv_read_option_strings sees clean types
+        read_cfg["columns"] = columns_csv
 
     # Runtime override: when explicit columns are set, force header=false
     # and bump skip by 1 so the header row is consumed as data.
@@ -120,6 +132,11 @@ def _execute_csv_read(
     trim_whitespace = read_cfg.get("trim_whitespace", True)
     sample_size = read_cfg.get("sample_size")
 
+    # Capture original columns (may contain "clean_name:DUCKDB_TYPE") before
+    # _csv_read_options mutates read_cfg["columns"] to have only types.
+    # This is needed for csv_trim_projection to perform the rename.
+    original_columns = read_cfg.get("columns")
+
     opts, params_used, source_columns = _csv_read_options(read_cfg)
     if sample_size is not None:
         opts.append(f"sample_size={int(sample_size)}")
@@ -132,7 +149,9 @@ def _execute_csv_read(
             f"SELECT * FROM read_csv([{paths}], {opt_sql});"
         )
         if trim_whitespace:
-            projection = csv_trim_projection(source_columns)
+            # original_columns has compact values for rename; source_columns
+            # has only types (set by _csv_read_options mutation)
+            projection = csv_trim_projection(original_columns)
         else:
             projection = ", ".join(q_ident(name) for name in source_columns)
         con.execute(

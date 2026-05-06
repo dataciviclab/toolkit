@@ -2,6 +2,7 @@ from pathlib import Path
 
 import toolkit.profile.raw as profile_raw_module
 from toolkit.cli.cmd_profile import write_suggested_read_yml
+from toolkit.profile._column_profile import _build_mapping_suggestions
 from toolkit.profile.raw import (
     _build_read_csv_opts,
     build_suggested_read_cfg,
@@ -115,3 +116,63 @@ def test_build_read_csv_opts_keeps_header_and_skip_for_profiler():
     assert "max_line_size=4096" in opts
     assert "header=false" in opts
     assert "skip=2" in opts
+
+
+def test_build_mapping_suggestions_varchar_falls_back_to_heuristics():
+    """When DuckDB reports VARCHAR (generic), regex heuristics must surface.
+
+    Italian decimal format 1.234,56 should produce type=float + parse=number_it,
+    not plain str — DuckDB sees VARCHAR but the heuristic detects number_it.
+    Regression test for the DuckDB-override fix.
+    """
+    sample = [
+        {"Importo": "1.234,56"},
+        {"Importo": "2.345,67"},
+    ]
+    duckdb_types = {"Importo": "VARCHAR"}
+
+    result = _build_mapping_suggestions(["Importo"], sample, duckdb_types=duckdb_types)
+    spec = result["Importo"]
+
+    # Must NOT be plain str — heuristic should detect Italian number
+    assert spec["type"] == "float", f"Expected float, got {spec['type']}"
+    assert spec.get("parse", {}).get("kind") == "number_it", (
+        f"Expected parse={{kind: number_it}}, got {spec.get('parse')}"
+    )
+
+
+def test_profile_raw_mismatch_header_data_cols_triggers_null_padding(tmp_path: Path):
+    """When DESCRIBE columns != true header token count, retry with null_padding.
+
+    IRPEF comunale real file: header has 50 cols, data rows have 52 cols.
+    suggest_skip returns 0 because 49 < 51 but 49 > 1 (first_count <= 1 fails).
+
+    In this test: header has 2 tokens, data rows have 4 tokens.
+    suggest_skip returns 1 (first_count=1 <= 1 and second_count=3 >= 3).
+    The profiler must detect that the true header (line 0) has fewer tokens
+    than the data columns returned by DESCRIBE, and emit a mismatch warning.
+
+    Note: the test file structure mirrors the IRPEF column-count pattern,
+    not the exact delimiter counts (skip logic differs).
+    """
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+
+    # Header: 2 tokens (1 comma), Data rows: 4 tokens (3 commas)
+    # first_count=1 <= 1 and second_count=3 >= 3 → suggest_skip=1
+    # But the mismatch is between true header (line 0 = 2 tokens) and data cols
+    (raw_dir / "test.csv").write_text(
+        "Codice,Descrizione\n"  # 1 comma = 2 tokens at line 0
+        "A001,B001,C001,D001\n"  # 3 commas = 4 tokens at line 1+
+        "A002,B002,C002,D002\n",
+        encoding="utf-8",
+    )
+
+    profile = profile_raw(raw_dir, "demo", 2024)
+
+    # Mismatch detected: true_header=2 tokens, data=4 cols
+    mismatch_warnings = [w for w in profile.warnings if "mismatch" in w]
+    assert mismatch_warnings, f"Expected mismatch warning, got {profile.warnings}"
+
+    # columns_raw reflects 4 data columns from DESCRIBE
+    assert len(profile.columns_raw) == 4

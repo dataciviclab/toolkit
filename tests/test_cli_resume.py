@@ -9,6 +9,26 @@ from toolkit.cli import cmd_run
 from toolkit.cli.app import app
 
 
+def _write_sql(base: Path) -> None:
+    """Write standard SQL files (clean.sql + mart_example.sql)."""
+    sql_dir = base / "sql" / "mart"
+    sql_dir.mkdir(parents=True, exist_ok=True)
+    (base / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
+    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
+
+
+def _mock_all_runs(monkeypatch) -> dict:
+    """Patch cmd_run run/validation functions; returns calls dict."""
+    calls = {"raw": 0, "clean": 0, "mart": 0}
+    monkeypatch.setattr(cmd_run, "run_raw", lambda *args, **kwargs: calls.__setitem__("raw", calls["raw"] + 1))
+    monkeypatch.setattr(cmd_run, "run_clean", lambda *args, **kwargs: calls.__setitem__("clean", calls["clean"] + 1))
+    monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1))
+    monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
+    monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
+    monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
+    return calls
+
+
 def _write_config(path: Path) -> None:
     path.write_text(
         "\n".join(
@@ -158,25 +178,14 @@ def _write_success_with_warnings_run_record(path: Path, run_id: str) -> None:
 def test_cli_resume_starts_from_first_non_success_layer(tmp_path: Path, monkeypatch) -> None:
     config_path = tmp_path / "dataset.yml"
     _write_config(config_path)
-
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
+    _write_sql(tmp_path)
 
     old_run_id = "old-run-id"
     runs_dir = tmp_path / "out" / "data" / "_runs" / "demo_ds" / "2022"
     _write_old_run_record(runs_dir / f"{old_run_id}.json", old_run_id)
     _write_layer_artifacts(tmp_path / "out", "demo_ds", 2022, "raw")
 
-    calls = {"raw": 0, "clean": 0, "mart": 0}
-
-    monkeypatch.setattr(cmd_run, "run_raw", lambda *args, **kwargs: calls.__setitem__("raw", calls["raw"] + 1))
-    monkeypatch.setattr(cmd_run, "run_clean", lambda *args, **kwargs: calls.__setitem__("clean", calls["clean"] + 1))
-    monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1))
-    monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
-    monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
-    monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
+    calls = _mock_all_runs(monkeypatch)
 
     runner = CliRunner()
     result = runner.invoke(
@@ -213,25 +222,14 @@ def test_cli_resume_uses_config_root_when_cwd_differs(tmp_path: Path, monkeypatc
     config_path = tmp_path / "project" / "dataset.yml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     _write_config(config_path)
-
-    sql_dir = config_path.parent / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (config_path.parent / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
+    _write_sql(config_path.parent)
 
     old_run_id = "old-run-id"
     runs_dir = config_path.parent / "out" / "data" / "_runs" / "demo_ds" / "2022"
     _write_old_run_record(runs_dir / f"{old_run_id}.json", old_run_id)
     _write_layer_artifacts(config_path.parent / "out", "demo_ds", 2022, "raw")
 
-    calls = {"raw": 0, "clean": 0, "mart": 0}
-
-    monkeypatch.setattr(cmd_run, "run_raw", lambda *args, **kwargs: calls.__setitem__("raw", calls["raw"] + 1))
-    monkeypatch.setattr(cmd_run, "run_clean", lambda *args, **kwargs: calls.__setitem__("clean", calls["clean"] + 1))
-    monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1))
-    monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
-    monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
-    monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
+    calls = _mock_all_runs(monkeypatch)
 
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
@@ -260,11 +258,7 @@ def test_resume_finds_latest_run(tmp_path: Path, monkeypatch) -> None:
     config_path = tmp_path / "project" / "dataset.yml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     _write_config(config_path)
-
-    sql_dir = config_path.parent / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (config_path.parent / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
+    _write_sql(config_path.parent)
 
     runs_dir = config_path.parent / "out" / "data" / "_runs" / "demo_ds" / "2022"
     _write_old_run_record(runs_dir / "old-run.json", "old-run")
@@ -279,14 +273,7 @@ def test_resume_finds_latest_run(tmp_path: Path, monkeypatch) -> None:
     new_payload["started_at"] = "2026-02-28T10:00:00+00:00"
     (runs_dir / "new-run.json").write_text(json.dumps(new_payload, indent=2), encoding="utf-8")
 
-    calls = {"raw": 0, "clean": 0, "mart": 0}
-
-    monkeypatch.setattr(cmd_run, "run_raw", lambda *args, **kwargs: calls.__setitem__("raw", calls["raw"] + 1))
-    monkeypatch.setattr(cmd_run, "run_clean", lambda *args, **kwargs: calls.__setitem__("clean", calls["clean"] + 1))
-    monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1))
-    monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
-    monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
-    monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
+    calls = _mock_all_runs(monkeypatch)
 
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
@@ -314,7 +301,6 @@ def test_resume_finds_latest_run(tmp_path: Path, monkeypatch) -> None:
 def test_cli_resume_non_portable_record_warns_and_proceeds(tmp_path: Path) -> None:
     """Non-portable records warn but no longer block (--compat flag removed)."""
     config_path = tmp_path / "dataset.yml"
-    # Write config with a working local file source so resume can proceed
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     (data_dir / "dati.csv").write_text("a,b\n1,2\n", encoding="utf-8")
@@ -337,11 +323,7 @@ def test_cli_resume_non_portable_record_warns_and_proceeds(tmp_path: Path) -> No
         ]),
         encoding="utf-8",
     )
-
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
+    _write_sql(tmp_path)
 
     old_run_id = "old-run-id"
     runs_dir = tmp_path / "out" / "data" / "_runs" / "demo_ds" / "2022"
@@ -370,24 +352,13 @@ def test_cli_resume_non_portable_record_warns_and_proceeds(tmp_path: Path) -> No
 def test_cli_resume_falls_back_to_raw_when_raw_success_artifacts_are_missing(tmp_path: Path, monkeypatch) -> None:
     config_path = tmp_path / "dataset.yml"
     _write_config(config_path)
-
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
+    _write_sql(tmp_path)
 
     old_run_id = "old-run-id"
     runs_dir = tmp_path / "out" / "data" / "_runs" / "demo_ds" / "2022"
     _write_old_run_record(runs_dir / f"{old_run_id}.json", old_run_id)
 
-    calls = {"raw": 0, "clean": 0, "mart": 0}
-
-    monkeypatch.setattr(cmd_run, "run_raw", lambda *args, **kwargs: calls.__setitem__("raw", calls["raw"] + 1))
-    monkeypatch.setattr(cmd_run, "run_clean", lambda *args, **kwargs: calls.__setitem__("clean", calls["clean"] + 1))
-    monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1))
-    monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
-    monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
-    monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
+    calls = _mock_all_runs(monkeypatch)
 
     runner = CliRunner()
     result = runner.invoke(
@@ -415,11 +386,7 @@ def test_cli_resume_falls_back_to_raw_when_raw_success_artifacts_are_missing(tmp
 def test_cli_resume_success_with_warnings_requires_from_layer_or_exits_cleanly(tmp_path: Path) -> None:
     config_path = tmp_path / "dataset.yml"
     _write_config(config_path)
-
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
+    _write_sql(tmp_path)
 
     run_id = "warn-run"
     runs_dir = tmp_path / "out" / "data" / "_runs" / "demo_ds" / "2022"
@@ -451,11 +418,7 @@ def test_cli_resume_success_with_warnings_requires_from_layer_or_exits_cleanly(t
 def test_cli_resume_success_with_warnings_allows_forced_from_layer(tmp_path: Path, monkeypatch) -> None:
     config_path = tmp_path / "dataset.yml"
     _write_config(config_path)
-
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
+    _write_sql(tmp_path)
 
     run_id = "warn-run"
     runs_dir = tmp_path / "out" / "data" / "_runs" / "demo_ds" / "2022"
@@ -464,14 +427,7 @@ def test_cli_resume_success_with_warnings_allows_forced_from_layer(tmp_path: Pat
     _write_layer_artifacts(tmp_path / "out", "demo_ds", 2022, "clean")
     _write_layer_artifacts(tmp_path / "out", "demo_ds", 2022, "mart")
 
-    calls = {"raw": 0, "clean": 0, "mart": 0}
-
-    monkeypatch.setattr(cmd_run, "run_raw", lambda *args, **kwargs: calls.__setitem__("raw", calls["raw"] + 1))
-    monkeypatch.setattr(cmd_run, "run_clean", lambda *args, **kwargs: calls.__setitem__("clean", calls["clean"] + 1))
-    monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1))
-    monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
-    monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
-    monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
+    calls = _mock_all_runs(monkeypatch)
 
     runner = CliRunner()
     result = runner.invoke(

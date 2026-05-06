@@ -12,7 +12,7 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 - `toolkit_review_readiness(config_path, year=0)`
 - `toolkit_list_runs(config_path, year=0, since=None, until=None, status=None, limit=20, cross_year=False)`
 - `toolkit_schema_diff(config_path)` — confronto segnali schema raw cross-year (encoding, colonne, ecc.)
-- `toolkit_csv_preview(csv_path, limit=20)` — schema + preview CSV via DuckDB auto-detect (senza runnare pipeline); utile per validare CSV prima di scrivere clean.sql
+- `toolkit_csv_preview(csv_path, limit=20)` — schema + preview CSV via profiler pipeline (`sniff_source_file` + `profile_with_read_cfg`); output allineato con `RawProfile` (delim, encoding, decimal, skip, robust_read_suggested)
 
 ## Boundary
 
@@ -52,7 +52,7 @@ Sostituire il path del `command` con il Python reale del clone locale che usera'
   - `raw`: usa `toolkit inspect schema-diff --json`
   - `clean` / `mart`: legge schema reale dei parquet risolti via `inspect paths`
 - `toolkit_schema_diff` confronta segnali schema raw (encoding, delim, colonne) tra tutti gli anni configurati per il dataset; riutilizza la stessa logica di `toolkit inspect schema-diff` ma esposto come tool MCP
-- `toolkit_csv_preview` legge un CSV con DuckDB auto-detect (delimiter, encoding, header, tipos automatici) e restituisce schema + prime N righe — utile per ispezionare file raw senza runnare la pipeline
+- `toolkit_csv_preview` legge un CSV usando la stessa pipeline di `profile_raw` (`sniff_source_file` + `profile_with_read_cfg`); restituisce schema + prime N righe + mapping_suggestions — utile per ispezionare file raw senza runnare la pipeline
 - `toolkit_run_summary` aggrega tutti i run record per dataset/year
 - `toolkit_summary` include `run.latest_run_record` (payload completo dell'ultimo run)
 - `toolkit_blocker_hints` evidenzia mismatch pratici tra output risolti e stato run

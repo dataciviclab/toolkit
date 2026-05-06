@@ -310,3 +310,32 @@ def test_profile_with_read_cfg_retry_sets_robust_read_suggested(tmp_path: Path, 
         "robust_read_suggested must be True after retry-success"
     )
     assert "profile_read_retry" in result["warnings"][-1]
+
+
+def test_profile_raw_respects_primary_file_override(tmp_path: Path):
+    """When primary_file is passed, profile_raw uses it instead of glob alphabetical.
+
+    Regression test: before the fix, multi-source datasets with different
+    source files per year would get the wrong file profiled because
+    _pick_data_file just returns the first alphabetical match.
+    """
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+
+    # Two source files: alphabetically bonus.csv comes first
+    bonus = raw_dir / "bonus.csv"
+    bonus.write_text("col_bonus\nval_bonus\n", encoding="utf-8")
+    tipo_reddito = raw_dir / "tipo_reddito.csv"
+    tipo_reddito.write_text("col_tipo_reddito\nval_tr\n", encoding="utf-8")
+
+    # Profile with primary_file pointing to tipo_reddito
+    profile = profile_raw(
+        raw_dir,
+        "demo",
+        2024,
+        primary_file=tipo_reddito,
+    )
+
+    # Must profile tipo_reddito.csv, not bonus.csv
+    assert profile.file_used == "tipo_reddito.csv"
+    assert profile.columns_raw == ["col_tipo_reddito"]

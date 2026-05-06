@@ -158,7 +158,12 @@ def run_raw(
                 logger.info("RAW suggested_read -> %s", suggested_path)
 
             if should_write("profile", "raw_profile", policy, profile_ctx):
-                raw_profile = profile_raw(out_dir, dataset, year)
+                raw_profile = profile_raw(
+                    out_dir,
+                    dataset,
+                    year,
+                    primary_file=primary_output_path,
+                )
                 profile_dir = out_dir / "_profile"
                 write_raw_profile(
                     profile_dir,

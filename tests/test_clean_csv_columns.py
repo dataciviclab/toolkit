@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 
 import duckdb
@@ -18,6 +19,7 @@ class _NoopLogger:
         return None
 
 
+@pytest.mark.policy
 def test_run_clean_csv_columns_reads_trailing_delimiter_csv(tmp_path: Path):
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -62,6 +64,7 @@ def test_run_clean_csv_columns_reads_trailing_delimiter_csv(tmp_path: Path):
     assert rows == [("1", "2"), ("3", "4")]
 
 
+@pytest.mark.policy
 def test_run_clean_positional_csv_short_rows_are_padded(tmp_path: Path):
     """Righe piu' corte delle colonne attese vengono paddate con stringa vuota."""
     csv_path = tmp_path / "short.csv"
@@ -84,6 +87,7 @@ def test_run_clean_positional_csv_short_rows_are_padded(tmp_path: Path):
     assert df.iloc[2].tolist() == ["4", "5", "6"]
 
 
+@pytest.mark.policy
 def test_run_clean_positional_csv_wide_rows_raise(tmp_path: Path):
     """Righe piu' lunghe delle colonne attese alzano ValueError."""
     csv_path = tmp_path / "wide.csv"
@@ -100,6 +104,7 @@ def test_run_clean_positional_csv_wide_rows_raise(tmp_path: Path):
         _load_normalized_csv_frame(csv_path, read_cfg, read_cfg["columns"])
 
 
+@pytest.mark.policy
 def test_run_clean_positional_csv_trim_whitespace(tmp_path: Path):
     """trim_whitespace=True (default) pulisce spazi dai valori."""
     csv_path = tmp_path / "ws.csv"
@@ -122,6 +127,7 @@ def test_run_clean_positional_csv_trim_whitespace(tmp_path: Path):
     assert df2.iloc[0].tolist() == [" col1 ", " col2 "]
 
 
+@pytest.mark.policy
 def test_run_clean_positional_csv_multi_file_concat(tmp_path: Path):
     """Piu' file CSV posizionali vengono concatenati in un unico DataFrame."""
     for name, content in [
@@ -150,6 +156,7 @@ def test_run_clean_positional_csv_multi_file_concat(tmp_path: Path):
     con.close()
 
 
+@pytest.mark.policy
 def test_run_clean_positional_csv_skip_and_encoding(tmp_path: Path):
     """Skip righe iniziali e encoding non-UTF funzionano con normalize_rows_to_columns."""
     csv_path = tmp_path / "encoded.csv"
@@ -173,6 +180,7 @@ def test_run_clean_positional_csv_skip_and_encoding(tmp_path: Path):
     assert df.iloc[0].tolist() == ["città", "perché"]
 
 
+@pytest.mark.policy
 def test_run_clean_positional_csv_empty_rows(tmp_path: Path):
     """Righe vuote o con solo delimitatore vengono gestite senza crash."""
     csv_path = tmp_path / "sparse.csv"
@@ -191,6 +199,7 @@ def test_run_clean_positional_csv_empty_rows(tmp_path: Path):
     assert df.iloc[2].tolist() == ["", ""]  # riga con solo ';'
 
 
+@pytest.mark.policy
 def test_run_clean_compact_columns_format_renames_and_types(tmp_path: Path):
     """Compact format 'clean_name:DUCKDB_TYPE' in columns: renames + passes only type to DuckDB.
 
@@ -239,6 +248,7 @@ def test_run_clean_compact_columns_format_renames_and_types(tmp_path: Path):
     assert rows == [("val_a", "val_b")]
 
 
+@pytest.mark.policy
 def test_run_clean_compact_columns_format_with_int_type(tmp_path: Path):
     """Compact format with non-VARCHAR type (e.g. BIGINT) passes type to DuckDB columns={}."""
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
@@ -279,6 +289,7 @@ def test_run_clean_compact_columns_format_with_int_type(tmp_path: Path):
     assert rows == [(2024, 42)]
 
 
+@pytest.mark.policy
 def test_run_clean_compact_columns_format_no_trim_whitespace(tmp_path: Path):
     """Compact format rename is applied even when trim_whitespace=False.
 

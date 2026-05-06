@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 import duckdb
 
 from toolkit.clean.validate import validate_clean
@@ -15,6 +16,7 @@ def _write_parquet(path: Path, sql_create_table_t: str) -> None:
     con.close()
 
 
+@pytest.mark.policy
 def test_validate_clean_pk_duplicates_fails(tmp_path: Path):
     p = tmp_path / "clean.parquet"
     _write_parquet(
@@ -37,6 +39,7 @@ def test_validate_clean_pk_duplicates_fails(tmp_path: Path):
     assert any("Primary key duplicates found" in e for e in res.errors)
 
 
+@pytest.mark.policy
 def test_validate_clean_range_fails(tmp_path: Path):
     p = tmp_path / "clean.parquet"
     _write_parquet(
@@ -59,6 +62,7 @@ def test_validate_clean_range_fails(tmp_path: Path):
     assert any("Range check failed for 'pct_rd'" in e for e in res.errors)
 
 
+@pytest.mark.policy
 def test_validate_clean_null_pct_fails(tmp_path: Path):
     p = tmp_path / "clean.parquet"
     _write_parquet(

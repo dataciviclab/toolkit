@@ -16,32 +16,35 @@ from toolkit.core.csv_read import (
 
 
 NORMALIZE_COLUMNS_SPEC_ERROR_CASES = [
+    # (input, must_contain_all)
     # dict: non-string name
-    ({123: "VARCHAR", "b": "VARCHAR"}, "123", "int"),
+    ({123: "VARCHAR", "b": "VARCHAR"}, ["123", "int"]),
     # dict: non-string dtype
-    ({"col1": 123, "col2": "VARCHAR"}, "123", "int"),
+    ({"col1": 123, "col2": "VARCHAR"}, ["123", "int"]),
     # dict: both non-string
-    ({123: 456}, "123", "456"),
+    ({123: 456}, ["123", "456"]),
     # list: non-string name
-    ([{"name": 123, "type": "VARCHAR"}], "123", "name"),
+    ([{"name": 123, "type": "VARCHAR"}], ["123", "name"]),
     # list: non-string dtype
-    ([{"name": "col1", "type": 999}], "999", "type"),
+    ([{"name": "col1", "type": 999}], ["999", "type"]),
     # list: both non-string
-    ([{"name": 111, "type": 222}], "111", "222"),
+    ([{"name": 111, "type": 222}], ["111", "222"]),
     # list: missing name key
-    ([{"type": "VARCHAR"}], "None", None),
+    ([{"type": "VARCHAR"}], ["None"]),
     # list: missing type key
-    ([{"name": "col1"}], "None", None),
+    ([{"name": "col1"}], ["None"]),
 ]
 
 
 @pytest.mark.policy
-@pytest.mark.parametrize("invalid_input, must_contain, _", NORMALIZE_COLUMNS_SPEC_ERROR_CASES)
-def test_normalize_columns_spec_errors(invalid_input, must_contain, _):
+@pytest.mark.parametrize("invalid_input, must_contain_all", NORMALIZE_COLUMNS_SPEC_ERROR_CASES)
+def test_normalize_columns_spec_errors(invalid_input, must_contain_all):
     """Invalid inputs to normalize_columns_spec must surface the bad value in the error."""
     with pytest.raises(ValueError) as exc_info:
         normalize_columns_spec(invalid_input)
-    assert must_contain in str(exc_info.value)
+    msg = str(exc_info.value)
+    for fragment in must_contain_all:
+        assert fragment in msg, f"Expected '{fragment}' in error message: {msg}"
 
 
 @pytest.mark.policy
@@ -118,21 +121,23 @@ def test_validate_nullstr_accepts_valid(valid_input):
 
 
 INVALID_NULLSTR_ERROR_CASES = [
-    # (invalid_input, must_contain)
-    ([1, 2, "NA"], "1", "int"),
-    ([None, "NA"], "None", "NoneType"),
-    ({"NA": True}, "dict", None),
-    (123, "123", "int"),
+    # (invalid_input, must_contain_all)
+    ([1, 2, "NA"], ["1", "int"]),
+    ([None, "NA"], ["None", "NoneType"]),
+    ({"NA": True}, ["dict"]),
+    (123, ["123", "int"]),
 ]
 
 
 @pytest.mark.policy
-@pytest.mark.parametrize("invalid_input, must_contain, _", INVALID_NULLSTR_ERROR_CASES)
-def test_validate_nullstr_rejects_invalid(invalid_input, must_contain, _):
+@pytest.mark.parametrize("invalid_input, must_contain_all", INVALID_NULLSTR_ERROR_CASES)
+def test_validate_nullstr_rejects_invalid(invalid_input, must_contain_all):
     """Invalid nullstr types (numbers, dict, list with non-strings) are rejected with the bad value."""
     with pytest.raises(ValueError) as exc_info:
         _validate_nullstr(invalid_input)
-    assert must_contain in str(exc_info.value)
+    msg = str(exc_info.value)
+    for fragment in must_contain_all:
+        assert fragment in msg, f"Expected '{fragment}' in error message: {msg}"
 
 
 @pytest.mark.policy

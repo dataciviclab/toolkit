@@ -1,8 +1,6 @@
 import pytest
-from pathlib import Path
-
 import duckdb
-import pytest
+from pathlib import Path
 
 from toolkit.clean.read_csv_normalized import (
     _execute_normalized_csv_read,

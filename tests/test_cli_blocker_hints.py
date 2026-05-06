@@ -258,6 +258,93 @@ mart:
     assert "clean_dir_missing" in result.output
 
 
+def test_blocker_hints_resolves_relative_path_from_config_dir(tmp_path: Path, monkeypatch) -> None:
+    """Relative config paths are resolved from the config file's parent dir, not WORKSPACE_ROOT."""
+    project_dir = tmp_path / "project" / "subdir"
+    project_dir.mkdir(parents=True)
+    config_path = project_dir / "dataset.yml"
+
+    config_path.write_text(
+        """
+root: "./out"
+dataset:
+  name: test_ds
+  years: [2023]
+raw: {}
+clean:
+  sql: "sql/clean.sql"
+mart:
+  tables:
+    - name: test_table
+      sql: "sql/mart/test_table.sql"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    sql_dir = project_dir / "sql" / "mart"
+    sql_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
+    (sql_dir / "test_table.sql").write_text("select * from clean_input", encoding="utf-8")
+
+    # All outputs exist
+    raw_dir = project_dir / "out" / "data" / "raw" / "test_ds" / "2023"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "raw_data.csv").write_text("id,value\n1,100\n", encoding="utf-8")
+    (raw_dir / "manifest.json").write_text(
+        json.dumps({"primary_output_file": "raw_data.csv"}, indent=2),
+        encoding="utf-8",
+    )
+
+    clean_dir = project_dir / "out" / "data" / "clean" / "test_ds" / "2023"
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    (clean_dir / "test_ds_2023_clean.parquet").write_text("dummy", encoding="utf-8")
+    (clean_dir / "manifest.json").write_text(
+        json.dumps({"outputs": [{"file": "test_ds_2023_clean.parquet"}]}, indent=2),
+        encoding="utf-8",
+    )
+
+    mart_dir = project_dir / "out" / "data" / "mart" / "test_ds" / "2023"
+    mart_dir.mkdir(parents=True, exist_ok=True)
+    (mart_dir / "test_table.parquet").write_text("dummy", encoding="utf-8")
+    (mart_dir / "manifest.json").write_text(
+        json.dumps({"outputs": [{"file": "test_table.parquet"}]}, indent=2),
+        encoding="utf-8",
+    )
+
+    run_dir = project_dir / "out" / "data" / "_runs" / "test_ds" / "2023"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "run-abc.json").write_text(
+        json.dumps(
+            {
+                "dataset": "test_ds",
+                "year": 2023,
+                "run_id": "run-abc",
+                "status": "SUCCESS",
+                "layers": {"raw": {"status": "SUCCESS"}, "clean": {"status": "SUCCESS"}, "mart": {"status": "SUCCESS"}},
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    # Set WORKSPACE_ROOT to tmp_path so relative path would resolve there
+    # if the bug existed (looking for config at tmp_path/candidates/...)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+    runner = CliRunner()
+
+    # Use a relative path from project_dir — NOT from WORKSPACE_ROOT
+    result = runner.invoke(
+        app,
+        ["blocker-hints", "--config", "project/subdir/dataset.yml", "--year", "2023"],
+    )
+
+    # With the fix, config is found at tmp_path/project/subdir/dataset.yml
+    # and blocker-hints runs successfully (0 blockers when everything exists)
+    assert result.exit_code == 0, f"expected exit 0, got {result.exit_code}: {result.output}"
+    assert "blockers: 0" in result.output
+
+
 def test_blocker_hints_exit_code_0_even_with_blockers(tmp_path: Path, monkeypatch) -> None:
     """Command exits 0 when hint generation succeeds, even with blockers present.
 

@@ -399,6 +399,7 @@ def test_run_clean_legacy_mode_warns_and_keeps_largest_selection(tmp_path: Path,
 
     assert seen["input_files"] == [large_file]
     assert "defaulting to largest file (legacy)" in caplog.text
+    assert "clean.read.mode: largest explicitly" in caplog.text
 
 
 def test_clean_manifest_missing_warns_and_selects_legacy(tmp_path: Path, monkeypatch, caplog) -> None:

@@ -18,6 +18,7 @@ from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.cli_adapter import inspect_paths
 from toolkit.mcp.schema_ops import (
     blocker_hints,
+    csv_preview,
     list_runs,
     raw_profile,
     review_readiness,

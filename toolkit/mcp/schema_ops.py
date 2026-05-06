@@ -8,6 +8,7 @@ Provides read-only diagnostics on config, layers, and run records:
 - blocker_hints: common mismatches between config and outputs
 - review_readiness: readiness check for candidate review
 - schema_diff: compare RAW schema signals across configured years
+- csv_preview: schema + preview of a CSV file via DuckDB auto-detect
 """
 
 from __future__ import annotations
@@ -756,3 +757,90 @@ def schema_diff(config_path: str) -> dict[str, Any]:
         "entries": entries,
         "comparisons": comparisons,
     }
+
+
+def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
+    """Read a CSV file with DuckDB auto-detect and return schema + data preview.
+
+    Useful for quick inspection of raw files without running the full pipeline.
+    DuckDB auto-detects delimiter, encoding, header, and column types.
+
+    Args:
+        csv_path: path to the CSV file (absolute or relative to workspace root)
+        limit: max rows to return in preview (default 20)
+
+    Returns:
+        dict with keys: path, column_count, columns (name + inferred_type),
+        row_count_estimate, preview (list of rows), mapping_suggestions
+        (same format as RawProfile.mapping_suggestions — compatible with clean.sql config)
+    """
+    import duckdb
+
+    from toolkit.mcp.path_safety import _safe_path
+    from toolkit.profile._column_profile import _build_mapping_suggestions
+
+    path = _safe_path(csv_path)
+    if not path.exists():
+        raise ToolkitClientError(f"CSV non trovato: {path}")
+
+    def _sql_literal(value: str) -> str:
+        return value.replace("'", "''")
+
+    try:
+        with duckdb.connect(database=":memory:") as conn:
+            conn.execute("PRAGMA disable_progress_bar")
+            # Auto-detect all options; DuckDB infers types from full file
+            conn.execute(
+                f"CREATE VIEW csv_preview AS SELECT * FROM read_csv("
+                f"'{_sql_literal(str(path))}', "
+                f"auto_detect=true, header=true)"
+            )
+            describe_rows = conn.execute("DESCRIBE csv_preview").fetchall()
+
+            # Build DuckDB type map (raw_name -> type)
+            duckdb_type_map: dict[str, str] = {}
+            columns_raw: list[str] = []
+            columns_info: list[dict[str, str]] = []
+            for row in describe_rows:
+                raw_name = str(row[0])
+                dtype = str(row[1])
+                columns_raw.append(raw_name)
+                duckdb_type_map[raw_name] = dtype
+                columns_info.append({"name": raw_name, "inferred_type": dtype})
+
+            # Fetch sample rows for nullify/normalize suggestions
+            sample_rows = conn.execute(
+                "SELECT * FROM csv_preview LIMIT 50"
+            ).fetchdf().to_dict(orient="records")
+
+            # Build mapping_suggestions using DuckDB-inferred types
+            mapping_suggestions = _build_mapping_suggestions(
+                columns_raw, sample_rows, duckdb_types=duckdb_type_map
+            )
+
+            # Row count estimate
+            count_result = conn.execute(
+                f"SELECT COUNT(*) FROM read_csv("
+                f"'{_sql_literal(str(path))}', "
+                f"auto_detect=true, header=true)"
+            ).fetchone()
+            row_count_estimate = int(count_result[0]) if count_result else None
+
+            # Fetch preview rows
+            preview_rows = conn.execute(
+                f"SELECT * FROM csv_preview LIMIT {int(limit)}"
+            ).fetchall()
+            col_names = [row[0] for row in describe_rows]
+            preview = [dict(zip(col_names, row)) for row in preview_rows]
+
+            return {
+                "path": str(path),
+                "column_count": len(columns_info),
+                "columns": columns_info,
+                "row_count_estimate": row_count_estimate,
+                "preview": preview,
+                "mapping_suggestions": mapping_suggestions,
+                "note": "type inference via DuckDB auto_detect on full file; mapping_suggestions use DuckDB types",
+            }
+    except Exception as exc:
+        raise ToolkitClientError(f"Lettura CSV fallita per {path}: {exc}") from exc

@@ -122,7 +122,12 @@ class TestGenerateCleanSql:
         assert "skip=2" in sql
 
     def test_no_columns_keeps_header_true(self, tmp_path: Path):
-        """When truly no columns available, header stays true."""
+        """When truly no columns available, header stays true.
+
+        Note: the scaffold injects {year}::INTEGER AS anno_di_imposta as first
+        column when no 'anno' column is detected in the raw file — so the SELECT
+        is no longer bare '*'.
+        """
         profile = {
             "file_used": "test.csv",
             "delim_suggested": ",",
@@ -134,8 +139,29 @@ class TestGenerateCleanSql:
         }
         sql = generate_clean_sql(profile, "test", 2024)
         assert "header=true" in sql
-        # With no columns, SELECT * is used
-        assert "SELECT\n    *" in sql
+        # Scaffold injects "{year}::INTEGER AS anno" — runtime resolves {year}
+        assert "anno" in sql
+        assert "{year}::INTEGER" in sql
+
+    def test_anno_not_injected_when_present_in_raw(self, tmp_path: Path):
+        """When the raw CSV already has a column that normalizes to 'anno', scaffold does NOT inject a duplicate."""
+        profile = {
+            "file_used": "test.csv",
+            "delim_suggested": ",",
+            "header_line": "anno,regione",
+            "skip_suggested": 0,
+            "columns_raw": ["anno", "regione"],
+            "mapping_suggestions": {
+                "anno": {"from": "anno", "type": "int"},
+                "regione": {"from": "regione", "type": "str"},
+            },
+            "warnings": [],
+        }
+        sql = generate_clean_sql(profile, "test", 2024)
+        # Scaffold must NOT inject 2024::INTEGER when raw CSV already has 'anno'
+        assert "2024::INTEGER" not in sql
+        # The mapping provides 'anno' normally; no duplicate injection
+        assert "anno" in sql  # from TRY_CAST
 
     def test_columns_sql_is_single_line(self, tmp_path: Path):
         """Verify columns param is on same line as other params (no missing comma)."""

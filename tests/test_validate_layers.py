@@ -341,6 +341,114 @@ def test_run_clean_validation_uses_columns_raw_from_raw_profile(tmp_path: Path):
     assert summary["stats"]["raw_cols"] == len(real_columns)
     assert summary["stats"]["col_drop_count"] == len(real_columns) - 2
 
+    # raw_probe_source must be "raw_profile" when profile exists
+    assert summary["stats"].get("raw_probe_source") == "raw_profile"
+
+
+def test_run_clean_validation_raw_probe_source_legacy_autodetect(tmp_path: Path):
+    """When no profile exists and a CSV raw file is present, validation falls back
+    to read_csv(auto_detect=true) and sets raw_probe_source = 'legacy_autodetect'."""
+    root = tmp_path / "root"
+    dataset = "demo"
+    year = 2024
+
+    raw_dir = root / "data" / "raw" / dataset / str(year)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    # No profile created — simulating a candidate that hasn't run init
+    (raw_dir / "data.csv").write_text("col1,col2,col3\nval1,val2,val3\n", encoding="utf-8")
+
+    clean_dir = root / "data" / "clean" / dataset / str(year)
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    _write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet", "CREATE TABLE t AS SELECT 1 AS col1, 2 AS col2")
+
+    (clean_dir / "metadata.json").write_text(
+        json.dumps(
+            {
+                "input_files": ["data.csv"],
+                "read_params_used": {},
+                "output_profile": {
+                    "columns": [
+                        {"name": "col1", "type": "INTEGER"},
+                        {"name": "col2", "type": "INTEGER"},
+                    ],
+                    "row_count": 1,
+                },
+                "outputs": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = SimpleNamespace(
+        root=root,
+        dataset=dataset,
+        clean={},
+    )
+    logger = SimpleNamespace(info=lambda *args, **kwargs: None)
+
+    result = run_clean_validation(cfg, year, logger=logger)
+
+    # With no profile, the probe must fall back to legacy autodetect
+    assert result["stats"].get("raw_probe_source") == "legacy_autodetect"
+    # Warning must mention the fallback reason
+    # build_validation_summary only includes the raw stats, not the full result.warnings
+    # So we check the warning was emitted by inspecting via the ValidationResult if accessible,
+    # or by verifying that the fallback path was taken (raw_probe_source = legacy_autodetect)
+    warning_texts = " ".join(_read_warnings_from_validation_report(clean_dir))
+    assert "falling back to read_csv(auto_detect=true)" in warning_texts
+
+
+def test_run_clean_validation_raw_probe_source_unavailable_when_no_raw_file(
+    tmp_path: Path,
+):
+    """When neither profile nor raw file exist, raw_probe_source = 'unavailable'."""
+    root = tmp_path / "root"
+    dataset = "demo"
+    year = 2024
+
+    raw_dir = root / "data" / "raw" / dataset / str(year)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    # No profile, no raw file
+
+    clean_dir = root / "data" / "clean" / dataset / str(year)
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    _write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet", "CREATE TABLE t AS SELECT 1 AS col1")
+
+    (clean_dir / "metadata.json").write_text(
+        json.dumps(
+            {
+                "input_files": ["data.csv"],
+                "read_params_used": {},
+                "output_profile": {
+                    "columns": [{"name": "col1", "type": "INTEGER"}],
+                    "row_count": 1,
+                },
+                "outputs": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = SimpleNamespace(
+        root=root,
+        dataset=dataset,
+        clean={},
+    )
+    logger = SimpleNamespace(info=lambda *args, **kwargs: None)
+
+    result = run_clean_validation(cfg, year, logger=logger)
+
+    assert result["stats"].get("raw_probe_source") == "unavailable"
+
+
+def _read_warnings_from_validation_report(clean_dir: Path) -> list[str]:
+    """Read warnings from the written validation JSON."""
+    report_path = clean_dir / "_validate" / "clean_validation.json"
+    if report_path.exists():
+        data = json.loads(report_path.read_text(encoding="utf-8"))
+        return data.get("warnings", [])
+    return []
+
 
 def test_ensure_dict_preserves_validate_alias() -> None:
     """Verify ensure_dict converts validate_config -> validate (by_alias=True)."""

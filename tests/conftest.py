@@ -3,6 +3,12 @@ from __future__ import annotations
 import pytest
 
 
+# ---- Test policy markers (Lab-wide) ----------------------------------------
+# Marker are declared in pytest.ini. See lab-ops/operations/test-policy.md.
+
+
+# ---- Existing Lab markers ---------------------------------------------------
+
 CORE_TESTS = {
     "test_cli_blocker_hints.py",
     "test_cli_inspect_paths.py",

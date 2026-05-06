@@ -420,7 +420,12 @@ class RawProfile:
 
 
 def profile_raw(
-    raw_dir: Path, dataset: str, year: int, read_cfg: Optional[Dict[str, Any]] = None
+    raw_dir: Path,
+    dataset: str,
+    year: int,
+    read_cfg: Optional[Dict[str, Any]] = None,
+    *,
+    primary_file: Path | None = None,
 ) -> RawProfile:
     """Profile a RAW directory.
 
@@ -439,6 +444,11 @@ def profile_raw(
     read_cfg:
         Optional explicit read configuration. Values here override the
         sniffed suggestions.
+    primary_file:
+        Optional explicit path to the primary source file. When provided,
+        takes precedence over the alphabetical glob fallback. Should match
+        the ``primary_output_file`` from the RAW manifest (via
+        ``_choose_primary_output``).
 
     Returns
     -------
@@ -448,7 +458,7 @@ def profile_raw(
     if not files:
         raise FileNotFoundError(f"No RAW files found in {raw_dir}")
 
-    file0 = _pick_data_file(files)
+    file0 = primary_file if primary_file is not None else _pick_data_file(files)
 
     # Phase 1: pure source sniffing
     sniff_hints = sniff_source_file(file0)

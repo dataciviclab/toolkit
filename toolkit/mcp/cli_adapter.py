@@ -17,7 +17,7 @@ from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import TOOLKIT_PYTHON, TOOLKIT_ROOT, _safe_path
 
 
-def _toolkit_json(args: list[str]) -> dict[str, Any] | list[Any]:
+def _toolkit_json(args: list[str]) -> Any:
     cmd = [str(TOOLKIT_PYTHON), "-m", "toolkit.cli.app", *args]
     env = os.environ.copy()
     env.setdefault("PYTHONIOENCODING", "utf-8")

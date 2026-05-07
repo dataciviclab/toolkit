@@ -446,3 +446,24 @@ def test_inspect_paths_cli_mcp_contract_alignment(tmp_path: Path, monkeypatch) -
     # Verifica raw_hints ha almeno le chiavi required di RawHints
     for key in RawHints.__required_keys__:
         assert key in payload["raw_hints"], f"RawHints: chiave '{key}' mancante"
+
+
+@pytest.mark.policy
+def test_inspect_paths_multi_year_requires_year(tmp_path: Path, monkeypatch) -> None:
+    """inspect_paths(year=None) su dataset multi-year deve alzare ToolkitClientError."""
+    from toolkit.mcp.cli_adapter import inspect_paths
+    from toolkit.mcp.errors import ToolkitClientError
+
+    # Crea un config reale per superare _safe_path
+    yml = tmp_path / "dataset.yml"
+    yml.write_text("dataset:\n  name: test\n  years: [2022, 2023]\n")
+    monkeypatch.chdir(tmp_path)
+
+    # Simula CLI che restituisce una lista (comportamento per multi-year senza --year)
+    monkeypatch.setattr(
+        "toolkit.mcp.cli_adapter._toolkit_json",
+        lambda args: [{"year": 2022}, {"year": 2023}],
+    )
+
+    with pytest.raises(ToolkitClientError, match="year è obbligatorio"):
+        inspect_paths(str(yml))

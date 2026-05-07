@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import duckdb
-import pandas as pd
 
 from toolkit.core.csv_read import (
     csv_read_option_strings,
@@ -303,27 +302,19 @@ def _sample_profile_rows(
 
 
 def _profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    """Profile an Excel file using pandas — same reader strategy as ``clean.read_excel``.
+    """Profile an Excel file using the same pandas reader as ``clean.read_excel``.
 
-    Uses ``clean.read.sheet_name`` from ``read_cfg`` if provided,
-    otherwise defaults to the first sheet (sheet_name=0).
+    Reuses ``_load_excel_frame`` from ``clean.read_excel`` to stay in sync
+    with the clean runtime's Excel handling (sheet_name, header, skip, columns,
+    trim_whitespace, mismatch detection).
 
     Returns the same dict shape as ``profile_with_read_cfg``.
     """
-    cfg = read_cfg or {}
-    sheet_name: str | int = cfg.get("sheet_name", 0)
-    skip = int(cfg.get("skip", 0)) if cfg.get("skip") is not None else 0
-    header: int | None = 0 if cfg.get("header", True) else None
+    from toolkit.clean.read_excel import _load_excel_frame
 
+    cfg = read_cfg or {}
     try:
-        df = pd.read_excel(
-            file0,
-            sheet_name=sheet_name,
-            header=header,
-            skiprows=skip,
-            dtype=object,
-            engine="xlrd" if file0.suffix.lower() == ".xls" else "openpyxl",
-        )
+        df, _ = _load_excel_frame(file0, cfg)
     except Exception as exc:
         return {
             "columns_raw": [],
@@ -345,7 +336,7 @@ def _profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[
 
     # Missingness
     n = len(df)
-    missingness_top = []
+    missingness_top: list[dict[str, Any]] = []
     if n > 0:
         for col in columns_raw:
             nmiss = int(df[col].isna().sum())
@@ -556,7 +547,8 @@ def profile_raw(
     header_line = sniff_hints["header_line"]
 
     # Phase 1b: Excel files — profile via pandas (same reader as clean runtime)
-    if sniff_hints.get("is_binary_file") in ("xlsx", "xls"):
+    binary_fmt = sniff_hints.get("is_binary_file")
+    if binary_fmt in ("xlsx", "xls"):
         runtime_result = _profile_excel(file0, read_cfg)
         return RawProfile(
             dataset=dataset,
@@ -574,6 +566,25 @@ def profile_raw(
             sample_rows=runtime_result["sample_rows"],
             mapping_suggestions=runtime_result["mapping_suggestions"],
             warnings=runtime_result["warnings"],
+        )
+    # ZIP or other unsupported binary — return empty profile with warning
+    if binary_fmt == "zip":
+        return RawProfile(
+            dataset=dataset,
+            year=year,
+            file_used=str(file0.name),
+            encoding_suggested=None,
+            delim_suggested=None,
+            decimal_suggested=None,
+            skip_suggested=skip,
+            robust_read_suggested=True,
+            header_line=None,
+            columns_raw=[],
+            columns_norm=[],
+            missingness_top=[],
+            sample_rows=[],
+            mapping_suggestions={},
+            warnings=["binary_file_not_supported: zip — use a different source format"],
         )
 
     # Phase 2: resolve effective read cfg (sniff + user override)

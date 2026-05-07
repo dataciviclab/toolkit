@@ -6,6 +6,7 @@ from toolkit.cli.cmd_profile import write_suggested_read_yml
 from toolkit.profile._column_profile import _build_mapping_suggestions
 from toolkit.profile.raw import (
     _build_read_csv_opts,
+    _profile_excel,
     build_suggested_read_cfg,
     profile_raw,
     profile_with_read_cfg,
@@ -374,6 +375,37 @@ def test_profile_raw_xlsx_produces_real_columns(tmp_path: Path):
     assert profile.columns_raw == ["anno", "comune", "importo"]
     assert profile.columns_norm == ["anno", "comune", "importo"]
     assert profile.warnings == []
+
+
+@pytest.mark.policy
+def test_profile_excel_parity_header_false_columns(tmp_path: Path):
+    """_profile_excel with header=false + columns must surface the same cols as clean runtime.
+
+    Parity with test_clean_duckdb_read.test_read_raw_to_relation_reads_xlsx_with_explicit_sheet_and_columns.
+    """
+    import pandas as pd
+
+    xlsx_path = tmp_path / "sheeted.xlsx"
+    with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
+        pd.DataFrame({"skipme": ["ignore"]}).to_excel(writer, sheet_name="Other", index=False)
+        pd.DataFrame([["A", 1], ["B", 2]]).to_excel(
+            writer, sheet_name="Export", header=False, index=False
+        )
+
+    read_cfg = {
+        "header": False,
+        "sheet_name": "Export",
+        "columns": {"col0": "VARCHAR", "col1": "VARCHAR"},
+    }
+
+    result = _profile_excel(xlsx_path, read_cfg)
+
+    # columns_raw must reflect what the clean runtime will actually read after applying columns map
+    assert result["columns_raw"] == ["col0", "col1"]
+    # No warnings — valid sheet + config
+    assert result["warnings"] == []
+    # Sample rows contain the data from "Export" sheet (as dicts, not raw lists)
+    assert result["sample_rows"] == [{"col0": "A", "col1": 1}, {"col0": "B", "col1": 2}]
 
 
 @pytest.mark.policy

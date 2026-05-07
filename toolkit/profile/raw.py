@@ -74,7 +74,10 @@ def sniff_source_file(filepath: Path) -> Dict[str, Any]:
             "header_line": None,
             "true_header_line": None,
             "columns_preview": [],
-            "warnings": [f"binary_file_detected: {binary_fmt} — use sheet_name in dataset.yml"],
+            "warnings": [
+                f"binary_file_detected: {binary_fmt}"
+                + (" — use sheet_name in dataset.yml" if binary_fmt in ("xlsx", "xls") else "")
+            ],
             "is_binary_file": binary_fmt,
         }
 

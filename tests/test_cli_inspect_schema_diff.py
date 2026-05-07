@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
@@ -98,6 +99,7 @@ def test_inspect_schema_diff_reports_multi_year_changes(tmp_path: Path, monkeypa
     assert "contribuenti" in result.output
 
 
+@pytest.mark.policy
 def test_inspect_schema_diff_skips_binary_file(tmp_path: Path, monkeypatch) -> None:
     """XLSX files produce garbage header_line — schema diff must skip comparison."""
     config_path = _write_dataset_config(tmp_path)

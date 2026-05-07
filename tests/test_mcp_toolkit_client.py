@@ -245,6 +245,7 @@ def test_review_readiness_needs_review_with_single_failure(tmp_path: Path, monke
     assert payload["fail_count"] == 1
 
 
+@pytest.mark.policy
 def test_review_readiness_fails_when_raw_binary_file(tmp_path: Path, monkeypatch) -> None:
     """policy: binary file in raw_profile.json causes raw_profiling_available check to fail."""
     src = Path("project-example")

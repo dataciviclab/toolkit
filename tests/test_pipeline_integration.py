@@ -38,7 +38,8 @@ def _simplify_sql_project(dst: Path) -> None:
         sql_path.write_text("SELECT * FROM clean_input\n", encoding="utf-8")
 
 
-def test_artifacts_policy_minimal_skips_optional_outputs(tmp_path: Path, monkeypatch):
+def test_artifacts_policy_minimal_behaves_like_standard(tmp_path: Path, monkeypatch):
+    """minimal policy no longer suppresses artifacts — same output as standard."""
     src = Path("project-example")
     dst = tmp_path / "project-example"
     shutil.copytree(src, dst)
@@ -91,9 +92,8 @@ def test_artifacts_policy_minimal_skips_optional_outputs(tmp_path: Path, monkeyp
     assert not (profile_dir / "profile.json").exists()
     assert not (profile_dir / "profile.md").exists()
     assert not (profile_dir / "suggested_mapping.yml").exists()
-    assert not (clean_dir / "_run" / "clean_rendered.sql").exists()
-    if (mart_dir / "_run").exists():
-        assert not any((mart_dir / "_run").glob("*_rendered.sql"))
+    assert (clean_dir / "_run" / "clean_rendered.sql").exists()
+    assert any((mart_dir / "_run").glob("*_rendered.sql"))
 
     assert (clean_dir / "manifest.json").exists()
     assert (clean_dir / "metadata.json").exists()

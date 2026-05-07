@@ -118,18 +118,8 @@ Uso consigliato:
 
 ## Artifact policy
 
-La policy artifacts resta disponibile per tuning operativo:
-
-```yaml
-output:
-  artifacts: standard   # minimal | standard
-  legacy_aliases: true
-```
-
-Regola pratica:
-
-- `standard`: default consigliato
-- `minimal`: riduce artefatti opzionali
+`output.artifacts` non ha più effetto — profiling e SQL renderizzati sono sempre generati.
+Il campo è accettato per backward compatibilità ma ignorato.
 
 `legacy_aliases` resta supportato per compatibilità, ma non va promosso nei nuovi repo dataset.
 

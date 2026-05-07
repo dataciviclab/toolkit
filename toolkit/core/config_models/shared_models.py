@@ -170,8 +170,6 @@ class GlobalValidationConfig(BaseModel):
 class ConfigPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    strict: bool = False
-
 
 class RangeRuleConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")

@@ -389,3 +389,60 @@ def test_run_summary_accepts_since_until_filters(tmp_path: Path, monkeypatch) ->
     # Aware datetime — same result as naive
     p4 = run_summary(str(config_path), 2022, since="2025-10-16T00:00:00+00:00")
     assert p4["total_runs"] == 2
+
+
+@pytest.mark.policy
+def test_inspect_paths_cli_mcp_contract_alignment(tmp_path: Path, monkeypatch) -> None:
+    """CLI --json output must match the InspectPathsResult TypedDict contract.
+
+    Run ``toolkit inspect paths --json`` via CLI runner and verify every key
+    defined in ``InspectPathsResult`` is present in the output. This catches
+    contract drift between CLI and MCP consumer code.
+    """
+    from typer.testing import CliRunner
+
+    from toolkit.cli.app import app
+    from toolkit.mcp.contracts import (
+        CleanPaths,
+        InspectPathsResult,
+        LayerPaths,
+        MartPaths,
+        RawHints,
+        RawPaths,
+    )
+
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+
+    result = runner.invoke(app, ["inspect", "paths", "--config", str(config_path), "--year", "2022", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+
+    # Verifica chiavi top-level del contratto
+    for key in InspectPathsResult.__required_keys__:
+        assert key in payload, f"InspectPathsResult: chiave '{key}' mancante nel CLI output"
+
+    # Verifica sottostruttura paths
+    for key in LayerPaths.__required_keys__:
+        assert key in payload["paths"], f"LayerPaths: chiave '{key}' mancante"
+
+    # Verifica raw paths
+    for key in RawPaths.__required_keys__:
+        assert key in payload["paths"]["raw"], f"RawPaths: chiave '{key}' mancante"
+
+    # Verifica clean paths
+    for key in CleanPaths.__required_keys__:
+        assert key in payload["paths"]["clean"], f"CleanPaths: chiave '{key}' mancante"
+
+    # Verifica mart paths
+    for key in MartPaths.__required_keys__:
+        assert key in payload["paths"]["mart"], f"MartPaths: chiave '{key}' mancante"
+
+    # Verifica raw_hints ha almeno le chiavi required di RawHints
+    for key in RawHints.__required_keys__:
+        assert key in payload["raw_hints"], f"RawHints: chiave '{key}' mancante"

@@ -12,6 +12,7 @@ import os
 import subprocess
 from typing import Any
 
+from toolkit.mcp.contracts import InspectPathsResult
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import TOOLKIT_PYTHON, TOOLKIT_ROOT, _safe_path
 
@@ -54,7 +55,7 @@ def _toolkit_json(args: list[str]) -> dict[str, Any] | list[Any]:
         raise ToolkitClientError("toolkit CLI non ha restituito JSON valido") from exc
 
 
-def inspect_paths(config_path: str, year: int | None = None) -> dict[str, Any]:
+def inspect_paths(config_path: str, year: int | None = None) -> InspectPathsResult:
     """Risolve i path per un dataset/year.
 
     Richiede ``year`` per dataset multi-year. Se ``year`` è ``None`` e il dataset
@@ -71,4 +72,11 @@ def inspect_paths(config_path: str, year: int | None = None) -> dict[str, Any]:
             "year è obbligatorio per dataset multi-year. "
             f"Trovati {len(result)} anni. Usa --year per specificarne uno."
         )
+    # Validazione contratto: verifica che le chiavi principali siano presenti.
+    for key in ("dataset", "year", "paths"):
+        if key not in result:
+            raise ToolkitClientError(
+                f"inspect paths: chiave '{key}' mancante nel risultato. "
+                "Il contratto CLI/MCP potrebbe essere disallineato."
+            )
     return result

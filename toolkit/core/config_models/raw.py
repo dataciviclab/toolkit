@@ -10,7 +10,7 @@ from toolkit.core.config_models.common import parse_bool
 
 
 class ClientConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     timeout: int | None = None
     retries: int | None = None

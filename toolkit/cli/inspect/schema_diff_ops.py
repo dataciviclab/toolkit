@@ -69,6 +69,10 @@ def schema_diff(
         typer.echo("comparisons:")
         for comparison in comparisons:
             typer.echo(f"  {comparison['from_year']} -> {comparison['to_year']}:")
+            if comparison.get("skipped"):
+                typer.echo("    skipped: true")
+                typer.echo(f"    reason: {comparison['reason']}")
+                continue
             typer.echo(
                 f"    counts: {comparison['from_columns_count']} -> {comparison['to_columns_count']}"
             )

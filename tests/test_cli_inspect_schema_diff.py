@@ -68,7 +68,7 @@ def _write_raw_year(
                     "decimal_suggested": ".",
                     "skip_suggested": 0,
                     "header_line": header_line,
-                    "columns_preview": header_line.split(delim),
+                    "columns_preview": header_line.split(delim) if header_line else [],
                     "warnings": [],
                 }
             }
@@ -96,6 +96,47 @@ def test_inspect_schema_diff_reports_multi_year_changes(tmp_path: Path, monkeypa
     assert "counts: 3 -> 4" in result.output
     assert "added_columns:" in result.output
     assert "contribuenti" in result.output
+
+
+def test_inspect_schema_diff_skips_binary_file(tmp_path: Path, monkeypatch) -> None:
+    """XLSX files produce garbage header_line — schema diff must skip comparison."""
+    config_path = _write_dataset_config(tmp_path)
+    root = tmp_path / "_out"
+    # 2022: CSV (normal)
+    _write_raw_year(root, 2022, "input_2022.csv", "anno,comune,imponibile")
+    # 2023: fake XLSX binary in metadata
+    raw_dir_2023 = root / "data" / "raw" / "schema_diff_example" / "2023"
+    raw_dir_2023.mkdir(parents=True, exist_ok=True)
+    (raw_dir_2023 / "input_2023.xlsx").write_bytes(b"PK\x03\x04\x14\x00\x00")
+    (raw_dir_2023 / "manifest.json").write_text(
+        json.dumps({"primary_output_file": "input_2023.xlsx"}),
+        encoding="utf-8",
+    )
+    (raw_dir_2023 / "metadata.json").write_text(
+        json.dumps(
+            {
+                "profile_hints": {
+                    "file_used": "input_2023.xlsx",
+                    "is_binary_file": "xlsx",
+                    "warnings": ["binary_file_detected: xlsx — use sheet_name in dataset.yml"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app, ["inspect", "schema-diff", "--config", str(config_path), "--json", "--strict-config"]
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["entries"][0]["is_binary_file"] is None
+    assert payload["entries"][1]["is_binary_file"] == "xlsx"
+    assert payload["comparisons"][0]["skipped"] is True
+    assert payload["comparisons"][0]["reason"] == "binary_file_not_comparable"
 
 
 def test_inspect_schema_diff_json_degrades_when_raw_is_missing(tmp_path: Path, monkeypatch) -> None:

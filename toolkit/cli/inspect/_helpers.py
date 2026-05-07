@@ -47,6 +47,10 @@ def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
     if sniff_error is not None:
         warnings.append(f"profile_hint_fallback_failed: {sniff_error}")
 
+    is_binary_file = profile_hints.get("is_binary_file")
+    if is_binary_file:
+        warnings.append(f"binary_file_detected: {is_binary_file} — schema not comparable")
+
     return {
         "year": year,
         "raw_dir": str(raw_dir),
@@ -54,6 +58,7 @@ def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
         "primary_output_file": raw_meta.get("primary_output_file"),
         "file_used": profile_hints.get("file_used"),
         "profile_source": profile_source,
+        "is_binary_file": is_binary_file,
         "encoding": profile_hints.get("encoding_suggested"),
         "delim": profile_hints.get("delim_suggested"),
         "decimal": profile_hints.get("decimal_suggested"),
@@ -68,6 +73,23 @@ def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
 def _compare_schema_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     comparisons: list[dict[str, Any]] = []
     for previous, current in zip(entries, entries[1:]):
+        # Binary files (XLSX/XLS) produce garbage columns_preview — skip comparison.
+        if previous.get("is_binary_file") or current.get("is_binary_file"):
+            comparisons.append(
+                {
+                    "from_year": previous["year"],
+                    "to_year": current["year"],
+                    "skipped": True,
+                    "reason": "binary_file_not_comparable",
+                    "from_columns_count": previous.get("columns_count") or 0,
+                    "to_columns_count": current.get("columns_count") or 0,
+                    "added_columns": [],
+                    "removed_columns": [],
+                    "changed": False,
+                }
+            )
+            continue
+
         previous_columns = set(previous.get("columns_preview") or [])
         current_columns = set(current.get("columns_preview") or [])
         comparisons.append(

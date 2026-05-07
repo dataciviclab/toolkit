@@ -24,7 +24,7 @@ from toolkit.mcp._schema_utils import (
     _schema_from_parquet,
     _validation_summary_for_layer,
 )
-from toolkit.mcp.cli_adapter import _toolkit_json, inspect_paths
+from toolkit.mcp.cli_adapter import inspect_paths
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import _load_cfg, _safe_path
 from toolkit.core.run_records import get_run_dir_dataset, list_runs as _list_runs_records
@@ -38,17 +38,15 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
         raise ToolkitClientError("layer deve essere uno tra: raw, clean, mart")
 
     if safe_layer == "raw":
-        try:
-            payload = _toolkit_json(["inspect", "schema-diff", "--config", str(config), "--json"])
-        except Exception as exc:
-            raise ToolkitClientError(f"show_schema(raw) fallito per {config}: {exc}") from exc
-        entries = [e for e in payload.get("entries", []) if year is None or e.get("year") == year]
+        years = list(_cfg.years or [])
+        entries = [_raw_schema_payload(_cfg, yr) for yr in years]
+        entries_filtered = [e for e in entries if year is None or e.get("year") == year]
         return {
-            "dataset": payload.get("dataset"),
+            "dataset": _cfg.dataset,
             "layer": "raw",
             "year": year,
-            "entry_count": len(entries),
-            "entries": entries,
+            "entry_count": len(entries_filtered),
+            "entries": entries_filtered,
         }
 
     paths = inspect_paths(str(config), year)

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import duckdb
+import pandas as pd
 
 from toolkit.core.csv_read import (
     csv_read_option_strings,
@@ -20,7 +21,7 @@ from toolkit.core.csv_read import (
     sql_str,
 )
 from toolkit.core.io import write_json_atomic
-from toolkit.profile._sniff_encoding import sniff_encoding
+from toolkit.profile._sniff_encoding import is_binary_file as _is_binary_file, sniff_encoding
 from toolkit.profile._sniff_delimiter import sniff_decimal, sniff_delim, suggest_skip
 from toolkit.profile._column_profile import _build_mapping_suggestions, _normalize_colname
 
@@ -58,7 +59,24 @@ def sniff_source_file(filepath: Path) -> Dict[str, Any]:
         - true_header_line (str | None): header text at line 0 (for mismatch detection)
         - columns_preview (list[str]): normalised column names from header_line
         - warnings (list[str]): issues detected during sniffing
+        - is_binary_file (str | None): 'xlsx' / 'xls' if binary format detected
     """
+    # Binary files (XLSX/XLS) cannot be decoded as text — return early.
+    binary_fmt = _is_binary_file(filepath)
+    if binary_fmt:
+        return {
+            "file_used": filepath.name,
+            "encoding_suggested": None,
+            "delim_suggested": None,
+            "decimal_suggested": None,
+            "skip_suggested": 0,
+            "header_line": None,
+            "true_header_line": None,
+            "columns_preview": [],
+            "warnings": [f"binary_file_detected: {binary_fmt}"],
+            "is_binary_file": binary_fmt,
+        }
+
     enc, txt = sniff_encoding(filepath)
     delim = sniff_delim(txt)
     dec = sniff_decimal(txt)
@@ -103,6 +121,7 @@ def sniff_source_file(filepath: Path) -> Dict[str, Any]:
         "true_header_line": true_header_line,
         "columns_preview": _preview_columns(header_line, delim),
         "warnings": warnings,
+        "is_binary_file": None,
     }
 
 
@@ -281,6 +300,73 @@ def _sample_profile_rows(
 
     missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
     return sample_rows, missingness_top
+
+
+def _profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    """Profile an Excel file using pandas — same reader strategy as ``clean.read_excel``.
+
+    Uses ``clean.read.sheet_name`` from ``read_cfg`` if provided,
+    otherwise defaults to the first sheet (sheet_name=0).
+
+    Returns the same dict shape as ``profile_with_read_cfg``.
+    """
+    cfg = read_cfg or {}
+    sheet_name: str | int = cfg.get("sheet_name", 0)
+    skip = int(cfg.get("skip", 0)) if cfg.get("skip") is not None else 0
+    header: int | None = 0 if cfg.get("header", True) else None
+
+    try:
+        df = pd.read_excel(
+            file0,
+            sheet_name=sheet_name,
+            header=header,
+            skiprows=skip,
+            dtype=object,
+            engine="xlrd" if file0.suffix.lower() == ".xls" else "openpyxl",
+        )
+    except Exception as exc:
+        return {
+            "columns_raw": [],
+            "columns_norm": [],
+            "duckdb_types": [],
+            "sample_rows": [],
+            "missingness_top": [],
+            "mapping_suggestions": {},
+            "warnings": [f"excel_profile_failed: {type(exc).__name__}: {exc}"],
+            "robust_read_suggested": True,
+        }
+
+    # Normalize column names
+    columns_raw = list(df.columns)
+    columns_norm = [_normalize_colname(str(c)) for c in columns_raw]
+
+    # Sample rows
+    sample_rows = df.head(5).fillna("").to_dict(orient="records")
+
+    # Missingness
+    n = len(df)
+    missingness_top = []
+    if n > 0:
+        for col in columns_raw:
+            nmiss = int(df[col].isna().sum())
+            if nmiss > 0:
+                missingness_top.append({"column": str(col), "missing_pct": float(nmiss) / float(n) * 100.0})
+    missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
+
+    # Mapping suggestions — no DuckDB types for Excel, use empty
+    mapping_suggestions: Dict[str, Any] = {}
+    duckdb_types: List[str] = []
+
+    return {
+        "columns_raw": columns_raw,
+        "columns_norm": columns_norm,
+        "duckdb_types": duckdb_types,
+        "sample_rows": sample_rows,
+        "missingness_top": missingness_top,
+        "mapping_suggestions": mapping_suggestions,
+        "warnings": [],
+        "robust_read_suggested": False,
+    }
 
 
 def profile_with_read_cfg(
@@ -468,6 +554,27 @@ def profile_raw(
     dec = sniff_hints["decimal_suggested"]
     skip = sniff_hints["skip_suggested"]
     header_line = sniff_hints["header_line"]
+
+    # Phase 1b: Excel files — profile via pandas (same reader as clean runtime)
+    if sniff_hints.get("is_binary_file") in ("xlsx", "xls"):
+        runtime_result = _profile_excel(file0, read_cfg)
+        return RawProfile(
+            dataset=dataset,
+            year=year,
+            file_used=str(file0.name),
+            encoding_suggested=None,
+            delim_suggested=None,
+            decimal_suggested=None,
+            skip_suggested=skip,
+            robust_read_suggested=runtime_result["robust_read_suggested"],
+            header_line=None,
+            columns_raw=runtime_result["columns_raw"],
+            columns_norm=runtime_result["columns_norm"],
+            missingness_top=runtime_result["missingness_top"],
+            sample_rows=runtime_result["sample_rows"],
+            mapping_suggestions=runtime_result["mapping_suggestions"],
+            warnings=runtime_result["warnings"],
+        )
 
     # Phase 2: resolve effective read cfg (sniff + user override)
     effective_read_cfg = _effective_profile_read_cfg(

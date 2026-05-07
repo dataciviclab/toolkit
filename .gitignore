@@ -34,3 +34,4 @@ tmp/
 # Generated artifacts
 generated/
 /sql/
+*.py,cover

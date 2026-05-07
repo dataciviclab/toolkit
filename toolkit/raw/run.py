@@ -33,7 +33,6 @@ def run_raw(
     *,
     base_dir: Path | None = None,
     run_id: str | None = None,
-    strict_plugins: bool = False,
     output_cfg: dict | None = None,
     clean_cfg: dict | None = None,
 ):
@@ -54,7 +53,7 @@ def run_raw(
     output_cfg = ensure_dict(output_cfg)
     clean_cfg = ensure_dict(clean_cfg)
 
-    register_builtin_plugins(strict=strict_plugins)
+    register_builtin_plugins()
 
     out_dir = layer_year_dir(root, "raw", dataset, year)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -166,12 +165,7 @@ def run_raw(
                     primary_file=primary_output_path,
                 )
                 profile_dir = out_dir / "_profile"
-                write_raw_profile(
-                    profile_dir,
-                    raw_profile,
-                    write_canonical=True,
-                    write_legacy_alias=should_write("profile", "profile_alias", policy, profile_ctx),
-                )
+                write_raw_profile(profile_dir, raw_profile)
                 logger.info("RAW profile -> %s", profile_dir / "raw_profile.json")
 
                 scaffold_clean_if_missing(

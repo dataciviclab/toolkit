@@ -360,7 +360,7 @@ Campi supportati:
 | Campo | Tipo | Default |
 |---|---|---|
 | `output.artifacts` | `str` | `standard` (accettato ma ignorato) |
-| `output.legacy_aliases` | `bool` | `false` |
+| `output.legacy_aliases` | — | rimosso, non ha più effetto |
 
 ## Legacy supportato
 

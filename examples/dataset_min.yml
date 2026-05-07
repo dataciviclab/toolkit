@@ -29,4 +29,3 @@ validation:
 
 output:
   artifacts: standard
-  legacy_aliases: true

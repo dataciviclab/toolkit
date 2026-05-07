@@ -32,12 +32,7 @@ def profile(
         # Explicit `toolkit profile raw` should always emit the canonical profile JSON.
         # Always emit canonical profile JSON for the assist workflow,
         # regardless of any discard-happy output configuration.
-        paths = write_raw_profile(
-            out_dir,
-            prof,
-            write_canonical=True,
-            write_legacy_alias=should_write("profile", "profile_alias", policy, cfg),
-        )
+        paths = write_raw_profile(out_dir, prof)
 
         written_paths = list(paths.values())
 

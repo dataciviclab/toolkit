@@ -46,11 +46,6 @@ def run_dir(root: str | os.PathLike[str], layer: str, dataset: str, year: int | 
     return layer_year_dir(root, layer, dataset, year) / "_runs" / run_id
 
 
-def ensure_dir(p: Path) -> Path:
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
-
 def serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | None:
     """Serialize a Path relative to rel_root for storage in metadata JSON.
 

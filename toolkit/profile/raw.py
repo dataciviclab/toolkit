@@ -244,16 +244,6 @@ def _effective_profile_read_cfg(
     return effective_read_cfg
 
 
-def _read_header_line(file0: Path, *, encoding: str, skip_n: int) -> str | None:
-    try:
-        with file0.open("r", encoding=encoding, errors="replace") as f:
-            for _ in range(skip_n):
-                f.readline()
-            return f.readline().rstrip("\n\r")
-    except Exception:
-        return None
-
-
 def _profile_view(
     con: duckdb.DuckDBPyConnection,
     file0: Path,
@@ -623,20 +613,15 @@ def write_raw_profile(
     profile: RawProfile,
     *,
     write_canonical: bool = True,
-    write_legacy_alias: bool = True,
 ) -> Dict[str, Path]:
     _safe_mkdir(out_dir)
 
     p_raw_json = out_dir / "raw_profile.json"
-    p_json = out_dir / "profile.json"
     payload = asdict(profile)
     written: Dict[str, Path] = {}
 
     if write_canonical:
         write_json_atomic(p_raw_json, payload)
         written["raw_json"] = p_raw_json
-    if write_legacy_alias:
-        write_json_atomic(p_json, payload)
-        written["json"] = p_json
 
     return written

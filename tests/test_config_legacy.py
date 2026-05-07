@@ -137,15 +137,12 @@ mart:
         primary_key: key_id
 validation:
   fail_on_error: "false"
-output:
-  legacy_aliases: "0"
 """,
     )
 
     cfg = load_config(yml)
 
     assert cfg.validation.fail_on_error is False
-    assert cfg.output.legacy_aliases is False
     assert cfg.raw.sources[0].primary is False
     assert cfg.clean.required_columns == ["comune"]
     assert cfg.clean.validate.primary_key == ["id"]
@@ -607,15 +604,12 @@ mart:
         primary_key: key_id
 validation:
   fail_on_error: "false"
-output:
-  legacy_aliases: "0"
 """,
     )
 
     model = load_config_model(yml)
 
     assert model.validation.fail_on_error is False
-    assert model.output.legacy_aliases is False
     assert model.raw.sources[0].primary is False
     assert model.clean.required_columns == ["comune"]
     assert model.clean.validate.primary_key == ["id"]

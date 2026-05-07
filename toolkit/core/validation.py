@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
-from toolkit.core.config_models import TransitionConfig
-from toolkit.core.exceptions import ValidationError
+from toolkit.core.config_models.mart import TransitionConfig
 from toolkit.core.io import write_json_atomic
 
 
@@ -16,12 +16,6 @@ class ValidationResult:
     warnings: list[str] = field(default_factory=list)
     summary: dict[str, Any] = field(default_factory=dict)
     sections: dict[str, Any] = field(default_factory=dict)
-
-    def ensure(self) -> "ValidationResult":
-        if not self.ok:
-            raise ValidationError(str(self.errors or self.summary))
-        return self
-
 
 def write_validation_json(path: str | Path, result: ValidationResult) -> Path:
     out = Path(path)

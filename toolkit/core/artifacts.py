@@ -8,10 +8,6 @@ def resolve_artifact_policy(output_cfg: dict[str, Any] | None) -> str:
     return "standard"
 
 
-def legacy_aliases_enabled(output_cfg: dict[str, Any] | None) -> bool:
-    return bool((output_cfg or {}).get("legacy_aliases", False))
-
-
 def profile_required(cfg: Any) -> bool:
     clean_cfg = getattr(cfg, "clean", None) if not isinstance(cfg, dict) else cfg.get("clean")
     clean_cfg = clean_cfg or {}
@@ -39,12 +35,8 @@ def should_write(
     is no longer consulted — profiling and rendered-SQL artifacts are
     always written when applicable.
     """
-    output_cfg = getattr(cfg, "output", None) if not isinstance(cfg, dict) else cfg.get("output")
-
     if layer == "profile":
         if artifact_name == "suggested_read":
             return profile_required(cfg)
-        if artifact_name == "profile_alias":
-            return legacy_aliases_enabled(output_cfg)
 
     return True

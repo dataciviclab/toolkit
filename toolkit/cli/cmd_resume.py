@@ -110,19 +110,13 @@ def resume(
     year: int = typer.Option(..., "--year", help="Dataset year"),
     run_id: str | None = typer.Option(None, "--run-id", help="Specific run id"),
     latest: bool = typer.Option(False, "--latest", help="Resume latest run"),
-    compat: bool = typer.Option(False, "--compat", help="Deprecated: non ha più effetto"),
     from_layer: str | None = typer.Option(None, "--from-layer", help="Force restart from raw | clean | mart"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
     """
     Riprende un run dal primo layer non SUCCESS.
-
-    Il flag --compat è deprecato e non ha più effetto: i record non portabili
-    non bloccano più il resume.
     """
-    if compat:
-        typer.echo("warning: --compat è deprecato e non serve più", err=True)
     if run_id and latest:
         raise typer.BadParameter("Use either --run-id or --latest, not both")
     if from_layer is not None and from_layer not in _LAYER_ORDER:

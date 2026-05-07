@@ -132,9 +132,6 @@ class ToolkitConfig:
         p = Path(rel_path)
         return p if p.is_absolute() else (self.base_dir / p)
 
-    def resolved_root(self) -> Path:
-        return self.root
-
 
 def parse_bool(value: Any, field_name: str) -> bool:
     return _parse_bool(value, field_name)

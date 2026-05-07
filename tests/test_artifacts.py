@@ -3,7 +3,6 @@
 import pytest
 
 from toolkit.core.artifacts import (
-    legacy_aliases_enabled,
     profile_required,
     resolve_artifact_policy,
     should_write,
@@ -18,24 +17,6 @@ def test_resolve_artifact_policy_returns_standard() -> None:
     assert resolve_artifact_policy({}) == "standard"
     assert resolve_artifact_policy({"artifacts": "minimal"}) == "standard"
     assert resolve_artifact_policy({"artifacts": "unknown"}) == "standard"
-
-
-# legacy_aliases_enabled
-
-@pytest.mark.policy
-@pytest.mark.parametrize("cfg, expected", [
-    (None, False),
-    ({}, False),
-    ({"legacy_aliases": True}, True),
-    ({"legacy_aliases": False}, False),
-])
-def test_legacy_aliases_enabled(cfg, expected) -> None:
-    assert legacy_aliases_enabled(cfg) is expected
-
-
-@pytest.mark.policy
-def test_legacy_aliases_enabled_returns_bool() -> None:
-    assert isinstance(legacy_aliases_enabled({"legacy_aliases": "yes"}), bool)
 
 
 # profile_required
@@ -63,15 +44,12 @@ def test_profile_required_object_attribute_access() -> None:
     assert profile_required(obj) is False
 
 
-# should_write — no policy gating, only conditional on profile/alias
+# should_write
 
 @pytest.mark.policy
 @pytest.mark.parametrize("layer, artifact, cfg, expected", [
     ("profile", "suggested_read", {"clean": {"read": {"source": "auto"}}}, True),
     ("profile", "suggested_read", {"clean": {"read": {"source": "duckdb"}}}, False),
-    ("profile", "profile_alias", {"output": {"legacy_aliases": True}}, True),
-    ("profile", "profile_alias", {"output": {"legacy_aliases": False}}, False),
-    ("profile", "profile_alias", {}, False),
 ])
 def test_should_write(layer, artifact, cfg, expected) -> None:
     assert should_write(layer, artifact, "standard", cfg) is expected
@@ -86,5 +64,5 @@ def test_should_write(layer, artifact, cfg, expected) -> None:
     ("mart", "aggregated_parquet"),
 ])
 def test_should_write_always_true(layer, artifact) -> None:
-    """Artifacts no longer suppressed by policy — always returned True."""
+    """All artifacts always returned True — no policy gating."""
     assert should_write(layer, artifact, "standard", {}) is True

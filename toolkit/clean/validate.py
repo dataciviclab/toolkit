@@ -213,8 +213,6 @@ def validate_promotion(
 
     profile_dir = raw_path / "_profile"
     saved_profile_path = profile_dir / "raw_profile.json"
-    if not saved_profile_path.exists():
-        saved_profile_path = profile_dir / "profile.json"
 
     if saved_profile_path.exists():
         try:
@@ -296,13 +294,10 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
     clean_row_count = promotion_result.summary.get("clean_row_count") or result.summary.get("row_count")
     raw_col_count = promotion_result.summary.get("raw_col_count")
 
-    # scaffold check: legge profile raw (canonical prima, fallback legacy alias)
-    # Usa columns_raw dal profile come source of truth per raw_col_count, bypassing
-    # _profile_raw_input che potrebbe rileggere il CSV con parametri header errati
+    # scaffold check: legge raw_profile.json come source of truth per raw_col_count,
+    # bypassando _profile_raw_input che potrebbe rileggere il CSV con parametri header errati
     _profile_dir = raw_dir / "_profile"
     profile_path = _profile_dir / "raw_profile.json"
-    if not profile_path.exists():
-        profile_path = _profile_dir / "profile.json"
     profile_parse_error: bool = False
     trusted_raw_cols: list[str] = []
     if profile_path.exists():

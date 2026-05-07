@@ -149,7 +149,6 @@ def _write_csv_it_project(project_dir: Path) -> Path:
           fail_on_error: "true"
         output:
           artifacts: standard
-          legacy_aliases: "false"
         """,
     )
     return project_dir / "dataset.yml"

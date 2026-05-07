@@ -182,28 +182,3 @@ def write_layer_manifest(
     out = folder / filename
     write_json_atomic(out, payload)
     return out
-
-
-def write_manifest_alias(
-    folder: Path,
-    filename: str,
-    metadata_path: str,
-    validation_path: str | None,
-    outputs: list[dict[str, Any]] | None,
-    ok: bool | None,
-    errors_count: int | None,
-    warnings_count: int | None,
-) -> Path:
-    payload = {
-        "metadata": metadata_path,
-        "validation": validation_path,
-        "summary": {
-            "ok": ok,
-            "errors_count": errors_count,
-            "warnings_count": warnings_count,
-        },
-        "outputs": outputs,
-    }
-    out = folder / filename
-    write_json_atomic(out, payload)
-    return out

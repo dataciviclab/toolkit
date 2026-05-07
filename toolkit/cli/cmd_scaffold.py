@@ -46,42 +46,34 @@ def scaffold_clean(
     selected_year = years[0]
 
     raw_profile_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, selected_year) / "_profile"
-    profile_path = raw_profile_dir / "profile.json"
+    profile_path = raw_profile_dir / "raw_profile.json"
     suggested_read_yml = raw_profile_dir / "suggested_read.yml"
 
     profile: dict[str, Any]
 
     if not profile_path.exists():
-        # Also check raw_profile.json as fallback
-        profile_path = raw_profile_dir / "raw_profile.json"
-        if not profile_path.exists():
-            # Fallback: suggested_read.yml contains read hints in YAML form.
-            # Build a minimal profile dict from it so propose_clean_read works.
-            if suggested_read_yml.exists():
-                try:
-                    raw_yaml = yaml.safe_load(suggested_read_yml.read_text(encoding="utf-8"))
-                except yaml.YAMLError as exc:
-                    raise typer.BadParameter(f"suggested_read.yml non valido: {exc}")
-                clean_section = raw_yaml.get("clean", {}) if isinstance(raw_yaml, dict) else {}
-                read_section = clean_section.get("read", {}) if isinstance(clean_section, dict) else {}
-                profile = {
-                    "delim_suggested": read_section.get("delim"),
-                    "encoding_suggested": read_section.get("encoding"),
-                    "decimal_suggested": read_section.get("decimal"),
-                    "skip_suggested": read_section.get("skip"),
-                    "header_line": None,
-                    "mapping_suggestions": {},
-                    "robust_read_suggested": None,
-                }
-            else:
-                typer.echo(f"Profilo RAW non trovato in {raw_profile_dir}", err=True)
-                typer.echo(f"Esegui prima: toolkit profile raw -c {config}", err=True)
-                raise typer.Exit(code=1)
-        else:
+        # Fallback: suggested_read.yml contains read hints in YAML form.
+        # Build a minimal profile dict from it so propose_clean_read works.
+        if suggested_read_yml.exists():
             try:
-                profile = json.loads(profile_path.read_text(encoding="utf-8"))
-            except Exception as exc:
-                raise typer.BadParameter(f"Impossibile leggere il profilo RAW: {exc}")
+                raw_yaml = yaml.safe_load(suggested_read_yml.read_text(encoding="utf-8"))
+            except yaml.YAMLError as exc:
+                raise typer.BadParameter(f"suggested_read.yml non valido: {exc}")
+            clean_section = raw_yaml.get("clean", {}) if isinstance(raw_yaml, dict) else {}
+            read_section = clean_section.get("read", {}) if isinstance(clean_section, dict) else {}
+            profile = {
+                "delim_suggested": read_section.get("delim"),
+                "encoding_suggested": read_section.get("encoding"),
+                "decimal_suggested": read_section.get("decimal"),
+                "skip_suggested": read_section.get("skip"),
+                "header_line": None,
+                "mapping_suggestions": {},
+                "robust_read_suggested": None,
+            }
+        else:
+            typer.echo(f"Profilo RAW non trovato in {raw_profile_dir}", err=True)
+            typer.echo(f"Esegui prima: toolkit profile raw -c {config}", err=True)
+            raise typer.Exit(code=1)
     else:
         try:
             profile = json.loads(profile_path.read_text(encoding="utf-8"))

@@ -368,7 +368,7 @@ def _make_profile_dir(tmp_path: Path, dataset: str, year: int) -> Path:
         },
         "warnings": [],
     }
-    (profile_dir / "profile.json").write_text(json.dumps(profile), encoding="utf-8")
+    (profile_dir / "raw_profile.json").write_text(json.dumps(profile), encoding="utf-8")
     return profile_dir
 
 

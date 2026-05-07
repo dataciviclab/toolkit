@@ -175,26 +175,6 @@ class SdmxSource:
         version = _safe_text(structure_ref.attrib.get("version"))
         return version
 
-    def _preview_dimensions(self, agency: str, flow: str, version: str) -> list[str]:
-        flow_ref = _flow_ref(agency, flow, version)
-        payload, _origin = self._get_json(
-            self._data_base_urls(agency),
-            f"data/{flow_ref}/all",
-            params={"firstNObservations": "0"},
-        )
-        structure = payload.get("structure") or {}
-        dimensions = (structure.get("dimensions") or {}).get("series") or []
-        result: list[str] = []
-        for dim in dimensions:
-            dim_id = str(dim.get("id") or "")
-            if dim_id:
-                result.append(dim_id)
-        if not result:
-            raise DownloadError(
-                f"SDMX structure preview returned no series dimensions for {flow_ref}"
-            )
-        return result
-
     def preview_constraints(self, agency: str, flow: str, version: str) -> dict[str, list[str]]:
         """Return valid codes per dimension for a dataflow.
 

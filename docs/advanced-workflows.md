@@ -96,7 +96,7 @@ Nota pratica:
 - `run raw` scrive già un `suggested_read.yml` leggero e conservativo quando il file primario e` profilabile
 - `profile raw` resta il comando da usare quando vuoi profiling più ricco e report diagnostici
 
-`profile.json` resta un alias legacy opzionale e non è il nome canonico da promuovere nei nuovi repo.
+`raw_profile.json` è il nome canonico del profilo RAW. `profile.json` non è più scritto.
 
 ## CLEAN read e input selection
 
@@ -121,7 +121,7 @@ Uso consigliato:
 `output.artifacts` non ha più effetto — profiling e SQL renderizzati sono sempre generati.
 Il campo è accettato per backward compatibilità ma ignorato.
 
-`legacy_aliases` resta supportato per compatibilità, ma non va promosso nei nuovi repo dataset.
+`legacy_aliases` è stato rimosso — non ha più effetto. Il profiler scrive solo `raw_profile.json`.
 
 
 ## ANAC Delta Ingestion (Spike aperto)

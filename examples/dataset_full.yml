@@ -89,4 +89,3 @@ validation:
 
 output:
   artifacts: standard
-  legacy_aliases: false

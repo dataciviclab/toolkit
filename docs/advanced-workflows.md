@@ -96,7 +96,7 @@ Nota pratica:
 - `run raw` scrive già un `suggested_read.yml` leggero e conservativo quando il file primario e` profilabile
 - `profile raw` resta il comando da usare quando vuoi profiling più ricco e report diagnostici
 
-`profile.json` resta un alias legacy opzionale e non è il nome canonico da promuovere nei nuovi repo.
+`raw_profile.json` è il nome canonico del profilo RAW. `profile.json` non è più scritto.
 
 ## CLEAN read e input selection
 

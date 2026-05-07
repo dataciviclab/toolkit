@@ -19,13 +19,6 @@ class Registry:
             raise ValueError(f"Plugin giÃ  registrato: '{name}'")
         self._plugins[name] = factory
 
-    def decorator(self, name: str, *, overwrite: bool = False):
-        def _wrap(factory: Callable[..., Any]):
-            self.register(name, factory, overwrite=overwrite)
-            return factory
-
-        return _wrap
-
     def create(self, name: str, **kwargs):
         if name not in self._plugins:
             available = ", ".join(sorted(self._plugins.keys())) or "(none)"

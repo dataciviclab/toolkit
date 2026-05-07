@@ -1,100 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
-
 import typer
 
 from toolkit.cli.common import iter_years, load_cfg_and_logger
 from toolkit.core.artifacts import resolve_artifact_policy, should_write
 from toolkit.core.paths import layer_year_dir
-from toolkit.profile.raw import (
-    build_suggested_read_cfg,
-    profile_raw,
-    write_raw_profile,
-    write_suggested_read_yml,
-)
-
-
-def render_profile_md(profile: dict[str, Any]) -> str:
-    ds = profile.get("dataset")
-    year = profile.get("year")
-    enc = profile.get("encoding_suggested")
-    header = profile.get("header_line")
-    file_used = profile.get("file_used")
-    suggested_read = build_suggested_read_cfg(profile)
-
-    columns_raw: list[str] = profile.get("columns_raw", [])
-    miss = profile.get("missingness_top", [])
-    warnings = profile.get("warnings", [])
-    mapping = profile.get("mapping_suggestions", {}) or {}
-
-    md: list[str] = []
-    md.append(f"# RAW Profile - {ds} ({year})\n")
-    if file_used:
-        md.append(f"- file used: `{file_used}`\n")
-    if enc:
-        md.append(f"- encoding suggested: `{enc}`\n")
-
-    md.append("## Suggested read options\n")
-    md.append("```yml")
-    md.append("clean:")
-    md.append("  read:")
-    for key, value in suggested_read.items():
-        md.append(f"    {key}: {_yml_scalar(value)}")
-    md.append("```\n")
-
-    md.append("## Header (first line)\n")
-    if header:
-        md.append("```")
-        md.append(header)
-        md.append("```\n")
-    else:
-        md.append("_header not available_\n")
-
-    md.append("## Columns (preview)\n")
-    for c in columns_raw[:80]:
-        md.append(f"- `{c}`")
-    if len(columns_raw) > 80:
-        md.append(f"- ... +{len(columns_raw) - 80} more")
-    md.append("")
-
-    md.append("## Missingness (top)\n")
-    for m in miss[:20]:
-        md.append(f"- `{m['column']}`: {m['missing_pct']:.1f}%")
-    md.append("")
-
-    md.append("## Mapping suggestions (first 15)\n")
-    shown = 0
-    for out_col, spec in mapping.items():
-        md.append(
-            f"- `{out_col}` -> type: `{spec.get('type')}`"
-            + (f", parse: `{spec.get('parse', {}).get('kind')}`" if spec.get("parse") else "")
-        )
-        shown += 1
-        if shown >= 15:
-            break
-    if len(mapping) > 15:
-        md.append(f"- ... +{len(mapping) - 15} more")
-    md.append("")
-
-    if warnings:
-        md.append("## Warnings\n")
-        for w in warnings[:20]:
-            md.append(f"- {w}")
-        md.append("")
-
-    return "\n".join(md)
-
-
-def _yml_scalar(v: Any) -> str:
-    if isinstance(v, str):
-        v = v.replace('"', '\\"')
-        return f'"{v}"'
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if v is None:
-        return "null"
-    return str(v)
+from toolkit.profile.raw import profile_raw, write_raw_profile, write_suggested_read_yml
 
 
 def profile(

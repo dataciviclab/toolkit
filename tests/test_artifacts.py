@@ -80,8 +80,6 @@ def test_should_write(layer, artifact, cfg, expected) -> None:
 @pytest.mark.policy
 @pytest.mark.parametrize("layer, artifact", [
     ("profile", "raw_profile"),
-    ("profile", "profile_md"),
-    ("profile", "suggested_mapping"),
     ("clean", "rendered_sql"),
     ("mart", "rendered_sql"),
     ("clean", "data_parquet"),

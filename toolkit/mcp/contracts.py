@@ -80,10 +80,10 @@ class Hint(TypedDict):
     message: str
 
 
-class BlockerHintsResult(TypedDict, total=False):
+class BlockerHintsResult(TypedDict):
     dataset: str | None
     config_path: str
-    year: str | None
+    year: int | None
     hint_count: int
     hints: list[Hint]
     blocker_count: int
@@ -105,10 +105,10 @@ class ReadinessCheck(TypedDict):
     detail: str | list[MartOutputCheck]
 
 
-class ReviewReadinessResult(TypedDict, total=False):
+class ReviewReadinessResult(TypedDict):
     dataset: str | None
     config_path: str
-    year: str | None
+    year: int | None
     readiness: str  # "ready" | "needs-review" | "incomplete"
     check_count: int
     ok_count: int
@@ -118,7 +118,7 @@ class ReviewReadinessResult(TypedDict, total=False):
 
 # --- schema-diff ---
 
-class RawSchemaEntry(TypedDict, total=False):
+class RawSchemaEntry(TypedDict):
     year: int
     raw_dir: str
     raw_exists: bool
@@ -136,7 +136,7 @@ class RawSchemaEntry(TypedDict, total=False):
     warnings: list[str]
 
 
-class SchemaComparison(TypedDict, total=False):
+class SchemaComparison(TypedDict):
     from_year: int
     to_year: int
     from_columns_count: int
@@ -146,7 +146,7 @@ class SchemaComparison(TypedDict, total=False):
     changed: bool
 
 
-class SchemaDiffResult(TypedDict, total=False):
+class SchemaDiffResult(TypedDict):
     dataset: str
     config_path: str
     years: list[int]

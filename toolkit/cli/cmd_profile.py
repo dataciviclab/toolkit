@@ -119,8 +119,8 @@ def profile(
 
         prof = profile_raw(raw_dir, cfg.dataset, year, read_cfg=(cfg.clean or {}).get("read"))
         # Explicit `toolkit profile raw` should always emit the canonical profile JSON.
-        # This keeps the assist workflow usable even when `output.artifacts: minimal`
-        # would otherwise skip profile artifacts during normal pipeline runs.
+        # Always emit canonical profile JSON for the assist workflow,
+        # regardless of any discard-happy output configuration.
         paths = write_raw_profile(
             out_dir,
             prof,

@@ -613,20 +613,15 @@ def write_raw_profile(
     profile: RawProfile,
     *,
     write_canonical: bool = True,
-    write_legacy_alias: bool = True,
 ) -> Dict[str, Path]:
     _safe_mkdir(out_dir)
 
     p_raw_json = out_dir / "raw_profile.json"
-    p_json = out_dir / "profile.json"
     payload = asdict(profile)
     written: Dict[str, Path] = {}
 
     if write_canonical:
         write_json_atomic(p_raw_json, payload)
         written["raw_json"] = p_raw_json
-    if write_legacy_alias:
-        write_json_atomic(p_json, payload)
-        written["json"] = p_json
 
     return written

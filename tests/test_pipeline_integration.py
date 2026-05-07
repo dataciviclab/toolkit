@@ -23,11 +23,10 @@ class _NoopLogger:
         return None
 
 
-def _append_output_cfg(config_path: Path, *, artifacts: str, legacy_aliases: bool) -> None:
+def _append_output_cfg(config_path: Path, *, artifacts: str) -> None:
     with config_path.open("a", encoding="utf-8") as fh:
         fh.write("\noutput:\n")
         fh.write(f"  artifacts: {artifacts}\n")
-        fh.write(f"  legacy_aliases: {'true' if legacy_aliases else 'false'}\n")
 
 
 def _simplify_sql_project(dst: Path) -> None:
@@ -45,7 +44,7 @@ def test_artifacts_policy_minimal_behaves_like_standard(tmp_path: Path, monkeypa
     shutil.copytree(src, dst)
     _simplify_sql_project(dst)
     config_path = dst / "dataset.yml"
-    _append_output_cfg(config_path, artifacts="minimal", legacy_aliases=False)
+    _append_output_cfg(config_path, artifacts="minimal")
 
     monkeypatch.chdir(dst)
     cfg = load_config(config_path)
@@ -89,9 +88,6 @@ def test_artifacts_policy_minimal_behaves_like_standard(tmp_path: Path, monkeypa
     assert (profile_dir / "suggested_read.yml").exists()
 
     assert (profile_dir / "raw_profile.json").exists()
-    assert not (profile_dir / "profile.json").exists()
-    assert not (profile_dir / "profile.md").exists()
-    assert not (profile_dir / "suggested_mapping.yml").exists()
     assert (clean_dir / "_run" / "clean_rendered.sql").exists()
     assert any((mart_dir / "_run").glob("*_rendered.sql"))
 
@@ -109,7 +105,7 @@ def test_artifacts_policy_standard_keeps_expected_artifacts(tmp_path: Path, monk
     shutil.copytree(src, dst)
     _simplify_sql_project(dst)
     config_path = dst / "dataset.yml"
-    _append_output_cfg(config_path, artifacts="standard", legacy_aliases=True)
+    _append_output_cfg(config_path, artifacts="standard")
 
     monkeypatch.chdir(dst)
     cfg = load_config(config_path)
@@ -148,9 +144,6 @@ def test_artifacts_policy_standard_keeps_expected_artifacts(tmp_path: Path, monk
     mart_dir = root / "data" / "mart" / cfg.dataset / str(year)
 
     assert (profile_dir / "raw_profile.json").exists()
-    assert (profile_dir / "profile.json").exists()
-    assert not (profile_dir / "profile.md").exists()
-    assert not (profile_dir / "suggested_mapping.yml").exists()
     assert (profile_dir / "suggested_read.yml").exists()
     assert (clean_dir / "_run" / "clean_rendered.sql").exists()
     assert any((mart_dir / "_run").glob("*_rendered.sql"))

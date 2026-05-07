@@ -165,12 +165,7 @@ def run_raw(
                     primary_file=primary_output_path,
                 )
                 profile_dir = out_dir / "_profile"
-                write_raw_profile(
-                    profile_dir,
-                    raw_profile,
-                    write_canonical=True,
-                    write_legacy_alias=should_write("profile", "profile_alias", policy, profile_ctx),
-                )
+                write_raw_profile(profile_dir, raw_profile)
                 logger.info("RAW profile -> %s", profile_dir / "raw_profile.json")
 
                 scaffold_clean_if_missing(

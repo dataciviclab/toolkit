@@ -16,7 +16,7 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 | `run cross_year` | supported / advanced | output multi-anno e workflow non canonici |
 | `inspect schema-diff` | supported / advanced | confronto rapido segnali schema RAW tra anni |
 | artifact policy | deprecated / ignored | accettato per backward compat ma senza effetto |
-| `legacy_aliases` | compatibility only | non promuovere nei repo nuovi |
+| `legacy_aliases` | removed | non ha più effetto — `raw_profile.json` è l'unico formato |
 | config legacy | compatibility only | usare `--strict-config` nei repo nuovi |
 | ~~`scout_url`~~ | removed | sostituito da `inspect url` |
 | `inspect url` | experimental | scouting rapido di un URL pubblico e generazione scaffold YAML |

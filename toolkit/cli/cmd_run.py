@@ -425,9 +425,7 @@ def run_init(
         typer.echo(f"[init] Bootstrap completato per {cfg.dataset}/{year}")
         typer.echo("  - raw scaricato")
         profile_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year) / "_profile"
-        profile_exists = (profile_dir / "profile.json").exists() or (
-            profile_dir / "raw_profile.json"
-        ).exists()
+        profile_exists = (profile_dir / "raw_profile.json").exists()
 
         scaffolded_now = not scaffold_existed_before and clean_sql_path.exists()
         if scaffold_existed_before:

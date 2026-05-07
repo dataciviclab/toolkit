@@ -467,3 +467,86 @@ def test_inspect_paths_multi_year_requires_year(tmp_path: Path, monkeypatch) -> 
 
     with pytest.raises(ToolkitClientError, match="year è obbligatorio"):
         inspect_paths(str(yml))
+
+
+@pytest.mark.policy
+def test_blocker_hints_cli_contract_alignment(tmp_path: Path, monkeypatch) -> None:
+    """toolkit blocker-hints --json output matches BlockerHintsResult TypedDict."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli.app import app
+    from toolkit.mcp.contracts import BlockerHintsResult, Hint
+
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+
+    result = runner.invoke(app, ["blocker-hints", "--config", str(config_path), "--year", "2022", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+
+    for key in BlockerHintsResult.__required_keys__:
+        assert key in payload, f"BlockerHintsResult: chiave '{key}' mancante"
+    for hint in payload.get("hints", []):
+        for key in Hint.__required_keys__:
+            assert key in hint, f"Hint: chiave '{key}' mancante in {hint.get('code')}"
+
+
+@pytest.mark.policy
+def test_schema_diff_cli_contract_alignment(tmp_path: Path, monkeypatch) -> None:
+    """toolkit inspect schema-diff --json output matches SchemaDiffResult TypedDict."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli.app import app
+    from toolkit.mcp.contracts import (
+        RawSchemaEntry,
+        SchemaComparison,
+        SchemaDiffResult,
+    )
+
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+
+    result = runner.invoke(app, ["inspect", "schema-diff", "--config", str(config_path), "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+
+    for key in SchemaDiffResult.__required_keys__:
+        assert key in payload, f"SchemaDiffResult: chiave '{key}' mancante"
+    for entry in payload.get("entries", []):
+        for key in RawSchemaEntry.__required_keys__:
+            assert key in entry, f"RawSchemaEntry: chiave '{key}' mancante in anno {entry.get('year')}"
+    for comp in payload.get("comparisons", []):
+        for key in SchemaComparison.__required_keys__:
+            assert key in comp, f"SchemaComparison: chiave '{key}' mancante"
+
+
+@pytest.mark.policy
+def test_review_readiness_mcp_contract_shape(tmp_path: Path, monkeypatch) -> None:
+    """review_readiness() output matches ReviewReadinessResult TypedDict."""
+    from toolkit.mcp.contracts import ReadinessCheck, ReviewReadinessResult
+    from toolkit.mcp.toolkit_client import review_readiness
+
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.chdir(tmp_path)
+
+    payload = review_readiness(str(config_path), 2022)
+
+    for key in ReviewReadinessResult.__required_keys__:
+        assert key in payload, f"ReviewReadinessResult: chiave '{key}' mancante"
+    for check in payload.get("checks", []):
+        for ck in ReadinessCheck.__required_keys__:
+            assert ck in check, f"ReadinessCheck: chiave '{ck}' mancante in {check.get('check')}"

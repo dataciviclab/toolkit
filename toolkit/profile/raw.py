@@ -20,7 +20,9 @@ from toolkit.core.csv_read import (
     sql_str,
 )
 from toolkit.core.io import write_json_atomic
-from toolkit.profile._sniff_encoding import sniff_encoding
+from toolkit.profile._sniff_encoding import sniff_encoding as _sniff_encoding
+from toolkit.profile._sniff_encoding import sniff_encoding as sniff_encoding  # re-export for backward compat
+from toolkit.profile._sniff_encoding import is_binary_file as _is_binary_file
 from toolkit.profile._sniff_delimiter import sniff_decimal, sniff_delim, suggest_skip
 from toolkit.profile._column_profile import _build_mapping_suggestions, _normalize_colname
 
@@ -58,8 +60,25 @@ def sniff_source_file(filepath: Path) -> Dict[str, Any]:
         - true_header_line (str | None): header text at line 0 (for mismatch detection)
         - columns_preview (list[str]): normalised column names from header_line
         - warnings (list[str]): issues detected during sniffing
+        - is_binary_file (str | None): set to "xlsx" / "xls" if binary format detected
     """
-    enc, txt = sniff_encoding(filepath)
+    # Detect binary files first — XLSX/XLS can't be profiled as CSV.
+    binary_fmt = _is_binary_file(filepath)
+    if binary_fmt:
+        return {
+            "file_used": filepath.name,
+            "encoding_suggested": None,
+            "delim_suggested": None,
+            "decimal_suggested": None,
+            "skip_suggested": 0,
+            "header_line": None,
+            "true_header_line": None,
+            "columns_preview": [],
+            "warnings": [f"binary_file_detected: {binary_fmt} — use sheet_name in dataset.yml"],
+            "is_binary_file": binary_fmt,
+        }
+
+    enc, txt = _sniff_encoding(filepath)
     delim = sniff_delim(txt)
     dec = sniff_decimal(txt)
     skip = suggest_skip(txt, delim)
@@ -72,6 +91,7 @@ def sniff_source_file(filepath: Path) -> Dict[str, Any]:
 
     header_line: str | None = None
     true_header_line: str | None = None
+    is_binary_file: str | None = None
 
     # Read header at skip offset (where DuckDB would start reading data).
     # This preserves backward-compatible header_line for suggested_read.
@@ -103,6 +123,7 @@ def sniff_source_file(filepath: Path) -> Dict[str, Any]:
         "true_header_line": true_header_line,
         "columns_preview": _preview_columns(header_line, delim),
         "warnings": warnings,
+        "is_binary_file": is_binary_file,
     }
 
 
@@ -462,6 +483,27 @@ def profile_raw(
 
     # Phase 1: pure source sniffing
     sniff_hints = sniff_source_file(file0)
+
+    # Binary files (XLSX/XLS) can't be profiled with DuckDB CSV reader.
+    # Return a minimal profile with a clear warning.
+    if sniff_hints.get("is_binary_file"):
+        return RawProfile(
+            dataset=dataset,
+            year=year,
+            file_used=str(file0.name),
+            encoding_suggested=None,
+            delim_suggested=None,
+            decimal_suggested=None,
+            skip_suggested=0,
+            robust_read_suggested=False,
+            header_line=None,
+            columns_raw=[],
+            columns_norm=[],
+            missingness_top=[],
+            sample_rows=[],
+            mapping_suggestions={},
+            warnings=sniff_hints.get("warnings", []),
+        )
 
     enc = sniff_hints["encoding_suggested"]
     delim = sniff_hints["delim_suggested"]

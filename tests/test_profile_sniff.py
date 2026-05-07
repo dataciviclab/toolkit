@@ -208,6 +208,7 @@ def test_sniff_source_file_returns_all_keys(tmp_path: Path):
         "true_header_line",
         "columns_preview",
         "warnings",
+        "is_binary_file",
     }
     assert set(hints.keys()) == expected_keys
     assert hints["delim_suggested"] == ";"
@@ -355,3 +356,58 @@ def test_profile_raw_respects_primary_file_override(tmp_path: Path):
     # Must profile tipo_reddito.csv, not bonus.csv
     assert profile.file_used == "tipo_reddito.csv"
     assert profile.columns_raw == ["col_tipo_reddito"]
+
+
+@pytest.mark.policy
+def test_sniff_source_file_detects_xlsx_as_binary(tmp_path: Path):
+    """XLSX files are ZIP archives — sniff_source_file must detect and warn."""
+    from toolkit.profile.raw import sniff_source_file
+
+    xlsx_path = tmp_path / "data.xlsx"
+    # Minimal valid ZIP with XLSX magic bytes (PK\x03\x04).
+    xlsx_path.write_bytes(b"PK\x03\x04\x14\x00\x00\x00\x08\x00")
+    result = sniff_source_file(xlsx_path)
+    assert result["is_binary_file"] == "xlsx"
+    assert any("binary_file_detected: xlsx" in w for w in result["warnings"])
+
+
+@pytest.mark.policy
+def test_sniff_source_file_detects_xls_as_binary(tmp_path: Path):
+    """XLS files (OLE2 format) are detected as binary."""
+    from toolkit.profile.raw import sniff_source_file
+
+    xls_path = tmp_path / "data.xls"
+    # OLE2 magic bytes.
+    xls_path.write_bytes(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1\x00\x00")
+    result = sniff_source_file(xls_path)
+    assert result["is_binary_file"] == "xls"
+    assert any("binary_file_detected: xls" in w for w in result["warnings"])
+
+
+@pytest.mark.policy
+def test_sniff_source_file_regular_csv_unchanged(tmp_path: Path):
+    """Regular CSV files are not flagged as binary."""
+    from toolkit.profile.raw import sniff_source_file
+
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("col1,col2\n1,2\n3,4\n", encoding="utf-8")
+    result = sniff_source_file(csv_path)
+    assert result["is_binary_file"] is None
+    assert result["delim_suggested"] == ","
+    assert result["columns_preview"] == ["col1", "col2"]
+
+
+@pytest.mark.policy
+def test_profile_raw_returns_early_for_binary_file(tmp_path: Path):
+    """profile_raw returns a minimal profile without DuckDB CSV profiling for XLSX."""
+    from toolkit.profile.raw import profile_raw
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir(parents=True)
+    xlsx_path = raw_dir / "data.xlsx"
+    xlsx_path.write_bytes(b"PK\x03\x04\x14\x00\x00\x00\x08\x00")
+
+    profile = profile_raw(raw_dir, "demo", 2024)
+    assert profile.columns_raw == []
+    assert profile.columns_norm == []
+    assert any("binary_file_detected" in w for w in profile.warnings)

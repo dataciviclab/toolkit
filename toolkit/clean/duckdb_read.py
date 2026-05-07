@@ -279,33 +279,34 @@ def _read_csv_relation(
             or (robust_ignore_errors and not strict_ignore_errors)
         )
 
-        if workaround_was_needed:
-            logger.warning(
-                "strict read failed, robust succeeded but activated "
-                "null_padding=%s/ignore_errors=%s (strict had %s/%s). "
-                "Your clean.read.columns may not match the CSV structure. | input=%s exc=%s",
-                robust_null_padding,
-                robust_ignore_errors,
-                strict_null_padding,
-                strict_ignore_errors,
-                input_files[0],
-                short_msg,
-            )
-        else:
-            logger.info(
-                "strict read failed, robust succeeded | input=%s exc=%s",
-                input_files[0],
-                short_msg,
-            )
-
         try:
-            return _execute_csv_mode(
+            result = _execute_csv_mode(
                 con,
                 input_files,
                 robust_cfg,
                 source="robust",
                 logger=logger,
             )
+            # Log AFTER successful robust execution — never before.
+            if workaround_was_needed:
+                logger.warning(
+                    "strict read failed, robust succeeded but activated "
+                    "null_padding=%s/ignore_errors=%s (strict had %s/%s). "
+                    "Your clean.read.columns may not match the CSV structure. | input=%s exc=%s",
+                    robust_null_padding,
+                    robust_ignore_errors,
+                    strict_null_padding,
+                    strict_ignore_errors,
+                    input_files[0],
+                    short_msg,
+                )
+            else:
+                logger.info(
+                    "strict read failed, robust succeeded | input=%s exc=%s",
+                    input_files[0],
+                    short_msg,
+                )
+            return result
         except Exception as robust_exc:
             raise ValueError(
                 _read_failure_message(input_file=input_files[0], read_cfg=robust_cfg)

@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 import json
 import shutil
@@ -278,6 +279,7 @@ class TestProposeCleanRead:
         assert cols["bool_col"] == "BOOLEAN"
         assert cols["str_col"] == "VARCHAR"
 
+    @pytest.mark.policy
     def test_header_detected_when_names_differ_from_mapping(self):
         """When header_line has real names but mapping has generic columnXX,
         propose header:true and drop the generic columns mapping.
@@ -299,6 +301,7 @@ class TestProposeCleanRead:
         # skip stays 0 (no bump needed, header line is now recognized as header)
         assert result.get("skip", 0) == 0
 
+    @pytest.mark.policy
     def test_header_detected_with_column_prefix_mapping(self):
         """Same as above but with 'col' prefix instead of 'column' prefix."""
         profile = {
@@ -315,6 +318,26 @@ class TestProposeCleanRead:
         # "Regione" != "col1" after normalization → header detected
         assert result["header"] is True
         assert "columns" not in result
+
+    @pytest.mark.policy
+    def test_no_header_false_positive_from_numeric_first_row(self):
+        """A positional CSV with first row as data (no real header) must NOT
+        trigger header:true even if names differ from column01/02.
+        Real header identifiers contain at least one letter."""
+        profile = {
+            "delim_suggested": ";",
+            "header_line": "1;2;3",  # numeric data, not a real header
+            "skip_suggested": 0,
+            "mapping_suggestions": {
+                "column01": {"from": "column01", "type": "str"},
+                "column02": {"from": "column02", "type": "str"},
+                "column03": {"from": "column03", "type": "str"},
+            },
+        }
+        result = propose_clean_read(profile)
+        # Numeric "1;2;3" has no letters → not treated as real header
+        assert result["header"] is False
+        assert result.get("columns") is not None  # columns preserved
 
 
 # --- CLI integration tests ---

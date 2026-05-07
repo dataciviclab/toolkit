@@ -239,6 +239,21 @@ def _names_match(keys: list[str], header_names: list[str]) -> bool:
     return norm_keys == norm_hdr
 
 
+def _looks_like_real_header(names: list[str]) -> bool:
+    """Check if header names look like real column identifiers, not data.
+
+    Guards against the false-positive case: a positional CSV with no header
+    line but first row containing values like '1;2;3' or 'foo;bar;baz'.
+    Real column identifiers typically contain at least one letter.
+    """
+    if not names:
+        return False
+    # All names must contain at least one letter to be considered real column names.
+    # This filters out purely numeric values (e.g. '1', '2', '3') and
+    # generic strings that could be data values.
+    return all(any(c.isalpha() for c in name) for name in names)
+
+
 def propose_clean_read(profile: dict[str, Any]) -> dict[str, Any]:
     """Build a suggested ``clean.read`` config section from a raw profile.
 
@@ -274,14 +289,15 @@ def propose_clean_read(profile: dict[str, Any]) -> dict[str, Any]:
         header_names = _header_names_from_line(header_line, delim)
         keys = list(mapping.keys())
 
-        if header_names and not _names_match(keys, header_names):
-            # Header names differ from mapping keys → file has a real header
+        if header_names and _looks_like_real_header(header_names) and not _names_match(keys, header_names):
+            # Header names look real (contain letters) and differ from mapping keys
+            # → file has a real header that was misread.
             effective_header = True
             columns: dict[str, str] | None = None
             # skip stays as-is (no bump needed, header line is now real)
             effective_skip = profile.get("skip_suggested", 0)
         else:
-            # Mapping keys match header names (or no header available)
+            # Mapping keys match header names (or header doesn't look real)
             # → use the explicit columns mapping as before.
             effective_header = False
             columns = {}

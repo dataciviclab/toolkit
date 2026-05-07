@@ -148,7 +148,7 @@ def run_raw(
     profile_hints = None
     profile_ctx = {"clean": clean_cfg or {}, "output": output_cfg or {}}
     policy = resolve_artifact_policy(output_cfg)
-    if primary_output_path.exists() and primary_output_path.suffix.lower() in {".csv", ".tsv", ".txt"}:
+    if primary_output_path.exists() and primary_output_path.suffix.lower() in {".csv", ".tsv", ".txt", ".xlsx", ".xls"}:
         try:
             profile_hints = sniff_source_file(primary_output_path)
             if should_write("profile", "suggested_read", policy, profile_ctx):
@@ -162,6 +162,7 @@ def run_raw(
                     out_dir,
                     dataset,
                     year,
+                    read_cfg=(clean_cfg or {}).get("read", {}),
                     primary_file=primary_output_path,
                 )
                 profile_dir = out_dir / "_profile"

@@ -5,6 +5,7 @@ Not part of the public API — internal utility module.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +43,18 @@ def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
         except Exception as exc:
             sniff_error = f"{type(exc).__name__}: {exc}"
 
-    columns_preview = profile_hints.get("columns_preview") or []
+    # For binary files (XLSX/XLS), sniff_hints columns_preview is empty.
+    # Read actual columns from raw_profile.json if available.
+    columns_preview = list(profile_hints.get("columns_preview") or [])
+    if not columns_preview and profile_hints.get("is_binary_file"):
+        raw_profile_path = raw_dir / "_profile" / "raw_profile.json"
+        if raw_profile_path.exists():
+            try:
+                raw_profile_data = json.loads(raw_profile_path.read_text(encoding="utf-8"))
+                columns_preview = raw_profile_data.get("columns_norm") or raw_profile_data.get("columns_raw") or []
+            except Exception:
+                pass
+
     warnings = list(profile_hints.get("warnings") or [])
     if sniff_error is not None:
         warnings.append(f"profile_hint_fallback_failed: {sniff_error}")
@@ -54,6 +66,7 @@ def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
         "primary_output_file": raw_meta.get("primary_output_file"),
         "file_used": profile_hints.get("file_used"),
         "profile_source": profile_source,
+        "is_binary_file": profile_hints.get("is_binary_file"),
         "encoding": profile_hints.get("encoding_suggested"),
         "delim": profile_hints.get("delim_suggested"),
         "decimal": profile_hints.get("decimal_suggested"),

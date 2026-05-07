@@ -6,6 +6,7 @@ from toolkit.cli.cmd_profile import write_suggested_read_yml
 from toolkit.profile._column_profile import _build_mapping_suggestions
 from toolkit.profile.raw import (
     _build_read_csv_opts,
+    _profile_excel,
     build_suggested_read_cfg,
     profile_raw,
     profile_with_read_cfg,
@@ -208,6 +209,7 @@ def test_sniff_source_file_returns_all_keys(tmp_path: Path):
         "true_header_line",
         "columns_preview",
         "warnings",
+        "is_binary_file",
     }
     assert set(hints.keys()) == expected_keys
     assert hints["delim_suggested"] == ";"
@@ -355,3 +357,80 @@ def test_profile_raw_respects_primary_file_override(tmp_path: Path):
     # Must profile tipo_reddito.csv, not bonus.csv
     assert profile.file_used == "tipo_reddito.csv"
     assert profile.columns_raw == ["col_tipo_reddito"]
+
+
+@pytest.mark.policy
+def test_profile_raw_xlsx_produces_real_columns(tmp_path: Path):
+    """XLSX files are profiled via pandas — columns_raw must contain real column names."""
+    import pandas as pd
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    xlsx_path = raw_dir / "input_2023.xlsx"
+    df = pd.DataFrame({"anno": [2020, 2021], "comune": ["Roma", "Milano"], "importo": [100.0, 200.5]})
+    df.to_excel(xlsx_path, index=False)
+
+    profile = profile_raw(raw_dir, "test_ds", 2023)
+
+    assert profile.columns_raw == ["anno", "comune", "importo"]
+    assert profile.columns_norm == ["anno", "comune", "importo"]
+    assert profile.warnings == []
+
+
+@pytest.mark.policy
+def test_profile_excel_parity_header_false_columns(tmp_path: Path):
+    """_profile_excel with header=false + columns must surface the same cols as clean runtime.
+
+    Parity with test_clean_duckdb_read.test_read_raw_to_relation_reads_xlsx_with_explicit_sheet_and_columns.
+    """
+    import pandas as pd
+
+    xlsx_path = tmp_path / "sheeted.xlsx"
+    with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
+        pd.DataFrame({"skipme": ["ignore"]}).to_excel(writer, sheet_name="Other", index=False)
+        pd.DataFrame([["A", 1], ["B", 2]]).to_excel(
+            writer, sheet_name="Export", header=False, index=False
+        )
+
+    read_cfg = {
+        "header": False,
+        "sheet_name": "Export",
+        "columns": {"col0": "VARCHAR", "col1": "VARCHAR"},
+    }
+
+    result = _profile_excel(xlsx_path, read_cfg)
+
+    # columns_raw must reflect what the clean runtime will actually read after applying columns map
+    assert result["columns_raw"] == ["col0", "col1"]
+    # No warnings — valid sheet + config
+    assert result["warnings"] == []
+    # Sample rows contain the data from "Export" sheet (as dicts, not raw lists)
+    assert result["sample_rows"] == [{"col0": "A", "col1": 1}, {"col0": "B", "col1": 2}]
+
+
+@pytest.mark.policy
+def test_sniff_source_file_detects_xlsx_as_binary(tmp_path: Path):
+    """sniff_source_file must detect XLSX via magic bytes and return is_binary_file."""
+    import pandas as pd
+
+    xlsx_path = tmp_path / "input.xlsx"
+    df = pd.DataFrame({"col1": [1, 2], "col2": [3, 4]})
+    df.to_excel(xlsx_path, index=False)
+
+    hints = sniff_source_file(xlsx_path)
+
+    assert hints["is_binary_file"] == "xlsx"
+    assert "binary_file_detected: xlsx" in hints["warnings"]
+
+
+@pytest.mark.policy
+def test_sniff_source_file_detects_xls_as_binary(tmp_path: Path):
+    """sniff_source_file must detect XLS (OLE2) via magic bytes and return is_binary_file."""
+    # Minimal OLE2 file header (D0 CF 11 E0) — just enough to trigger magic detection.
+    xls_path = tmp_path / "input.xls"
+    xls_path.write_bytes(b"\xd0\xcf\x11\xe0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+
+    hints = sniff_source_file(xls_path)
+
+    assert hints["is_binary_file"] == "xls"
+    assert "binary_file_detected: xls" in hints["warnings"]

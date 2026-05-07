@@ -15,7 +15,7 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 | `run raw|clean|mart` | supported / advanced | debug e re-run parziali |
 | `run cross_year` | supported / advanced | output multi-anno e workflow non canonici |
 | `inspect schema-diff` | supported / advanced | confronto rapido segnali schema RAW tra anni |
-| artifact policy `minimal|standard|debug` | supported / advanced | tuning operativo |
+| artifact policy `minimal|standard` | supported / advanced | tuning operativo |
 | `legacy_aliases` | compatibility only | non promuovere nei repo nuovi |
 | config legacy | compatibility only | usare `--strict-config` nei repo nuovi |
 | ~~`scout_url`~~ | removed | sostituito da `inspect url` |

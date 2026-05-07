@@ -359,7 +359,7 @@ Campi supportati:
 
 | Campo | Tipo | Default |
 |---|---|---|
-| `output.artifacts` | `minimal \| standard \| debug` | `standard` |
+| `output.artifacts` | `minimal \| standard` | `standard` |
 | `output.legacy_aliases` | `bool` | `false` |
 
 ## Legacy supportato

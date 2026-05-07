@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import typer
@@ -96,40 +95,6 @@ def _yml_scalar(v: Any) -> str:
     if v is None:
         return "null"
     return str(v)
-
-
-def write_suggested_mapping_yml(out_dir: Path, profile: dict[str, Any]) -> Path:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    mapping = profile.get("mapping_suggestions") or {}
-
-    lines: list[str] = []
-    lines.append("clean:")
-    lines.append("  mapping:")
-
-    for out_col, spec in mapping.items():
-        lines.append(f"    {out_col}:")
-        for k in ["from", "type"]:
-            if k in spec:
-                lines.append(f"      {k}: {_yml_scalar(spec[k])}")
-
-        if "normalize" in spec:
-            lines.append("      normalize:")
-            for op in spec["normalize"]:
-                lines.append(f"        - {_yml_scalar(op)}")
-
-        if "nullify" in spec:
-            lines.append("      nullify:")
-            for tok in spec["nullify"]:
-                lines.append(f"        - {_yml_scalar(tok)}")
-
-        if "parse" in spec:
-            lines.append("      parse:")
-            for pk, pv in spec["parse"].items():
-                lines.append(f"        {pk}: {_yml_scalar(pv)}")
-
-    p = out_dir / "suggested_mapping.yml"
-    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return p
 
 
 def profile(

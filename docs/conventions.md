@@ -6,10 +6,9 @@
 - **Audit**: `metadata.json` e `validation.json` accompagnano ogni layer con versioni di schema e audit trail.
 
 ## 2. Artifacts Policy
-Il toolkit supporta tre livelli di conservazione artefatti (`output.artifacts`):
+Il toolkit supporta due livelli di conservazione artefatti (`output.artifacts`):
 - `minimal`: Solo file primari, parquet finale, manifest e metadata essenziali.
 - `standard` (**default**): Aggiunge `raw_profile.json` e SQL generati in `_run/*.sql`.
-- `debug`: Tutti gli output intermedi, report e alias di compatibilità legacy.
 
 `output.legacy_aliases: true` conserva alias di compatibilità dove supportati; nei nuovi repo usare `--strict-config` per intercettare campi legacy.
 

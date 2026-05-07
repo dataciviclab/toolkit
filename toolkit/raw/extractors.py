@@ -1,12 +1,6 @@
 import io
 import zipfile
-from dataclasses import dataclass
 from typing import Callable
-
-@dataclass
-class ExtractorSpec:
-    type: str
-    args: dict
 
 def _safe_name(name: str) -> str:
     # evita path traversal e sottocartelle dentro gli zip

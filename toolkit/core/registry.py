@@ -82,7 +82,6 @@ _BUILTIN_PLUGINS: tuple[dict[str, Any], ...] = (
 
 def register_builtin_plugins(
     *,
-    strict: bool = False,
     registry_obj: Registry | None = None,
 ) -> None:
     target = registry_obj or registry

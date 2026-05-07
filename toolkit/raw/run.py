@@ -33,7 +33,6 @@ def run_raw(
     *,
     base_dir: Path | None = None,
     run_id: str | None = None,
-    strict_plugins: bool = False,
     output_cfg: dict | None = None,
     clean_cfg: dict | None = None,
 ):
@@ -54,7 +53,7 @@ def run_raw(
     output_cfg = ensure_dict(output_cfg)
     clean_cfg = ensure_dict(clean_cfg)
 
-    register_builtin_plugins(strict=strict_plugins)
+    register_builtin_plugins()
 
     out_dir = layer_year_dir(root, "raw", dataset, year)
     out_dir.mkdir(parents=True, exist_ok=True)

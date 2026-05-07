@@ -244,16 +244,6 @@ def _effective_profile_read_cfg(
     return effective_read_cfg
 
 
-def _read_header_line(file0: Path, *, encoding: str, skip_n: int) -> str | None:
-    try:
-        with file0.open("r", encoding=encoding, errors="replace") as f:
-            for _ in range(skip_n):
-                f.readline()
-            return f.readline().rstrip("\n\r")
-    except Exception:
-        return None
-
-
 def _profile_view(
     con: duckdb.DuckDBPyConnection,
     file0: Path,

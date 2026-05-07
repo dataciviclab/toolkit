@@ -272,7 +272,6 @@ def run_year(
             _dump(cfg.raw),
             base_dir=cfg.base_dir,
             run_id=context.run_id,
-            strict_plugins=bool((cfg.config.get("strict", False))),
             output_cfg=_dump(cfg.output),
             clean_cfg=_dump(cfg.clean),
         )

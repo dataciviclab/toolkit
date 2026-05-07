@@ -162,6 +162,7 @@ def run_raw(
                     out_dir,
                     dataset,
                     year,
+                    read_cfg=(clean_cfg or {}).get("read", {}),
                     primary_file=primary_output_path,
                 )
                 profile_dir = out_dir / "_profile"

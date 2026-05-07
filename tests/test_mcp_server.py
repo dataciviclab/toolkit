@@ -78,10 +78,6 @@ def test_toolkit_show_schema_passes_layer_and_year(monkeypatch: pytest.MonkeyPat
     assert calls == {"config_path": "dataset.yml", "layer": "mart", "year": 2024}
 
 
-def test_toolkit_json_removed() -> None:
-    """_toolkit_json rimosso — subprocess sostituito da chiamate dirette."""
-    pass
-
 def test_toolkit_raw_profile_passes_config_and_year(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: dict[str, object] = {}
 

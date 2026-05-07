@@ -6,6 +6,8 @@ Provides:
 
 from __future__ import annotations
 
+from typing import cast
+
 from toolkit.cli.inspect._helpers import _payload_for_year
 from toolkit.mcp.contracts import InspectPathsResult
 from toolkit.mcp.errors import ToolkitClientError
@@ -34,4 +36,4 @@ def inspect_paths(config_path: str, year: int | None = None) -> InspectPathsResu
     if year is None:
         raise ToolkitClientError("Nessun anno configurato nel dataset")
 
-    return _payload_for_year(cfg, year)
+    return cast(InspectPathsResult, _payload_for_year(cfg, year))

@@ -1,8 +1,8 @@
-"""TypedDict contracts for CLI --json output consumed by MCP adapters.
+"""TypedDict contracts for MCP-consumed data shapes.
 
-Each function in ``cli_adapter.py`` that invokes a ``toolkit <command> --json``
-subprocess MUST validate the result against the corresponding contract here.
-This ensures CLI output shape stays aligned with what MCP consumers expect.
+Each contract defines the expected shape of a function's return value.
+CLI ``--json`` output should match the same contract to prevent drift
+between CLI and MCP consumers.
 """
 
 from __future__ import annotations

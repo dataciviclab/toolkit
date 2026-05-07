@@ -158,7 +158,7 @@ class SupportDatasetConfig(BaseModel):
 class OutputConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    artifacts: Literal["minimal", "standard", "debug"] = "standard"
+    artifacts: str = "standard"
     legacy_aliases: bool = False
 
 

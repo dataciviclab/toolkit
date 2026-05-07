@@ -88,5 +88,5 @@ validation:
   fail_on_error: true
 
 output:
-  artifacts: debug
+  artifacts: standard
   legacy_aliases: false

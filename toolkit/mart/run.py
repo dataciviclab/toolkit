@@ -6,7 +6,7 @@ from typing import Any
 
 import duckdb
 
-from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
+from toolkit.core.artifacts import resolve_artifact_policy, should_write
 from toolkit.core.config import ensure_dict
 from toolkit.core.layer_profile import compare_layer_profiles, profile_relation, profile_parquet_files
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
@@ -87,7 +87,6 @@ def run_mart(
         executed: list[dict[str, Any]] = []
         table_profiles: dict[str, Any] = {}
         transition_profiles: list[dict[str, Any]] = []
-        debug_tables: list[dict[str, Any]] = []
         total_rows = 0
 
         for i, table in enumerate(tables, start=1):
@@ -145,16 +144,6 @@ def run_mart(
                     "output": serialize_metadata_path(out, root_dir),
                 }
             )
-            if policy == ARTIFACT_POLICY_DEBUG:
-                debug_tables.append(
-                    {
-                        "name": name,
-                        "sql_absolute": str(sql_path.resolve()),
-                        "sql_rendered_absolute": str(rendered_sql_path.resolve()) if rendered_sql_path else None,
-                        "output_absolute": str(out.resolve()),
-                    }
-                )
-
     finally:
         con.close()
 
@@ -173,11 +162,6 @@ def run_mart(
         "table_profiles": table_profiles,
         "transition_profiles": transition_profiles,
     }
-    if policy == ARTIFACT_POLICY_DEBUG:
-        metadata_payload["debug"] = {
-            "output_root_absolute": str(root_dir.resolve()),
-            "tables": debug_tables,
-        }
     metadata_path = write_metadata(
         mart_dir,
         metadata_payload,

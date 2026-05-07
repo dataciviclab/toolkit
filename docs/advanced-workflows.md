@@ -94,7 +94,7 @@ Artefatti principali:
 Nota pratica:
 
 - `run raw` scrive già un `suggested_read.yml` leggero e conservativo quando il file primario e` profilabile
-- `profile raw` resta il comando da usare quando vuoi profiling più ricco, report diagnostici e `suggested_mapping.yml`
+- `profile raw` resta il comando da usare quando vuoi profiling più ricco e report diagnostici
 
 `profile.json` resta un alias legacy opzionale e non è il nome canonico da promuovere nei nuovi repo.
 
@@ -118,19 +118,8 @@ Uso consigliato:
 
 ## Artifact policy
 
-La policy artifacts resta disponibile per tuning operativo:
-
-```yaml
-output:
-  artifacts: standard   # minimal | standard | debug
-  legacy_aliases: true
-```
-
-Regola pratica:
-
-- `standard`: default consigliato
-- `minimal`: riduce artefatti opzionali
-- `debug`: conserva anche SQL renderizzate e dettagli di debug
+`output.artifacts` non ha più effetto — profiling e SQL renderizzati sono sempre generati.
+Il campo è accettato per backward compatibilità ma ignorato.
 
 `legacy_aliases` resta supportato per compatibilità, ma non va promosso nei nuovi repo dataset.
 

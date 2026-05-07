@@ -4,7 +4,6 @@ import pytest
 
 from toolkit.core.artifacts import (
     ARTIFACT_POLICIES,
-    ARTIFACT_POLICY_DEBUG,
     ARTIFACT_POLICY_MINIMAL,
     ARTIFACT_POLICY_STANDARD,
     legacy_aliases_enabled,
@@ -24,8 +23,6 @@ from toolkit.core.artifacts import (
     ({"artifacts": "  standard  "}, ARTIFACT_POLICY_STANDARD),
     ({"artifacts": "STANDARD"}, ARTIFACT_POLICY_STANDARD),
     ({"artifacts": "minimal"}, ARTIFACT_POLICY_MINIMAL),
-    ({"artifacts": "debug"}, ARTIFACT_POLICY_DEBUG),
-    ({"artifacts": "DEBUG"}, ARTIFACT_POLICY_DEBUG),
 ])
 def test_resolve_artifact_policy_valid(cfg, expected) -> None:
     assert resolve_artifact_policy(cfg) == expected
@@ -91,16 +88,8 @@ def test_profile_required_object_attribute_access() -> None:
 
 @pytest.mark.policy
 @pytest.mark.parametrize("layer, artifact, policy, cfg, expected", [
-    ("clean", "any_artifact", ARTIFACT_POLICY_DEBUG, {}, True),
-    ("mart", "any_artifact", ARTIFACT_POLICY_DEBUG, {}, True),
-    ("profile", "raw_profile", ARTIFACT_POLICY_DEBUG, {}, True),
-    ("profile", "profile_md", ARTIFACT_POLICY_DEBUG, {}, True),
-    ("profile", "profile_md", ARTIFACT_POLICY_STANDARD, {}, False),
-    ("profile", "profile_md", ARTIFACT_POLICY_MINIMAL, {}, False),
     ("profile", "suggested_read", ARTIFACT_POLICY_STANDARD, {"clean": {"read": {"source": "auto"}}}, True),
     ("profile", "suggested_read", ARTIFACT_POLICY_STANDARD, {"clean": {"read": {"source": "duckdb"}}}, False),
-    ("profile", "suggested_mapping", ARTIFACT_POLICY_DEBUG, {}, True),
-    ("profile", "suggested_mapping", ARTIFACT_POLICY_STANDARD, {}, False),
     ("profile", "profile_alias", ARTIFACT_POLICY_STANDARD, {"output": {"artifacts": "standard", "legacy_aliases": True}}, True),
     ("profile", "profile_alias", ARTIFACT_POLICY_MINIMAL, {"output": {"artifacts": "minimal", "legacy_aliases": True}}, False),
     ("profile", "profile_alias", ARTIFACT_POLICY_STANDARD, {"output": {"artifacts": "standard", "legacy_aliases": False}}, False),

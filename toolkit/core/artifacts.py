@@ -5,11 +5,9 @@ from typing import Any
 
 ARTIFACT_POLICY_MINIMAL = "minimal"
 ARTIFACT_POLICY_STANDARD = "standard"
-ARTIFACT_POLICY_DEBUG = "debug"
 ARTIFACT_POLICIES = {
     ARTIFACT_POLICY_MINIMAL,
     ARTIFACT_POLICY_STANDARD,
-    ARTIFACT_POLICY_DEBUG,
 }
 
 
@@ -46,9 +44,6 @@ def should_write(
     policy: str,
     cfg: Any,
 ) -> bool:
-    if policy == ARTIFACT_POLICY_DEBUG:
-        return True
-
     output_cfg = getattr(cfg, "output", None) if not isinstance(cfg, dict) else cfg.get("output")
 
     if layer == "profile":
@@ -58,8 +53,6 @@ def should_write(
             return policy != ARTIFACT_POLICY_MINIMAL
         if artifact_name == "profile_alias":
             return policy != ARTIFACT_POLICY_MINIMAL and legacy_aliases_enabled(output_cfg)
-        if artifact_name in {"profile_md", "suggested_mapping"}:
-            return False
 
     if layer in {"clean", "mart"} and artifact_name == "rendered_sql":
         return policy != ARTIFACT_POLICY_MINIMAL

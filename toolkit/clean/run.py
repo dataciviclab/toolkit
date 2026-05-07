@@ -6,7 +6,7 @@ from typing import Any
 from toolkit.clean.duckdb_read import SUPPORTED_INPUT_EXTS
 from toolkit.clean.read_config import resolve_clean_read_cfg
 from toolkit.clean.input_selection import select_raw_input
-from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
+from toolkit.core.artifacts import resolve_artifact_policy, should_write
 from toolkit.core.config import ensure_dict
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
@@ -156,12 +156,6 @@ def _clean_metadata_payload(
         "outputs": outputs,
         "input_files": [p.name for p in input_files],
     }
-    if policy == ARTIFACT_POLICY_DEBUG:
-        metadata_payload["debug"] = {
-            "sql_absolute": str(sql_path_obj.resolve()),
-            "sql_rendered_absolute": str(rendered_sql_path.resolve()) if rendered_sql_path else None,
-            "output_root_absolute": str(root_dir.resolve()),
-        }
     return metadata_payload
 
 

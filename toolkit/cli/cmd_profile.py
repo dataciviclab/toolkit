@@ -165,16 +165,8 @@ def profile(
 
         written_paths = list(paths.values())
 
-        if should_write("profile", "profile_md", policy, cfg):
-            md_path = out_dir / "profile.md"
-            md_path.write_text(render_profile_md(prof.__dict__), encoding="utf-8")
-            written_paths.append(md_path)
-
         if should_write("profile", "suggested_read", policy, cfg):
             written_paths.append(write_suggested_read_yml(out_dir, prof.__dict__))
-
-        if should_write("profile", "suggested_mapping", policy, cfg):
-            written_paths.append(write_suggested_mapping_yml(out_dir, prof.__dict__))
 
         if written_paths:
             logger.info("PROFILE RAW -> %s", " | ".join(str(path) for path in written_paths))

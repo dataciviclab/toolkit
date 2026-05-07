@@ -103,7 +103,7 @@ def test_artifacts_policy_minimal_skips_optional_outputs(tmp_path: Path, monkeyp
     assert (mart_dir / "_validate" / "mart_validation.json").exists()
 
 
-def test_artifacts_policy_standard_keeps_current_debug_artifacts(tmp_path: Path, monkeypatch):
+def test_artifacts_policy_standard_keeps_expected_artifacts(tmp_path: Path, monkeypatch):
     src = Path("project-example")
     dst = tmp_path / "project-example"
     shutil.copytree(src, dst)

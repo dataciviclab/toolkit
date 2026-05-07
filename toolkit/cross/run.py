@@ -5,7 +5,7 @@ from typing import Any
 
 import duckdb
 
-from toolkit.core.artifacts import ARTIFACT_POLICY_DEBUG, resolve_artifact_policy, should_write
+from toolkit.core.artifacts import resolve_artifact_policy, should_write
 from toolkit.core.config import ensure_dict
 from toolkit.core.metadata import file_record, sha256_bytes, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_dataset_dir, layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
@@ -101,7 +101,6 @@ def run_cross_year(
 
         written: list[Path] = []
         executed: list[dict[str, Any]] = []
-        debug_tables: list[dict[str, Any]] = []
 
         for i, table in enumerate(tables, start=1):
             if not isinstance(table, dict):
@@ -143,15 +142,6 @@ def run_cross_year(
                     "source_inputs": [serialize_metadata_path(path, root_dir) for path in files],
                 }
             )
-            if policy == ARTIFACT_POLICY_DEBUG:
-                debug_tables.append(
-                    {
-                        "name": name,
-                        "sql_absolute": str(sql_path.resolve()),
-                        "sql_rendered_absolute": str(rendered_sql_path.resolve()) if rendered_sql_path else None,
-                        "output_absolute": str(out.resolve()),
-                    }
-                )
     finally:
         con.close()
 
@@ -165,11 +155,6 @@ def run_cross_year(
         "output_paths": [serialize_metadata_path(path, root_dir) for path in written],
         "tables": executed,
     }
-    if policy == ARTIFACT_POLICY_DEBUG:
-        metadata_payload["debug"] = {  # type: ignore[assignment]
-            "output_root_absolute": str(root_dir.resolve()),
-            "tables": debug_tables,
-        }
     metadata_path = write_metadata(cross_dir, metadata_payload)
     write_layer_manifest(
         cross_dir,

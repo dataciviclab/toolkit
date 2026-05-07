@@ -148,7 +148,13 @@ def run_raw(
     profile_hints = None
     profile_ctx = {"clean": clean_cfg or {}, "output": output_cfg or {}}
     policy = resolve_artifact_policy(output_cfg)
-    if primary_output_path.exists() and primary_output_path.suffix.lower() in {".csv", ".tsv", ".txt"}:
+    if primary_output_path.exists() and primary_output_path.suffix.lower() in {
+        ".csv",
+        ".tsv",
+        ".txt",
+        ".xlsx",
+        ".xls",
+    }:
         try:
             profile_hints = sniff_source_file(primary_output_path)
             if should_write("profile", "suggested_read", policy, profile_ctx):
@@ -171,16 +177,22 @@ def run_raw(
                     write_canonical=True,
                     write_legacy_alias=should_write("profile", "profile_alias", policy, profile_ctx),
                 )
-                logger.info("RAW profile -> %s", profile_dir / "raw_profile.json")
-
-                scaffold_clean_if_missing(
-                    raw_profile.__dict__,
-                    dataset,
-                    year,
-                    base_dir or Path("."),
-                    clean_cfg,
-                    logger,
+                is_binary = raw_profile.is_binary_file
+                logger.info(
+                    "RAW profile -> %s",
+                    profile_dir / "raw_profile.json",
                 )
+
+                # scaffold_clean_if_missing needs column names — not available for binary files
+                if not is_binary:
+                    scaffold_clean_if_missing(
+                        raw_profile.__dict__,
+                        dataset,
+                        year,
+                        base_dir or Path("."),
+                        clean_cfg,
+                        logger,
+                    )
         except Exception as exc:
             logger.warning("RAW profile/scaffold generation failed: %s: %s", type(exc).__name__, exc)
 

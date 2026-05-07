@@ -245,6 +245,62 @@ def test_review_readiness_needs_review_with_single_failure(tmp_path: Path, monke
     assert payload["fail_count"] == 1
 
 
+def test_review_readiness_fails_when_raw_binary_file(tmp_path: Path, monkeypatch) -> None:
+    """policy: binary file in raw_profile.json causes raw_profiling_available check to fail."""
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst)
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    # Raw dir with binary file and profile
+    raw_dir = dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "input_2022.xlsx").write_bytes(b"PK\x03\x04\x14\x00\x00")
+    profile_dir = raw_dir / "_profile"
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    (profile_dir / "raw_profile.json").write_text(
+        json.dumps(
+            {
+                "dataset": "project_example",
+                "year": 2022,
+                "file_used": "input_2022.xlsx",
+                "is_binary_file": "xlsx",
+                "columns_raw": [],
+                "columns_norm": [],
+                "warnings": ["binary_file_detected: xlsx"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # Clean present and readable
+    clean_dir = dst / "_smoke_out" / "data" / "clean" / "project_example" / "2022"
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    import duckdb
+
+    clean_parquet = clean_dir / "project_example_2022_clean.parquet"
+    with duckdb.connect(":memory:") as conn:
+        conn.execute("CREATE TABLE t AS SELECT 1 AS x")
+        conn.execute(f"COPY t TO '{clean_parquet}' (FORMAT PARQUET)")
+
+    # Mart present
+    mart_dir = dst / "_smoke_out" / "data" / "mart" / "project_example" / "2022"
+    mart_dir.mkdir(parents=True, exist_ok=True)
+    with duckdb.connect(":memory:") as conn:
+        conn.execute("CREATE TABLE t AS SELECT 1 AS x")
+        conn.execute(f"COPY t TO '{mart_dir / 'rd_by_regione.parquet'}' (FORMAT PARQUET)")
+
+    payload = review_readiness(str(config_path), 2022)
+    check_names = {c["check"] for c in payload["checks"]}
+    assert "raw_profiling_available" in check_names
+    profiling_check = next(c for c in payload["checks"] if c["check"] == "raw_profiling_available")
+    assert profiling_check["ok"] is False
+    # readiness is not "ready" because of the profiling failure
+    assert payload["readiness"] != "ready"
+
+
 def test_mcp_raw_profile_handles_suggested_read_yaml(tmp_path: Path, monkeypatch) -> None:
     """raw_profile deve cadere su suggested_read.yml quando raw_profile.json non esiste."""
     src = Path("project-example")

@@ -154,6 +154,7 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
         "missingness_top": profile.get("missingness_top", []),
         "mapping_suggestions": profile.get("mapping_suggestions", {}),
         "warnings": profile.get("warnings", []),
+        "is_binary_file": profile.get("is_binary_file"),
         "profile_exists": True,
     }
 
@@ -575,9 +576,38 @@ def blocker_hints(config_path: str, year: int | None = None) -> dict[str, Any]:
                         {
                             "code": "run_says_mart_success_but_outputs_missing",
                             "severity": "blocker",
-                            "message": "run record dice mart SUCCESS ma nessun output file presente",
+                            "message": "run record dice mart SUCCESS ma nessun output presente",
                         }
                     )
+
+    # XLSX/XLS binary file detected during profiling — schema is not comparable
+    raw_profile_path = Path(raw.get("dir", "")) / "_profile" / "raw_profile.json"
+    if raw_profile_path.exists():
+        try:
+            raw_profile_data = json.loads(raw_profile_path.read_text(encoding="utf-8"))
+            is_binary = raw_profile_data.get("is_binary_file")
+            if is_binary:
+                hints.append(
+                    {
+                        "code": "raw_binary_file_not_comparable",
+                        "severity": "blocker",
+                        "message": f"file binario '{is_binary}' rilevato — profiling non disponibile, schema non comparabile",
+                    }
+                )
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # raw_probe_source unavailable in run stats
+    if run_record:
+        stats = run_record.get("stats") or {}
+        if stats.get("raw_probe_source") == "unavailable":
+            hints.append(
+                {
+                    "code": "raw_probe_unavailable",
+                    "severity": "blocker",
+                    "message": "raw profiling non disponibile (file mancante o illeggibile)",
+                }
+            )
 
     return {
         "dataset": s.get("dataset"),
@@ -712,6 +742,27 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
             "check": "run_record_coherent",
             "ok": run_coherent,
             "detail": run_detail,
+        }
+    )
+
+    # --- Binary file check ---
+    raw_profile_path = Path(raw.get("dir", "")) / "_profile" / "raw_profile.json"
+    binary_ok = True
+    binary_detail = "schema profiling ok"
+    if raw_profile_path.exists():
+        try:
+            raw_profile_data = json.loads(raw_profile_path.read_text(encoding="utf-8"))
+            is_binary = raw_profile_data.get("is_binary_file")
+            if is_binary:
+                binary_ok = False
+                binary_detail = f"file binario '{is_binary}' — profiling non disponibile per review"
+        except (json.JSONDecodeError, OSError):
+            pass
+    checks.append(
+        {
+            "check": "raw_profiling_available",
+            "ok": binary_ok,
+            "detail": binary_detail,
         }
     )
 

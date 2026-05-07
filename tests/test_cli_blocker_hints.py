@@ -408,3 +408,211 @@ mart:
 
         assert result.exit_code == 0
         assert "blockers: 0" in result.output
+
+    @pytest.mark.policy
+    def test_blocker_hints_detects_binary_file_not_comparable(self, tmp_path: Path, monkeypatch) -> None:
+        """policy: XLSX binary file in raw_profile.json emits raw_binary_file_not_comparable blocker."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        config_path = project_dir / "dataset.yml"
+
+        config_path.write_text(
+            """
+root: "./out"
+dataset:
+  name: test_ds
+  years: [2023]
+raw:
+  sources:
+    - name: src
+      type: local_file
+      args:
+        path: "input.xlsx"
+        filename: "input_{year}.xlsx"
+clean:
+  sql: "sql/clean.sql"
+mart:
+  tables:
+    - name: test_table
+      sql: "sql/mart/test_table.sql"
+            """.strip(),
+            encoding="utf-8",
+        )
+
+        sql_dir = project_dir / "sql" / "mart"
+        sql_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
+        (sql_dir / "test_table.sql").write_text("select * from clean_input", encoding="utf-8")
+
+        raw_dir = project_dir / "out" / "data" / "raw" / "test_ds" / "2023"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        (raw_dir / "input_2023.xlsx").write_bytes(b"PK\x03\x04\x14\x00\x00")
+        (raw_dir / "manifest.json").write_text(
+            json.dumps({"primary_output_file": "input_2023.xlsx"}),
+            encoding="utf-8",
+        )
+        profile_dir = raw_dir / "_profile"
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        (profile_dir / "raw_profile.json").write_text(
+            json.dumps(
+                {
+                    "dataset": "test_ds",
+                    "year": 2023,
+                    "file_used": "input_2023.xlsx",
+                    "is_binary_file": "xlsx",
+                    "columns_raw": [],
+                    "columns_norm": [],
+                    "warnings": ["binary_file_detected: xlsx — use sheet_name in dataset.yml"],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        clean_dir = project_dir / "out" / "data" / "clean" / "test_ds" / "2023"
+        clean_dir.mkdir(parents=True, exist_ok=True)
+        (clean_dir / "test_ds_2023_clean.parquet").write_text("dummy parquet", encoding="utf-8")
+        (clean_dir / "manifest.json").write_text(
+            json.dumps({"outputs": [{"file": "test_ds_2023_clean.parquet"}]}, indent=2),
+            encoding="utf-8",
+        )
+
+        mart_dir = project_dir / "out" / "data" / "mart" / "test_ds" / "2023"
+        mart_dir.mkdir(parents=True, exist_ok=True)
+        (mart_dir / "test_table.parquet").write_text("dummy parquet", encoding="utf-8")
+        (mart_dir / "manifest.json").write_text(
+            json.dumps({"outputs": [{"file": "test_table.parquet"}]}, indent=2),
+            encoding="utf-8",
+        )
+
+        run_dir = project_dir / "out" / "data" / "_runs" / "test_ds" / "2023"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "run-abc.json").write_text(
+            json.dumps(
+                {
+                    "dataset": "test_ds",
+                    "year": 2023,
+                    "run_id": "run-abc",
+                    "status": "SUCCESS",
+                    "layers": {
+                        "raw": {"status": "SUCCESS"},
+                        "clean": {"status": "SUCCESS"},
+                        "mart": {"status": "SUCCESS"},
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+        runner = CliRunner()
+
+        result = runner.invoke(
+            app,
+            [
+                "blocker-hints",
+                "--config",
+                str(config_path),
+                "--year",
+                "2023",
+                "--json",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        blocker_codes = [h["code"] for h in payload["hints"] if h["severity"] == "blocker"]
+        assert "raw_binary_file_not_comparable" in blocker_codes
+
+    @pytest.mark.policy
+    def test_blocker_hints_detects_raw_probe_unavailable(self, tmp_path: Path, monkeypatch) -> None:
+        """policy: raw_probe_source=unavailable in run record emits raw_probe_unavailable blocker."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        config_path = project_dir / "dataset.yml"
+
+        config_path.write_text(
+            """
+root: "./out"
+dataset:
+  name: test_ds
+  years: [2023]
+raw: {}
+clean:
+  sql: "sql/clean.sql"
+mart:
+  tables:
+    - name: test_table
+      sql: "sql/mart/test_table.sql"
+            """.strip(),
+            encoding="utf-8",
+        )
+
+        sql_dir = project_dir / "sql" / "mart"
+        sql_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
+        (sql_dir / "test_table.sql").write_text("select * from clean_input", encoding="utf-8")
+
+        raw_dir = project_dir / "out" / "data" / "raw" / "test_ds" / "2023"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+
+        clean_dir = project_dir / "out" / "data" / "clean" / "test_ds" / "2023"
+        clean_dir.mkdir(parents=True, exist_ok=True)
+        (clean_dir / "test_ds_2023_clean.parquet").write_text("dummy", encoding="utf-8")
+        (clean_dir / "manifest.json").write_text(
+            json.dumps({"outputs": [{"file": "test_ds_2023_clean.parquet"}]}, indent=2),
+            encoding="utf-8",
+        )
+
+        mart_dir = project_dir / "out" / "data" / "mart" / "test_ds" / "2023"
+        mart_dir.mkdir(parents=True, exist_ok=True)
+        (mart_dir / "test_table.parquet").write_text("dummy", encoding="utf-8")
+        (mart_dir / "manifest.json").write_text(
+            json.dumps({"outputs": [{"file": "test_table.parquet"}]}, indent=2),
+            encoding="utf-8",
+        )
+
+        run_dir = project_dir / "out" / "data" / "_runs" / "test_ds" / "2023"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "run-abc.json").write_text(
+            json.dumps(
+                {
+                    "dataset": "test_ds",
+                    "year": 2023,
+                    "run_id": "run-abc",
+                    "status": "SUCCESS",
+                    "layers": {
+                        "raw": {"status": "SUCCESS"},
+                        "clean": {"status": "SUCCESS"},
+                        "mart": {"status": "SUCCESS"},
+                    },
+                    "stats": {
+                        "raw_probe_source": "unavailable",
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+        runner = CliRunner()
+
+        result = runner.invoke(
+            app,
+            [
+                "blocker-hints",
+                "--config",
+                str(config_path),
+                "--year",
+                "2023",
+                "--json",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        blocker_codes = [h["code"] for h in payload["hints"] if h["severity"] == "blocker"]
+        assert "raw_probe_unavailable" in blocker_codes

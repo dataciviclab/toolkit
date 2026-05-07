@@ -438,6 +438,7 @@ class RawProfile:
     mapping_suggestions: Dict[str, Any]
 
     warnings: List[str]
+    is_binary_file: Optional[str] = None
 
 
 def profile_raw(
@@ -503,6 +504,7 @@ def profile_raw(
             sample_rows=[],
             mapping_suggestions={},
             warnings=sniff_hints.get("warnings", []),
+            is_binary_file=sniff_hints.get("is_binary_file"),
         )
 
     enc = sniff_hints["encoding_suggested"]

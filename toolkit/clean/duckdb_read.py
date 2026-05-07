@@ -263,20 +263,50 @@ def _read_csv_relation(
             ) from exc
 
         short_msg = f"{type(exc).__name__}: {exc}"
-        logger.warning(
-            "strict read failed, falling back to robust | input=%s exc=%s",
-            input_files[0],
-            short_msg,
-        )
+        # Capture what the strict config had before robust preset is applied.
+        # This determines whether robust had to use workarounds that strict didn't.
+        strict_null_padding = read_cfg.get("null_padding", False)
+        strict_ignore_errors = read_cfg.get("ignore_errors", False)
+
         robust_cfg = robust_preset(read_cfg)
+
+        # Check if robust had to enable workarounds that strict didn't need.
+        # These flags mask real config problems (e.g. column count mismatch).
+        robust_null_padding = robust_cfg.get("null_padding", False)
+        robust_ignore_errors = robust_cfg.get("ignore_errors", False)
+        workaround_was_needed = (
+            (robust_null_padding and not strict_null_padding)
+            or (robust_ignore_errors and not strict_ignore_errors)
+        )
+
         try:
-            return _execute_csv_mode(
+            result = _execute_csv_mode(
                 con,
                 input_files,
                 robust_cfg,
                 source="robust",
                 logger=logger,
             )
+            # Log AFTER successful robust execution — never before.
+            if workaround_was_needed:
+                logger.warning(
+                    "strict read failed, robust succeeded but activated "
+                    "null_padding=%s/ignore_errors=%s (strict had %s/%s). "
+                    "Your clean.read.columns may not match the CSV structure. | input=%s exc=%s",
+                    robust_null_padding,
+                    robust_ignore_errors,
+                    strict_null_padding,
+                    strict_ignore_errors,
+                    input_files[0],
+                    short_msg,
+                )
+            else:
+                logger.info(
+                    "strict read failed, robust succeeded | input=%s exc=%s",
+                    input_files[0],
+                    short_msg,
+                )
+            return result
         except Exception as robust_exc:
             raise ValueError(
                 _read_failure_message(input_file=input_files[0], read_cfg=robust_cfg)

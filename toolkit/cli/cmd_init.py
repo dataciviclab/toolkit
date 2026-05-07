@@ -20,6 +20,7 @@ from toolkit.cli.cmd_run import run_init as _run_init
 
 def init(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without executing"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
@@ -34,6 +35,7 @@ def init(
     """
     _run_init(
         config=config,
+        year=year,
         years=years,
         dry_run=dry_run,
         strict_config=strict_config,

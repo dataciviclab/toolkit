@@ -1,8 +1,12 @@
+import logging
+
 import requests
 import urllib3
 from urllib3.exceptions import InsecureRequestWarning
 
 from toolkit.core.exceptions import DownloadError
+
+logger = logging.getLogger("toolkit.plugins.http_file")
 
 
 class HttpFileSource:
@@ -24,11 +28,11 @@ class HttpFileSource:
                 return r.content
             except requests.exceptions.SSLError:
                 # SSL fallback: make a fresh request with verify=False
+                logger.warning("SSL error per %s — retry con verify=False", url)
                 urllib3.disable_warnings(InsecureRequestWarning)
                 try:
-                    # Create fresh session to avoid urllib3 retry state carry-over
-                    session = requests.Session()
-                    r = session.get(url, timeout=self.timeout, headers=headers, verify=False)
+                    with requests.Session() as session:
+                        r = session.get(url, timeout=self.timeout, headers=headers, verify=False)
                     if r.status_code != 200:
                         raise DownloadError(f"HTTP {r.status_code} for {url}")
                     return r.content

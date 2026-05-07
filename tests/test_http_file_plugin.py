@@ -71,3 +71,71 @@ def test_http_file_fetch_http_status_error(monkeypatch: pytest.MonkeyPatch) -> N
     source = HttpFileSource(retries=1)
     with pytest.raises(DownloadError, match="HTTP 503"):
         source.fetch("https://example.test/unavailable")
+
+
+@pytest.mark.policy
+def test_http_file_ssl_fallback_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SSLError triggers verify=False fallback that succeeds."""
+    first_get = True
+
+    def fake_get(url: str, timeout: int, headers: dict[str, str]):
+        nonlocal first_get
+        if first_get:
+            first_get = False
+            raise requests.exceptions.SSLError("cert expired")
+        return _FakeResponse(200, b"ssl-fallback-payload")
+
+    monkeypatch.setattr("toolkit.plugins.http_file.requests.get", fake_get)
+
+    session_get_calls: list[dict[str, object]] = []
+
+    class FakeSession:
+        def get(self, url, timeout=60, headers=None, verify=True):
+            session_get_calls.append({"verify": verify})
+            return _FakeResponse(200, b"ssl-fallback-payload")
+
+        def close(self):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr("toolkit.plugins.http_file.requests.Session", lambda: FakeSession())
+
+    source = HttpFileSource(retries=2)
+    payload = source.fetch("https://example.test/ssl-expired")
+
+    assert payload == b"ssl-fallback-payload"
+    assert len(session_get_calls) == 1
+    assert session_get_calls[0]["verify"] is False
+
+
+@pytest.mark.policy
+def test_http_file_ssl_fallback_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SSLError → SSL fallback also fails → DownloadError."""
+    def fake_get(url: str, timeout: int, headers: dict[str, str]):
+        raise requests.exceptions.SSLError("cert expired")
+
+    monkeypatch.setattr("toolkit.plugins.http_file.requests.get", fake_get)
+
+    class FakeSession:
+        def get(self, url, timeout=60, headers=None, verify=True):
+            raise requests.exceptions.ConnectionError("fallback also failed")
+
+        def close(self):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr("toolkit.plugins.http_file.requests.Session", lambda: FakeSession())
+
+    source = HttpFileSource(retries=1)
+    with pytest.raises(DownloadError, match="fallback also failed"):
+        source.fetch("https://example.test/ssl-fail")

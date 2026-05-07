@@ -1,10 +1,16 @@
+import logging
+
 import requests
+import urllib3
+from urllib3.exceptions import InsecureRequestWarning
 
 from toolkit.core.exceptions import DownloadError
 
+logger = logging.getLogger("toolkit.plugins.http_file")
+
 
 class HttpFileSource:
-    """Download a file via HTTP(S)."""
+    """Download a file via HTTP(S) with SSL fallback for expired/invalid certs."""
 
     def __init__(self, timeout: int = 60, retries: int = 2, user_agent: str | None = None):
         self.timeout = timeout
@@ -20,7 +26,21 @@ class HttpFileSource:
                 if r.status_code != 200:
                     raise DownloadError(f"HTTP {r.status_code} for {url}")
                 return r.content
+            except requests.exceptions.SSLError:
+                # SSL fallback: make a fresh request with verify=False
+                logger.warning("SSL error per %s — retry con verify=False", url)
+                urllib3.disable_warnings(InsecureRequestWarning)
+                try:
+                    with requests.Session() as session:
+                        r = session.get(url, timeout=self.timeout, headers=headers, verify=False)
+                    if r.status_code != 200:
+                        raise DownloadError(f"HTTP {r.status_code} for {url}")
+                    return r.content
+                except Exception as e:
+                    last_err = e
+                    continue  # try again in next outer iteration
             except Exception as e:
                 last_err = e
+                continue  # try again in next outer iteration
 
         raise DownloadError(str(last_err) if last_err else f"Failed to fetch {url}")

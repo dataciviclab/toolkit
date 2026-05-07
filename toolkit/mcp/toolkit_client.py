@@ -4,7 +4,7 @@ This module is a thin facade. The actual implementation lives in dedicated sub-m
 
 - errors: ToolkitClientError
 - path_safety: _safe_path, _load_cfg
-- cli_adapter: _toolkit_json, inspect_paths
+- cli_adapter: inspect_paths (direct call, no subprocess)
 - schema_ops: list_runs, show_schema, raw_profile, run_state, summary, blocker_hints, review_readiness
 
 Note: run_state is kept here for internal use (tests) but is no longer a registered MCP tool.

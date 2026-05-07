@@ -454,16 +454,14 @@ def test_inspect_paths_multi_year_requires_year(tmp_path: Path, monkeypatch) -> 
     from toolkit.mcp.cli_adapter import inspect_paths
     from toolkit.mcp.errors import ToolkitClientError
 
-    # Crea un config reale per superare _safe_path
     yml = tmp_path / "dataset.yml"
-    yml.write_text("dataset:\n  name: test\n  years: [2022, 2023]\n")
-    monkeypatch.chdir(tmp_path)
-
-    # Simula CLI che restituisce una lista (comportamento per multi-year senza --year)
-    monkeypatch.setattr(
-        "toolkit.mcp.cli_adapter._toolkit_json",
-        lambda args: [{"year": 2022}, {"year": 2023}],
+    yml.write_text(
+        "root: " + str(tmp_path) + "\n"
+        "dataset:\n"
+        "  name: test\n"
+        "  years: [2022, 2023]\n"
     )
+    monkeypatch.chdir(tmp_path)
 
     with pytest.raises(ToolkitClientError, match="year è obbligatorio"):
         inspect_paths(str(yml))

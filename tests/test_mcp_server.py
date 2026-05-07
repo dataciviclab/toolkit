@@ -78,23 +78,9 @@ def test_toolkit_show_schema_passes_layer_and_year(monkeypatch: pytest.MonkeyPat
     assert calls == {"config_path": "dataset.yml", "layer": "mart", "year": 2024}
 
 
-def test_toolkit_json_includes_cmd_in_error_on_empty_output(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When CLI fails with no stdout/stderr, error should include the command."""
-    import subprocess
-    from toolkit.mcp.toolkit_client import ToolkitClientError
-
-    def fake_run(*args: object, **kwargs: object) -> object:
-        fake_result = subprocess.CompletedProcess(args=[], returncode=127)
-        return fake_result
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-
-    with pytest.raises(ToolkitClientError, match="exit code 127") as exc_info:
-        from toolkit.mcp import cli_adapter  # re-import to apply monkeypatch
-        cli_adapter._toolkit_json(["inspect", "paths", "--config", "dataset.yml"])
-
-    assert "toolkit.cli.app" in str(exc_info.value)
-
+def test_toolkit_json_removed() -> None:
+    """_toolkit_json rimosso — subprocess sostituito da chiamate dirette."""
+    pass
 
 def test_toolkit_raw_profile_passes_config_and_year(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: dict[str, object] = {}

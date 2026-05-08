@@ -1,2 +1,0 @@
-# lab-connectors: shared cross-repo package (not on PyPI)
-lab-connectors @ git+https://github.com/dataciviclab/lab-connectors.git@v0.1.2

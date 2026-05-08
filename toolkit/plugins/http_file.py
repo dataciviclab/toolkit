@@ -18,7 +18,13 @@ class HttpFileSource:
     """
 
     def __init__(self, timeout: int = 60, retries: int = 2, user_agent: str | None = None):
-        from lab_connectors.http import HttpClient
+        try:
+            from lab_connectors.http import HttpClient
+        except ImportError:
+            raise RuntimeError(
+                "HttpFileSource richiede lab-connectors. "
+                "Installa con: pip install dataciviclab-toolkit[http]"
+            )
 
         self.timeout = timeout
         self.retries = retries

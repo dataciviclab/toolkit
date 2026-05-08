@@ -18,10 +18,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
-      - name: Install lab-connectors (cross-repo)
-        run: python -m pip install -r requirements-lab.txt
-      - name: Install Dev Dependencies
-        run: python -m pip install -e ".[dev]"
+      - name: Install Dev Dependencies (con http extra per lab-connectors)
+        run: python -m pip install -e ".[dev,http]"
       - name: Ruff
         run: python -m ruff check .
       - name: Mypy

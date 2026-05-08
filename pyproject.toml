@@ -40,6 +40,9 @@ dependencies = [
 parquet = [
   "pyarrow>=14.0"
 ]
+http = [
+  "lab-connectors @ git+https://github.com/dataciviclab/lab-connectors.git@v0.1.2"
+]
 dev = [
   "build>=1.4.3",
   "mypy>=1.20",

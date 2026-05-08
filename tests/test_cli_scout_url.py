@@ -186,6 +186,39 @@ def test_probe_url_uses_head_then_get_only_for_html(monkeypatch) -> None:
     assert calls[2] == ("get", "https://example.org/html")
 
 
+def test_probe_url_falls_back_to_get_when_head_fails(monkeypatch) -> None:
+    """HEAD fails with error, GET with Range succeeds → probe returns file info."""
+    head_called = False
+    get_called = False
+
+    class _FileResp:
+        headers = {"Content-Type": "text/csv; charset=utf-8"}
+        url = "https://example.org/data.csv"
+        status_code = 200
+
+    def _fake_head(self, url, **kwargs):
+        nonlocal head_called
+        head_called = True
+        return HttpResult(response=None, err=ConnectionError("HEAD refused"))
+
+    def _fake_get(self, url, **kwargs):
+        nonlocal get_called
+        get_called = True
+        return HttpResult(response=_FileResp(), err=None)
+
+    monkeypatch.setattr(HttpClient, "head", _fake_head)
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
+
+    result = probe_url("https://example.org/data.csv", timeout=10)
+
+    assert head_called
+    assert get_called
+    assert result["kind"] == "file"
+    assert result["status_code"] == 200
+    assert result["final_url"] == "https://example.org/data.csv"
+    assert "csv" in (result["content_type"] or "")
+
+
 def test_probe_url_passes_timeout_and_user_agent(monkeypatch) -> None:
     """Verify probe_url creates HttpClient with the correct timeout and user-agent."""
     init_captured: dict = {}

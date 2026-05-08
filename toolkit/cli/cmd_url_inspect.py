@@ -261,30 +261,26 @@ def probe_url(
 ) -> dict[str, Any]:
     client = HttpClient(timeout=timeout, user_agent=user_agent)
 
-    # --- Step 1: HEAD probe (lightweight, follows redirects, gets headers) ---
+    # --- Step 1: probe headers (HEAD preferred, GET+Range fallback) ---
+    # Some servers reject HEAD (405/403/err) but work with GET.
     head_result = client.head(url)
+    range_result = None
 
-    if head_result.is_ok and head_result.response is not None:
+    if head_result.is_ok and head_result.response is not None and head_result.response.status_code < 400:
         probe = head_result.response
-        status_code = probe.status_code
-        content_type = probe.headers.get("Content-Type")
-        content_disposition = probe.headers.get("Content-Disposition")
-        final_url = probe.url
-    elif head_result.err is not None:
-        err = head_result.err
-        raise RuntimeError(str(err) if err else f"HEAD failed for {url}")
     else:
-        raise RuntimeError(f"HEAD failed for {url}")
-
-    # Some servers reject HEAD (405/403) — fall back to a lightweight GET with Range
-    if status_code >= 400:
+        # HEAD failed or returned error — try lightweight GET with Range
         range_result = client.get(url, headers={"Range": "bytes=0-0"})
         if range_result.is_ok and range_result.response is not None:
-            g = range_result.response
-            status_code = g.status_code
-            content_type = g.headers.get("Content-Type") or content_type
-            content_disposition = g.headers.get("Content-Disposition") or content_disposition
-            final_url = g.url
+            probe = range_result.response
+        else:
+            err = head_result.err or (range_result.err if range_result else None)
+            raise RuntimeError(str(err) if err else f"HEAD failed for {url}")
+
+    status_code = probe.status_code
+    content_type = probe.headers.get("Content-Type")
+    content_disposition = probe.headers.get("Content-Disposition")
+    final_url = probe.url
 
     # --- Step 2: GET body only for HTML (link extraction, optional capture) ---
     is_html = _is_html(content_type)

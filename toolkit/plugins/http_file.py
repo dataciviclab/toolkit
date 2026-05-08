@@ -1,8 +1,6 @@
 import logging
 
-import requests
-import urllib3
-from urllib3.exceptions import InsecureRequestWarning
+from lab_connectors.http import HttpClient
 
 from toolkit.core.exceptions import DownloadError
 
@@ -10,37 +8,27 @@ logger = logging.getLogger("toolkit.plugins.http_file")
 
 
 class HttpFileSource:
-    """Download a file via HTTP(S) with SSL fallback for expired/invalid certs."""
+    """Download a file via HTTP(S) with SSL fallback for expired/invalid certs.
+
+    Adapter over lab_connectors.http.HttpClient that translates
+    HttpResult into toolkit's DownloadError contract.
+    """
 
     def __init__(self, timeout: int = 60, retries: int = 2, user_agent: str | None = None):
         self.timeout = timeout
         self.retries = retries
         self.user_agent = user_agent or "dataciviclab-toolkit/0.1"
+        self._client = HttpClient(
+            timeout=timeout,
+            max_retries=retries,
+            user_agent=self.user_agent,
+        )
 
     def fetch(self, url: str) -> bytes:
-        headers = {"User-Agent": self.user_agent}
-        last_err: Exception | None = None
-        for _ in range(max(1, self.retries)):
-            try:
-                r = requests.get(url, timeout=self.timeout, headers=headers)
-                if r.status_code != 200:
-                    raise DownloadError(f"HTTP {r.status_code} for {url}")
-                return r.content
-            except requests.exceptions.SSLError:
-                # SSL fallback: make a fresh request with verify=False
-                logger.warning("SSL error per %s — retry con verify=False", url)
-                urllib3.disable_warnings(InsecureRequestWarning)
-                try:
-                    with requests.Session() as session:
-                        r = session.get(url, timeout=self.timeout, headers=headers, verify=False)
-                    if r.status_code != 200:
-                        raise DownloadError(f"HTTP {r.status_code} for {url}")
-                    return r.content
-                except Exception as e:
-                    last_err = e
-                    continue  # try again in next outer iteration
-            except Exception as e:
-                last_err = e
-                continue  # try again in next outer iteration
-
-        raise DownloadError(str(last_err) if last_err else f"Failed to fetch {url}")
+        result = self._client.get(url)
+        if result.is_ok and result.response is not None:
+            if result.response.status_code != 200:
+                raise DownloadError(f"HTTP {result.response.status_code} for {url}")
+            return result.response.content
+        err = result.err
+        raise DownloadError(str(err) if err else f"Failed to fetch {url}")

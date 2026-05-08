@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
-
 from typer.testing import CliRunner
 
 from lab_connectors.http import HttpClient, HttpResult

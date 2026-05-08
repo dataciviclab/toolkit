@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
-import requests
+from lab_connectors.http import HttpClient
 
 # Public API — functions used by cmd_inspect.py
 __all__ = [
@@ -136,11 +136,14 @@ def _discover_ckan_resources(
     else:
         api_bases.append(f"{root}/api/3/action/package_show")
         api_bases.append(f"{root}/package_show")
-    headers = {"User-Agent": user_agent}
+    client = HttpClient(timeout=timeout, user_agent=user_agent)
     for api_base in api_bases:
         pkg_url = f"{api_base}?id={dataset_id}"
         try:
-            resp = requests.get(pkg_url, timeout=timeout, headers=headers)
+            http_result = client.get(pkg_url)
+            if not http_result.is_ok or http_result.response is None:
+                continue
+            resp = http_result.response
             if resp.status_code != 200:
                 continue
             data = resp.json()
@@ -256,35 +259,48 @@ def probe_url(
     user_agent: str = _DEFAULT_USER_AGENT,
     capture_html: bool = False,
 ) -> dict[str, Any]:
-    headers = {"User-Agent": user_agent}
-    with requests.get(url, allow_redirects=True, timeout=timeout, headers=headers, stream=True) as response:
-        content_type = response.headers.get("Content-Type")
-        content_disposition = response.headers.get("Content-Disposition")
-        final_url = response.url
-        is_html = _is_html(content_type)
-        raw_html: bytes = b""
-        if is_html:
-            response.encoding = response.encoding or response.apparent_encoding or "utf-8"
-            text = response.text
-            candidate_links = _candidate_links(final_url, text)
-            kind = "html"
+    client = HttpClient(timeout=timeout, user_agent=user_agent)
+
+    # HEAD probe — lightweight, follows redirects, gets headers
+    head_result = client.head(url)
+    if not head_result.is_ok or head_result.response is None:
+        err = head_result.err
+        raise RuntimeError(str(err) if err else f"HEAD failed for {url}")
+
+    head = head_result.response
+    content_type = head.headers.get("Content-Type")
+    content_disposition = head.headers.get("Content-Disposition")
+    final_url = head.url
+    status_code = head.status_code
+
+    # For HTML pages, GET the body to extract links
+    is_html = _is_html(content_type)
+    candidate_links: list[str] = []
+    kind: str = "opaque"
+    raw_html: bytes = b""
+
+    if is_html or capture_html:
+        get_result = client.get(url)
+        if get_result.is_ok and get_result.response is not None:
+            body = get_result.response
+            text = body.text
+            if is_html:
+                candidate_links = _candidate_links(final_url, text)
+                kind = "html"
             if capture_html:
-                raw_html = text.encode(response.encoding or "utf-8", errors="replace")
-        elif _is_file_like(final_url, content_type, content_disposition):
-            candidate_links = []
-            kind = "file"
-        else:
-            candidate_links = []
-            kind = "opaque"
-        result: dict[str, Any] = {
-            "requested_url": url,
-            "final_url": final_url,
-            "status_code": response.status_code,
-            "content_type": content_type,
-            "content_disposition": content_disposition,
-            "kind": kind,
-            "candidate_links": candidate_links,
-        }
-        if capture_html and raw_html:
-            result["html_content"] = raw_html
-        return result
+                raw_html = text.encode(body.encoding or "utf-8", errors="replace")
+    elif _is_file_like(final_url, content_type, content_disposition):
+        kind = "file"
+
+    result: dict[str, Any] = {
+        "requested_url": url,
+        "final_url": final_url,
+        "status_code": status_code,
+        "content_type": content_type,
+        "content_disposition": content_disposition,
+        "kind": kind,
+        "candidate_links": candidate_links,
+    }
+    if capture_html and raw_html:
+        result["html_content"] = raw_html
+    return result

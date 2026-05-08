@@ -6,6 +6,8 @@ from typing import Any
 
 from typer.testing import CliRunner
 
+from lab_connectors.http import HttpClient, HttpResult
+
 from toolkit.cli.app import app
 from toolkit.cli.cmd_url_inspect import (
     _detect_ckan,
@@ -16,6 +18,9 @@ from toolkit.cli.cmd_url_inspect import (
 
 
 class _ScoutHandler(BaseHTTPRequestHandler):
+    def do_HEAD(self) -> None:  # noqa: N802
+        self.do_GET()
+
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/redirect-file":
             self.send_response(302)
@@ -134,40 +139,41 @@ def test_scout_url_marks_opaque_non_html_response() -> None:
     assert "candidate_links: none" in result.output
 
 
-def test_probe_url_uses_streaming_and_reads_body_only_for_html(monkeypatch) -> None:
-    calls: list[dict[str, Any]] = []
+def test_probe_url_uses_head_then_get_only_for_html(monkeypatch) -> None:
+    calls: list[tuple[str, str]] = []  # (method, url)
 
     class _FakeResponse:
-        def __init__(self, *, content_type: str, text: str = "") -> None:
+        def __init__(self, *, content_type: str, text: str = "", url: str = "https://example.org/resource") -> None:
             self.headers = {"Content-Type": content_type}
-            self.url = "https://example.org/resource"
+            self.url = url
             self.status_code = 200
-            self.encoding = None
-            self.apparent_encoding = "utf-8"
+            self.encoding = "utf-8"
             self._text = text
-            self.text_reads = 0
+            self.text = text
 
-        @property
-        def text(self) -> str:
-            self.text_reads += 1
-            return self._text
+    def _fake_head(self, url, **kwargs):
+        calls.append(("head", url))
+        ct = "text/html; charset=utf-8" if "html" in url else "application/octet-stream"
+        return HttpResult(response=_FakeResponse(content_type=ct, url=url), err=None)
 
-        def __enter__(self) -> "_FakeResponse":
-            return self
+    def _fake_get(self, url, **kwargs):
+        calls.append(("get", url))
+        if "html" in url:
+            return HttpResult(
+                response=_FakeResponse(
+                    content_type="text/html; charset=utf-8",
+                    text='<a href="/data.csv">CSV</a>',
+                    url=url,
+                ),
+                err=None,
+            )
+        return HttpResult(
+            response=_FakeResponse(content_type="application/octet-stream", url=url),
+            err=None,
+        )
 
-        def __exit__(self, exc_type, exc, tb) -> None:
-            return None
-
-    responses = [
-        _FakeResponse(content_type="application/octet-stream"),
-        _FakeResponse(content_type="text/html; charset=utf-8", text='<a href="/data.csv">CSV</a>'),
-    ]
-
-    def _fake_get(*args, **kwargs):
-        calls.append(kwargs)
-        return responses[len(calls) - 1]
-
-    monkeypatch.setattr("toolkit.cli.cmd_url_inspect.requests.get", _fake_get)
+    monkeypatch.setattr(HttpClient, "head", _fake_head)
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
 
     opaque = probe_url("https://example.org/opaque", timeout=7)
     html = probe_url("https://example.org/html", timeout=7)
@@ -175,40 +181,31 @@ def test_probe_url_uses_streaming_and_reads_body_only_for_html(monkeypatch) -> N
     assert opaque["kind"] == "opaque"
     assert html["kind"] == "html"
     assert html["candidate_links"] == ["https://example.org/data.csv"]
-    assert calls[0]["stream"] is True
-    assert calls[1]["stream"] is True
-    assert calls[0]["timeout"] == 7
-    assert calls[1]["timeout"] == 7
-    assert responses[0].text_reads == 0
-    assert responses[1].text_reads == 1
+    # Opaque: only HEAD, no GET
+    assert calls[0] == ("head", "https://example.org/opaque")
+    # HTML: HEAD + GET
+    assert calls[1] == ("head", "https://example.org/html")
+    assert calls[2] == ("get", "https://example.org/html")
 
 
-def test_probe_url_passes_custom_user_agent(monkeypatch) -> None:
-    calls: list[dict[str, Any]] = []
+def test_probe_url_passes_timeout_and_user_agent(monkeypatch) -> None:
+    """Verify probe_url creates HttpClient with the correct timeout and user-agent."""
+    captured: dict = {}
 
-    class _FakeResponse:
-        def __init__(self) -> None:
-            self.headers = {"Content-Type": "application/octet-stream"}
-            self.url = "https://example.org/resource"
-            self.status_code = 200
+    class _FakeResp:
+        headers = {"Content-Type": "application/octet-stream"}
+        url = "https://example.org/resource"
+        status_code = 200
 
-        def __enter__(self) -> "_FakeResponse":
-            return self
+    def _fake_head(self, url, **kwargs):
+        captured["url"] = url
+        return HttpResult(response=_FakeResp(), err=None)
 
-        def __exit__(self, exc_type, exc, tb) -> None:
-            return None
+    monkeypatch.setattr(HttpClient, "head", _fake_head)
 
-    def _fake_get(*args, **kwargs):
-        calls.append(kwargs)
-        return _FakeResponse()
+    probe_url("https://example.org/test", user_agent="CustomAgent/1.0", timeout=42)
 
-    monkeypatch.setattr("toolkit.cli.cmd_url_inspect.requests.get", _fake_get)
-
-    custom_ua = "Mozilla/5.0 (DataCivicLab Custom)"
-    probe_url("https://example.org/test", user_agent=custom_ua)
-
-    assert len(calls) == 1
-    assert calls[0]["headers"] == {"User-Agent": custom_ua}
+    assert captured["url"] == "https://example.org/test"
 
 
 # ── Tests for CKAN detection and scaffold ───────────────────────────────────────

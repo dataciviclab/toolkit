@@ -261,32 +261,44 @@ def probe_url(
 ) -> dict[str, Any]:
     client = HttpClient(timeout=timeout, user_agent=user_agent)
 
-    # HEAD probe — lightweight, follows redirects, gets headers
+    # --- Step 1: HEAD probe (lightweight, follows redirects, gets headers) ---
     head_result = client.head(url)
-    if not head_result.is_ok or head_result.response is None:
+
+    if head_result.is_ok and head_result.response is not None:
+        probe = head_result.response
+        status_code = probe.status_code
+        content_type = probe.headers.get("Content-Type")
+        content_disposition = probe.headers.get("Content-Disposition")
+        final_url = probe.url
+    elif head_result.err is not None:
         err = head_result.err
         raise RuntimeError(str(err) if err else f"HEAD failed for {url}")
+    else:
+        raise RuntimeError(f"HEAD failed for {url}")
 
-    head = head_result.response
-    content_type = head.headers.get("Content-Type")
-    content_disposition = head.headers.get("Content-Disposition")
-    final_url = head.url
-    status_code = head.status_code
+    # Some servers reject HEAD (405/403) — fall back to a lightweight GET with Range
+    if status_code >= 400:
+        range_result = client.get(url, headers={"Range": "bytes=0-0"})
+        if range_result.is_ok and range_result.response is not None:
+            g = range_result.response
+            status_code = g.status_code
+            content_type = g.headers.get("Content-Type") or content_type
+            content_disposition = g.headers.get("Content-Disposition") or content_disposition
+            final_url = g.url
 
-    # For HTML pages, GET the body to extract links
+    # --- Step 2: GET body only for HTML (link extraction, optional capture) ---
     is_html = _is_html(content_type)
     candidate_links: list[str] = []
     kind: str = "opaque"
     raw_html: bytes = b""
 
-    if is_html or capture_html:
+    if is_html:
         get_result = client.get(url)
         if get_result.is_ok and get_result.response is not None:
             body = get_result.response
             text = body.text
-            if is_html:
-                candidate_links = _candidate_links(final_url, text)
-                kind = "html"
+            candidate_links = _candidate_links(final_url, text)
+            kind = "html"
             if capture_html:
                 raw_html = text.encode(body.encoding or "utf-8", errors="replace")
     elif _is_file_like(final_url, content_type, content_disposition):

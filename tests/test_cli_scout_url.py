@@ -188,7 +188,14 @@ def test_probe_url_uses_head_then_get_only_for_html(monkeypatch) -> None:
 
 def test_probe_url_passes_timeout_and_user_agent(monkeypatch) -> None:
     """Verify probe_url creates HttpClient with the correct timeout and user-agent."""
-    captured: dict = {}
+    init_captured: dict = {}
+    real_init = HttpClient.__init__
+
+    def _fake_init(self, **kwargs):
+        init_captured.update(kwargs)
+        real_init(self, **kwargs)
+
+    monkeypatch.setattr(HttpClient, "__init__", _fake_init)
 
     class _FakeResp:
         headers = {"Content-Type": "application/octet-stream"}
@@ -196,14 +203,14 @@ def test_probe_url_passes_timeout_and_user_agent(monkeypatch) -> None:
         status_code = 200
 
     def _fake_head(self, url, **kwargs):
-        captured["url"] = url
         return HttpResult(response=_FakeResp(), err=None)
 
     monkeypatch.setattr(HttpClient, "head", _fake_head)
 
     probe_url("https://example.org/test", user_agent="CustomAgent/1.0", timeout=42)
 
-    assert captured["url"] == "https://example.org/test"
+    assert init_captured.get("timeout") == 42
+    assert init_captured.get("user_agent") == "CustomAgent/1.0"
 
 
 # ── Tests for CKAN detection and scaffold ───────────────────────────────────────

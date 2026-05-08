@@ -1,6 +1,6 @@
-import logging
+from __future__ import annotations
 
-from lab_connectors.http import HttpClient
+import logging
 
 from toolkit.core.exceptions import DownloadError
 
@@ -12,9 +12,14 @@ class HttpFileSource:
 
     Adapter over lab_connectors.http.HttpClient that translates
     HttpResult into toolkit's DownloadError contract.
+
+    HttpClient is imported lazily so the module loads without lab-connectors
+    installed (e.g. in CI smoke tests that never instantiate this class).
     """
 
     def __init__(self, timeout: int = 60, retries: int = 2, user_agent: str | None = None):
+        from lab_connectors.http import HttpClient
+
         self.timeout = timeout
         self.retries = retries
         self.user_agent = user_agent or "dataciviclab-toolkit/0.1"

@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-import requests
 import typer
 
 from toolkit.cli.cmd_url_inspect import (
@@ -41,8 +40,8 @@ def url(
         raise typer.Exit(code=1)
     try:
         result = probe_url(url, timeout=timeout, user_agent=user_agent, capture_html=scaffold or run)
-    except requests.RequestException as exc:
-        typer.echo(f"error: {type(exc).__name__}: {exc}")
+    except RuntimeError as exc:
+        typer.echo(f"error: {exc}")
         raise typer.Exit(code=1) from exc
 
     if scaffold or run:

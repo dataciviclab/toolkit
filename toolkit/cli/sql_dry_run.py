@@ -49,11 +49,6 @@ def _normalize_sql(sql: str) -> str:
     return sql.strip().rstrip(";").strip()
 
 
-def _create_placeholder_raw_input(con: duckdb.DuckDBPyConnection, clean_cfg: dict[str, Any], sql: str) -> None:
-    columns = _placeholder_columns(clean_cfg, sql)
-    _create_placeholder_raw_input_with_columns(con, columns)
-
-
 def _create_placeholder_raw_input_with_columns(
     con: duckdb.DuckDBPyConnection,
     columns: list[str],

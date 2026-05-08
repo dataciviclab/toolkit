@@ -26,46 +26,28 @@ _SAFE_SQL_IDENTIFIER_RE = r"^[A-Za-z_][A-Za-z0-9_]*$"
 @dataclass(frozen=True)
 class ConfigDeprecation:
     code: str
-    legacy: str
-    replacement: str
-    status: str
     message: str
 
 
 _CONFIG_DEPRECATIONS: dict[str, ConfigDeprecation] = {
     "unknown.top_level": ConfigDeprecation(
         code="DCL009",
-        legacy="unknown top-level keys",
-        replacement="remove unsupported keys",
-        status="ignored",
         message="unknown top-level config keys detected",
     ),
     "unknown.raw": ConfigDeprecation(
         code="DCL010",
-        legacy="raw.* unknown keys",
-        replacement="remove unsupported raw keys",
-        status="ignored",
         message="unknown raw config keys detected",
     ),
     "unknown.clean": ConfigDeprecation(
         code="DCL011",
-        legacy="clean.* unknown keys",
-        replacement="remove unsupported clean keys",
-        status="ignored",
         message="unknown clean config keys detected",
     ),
     "unknown.mart": ConfigDeprecation(
         code="DCL012",
-        legacy="mart.* unknown keys",
-        replacement="remove unsupported mart keys",
-        status="ignored",
         message="unknown mart config keys detected",
     ),
     "unknown.cross_year": ConfigDeprecation(
         code="DCL013",
-        legacy="cross_year.* unknown keys",
-        replacement="remove unsupported cross_year keys",
-        status="ignored",
         message="unknown cross_year config keys detected",
     ),
 }

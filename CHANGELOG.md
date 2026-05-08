@@ -15,6 +15,8 @@ All notable changes to this project will be documented in this file.
 - `pyarrow` is no longer a direct dependency. All Parquet I/O is handled natively by DuckDB. Users who need `pyarrow` directly can install the `parquet` optional extra (`pip install dataciviclab-toolkit[parquet]`).
 - Documentation now classifies `run cross_year` and `inspect schema-diff` as supported advanced tooling in the feature stability matrix.
 - Changelog/docs references to config warning codes now reflect the current implemented range through `DCL013`.
+- **HTTP centralizzato su `lab_connectors.http`**: `http_file`, `ckan`, `sdmx` e `inspect url` ora usano `HttpClient` invece di `requests.get` diretto, con retry, SSL fallback e timeout uniformi (PR #232, #233, #234, #235).
+- `lab-connectors` aggiunto come dipendenza core (git URL in `pyproject.toml`).
 
 ### Removed
 

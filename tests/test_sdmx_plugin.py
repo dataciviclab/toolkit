@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+import requests
+
+from lab_connectors.http import HttpClient, HttpResult
+
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.sdmx import SdmxSource
-import requests
 
 
 class _FakeResponse:
@@ -84,23 +89,27 @@ PREVIEW_JSON_WITH_VALUES = """
 }
 """
 
-EMPTY_DATA_JSON = '{"dataSets":[{"series":{}}],"structure":{"dimensions":{"series":[{"id":"FREQ","values":[{"id":"A","name":"annual"}]}]}}}'
+
+def _ok(result, err=None):
+    return HttpResult(response=result, err=err)
 
 
 def test_sdmx_fetch_normalizes_csv(monkeypatch):
     calls = []
 
-    def _fake_get(url, params=None, timeout=None, headers=None):
+    def _fake_get(self, url, **kwargs):
+        params = kwargs.get("params")
+        headers = kwargs.get("headers", {})
         calls.append((url, params, headers.get("Accept") if headers else None))
         if url.endswith("/dataflow/IT1/22_289"):
-            return _FakeResponse(200, DATAFLOW_XML, url)
+            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
         if url.endswith("/data/IT1,22_289,1.5/all"):
-            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
+            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
         if url.endswith("/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99"):
-            return _FakeResponse(200, DATA_JSON, url)
+            return _ok(_FakeResponse(200, DATA_JSON, url))
         raise AssertionError(f"Unexpected URL {url}")
 
-    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
 
     payload, origin = SdmxSource(retries=1).fetch(
         "IT1",
@@ -127,12 +136,12 @@ def test_sdmx_fetch_normalizes_csv(monkeypatch):
 
 
 def test_sdmx_fetch_blocks_version_mismatch(monkeypatch):
-    def _fake_get(url, params=None, timeout=None, headers=None):
+    def _fake_get(self, url, **kwargs):
         if url.endswith("/dataflow/IT1/22_289"):
-            return _FakeResponse(200, DATAFLOW_XML, url)
+            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
         raise AssertionError(f"Unexpected URL {url}")
 
-    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
 
     try:
         SdmxSource().fetch("IT1", "22_289", "1.0", {"FREQ": "A"})
@@ -143,14 +152,14 @@ def test_sdmx_fetch_blocks_version_mismatch(monkeypatch):
 
 
 def test_sdmx_fetch_rejects_unknown_filter_dimension(monkeypatch):
-    def _fake_get(url, params=None, timeout=None, headers=None):
+    def _fake_get(self, url, **kwargs):
         if url.endswith("/dataflow/IT1/22_289"):
-            return _FakeResponse(200, DATAFLOW_XML, url)
+            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
         if url.endswith("/data/IT1,22_289,1.5/all"):
-            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
-        return _FakeResponse(404, "not found", url)
+            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
+        return _ok(_FakeResponse(404, "not found", url))
 
-    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
 
     try:
         SdmxSource().fetch("IT1", "22_289", "1.5", {"NOT_A_VALID_DIM": "X"})
@@ -164,19 +173,19 @@ def test_sdmx_fetch_rejects_unknown_filter_dimension(monkeypatch):
 def test_sdmx_fetch_falls_back_on_metadata_timeout(monkeypatch):
     calls = []
 
-    def _fake_get(url, params=None, timeout=None, headers=None):
+    def _fake_get(self, url, **kwargs):
         calls.append(url)
         if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
-            raise requests.exceptions.Timeout("metadata timeout")
+            return HttpResult(response=None, err=requests.exceptions.Timeout("metadata timeout"))
         if url == "https://esploradati.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
-            return _FakeResponse(200, DATAFLOW_XML, url)
+            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
+            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
-            return _FakeResponse(200, DATA_JSON, url)
+            return _ok(_FakeResponse(200, DATA_JSON, url))
         raise AssertionError(f"Unexpected URL {url}")
 
-    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
 
     payload, origin = SdmxSource(retries=1).fetch(
         "IT1",
@@ -201,14 +210,14 @@ def test_sdmx_fetch_falls_back_on_metadata_timeout(monkeypatch):
 
 
 def test_sdmx_fetch_rejects_invalid_filter_value(monkeypatch):
-    def _fake_get(url, params=None, timeout=None, headers=None):
+    def _fake_get(self, url, **kwargs):
         if url.endswith("/dataflow/IT1/22_289"):
-            return _FakeResponse(200, DATAFLOW_XML, url)
+            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
         if url.endswith("/data/IT1,22_289,1.5/all"):
-            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
-        return _FakeResponse(404, "not found", url)
+            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
+        return _ok(_FakeResponse(404, "not found", url))
 
-    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
 
     try:
         SdmxSource().fetch("IT1", "22_289", "1.5", {"FREQ": "X"})
@@ -220,14 +229,14 @@ def test_sdmx_fetch_rejects_invalid_filter_value(monkeypatch):
 
 
 def test_sdmx_fetch_rejects_invalid_filter_value_list(monkeypatch):
-    def _fake_get(url, params=None, timeout=None, headers=None):
+    def _fake_get(self, url, **kwargs):
         if url.endswith("/dataflow/IT1/22_289"):
-            return _FakeResponse(200, DATAFLOW_XML, url)
+            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
         if url.endswith("/data/IT1,22_289,1.5/all"):
-            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
+            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
         raise AssertionError(f"Unexpected URL {url}")
 
-    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
 
     try:
         SdmxSource().fetch("IT1", "22_289", "1.5", {"REF_AREA": ["001001", "999999"]})
@@ -241,14 +250,14 @@ def test_sdmx_fetch_rejects_invalid_filter_value_list(monkeypatch):
 def test_sdmx_fetch_empty_response(monkeypatch):
     empty_data_json = '{"dataSets":[{"series":{}}],"structure":{"dimensions":{"series":[{"id":"FREQ","values":[{"id":"A","name":"annual"}]}]}}}'
 
-    def _fake_get(url, params=None, timeout=None, headers=None):
+    def _fake_get(self, url, **kwargs):
         if url.endswith("/dataflow/IT1/22_289"):
-            return _FakeResponse(200, DATAFLOW_XML, url)
+            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
         if url.endswith("/data/IT1,22_289,1.5/all"):
-            return _FakeResponse(200, empty_data_json, url)
-        return _FakeResponse(200, '{"dataSets":[{"series":{}}],"structure":{"dimensions":{"series":[{"id":"FREQ","values":[{"id":"A","name":"annual"}]}]}}}', url)
+            return _ok(_FakeResponse(200, empty_data_json, url))
+        return _ok(_FakeResponse(200, empty_data_json, url))
 
-    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
 
     try:
         SdmxSource().fetch("IT1", "22_289", "1.5", {"FREQ": "A"})
@@ -261,21 +270,21 @@ def test_sdmx_fetch_empty_response(monkeypatch):
 def test_sdmx_fetch_falls_back_on_data_5xx(monkeypatch):
     calls = []
 
-    def _fake_get(url, params=None, timeout=None, headers=None):
+    def _fake_get(self, url, **kwargs):
         calls.append(url)
         if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
-            return _FakeResponse(200, DATAFLOW_XML, url)
+            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _FakeResponse(500, "boom", url)
+            return _ok(_FakeResponse(500, "boom", url))
         if url == "https://sdmx.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
+            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
-            return _FakeResponse(500, "boom", url)
+            return _ok(_FakeResponse(500, "boom", url))
         if url == "https://sdmx.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
-            return _FakeResponse(200, DATA_JSON, url)
+            return _ok(_FakeResponse(200, DATA_JSON, url))
         raise AssertionError(f"Unexpected URL {url}")
 
-    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
 
     payload, origin = SdmxSource(
         retries=1,
@@ -300,16 +309,16 @@ def test_sdmx_fetch_falls_back_on_data_5xx(monkeypatch):
 
 
 def test_sdmx_fetch_does_not_fallback_on_404(monkeypatch):
-    def _fake_get(url, params=None, timeout=None, headers=None):
+    def _fake_get(self, url, **kwargs):
         if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
-            return _FakeResponse(200, DATAFLOW_XML, url)
+            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
+            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
-            return _FakeResponse(404, "not found", url)
+            return _ok(_FakeResponse(404, "not found", url))
         raise AssertionError(f"Unexpected URL {url}")
 
-    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
 
     try:
         SdmxSource(
@@ -338,17 +347,19 @@ def test_sdmx_fetch_does_not_fallback_on_404(monkeypatch):
 def test_sdmx_fetch_does_not_fallback_on_connection_error(monkeypatch):
     calls = []
 
-    def _fake_get(url, params=None, timeout=None, headers=None):
+    def _fake_get(self, url, **kwargs):
         calls.append(url)
         if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
-            return _FakeResponse(200, DATAFLOW_XML, url)
+            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url)
+            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
-            raise requests.exceptions.ConnectionError("tls handshake failed")
+            return HttpResult(
+                response=None, err=requests.exceptions.ConnectionError("tls handshake failed")
+            )
         raise AssertionError(f"Unexpected URL {url}")
 
-    monkeypatch.setattr("toolkit.plugins.sdmx.requests.get", _fake_get)
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
 
     try:
         SdmxSource(

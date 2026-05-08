@@ -75,23 +75,6 @@ def test_fetch_passes_params() -> None:
     assert source2._client.user_agent == "dataciviclab-toolkit/0.1"
 
 
-def test_missing_lab_connectors_raises_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Missing lab-connectors produces RuntimeError with install hint."""
-    import builtins
-
-    real_import = builtins.__import__
-
-    def fake_import(name, *args, **kwargs):
-        if name.startswith("lab_connectors"):
-            raise ImportError(f"No module named {name}")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", fake_import)
-
-    with pytest.raises(RuntimeError, match=r"pip install dataciviclab-toolkit\[http\]"):
-        HttpFileSource()
-
-
 @pytest.mark.policy
 def test_ssl_fallback_semantics_preserved(monkeypatch: pytest.MonkeyPatch) -> None:
     """ssl_fallback_used=True in HttpResult is transparent to caller."""

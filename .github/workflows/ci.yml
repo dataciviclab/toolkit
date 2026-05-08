@@ -18,8 +18,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
-      - name: Install Dev Dependencies (con http extra per lab-connectors)
-        run: python -m pip install -e ".[dev,http]"
+      - name: Install Dev Dependencies
+        run: python -m pip install -e ".[dev]"
       - name: Ruff
         run: python -m ruff check .
       - name: Mypy

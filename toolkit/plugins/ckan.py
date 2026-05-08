@@ -4,7 +4,7 @@ import csv
 import io
 from urllib.parse import urlparse, urlunparse
 
-import requests
+from lab_connectors.http import HttpClient
 
 from toolkit.core.exceptions import DownloadError
 
@@ -50,35 +50,34 @@ class CkanSource:
         self.timeout = timeout
         self.retries = retries
         self.user_agent = user_agent or "dataciviclab-toolkit/0.1"
+        self._client = HttpClient(
+            timeout=timeout,
+            max_retries=retries,
+            user_agent=self.user_agent,
+        )
 
     def _get_json(self, url: str, params: dict[str, str]) -> dict:
-        headers = {"User-Agent": self.user_agent}
-        last_err: Exception | None = None
-        for _ in range(max(1, self.retries)):
-            try:
-                response = requests.get(url, params=params, timeout=self.timeout, headers=headers)
-                if response.status_code != 200:
-                    raise DownloadError(f"HTTP {response.status_code} for {response.url}")
-                data = response.json()
-                if not data.get("success"):
-                    raise DownloadError(f"CKAN API failed for {response.url}")
-                return data
-            except Exception as exc:
-                last_err = exc
-        raise DownloadError(str(last_err) if last_err else f"Failed to fetch CKAN metadata from {url}")
+        result = self._client.get(url, params=params)
+        if result.is_ok and result.response is not None:
+            response = result.response
+            if response.status_code != 200:
+                raise DownloadError(f"HTTP {response.status_code} for {response.url}")
+            data = response.json()
+            if not data.get("success"):
+                raise DownloadError(f"CKAN API failed for {response.url}")
+            return data
+        err = result.err
+        raise DownloadError(str(err) if err else f"Failed to fetch CKAN metadata from {url}")
 
     def _download_bytes(self, url: str) -> bytes:
-        headers = {"User-Agent": self.user_agent}
-        last_err: Exception | None = None
-        for _ in range(max(1, self.retries)):
-            try:
-                response = requests.get(url, timeout=self.timeout, headers=headers)
-                if response.status_code != 200:
-                    raise DownloadError(f"HTTP {response.status_code} for {url}")
-                return response.content
-            except Exception as exc:
-                last_err = exc
-        raise DownloadError(str(last_err) if last_err else f"Failed to fetch {url}")
+        result = self._client.get(url)
+        if result.is_ok and result.response is not None:
+            response = result.response
+            if response.status_code != 200:
+                raise DownloadError(f"HTTP {response.status_code} for {url}")
+            return response.content
+        err = result.err
+        raise DownloadError(str(err) if err else f"Failed to fetch {url}")
 
     def _datastore_search(self, resource_id: str, api_base: str) -> bytes:
         url = _normalize_datastore_search_url(api_base)

@@ -8,6 +8,8 @@ from typing import Iterable
 
 import requests
 
+from lab_connectors.http import HttpClient
+
 from toolkit.core.exceptions import DownloadError
 
 SDMX_NS = {
@@ -51,6 +53,11 @@ class SdmxSource:
         )
         self.metadata_base_url = _normalize_base_url(
             metadata_base_url or ISTAT_SDMX_BASE
+        )
+        self._client = HttpClient(
+            timeout=timeout,
+            max_retries=retries,
+            user_agent=self.user_agent,
         )
 
     def _candidate_base_urls(self, agency: str, primary: str, alternate: str) -> list[str]:
@@ -102,38 +109,36 @@ class SdmxSource:
         accept: str | None = None,
         params: dict[str, str] | None = None,
     ) -> tuple[str, str]:
-        headers = {"User-Agent": self.user_agent}
-        if accept:
-            headers["Accept"] = accept
-
         url = f"{_normalize_base_url(base_url)}/{path.lstrip('/')}"
-        last_err: Exception | None = None
-        for _ in range(max(1, self.retries)):
-            try:
-                response = requests.get(url, params=params, timeout=self.timeout, headers=headers)
-                if response.status_code != 200:
-                    if response.status_code == 404:
-                        raise DownloadError(
-                            f"SDMX query not found (HTTP 404) for {response.url}"
-                        )
-                    if 500 <= response.status_code <= 599:
-                        raise DownloadError(
-                            f"SDMX endpoint error (HTTP {response.status_code}) for {response.url}"
-                        )
-                    raise DownloadError(f"SDMX HTTP {response.status_code} for {response.url}")
-                return response.text, response.url
-            except requests.exceptions.Timeout as exc:
-                last_err = DownloadError(f"SDMX endpoint timeout for {url}: {exc}")
-            except requests.exceptions.ConnectionError as exc:
-                last_err = DownloadError(
-                    f"SDMX endpoint connection error for {url}: {exc}"
-                )
-            except Exception as exc:
-                if isinstance(exc, DownloadError):
-                    last_err = exc
-                else:
-                    last_err = DownloadError(str(exc))
-        raise last_err or DownloadError(f"Failed to fetch {url}")
+        custom_headers: dict[str, str] = {}
+        if accept:
+            custom_headers["Accept"] = accept
+
+        result = self._client.get(url, params=params, headers=custom_headers)
+
+        if result.is_ok and result.response is not None:
+            response = result.response
+            if response.status_code != 200:
+                if response.status_code == 404:
+                    raise DownloadError(
+                        f"SDMX query not found (HTTP 404) for {response.url}"
+                    )
+                if 500 <= response.status_code <= 599:
+                    raise DownloadError(
+                        f"SDMX endpoint error (HTTP {response.status_code}) for {response.url}"
+                    )
+                raise DownloadError(f"SDMX HTTP {response.status_code} for {response.url}")
+            return response.text, response.url
+
+        err = result.err
+        if err is None:
+            raise DownloadError(f"Failed to fetch {url}")
+        # Preserve SDMX-specific diagnostics for timeout/connection errors
+        if isinstance(err, requests.exceptions.Timeout):
+            raise DownloadError(f"SDMX endpoint timeout for {url}: {err}")
+        if isinstance(err, requests.exceptions.ConnectionError):
+            raise DownloadError(f"SDMX endpoint connection error for {url}: {err}")
+        raise DownloadError(str(err))
 
     def _get_json(
         self,

@@ -75,6 +75,15 @@ def test_fetch_passes_params() -> None:
     assert source2._client.user_agent == "dataciviclab-toolkit/0.1"
 
 
+@pytest.mark.adapter
+def test_integration_fetch_real_url() -> None:
+    """Real HTTPS fetch against a stable public URL (no mocks)."""
+    source = HttpFileSource(timeout=30, retries=1)
+    data = source.fetch("https://raw.githubusercontent.com/dataciviclab/toolkit/main/README.md")
+    assert len(data) > 100
+    assert b"DataCivicLab Toolkit" in data
+
+
 @pytest.mark.policy
 def test_ssl_fallback_semantics_preserved(monkeypatch: pytest.MonkeyPatch) -> None:
     """ssl_fallback_used=True in HttpResult is transparent to caller."""

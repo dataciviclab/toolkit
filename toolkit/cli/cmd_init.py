@@ -101,12 +101,35 @@ def _scout(url: str, *, timeout: int = 60) -> None:
     # 7. Generate sql/mart.sql placeholder (SELECT * FROM clean per run all)
     (sql_dir / "mart.sql").write_text("-- Default mart: SELECT * FROM clean.\n-- Personalizza per aggregazioni.\nSELECT * FROM clean\n")
 
+    # 8. Generate candidate scaffold (README.md, notes.md, notebooks/)
+    (out_dir / "notebooks").mkdir(exist_ok=True)
+    (out_dir / "README.md").write_text(
+        f"# {slug}\n\n"
+        f"Fonte: {url}\n\n"
+        "## Domanda\n\n-\n\n"
+        "## Dataset\n\n-\n\n"
+        "## Perche vale la pena testarlo\n\n-\n\n"
+        "## Output minimo atteso\n\n-\n\n"
+        "## Criterio di promozione\n\n-\n\n"
+        "## Stato\n\n- intake\n\n"
+        "## Prossimo passo\n\n- run init --url poi run all\n",
+        encoding="utf-8",
+    )
+    (out_dir / "notes.md").write_text(
+        "## Tecnico\n\n-\n\n## Analitico\n\n-\n\n## Cautele\n\n- La serie storica e omogenea su tutti gli anni?\n"
+        "- Ci sono discontinuita dichiarate dalla fonte?\n- I valori nulli sono zero reale o dato mancante?\n",
+        encoding="utf-8",
+    )
+
     typer.echo(f"\nDataset YAML generated: {out_dir / 'dataset.yml'}")
-    typer.echo(f"  sql/clean.sql: generated ({len(columns_spec)} columns)")
-    typer.echo(f"  sql/mart.sql:  generated (default: SELECT * FROM clean)")
+    typer.echo(f"  sql/clean.sql:      generated ({len(columns_spec)} columns)")
+    typer.echo(f"  sql/mart.sql:       generated (default: SELECT * FROM clean)")
+    typer.echo(f"  README.md:          generated")
+    typer.echo(f"  notes.md:           generated")
+    typer.echo(f"  notebooks/:         created (empty)")
     typer.echo(f"Next: toolkit run all --config {out_dir / 'dataset.yml'}")
 
-    # 8. Cleanup temp
+    # 9. Cleanup temp
     sample_path.unlink(missing_ok=True)
 
 

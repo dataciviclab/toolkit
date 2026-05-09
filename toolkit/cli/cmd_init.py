@@ -215,7 +215,6 @@ def _generate_dataset_yml(
 
     lines.append("")
     lines.append("mart:")
-    lines.append("  sql: sql/mart.sql")
     lines.append("  tables:")
     lines.append(f'    - name: "{slug}"')
     lines.append("      sql: sql/mart.sql")

@@ -70,8 +70,8 @@ def test_init_url_generates_dataset_yml(monkeypatch, tmp_path: Path) -> None:
         assert cols[2]["name"] == "citta"
 
         # Verify mart section
-        assert data["mart"]["sql"] == "sql/mart.sql"
         assert len(data["mart"]["tables"]) == 1
+        assert data["mart"]["tables"][0]["sql"] == "sql/mart.sql"
 
         # Verify generated SQL files
         assert (Path(td) / "dati" / "sql" / "clean.sql").exists()

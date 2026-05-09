@@ -7,7 +7,6 @@ import pytest
 
 from toolkit.cli.sql_dry_run import (
     _build_clean_preview,
-    _create_placeholder_raw_input,
     _create_placeholder_raw_input_with_columns,
     _dedupe_preserve_order,
     _extract_missing_binder_column,
@@ -162,7 +161,7 @@ class TestCreatePlaceholderRawInput:
         try:
             clean_cfg = {"read": {}}
             sql = 'select "val" from raw_input'
-            _create_placeholder_raw_input(con, clean_cfg, sql)
+            _create_placeholder_raw_input_with_columns(con, _placeholder_columns(clean_cfg, sql))
             result = con.execute("DESCRIBE raw_input").fetchall()
             names = [row[0] for row in result]
             assert names == ["val"]

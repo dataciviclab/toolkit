@@ -116,14 +116,10 @@ def _scout(url: str, *, timeout: int = 60) -> None:
 
     profile = profile_with_read_cfg(sample_path, sniff_hints, read_cfg)
 
-    # 4. Build columns spec for clean.read
-    columns_spec: list[dict[str, str]] = []
-    raw_cols = profile.get("columns_raw") or profile.get("columns_norm") or []
-    duckdb_types = profile.get("duckdb_types") or []
-    for i, col in enumerate(raw_cols):
-        dtype = duckdb_types[i] if i < len(duckdb_types) else "VARCHAR"
-        clean_type = _map_duckdb_to_clean(dtype)
-        columns_spec.append({"name": col, "type": clean_type})
+    # 4. Build columns spec for clean.read.
+    #    Se profiling restituisce 0 colonne (skip sbagliato, CSV anomalo),
+    #    riprova con skip incrementale (0..5) per trovare l'header reale.
+    columns_spec, sniff_hints = _resolve_columns(profile, sniff_hints, read_cfg, sample_path)
 
     # 5. Generate dataset.yml
     dataset_yml = _generate_dataset_yml(url, slug, sniff_hints, read_cfg, columns_spec)
@@ -169,6 +165,46 @@ def _scout(url: str, *, timeout: int = 60) -> None:
 
     # 9. Cleanup temp
     sample_path.unlink(missing_ok=True)
+
+
+def _resolve_columns(
+    profile: dict[str, Any],
+    sniff_hints: dict[str, Any],
+    read_cfg: dict[str, Any],
+    sample_path: Path,
+) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    """Build columns spec, retrying with incremental skip if empty."""
+    from toolkit.profile.raw import profile_with_read_cfg
+
+    def _build(cols_raw: list[str], types: list[str]) -> list[dict[str, str]]:
+        spec = []
+        for i, col in enumerate(cols_raw):
+            dtype = types[i] if i < len(types) else "VARCHAR"
+            spec.append({"name": col, "type": _map_duckdb_to_clean(dtype)})
+        return spec
+
+    raw_cols = profile.get("columns_raw") or profile.get("columns_norm") or []
+    duckdb_types = profile.get("duckdb_types") or []
+    columns_spec = _build(raw_cols, duckdb_types)
+
+    # Se 0 colonne, riprova con skip 0..5
+    if not columns_spec:
+        for try_skip in range(6):
+            if try_skip == sniff_hints.get("skip_suggested", 0):
+                continue
+            retry_cfg = dict(read_cfg)
+            retry_cfg["skip"] = try_skip
+            retry_profile = profile_with_read_cfg(sample_path, sniff_hints, retry_cfg)
+            retry_cols = retry_profile.get("columns_raw") or retry_profile.get("columns_norm") or []
+            retry_types = retry_profile.get("duckdb_types") or []
+            if len(retry_cols) >= 2:
+                sniff_hints["skip_suggested"] = try_skip
+                sniff_hints["columns_preview"] = retry_cols
+                typer.echo(f"  Retry with skip={try_skip}: {len(retry_cols)} columns found")
+                columns_spec = _build(retry_cols, retry_types)
+                break
+
+    return columns_spec, sniff_hints
 
 
 def _generate_clean_sql(path: Path, columns_spec: list[dict[str, str]]) -> None:

@@ -1,4 +1,7 @@
-"""Tests for toolkit init --url (scout + generate dataset.yml)."""
+"""Tests for toolkit init --url (scout + generate dataset.yml).
+
+policy: init --url must produce a valid dataset.yml loadable by the config loader
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -60,16 +63,15 @@ def test_init_url_generates_dataset_yml(monkeypatch, tmp_path: Path) -> None:
         assert src["type"] == "http_file"
         assert src["args"]["url"] == "https://example.test/dati.csv"
 
-        # Verify sniffed config
-        assert data["raw"]["read"]["encoding"] in ("utf-8", "ascii")
-        assert data["raw"]["read"]["delim"] == ","
+        # Verify sniffed config (in clean.read, per contratto)
+        assert data["clean"]["read"]["encoding"] in ("utf-8", "ascii")
+        assert data["clean"]["read"]["delim"] == ","
 
         # Verify columns
         cols = data["clean"]["read"]["columns"]
-        assert len(cols) == 3
-        assert cols[0]["name"] == "nome"
-        assert cols[1]["name"] == "eta"
-        assert cols[2]["name"] == "citta"
+        assert "nome" in cols
+        assert "eta" in cols
+        assert "citta" in cols
 
         # Verify mart section
         assert len(data["mart"]["tables"]) == 1

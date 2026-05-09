@@ -69,6 +69,16 @@ def test_init_url_generates_dataset_yml(monkeypatch, tmp_path: Path) -> None:
         assert cols[1]["name"] == "eta"
         assert cols[2]["name"] == "citta"
 
+        # Verify mart section
+        assert data["mart"]["sql"] == "sql/mart.sql"
+        assert len(data["mart"]["tables"]) == 1
+
+        # Verify generated SQL files
+        assert (Path(td) / "dati" / "sql" / "clean.sql").exists()
+        assert (Path(td) / "dati" / "sql" / "mart.sql").exists()
+        mart_sql = (Path(td) / "dati" / "sql" / "mart.sql").read_text()
+        assert "SELECT * FROM clean" in mart_sql
+
 
 def test_init_url_requires_url_or_config() -> None:
     """init without --url or --config must fail with clear error."""

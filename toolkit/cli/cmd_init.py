@@ -101,7 +101,8 @@ def _scout(url: str, *, timeout: int = 60) -> None:
         typer.echo("  Controlla che l'URL punti direttamente a un file CSV/XLSX/JSON.", err=True)
         raise typer.Exit(code=1)
 
-    content = resp.content
+    # Cap difensivo: anche se server ignora Range e risponde 200, tronca
+    content = resp.content[:_SAMPLE_SIZE]
     ext = _infer_ext(url, ct)
     sample_path = tmp_dir / f"{tmp_name}{ext}"
     sample_path.write_bytes(content)

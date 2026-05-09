@@ -1,17 +1,17 @@
-"""Tests for toolkit init --url (scout + generate dataset.yml).
-
-policy: init --url must produce a valid dataset.yml loadable by the config loader
-"""
+"""Tests for toolkit init --url (scout + generate dataset.yml)."""
 from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from lab_connectors.http import HttpClient, HttpResult
 
 from toolkit.cli.app import app
 from typer.testing import CliRunner
+
+pytestmark = pytest.mark.policy
 
 
 class _FakeResp:

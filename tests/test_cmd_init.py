@@ -11,8 +11,6 @@ from lab_connectors.http import HttpClient, HttpResult
 from toolkit.cli.app import app
 from typer.testing import CliRunner
 
-pytestmark = pytest.mark.policy
-
 
 class _FakeResp:
     def __init__(self, content: bytes = b"", headers: dict | None = None, status_code: int = 200, url: str = ""):
@@ -22,6 +20,7 @@ class _FakeResp:
         self.url = url
 
 
+@pytest.mark.policy
 def test_init_url_generates_dataset_yml(monkeypatch, tmp_path: Path) -> None:
     """init --url downloads sample, sniffs, generates valid dataset.yml."""
     csv_content = b"nome,eta,citta\nMario,30,Roma\nLucia,25,Milano\n"
@@ -84,6 +83,7 @@ def test_init_url_generates_dataset_yml(monkeypatch, tmp_path: Path) -> None:
         assert "SELECT * FROM clean" in mart_sql
 
 
+@pytest.mark.policy
 def test_init_url_requires_url_or_config() -> None:
     """init without --url or --config must fail with clear error."""
     runner = CliRunner()
@@ -92,6 +92,7 @@ def test_init_url_requires_url_or_config() -> None:
     assert "--url" in r.output or "--config" in r.output
 
 
+@pytest.mark.policy
 def test_init_url_rejects_both_url_and_config() -> None:
     """init with both --url and --config must fail."""
     runner = CliRunner()

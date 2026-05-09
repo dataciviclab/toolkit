@@ -45,14 +45,19 @@ def test_init_url_generates_dataset_yml(monkeypatch, tmp_path: Path) -> None:
         r = runner.invoke(app, ["init", "--url", "https://example.test/dati.csv"])
         assert r.exit_code == 0, f"init failed: {r.output}"
 
+        # Find generated slug directory (slug_<hash>)
+        dirs = [d for d in Path(td).iterdir() if d.is_dir()]
+        assert len(dirs) == 1, f"expected 1 directory, got {dirs}"
+        slug_dir = dirs[0]
+
         # Check dataset.yml was created
-        yml_path = Path(td) / "dati" / "dataset.yml"
+        yml_path = slug_dir / "dataset.yml"
         assert yml_path.exists(), f"dataset.yml not found at {yml_path}"
         data = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
 
         # Verify structure
         assert data["root"] == "../../out"
-        assert data["dataset"]["name"] == "dati"
+        assert data["dataset"]["name"].startswith("dati")
         assert len(data["raw"]["sources"]) == 1
         src = data["raw"]["sources"][0]
         assert src["type"] == "http_file"
@@ -74,9 +79,9 @@ def test_init_url_generates_dataset_yml(monkeypatch, tmp_path: Path) -> None:
         assert data["mart"]["tables"][0]["sql"] == "sql/mart.sql"
 
         # Verify generated SQL files
-        assert (Path(td) / "dati" / "sql" / "clean.sql").exists()
-        assert (Path(td) / "dati" / "sql" / "mart.sql").exists()
-        mart_sql = (Path(td) / "dati" / "sql" / "mart.sql").read_text()
+        assert (slug_dir / "sql" / "clean.sql").exists()
+        assert (slug_dir / "sql" / "mart.sql").exists()
+        mart_sql = (slug_dir / "sql" / "mart.sql").read_text()
         assert "SELECT * FROM clean" in mart_sql
 
 

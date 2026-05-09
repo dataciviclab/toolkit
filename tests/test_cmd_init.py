@@ -1,11 +1,8 @@
 """Tests for toolkit init --url (scout + generate dataset.yml)."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from unittest.mock import ANY
 
-import pytest
 import yaml
 
 from lab_connectors.http import HttpClient, HttpResult

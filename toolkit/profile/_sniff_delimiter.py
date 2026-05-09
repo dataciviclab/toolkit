@@ -37,13 +37,17 @@ def sniff_decimal(sample_text: str) -> Optional[str]:
 def suggest_skip(sample_text: str, delim: Optional[str]) -> int:
     if not delim:
         return 0
-    lines = [ln for ln in sample_text.splitlines() if ln.strip()][:5]
+    lines = [ln for ln in sample_text.splitlines() if ln.strip()][:10]
     if len(lines) < 2:
         return 0
-    first_count = lines[0].count(delim)
-    second_count = lines[1].count(delim)
-    if first_count == 0 and second_count > 0:
-        return 1
-    if first_count < second_count and first_count <= 1 and second_count >= 3:
-        return 1
+    counts = [ln.count(delim) for ln in lines]
+    max_count = max(counts)
+    if max_count == 0:
+        return 0
+    # Cerca la prima riga che ha almeno meta' del massimo conteggio
+    # (salta righe di titolo/descrizione che hanno pochi delimitatori)
+    threshold = max(max_count * 0.5, 1.0)
+    for idx, c in enumerate(counts):
+        if c >= threshold:
+            return idx
     return 0

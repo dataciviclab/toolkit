@@ -128,19 +128,6 @@ def sniff_source_file(filepath: Path) -> Dict[str, Any]:
 build_profile_hints = sniff_source_file
 
 
-def _build_read_csv_opts(read_cfg: Dict[str, Any]) -> str:
-    opts = ["union_by_name=true"] + csv_read_option_strings(read_cfg)
-
-    header = read_cfg.get("header", True)
-    opts.append(f"header={'true' if bool(header) else 'false'}")
-
-    skip_n = read_cfg.get("skip")
-    if skip_n is not None:
-        opts.append(f"skip={int(skip_n)}")
-
-    return ", ".join(opts)
-
-
 def build_suggested_read_cfg(
     profile: "RawProfile | Dict[str, Any]",
     read_cfg: Optional[Dict[str, Any]] = None,
@@ -250,7 +237,8 @@ def _profile_view(
     *,
     effective_read_cfg: dict[str, Any],
 ) -> None:
-    opt_sql = _build_read_csv_opts(effective_read_cfg)
+    opts = csv_read_option_strings(effective_read_cfg, include_header_skip=True)
+    opt_sql = f"union_by_name=true, {', '.join(opts)}"
     con.execute(
         f"CREATE OR REPLACE VIEW v AS SELECT * FROM read_csv('{sql_str(str(file0))}', {opt_sql});"
     )
@@ -271,23 +259,31 @@ def _sample_profile_rows(
     df = con.execute("SELECT * FROM v LIMIT 50").fetchdf()
     sample_rows = df.to_dict(orient="records")
 
+    # Single-pass missingness: one query with all columns in CASE expressions.
+    # Avoids O(N) separate queries (N = columns), which was slow for 50+ column files.
     missingness_top: list[dict[str, Any]] = []
-    for c in columns_raw[:200]:
-        row = con.execute(
-            f"""
-            SELECT
-              COUNT(*) AS n,
-              SUM(CASE WHEN "{c}" IS NULL OR TRIM(CAST("{c}" AS VARCHAR)) = '' THEN 1 ELSE 0 END) AS n_missing
-            FROM v
-            """
-        ).fetchone()
-        if row is None:
-            continue
-        n, nmiss = row
-        if n:
-            missingness_top.append({"column": c, "missing_pct": float(nmiss) / float(n) * 100.0})
+    cols_to_profile = columns_raw[:200]
+    if cols_to_profile:
+        case_exprs: list[str] = []
+        for c in cols_to_profile:
+            col_ref = f'"{c}"'
+            case_exprs.append(
+                f'SUM(CASE WHEN {col_ref} IS NULL OR TRIM(CAST({col_ref} AS VARCHAR)) = \'\' THEN 1 ELSE 0 END) AS "{c}__missing"'
+            )
 
-    missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
+        row = con.execute(
+            f"SELECT COUNT(*) AS n_total, {', '.join(case_exprs)} FROM v"
+        ).fetchone()
+        if row is not None:
+            n_total = int(row[0])
+            if n_total > 0:
+                for i, c in enumerate(cols_to_profile):
+                    nmiss = int(row[i + 1])
+                    if nmiss > 0:
+                        missingness_top.append({"column": c, "missing_pct": float(nmiss) / float(n_total) * 100.0})
+
+                missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
+
     return sample_rows, missingness_top
 
 

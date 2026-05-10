@@ -830,9 +830,8 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     else:
         preview_cfg = effective_read_cfg
 
-    read_opts = csv_read_option_strings(preview_cfg)
-    header_opt = "header=true"
-    opt_sql = f"union_by_name=true, {', '.join(read_opts)}, {header_opt}"
+    read_opts = csv_read_option_strings(preview_cfg, include_header_skip=True)
+    opt_sql = f"union_by_name=true, {', '.join(read_opts)}"
 
     try:
         with duckdb.connect(database=":memory:") as conn:

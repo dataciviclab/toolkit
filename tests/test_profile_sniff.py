@@ -4,8 +4,8 @@ import pytest
 import toolkit.profile.raw as profile_raw_module
 from toolkit.cli.cmd_profile import write_suggested_read_yml
 from toolkit.profile._column_profile import _build_mapping_suggestions
+from toolkit.core.csv_read import csv_read_option_strings
 from toolkit.profile.raw import (
-    _build_read_csv_opts,
     _profile_excel,
     build_suggested_read_cfg,
     profile_raw,
@@ -110,23 +110,25 @@ def test_profile_raw_writes_suggested_read_even_when_duckdb_sniff_fails(
 
 
 @pytest.mark.policy
-def test_build_read_csv_opts_keeps_header_and_skip_for_profiler():
-    opts = _build_read_csv_opts(
+def test_csv_read_option_strings_include_header_skip():
+    """csv_read_option_strings with include_header_skip=True must emit header and skip."""
+    opts = csv_read_option_strings(
         {
             "delim": ";",
             "encoding": "utf8",
             "header": False,
             "skip": 2,
             "max_line_size": 4096,
-        }
+        },
+        include_header_skip=True,
     )
 
-    assert "union_by_name=true" in opts
-    assert "sep=';'" in opts
-    assert "encoding='utf-8'" in opts
-    assert "max_line_size=4096" in opts
-    assert "header=false" in opts
-    assert "skip=2" in opts
+    opts_str = ", ".join(opts)
+    assert "sep=';'" in opts_str
+    assert "encoding='utf-8'" in opts_str
+    assert "max_line_size=4096" in opts_str
+    assert "header=false" in opts_str
+    assert "skip=2" in opts_str
 
 
 @pytest.mark.policy

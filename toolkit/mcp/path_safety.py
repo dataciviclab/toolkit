@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from lab_connectors.mcp.errors import McpError, ErrorCode
+from lab_connectors.mcp.errors import ErrorCode
 
 from toolkit.core.config import load_config
 from toolkit.mcp.errors import ToolkitClientError

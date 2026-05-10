@@ -10,7 +10,7 @@ from typing import cast
 
 from toolkit.cli.inspect._helpers import _payload_for_year
 from toolkit.mcp.contracts import InspectPathsResult
-from lab_connectors.mcp.errors import McpError, ErrorCode
+from lab_connectors.mcp.errors import ErrorCode
 
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import _safe_path

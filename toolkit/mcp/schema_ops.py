@@ -24,7 +24,7 @@ from toolkit.mcp._schema_utils import (
     _schema_from_parquet,
     _validation_summary_for_layer,
 )
-from lab_connectors.mcp.errors import McpError, ErrorCode
+from lab_connectors.mcp.errors import ErrorCode
 
 from toolkit.mcp.cli_adapter import inspect_paths
 from toolkit.mcp.errors import ToolkitClientError
@@ -97,7 +97,7 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
         except json.JSONDecodeError as exc:
             raise ToolkitClientError(
                 f"raw_profile.json malformato in {raw_profile_json}: {exc}",
-                code=ErrorCode.FILE_FORMAT_ERROR,
+                code=ErrorCode.ARTIFACT_UNREADABLE,
             ) from exc
     elif suggested_read_yml.exists():
         # Fallback: suggested_read.yml contains the same hints in YAML form
@@ -108,7 +108,7 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
         except yaml.YAMLError as exc:
             raise ToolkitClientError(
                 f"suggested_read.yml non valido in {suggested_read_yml}: {exc}",
-                code=ErrorCode.FILE_FORMAT_ERROR,
+                code=ErrorCode.ARTIFACT_UNREADABLE,
             ) from exc
         clean_section = raw_yaml.get("clean", {}) if isinstance(raw_yaml, dict) else {}
         read_section = clean_section.get("read", {}) if isinstance(clean_section, dict) else {}
@@ -130,7 +130,7 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
         raise ToolkitClientError(
             f"Profilo raw non trovato in {profile_path}. "
             "Nessun file raw_profile.json ne suggested_read.yml.",
-            code=ErrorCode.FILE_NOT_FOUND,
+            code=ErrorCode.ARTIFACT_NOT_FOUND,
         )
 
     # Ritorna un sottoinsieme leggibile: evita di restituire sample_rows intere
@@ -230,7 +230,7 @@ def list_runs(
             since_dt = datetime.fromisoformat(raw)
             if since_dt.tzinfo is None:
                 since_dt = since_dt.replace(tzinfo=timezone.utc)
-        except ValueError:
+        except ValueError as exc:
             raise ToolkitClientError(f"since must be a valid ISO datetime, got: {since}", code=ErrorCode.INVALID_PARAMS) from exc
 
     until_dt = None
@@ -240,7 +240,7 @@ def list_runs(
             until_dt = datetime.fromisoformat(raw)
             if until_dt.tzinfo is None:
                 until_dt = until_dt.replace(tzinfo=timezone.utc)
-        except ValueError:
+        except ValueError as exc:
             raise ToolkitClientError(f"until must be a valid ISO datetime, got: {until}", code=ErrorCode.INVALID_PARAMS) from exc
 
     valid_statuses = {"SUCCESS", "FAILED", "RUNNING", "DRY_RUN"}
@@ -310,7 +310,7 @@ def run_summary(
             since_dt = datetime.fromisoformat(raw)
             if since_dt.tzinfo is None:
                 since_dt = since_dt.replace(tzinfo=timezone.utc)
-        except ValueError:
+        except ValueError as exc:
             raise ToolkitClientError(f"since must be a valid ISO datetime, got: {since}", code=ErrorCode.INVALID_PARAMS) from exc
 
     until_dt: datetime | None = None
@@ -320,7 +320,7 @@ def run_summary(
             until_dt = datetime.fromisoformat(raw)
             if until_dt.tzinfo is None:
                 until_dt = until_dt.replace(tzinfo=timezone.utc)
-        except ValueError:
+        except ValueError as exc:
             raise ToolkitClientError(f"until must be a valid ISO datetime, got: {until}", code=ErrorCode.INVALID_PARAMS) from exc
 
     all_records = list_runs(run_dir, since=since_dt, until=until_dt, limit=None)
@@ -798,7 +798,7 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
 
     path = _safe_path(csv_path)
     if not path.exists():
-        raise ToolkitClientError(f"CSV non trovato: {path}")
+        raise ToolkitClientError(f"CSV non trovato: {path}", code=ErrorCode.ARTIFACT_NOT_FOUND)
 
     # Phase 1: pure sniff — same pipeline as profile_raw
     sniff_hints = sniff_source_file(path)
@@ -882,4 +882,4 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
                 ),
             }
     except Exception as exc:
-        raise ToolkitClientError(f"Lettura CSV fallita per {path}: {exc}", code=ErrorCode.FILE_FORMAT_ERROR) from exc
+        raise ToolkitClientError(f"Lettura CSV fallita per {path}: {exc}", code=ErrorCode.ARTIFACT_UNREADABLE) from exc

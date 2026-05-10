@@ -6,8 +6,7 @@ from pathlib import Path
 import pytest
 
 from toolkit.mcp import server as mcp_server
-from toolkit.mcp.errors import ErrorCode
-from toolkit.mcp.toolkit_client import ToolkitClientError
+from toolkit.mcp.errors import ErrorCode, ToolkitClientError
 
 
 def test_mcp_server_registers_expected_tools() -> None:
@@ -43,8 +42,6 @@ def test_tool_error_has_error_code_and_message(monkeypatch: pytest.MonkeyPatch) 
 
     The error dict must have 'error' (code string) and 'message' keys.
     """
-    from toolkit.mcp.errors import ToolkitClientError
-
     def raising_impl(config_path: str, year: int | None) -> dict[str, object]:
         raise ToolkitClientError("config non trovato", code=ErrorCode.CONFIG_NOT_FOUND)
 

@@ -5,9 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from lab_connectors.mcp import guard
-
 from toolkit.mcp import server as mcp_server
+from toolkit.mcp.errors import ErrorCode
 from toolkit.mcp.toolkit_client import ToolkitClientError
 
 
@@ -28,27 +27,49 @@ def test_mcp_server_registers_expected_tools() -> None:
     }
 
 
-def test_guard_returns_payload_on_success() -> None:
-    assert guard(lambda x: {"ok": x}, 123) == {"ok": 123}
+def test_tool_returns_payload_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Through a real tool implementation, guard passes payload through unchanged."""
+
+    def fake_impl(config_path: str, year: int | None) -> dict[str, object]:
+        return {"ok": True, "config_path": config_path, "year": year}
+
+    monkeypatch.setattr(mcp_server, "inspect_paths_impl", fake_impl)
+    result = mcp_server.toolkit_inspect_paths("dataset.yml", 2024)
+    assert result == {"ok": True, "config_path": "dataset.yml", "year": 2024}
 
 
-def test_guard_wraps_toolkit_client_error() -> None:
-    def boom() -> dict[str, str]:
-        raise ToolkitClientError("errore client")
+def test_tool_error_has_error_code_and_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ToolkitClientError raised by impl is caught by guard and returned as dict.
 
-    result = guard(boom)
+    The error dict must have 'error' (code string) and 'message' keys.
+    """
+    from toolkit.mcp.errors import ToolkitClientError
+
+    def raising_impl(config_path: str, year: int | None) -> dict[str, object]:
+        raise ToolkitClientError("config non trovato", code=ErrorCode.CONFIG_NOT_FOUND)
+
+    monkeypatch.setattr(mcp_server, "inspect_paths_impl", raising_impl)
+    result = mcp_server.toolkit_inspect_paths("dataset.yml", 2024)
+
+    assert "error" in result
+    assert "message" in result
+    assert result["error"] == "config_not_found"
+    assert "config non trovato" in result["message"]
+
+
+def test_unexpected_error_becomes_unexpected_with_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Any unexpected exception (not ToolkitClientError) is caught by guard and
+    returned as 'unexpected_error' with the original message.
+    """
+
+    def raising_impl(config_path: str, year: int | None) -> dict[str, object]:
+        raise ValueError("unexpected value")
+
+    monkeypatch.setattr(mcp_server, "inspect_paths_impl", raising_impl)
+    result = mcp_server.toolkit_inspect_paths("dataset.yml", 2024)
+
     assert result["error"] == "unexpected_error"
-    assert "errore client" in result["message"]
-
-
-def test_guard_does_not_swallow_unexpected_errors() -> None:
-    """guard() cattura OGNI eccezione e restituisce dict, non propaga."""
-    def boom() -> dict[str, str]:
-        raise ValueError("unexpected")
-
-    result = guard(boom)
-    assert result["error"] == "unexpected_error"
-    assert "unexpected" in result["message"]
+    assert "unexpected value" in result["message"]
 
 
 def test_toolkit_inspect_paths_passes_none_when_year_zero(monkeypatch: pytest.MonkeyPatch) -> None:

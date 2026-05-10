@@ -15,8 +15,15 @@ class ToolkitClientError(McpError):
 
     Ponte verso lab_connectors.mcp: eredita McpError, quindi
     ``guard()`` lo cattura come McpError e produce
-    ``{"error": "unexpected_error", "message": "..."}``.
+    ``{"error": code.value, "message": "..."}``.
+
+    Args:
+        message: human-readable description of the error.
+        code: tassonomic error code. Defaults to UNEXPECTED (conservative).
+              Call sites should use the most specific code available.
     """
 
-    def __init__(self, message: str) -> None:
-        super().__init__(ErrorCode.UNEXPECTED, message)
+    def __init__(
+        self, message: str, code: ErrorCode = ErrorCode.UNEXPECTED
+    ) -> None:
+        super().__init__(code, message)

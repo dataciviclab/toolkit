@@ -199,7 +199,11 @@ def robust_preset(read_cfg: dict[str, Any] | None) -> dict[str, Any]:
     return robust
 
 
-def csv_read_option_strings(read_cfg: dict[str, Any]) -> list[str]:
+def csv_read_option_strings(
+    read_cfg: dict[str, Any],
+    *,
+    include_header_skip: bool = False,
+) -> list[str]:
     """Build a list of DuckDB read_csv option strings from a config dict.
 
     This is the single canonical place where read_csv options are converted
@@ -212,9 +216,11 @@ def csv_read_option_strings(read_cfg: dict[str, Any]) -> list[str]:
     ``parallel``, ``quote``, ``escape``, ``comment``, ``max_line_size``,
     ``columns``.
 
-    ``header`` and ``skip`` are intentionally NOT handled here because their
-    effective values can be overridden at runtime by the clean layer when
-    explicit columns are provided (see ``duckdb_read._csv_read_options``).
+    ``header`` and ``skip`` are intentionally excluded by default because
+    their effective values can be overridden at runtime by the clean layer
+    when explicit columns are provided (see ``duckdb_read._csv_read_options``).
+    Pass ``include_header_skip=True`` to include them — needed by profiling
+    and preview code that reads files with explicit parse parameters.
     """
     opts: list[str] = []
 
@@ -281,5 +287,15 @@ def csv_read_option_strings(read_cfg: dict[str, Any]) -> list[str]:
                 [f"'{sql_str(name)}': '{sql_str(dtype)}'" for name, dtype in columns.items()]
             )
             opts.append(f"columns={{ {cols_sql} }}")
+
+    if include_header_skip:
+        header = read_cfg.get("header", True)
+        opts.append(f"header={'true' if bool(header) else 'false'}")
+        skip_n = read_cfg.get("skip")
+        # Skip 0 is the DuckDB default; explicitly passing skip=0 can
+        # confuse DuckDB's CSV sniffing (known behaviour). Only emit
+        # skip when it has a real value.
+        if skip_n:
+            opts.append(f"skip={int(skip_n)}")
 
     return opts

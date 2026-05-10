@@ -128,19 +128,6 @@ def sniff_source_file(filepath: Path) -> Dict[str, Any]:
 build_profile_hints = sniff_source_file
 
 
-def _build_read_csv_opts(read_cfg: Dict[str, Any]) -> str:
-    opts = ["union_by_name=true"] + csv_read_option_strings(read_cfg)
-
-    header = read_cfg.get("header", True)
-    opts.append(f"header={'true' if bool(header) else 'false'}")
-
-    skip_n = read_cfg.get("skip")
-    if skip_n is not None:
-        opts.append(f"skip={int(skip_n)}")
-
-    return ", ".join(opts)
-
-
 def build_suggested_read_cfg(
     profile: "RawProfile | Dict[str, Any]",
     read_cfg: Optional[Dict[str, Any]] = None,
@@ -250,7 +237,8 @@ def _profile_view(
     *,
     effective_read_cfg: dict[str, Any],
 ) -> None:
-    opt_sql = _build_read_csv_opts(effective_read_cfg)
+    opts = csv_read_option_strings(effective_read_cfg, include_header_skip=True)
+    opt_sql = f"union_by_name=true, {', '.join(opts)}"
     con.execute(
         f"CREATE OR REPLACE VIEW v AS SELECT * FROM read_csv('{sql_str(str(file0))}', {opt_sql});"
     )

@@ -12,6 +12,7 @@ from typing import Any
 
 import duckdb
 
+from lab_connectors.mcp.errors import ErrorCode
 from toolkit.mcp.errors import ToolkitClientError
 
 
@@ -27,7 +28,7 @@ def _schema_from_parquet(parquet_path: Path) -> dict[str, Any]:
         ToolkitClientError: if the file doesn't exist or can't be read.
     """
     if not parquet_path.exists():
-        raise ToolkitClientError(f"Parquet non trovato: {parquet_path}")
+        raise ToolkitClientError(f"Parquet non trovato: {parquet_path}", code=ErrorCode.PARQUET_NOT_FOUND)
     relation = f"read_parquet('{_sql_literal(str(parquet_path))}')"
     try:
         with duckdb.connect(database=":memory:") as conn:
@@ -35,7 +36,8 @@ def _schema_from_parquet(parquet_path: Path) -> dict[str, Any]:
             describe_rows = conn.execute(f"DESCRIBE SELECT * FROM {relation}").fetchall()
     except Exception as exc:
         raise ToolkitClientError(
-            f"Lettura schema parquet fallita per {parquet_path}: {exc}"
+            f"Lettura schema parquet fallita per {parquet_path}: {exc}",
+            code=ErrorCode.DUCKDB_ERROR,
         ) from exc
 
     columns = [{"name": row[0], "type": row[1]} for row in describe_rows]

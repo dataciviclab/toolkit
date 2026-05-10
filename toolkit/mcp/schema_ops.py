@@ -24,6 +24,8 @@ from toolkit.mcp._schema_utils import (
     _schema_from_parquet,
     _validation_summary_for_layer,
 )
+from lab_connectors.mcp.errors import ErrorCode
+
 from toolkit.mcp.cli_adapter import inspect_paths
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import _load_cfg, _safe_path
@@ -35,7 +37,7 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
     config, _cfg = _load_cfg(config_path)
     safe_layer = (layer or "clean").strip().lower()
     if safe_layer not in {"raw", "clean", "mart"}:
-        raise ToolkitClientError("layer deve essere uno tra: raw, clean, mart")
+        raise ToolkitClientError("layer deve essere uno tra: raw, clean, mart", code=ErrorCode.INVALID_PARAMS)
 
     if safe_layer == "raw":
         years = list(_cfg.years or [])
@@ -56,7 +58,7 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
     else:
         outputs = paths["paths"]["mart"].get("outputs") or []
         if not outputs:
-            raise ToolkitClientError("Nessun output mart risolto dal toolkit")
+            raise ToolkitClientError("Nessun output mart risolto dal toolkit", code=ErrorCode.PARQUET_NOT_FOUND)
         parquet_path = Path(outputs[0])
         payload = _schema_from_parquet(parquet_path)
         payload["available_outputs"] = outputs
@@ -94,7 +96,8 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
             profile = json.loads(raw_profile_json.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise ToolkitClientError(
-                f"raw_profile.json malformato in {raw_profile_json}: {exc}"
+                f"raw_profile.json malformato in {raw_profile_json}: {exc}",
+                code=ErrorCode.ARTIFACT_UNREADABLE,
             ) from exc
     elif suggested_read_yml.exists():
         # Fallback: suggested_read.yml contains the same hints in YAML form
@@ -104,7 +107,8 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
             raw_yaml = yaml.safe_load(suggested_read_yml.read_text(encoding="utf-8"))
         except yaml.YAMLError as exc:
             raise ToolkitClientError(
-                f"suggested_read.yml non valido in {suggested_read_yml}: {exc}"
+                f"suggested_read.yml non valido in {suggested_read_yml}: {exc}",
+                code=ErrorCode.ARTIFACT_UNREADABLE,
             ) from exc
         clean_section = raw_yaml.get("clean", {}) if isinstance(raw_yaml, dict) else {}
         read_section = clean_section.get("read", {}) if isinstance(clean_section, dict) else {}
@@ -125,7 +129,8 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
     else:
         raise ToolkitClientError(
             f"Profilo raw non trovato in {profile_path}. "
-            "Nessun file raw_profile.json ne suggested_read.yml."
+            "Nessun file raw_profile.json ne suggested_read.yml.",
+            code=ErrorCode.ARTIFACT_NOT_FOUND,
         )
 
     # Ritorna un sottoinsieme leggibile: evita di restituire sample_rows intere
@@ -225,8 +230,8 @@ def list_runs(
             since_dt = datetime.fromisoformat(raw)
             if since_dt.tzinfo is None:
                 since_dt = since_dt.replace(tzinfo=timezone.utc)
-        except ValueError:
-            raise ToolkitClientError(f"since must be a valid ISO datetime, got: {since}")
+        except ValueError as exc:
+            raise ToolkitClientError(f"since must be a valid ISO datetime, got: {since}", code=ErrorCode.INVALID_PARAMS) from exc
 
     until_dt = None
     if until:
@@ -235,12 +240,12 @@ def list_runs(
             until_dt = datetime.fromisoformat(raw)
             if until_dt.tzinfo is None:
                 until_dt = until_dt.replace(tzinfo=timezone.utc)
-        except ValueError:
-            raise ToolkitClientError(f"until must be a valid ISO datetime, got: {until}")
+        except ValueError as exc:
+            raise ToolkitClientError(f"until must be a valid ISO datetime, got: {until}", code=ErrorCode.INVALID_PARAMS) from exc
 
     valid_statuses = {"SUCCESS", "FAILED", "RUNNING", "DRY_RUN"}
     if status and status not in valid_statuses:
-        raise ToolkitClientError(f"status must be one of: {', '.join(sorted(valid_statuses))}")
+        raise ToolkitClientError(f"status must be one of: {', '.join(sorted(valid_statuses))}", code=ErrorCode.INVALID_PARAMS)
 
     limit = limit if limit is not None else 20
 
@@ -305,8 +310,8 @@ def run_summary(
             since_dt = datetime.fromisoformat(raw)
             if since_dt.tzinfo is None:
                 since_dt = since_dt.replace(tzinfo=timezone.utc)
-        except ValueError:
-            raise ToolkitClientError(f"since must be a valid ISO datetime, got: {since}")
+        except ValueError as exc:
+            raise ToolkitClientError(f"since must be a valid ISO datetime, got: {since}", code=ErrorCode.INVALID_PARAMS) from exc
 
     until_dt: datetime | None = None
     if until:
@@ -315,8 +320,8 @@ def run_summary(
             until_dt = datetime.fromisoformat(raw)
             if until_dt.tzinfo is None:
                 until_dt = until_dt.replace(tzinfo=timezone.utc)
-        except ValueError:
-            raise ToolkitClientError(f"until must be a valid ISO datetime, got: {until}")
+        except ValueError as exc:
+            raise ToolkitClientError(f"until must be a valid ISO datetime, got: {until}", code=ErrorCode.INVALID_PARAMS) from exc
 
     all_records = list_runs(run_dir, since=since_dt, until=until_dt, limit=None)
 
@@ -793,7 +798,7 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
 
     path = _safe_path(csv_path)
     if not path.exists():
-        raise ToolkitClientError(f"CSV non trovato: {path}")
+        raise ToolkitClientError(f"CSV non trovato: {path}", code=ErrorCode.ARTIFACT_NOT_FOUND)
 
     # Phase 1: pure sniff — same pipeline as profile_raw
     sniff_hints = sniff_source_file(path)
@@ -877,4 +882,4 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
                 ),
             }
     except Exception as exc:
-        raise ToolkitClientError(f"Lettura CSV fallita per {path}: {exc}") from exc
+        raise ToolkitClientError(f"Lettura CSV fallita per {path}: {exc}", code=ErrorCode.ARTIFACT_UNREADABLE) from exc

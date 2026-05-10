@@ -10,6 +10,8 @@ from typing import cast
 
 from toolkit.cli.inspect._helpers import _payload_for_year
 from toolkit.mcp.contracts import InspectPathsResult
+from lab_connectors.mcp.errors import ErrorCode
+
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import _safe_path
 from toolkit.core.config import load_config
@@ -29,11 +31,12 @@ def inspect_paths(config_path: str, year: int | None = None) -> InspectPathsResu
         if len(years) > 1:
             raise ToolkitClientError(
                 "year è obbligatorio per dataset multi-year. "
-                f"Trovati {len(years)} anni: {years}. Usa --year per specificarne uno."
+                f"Trovati {len(years)} anni: {years}. Usa --year per specificarne uno.",
+                code=ErrorCode.INVALID_PARAMS,
             )
         year = years[0] if years else None
 
     if year is None:
-        raise ToolkitClientError("Nessun anno configurato nel dataset")
+        raise ToolkitClientError("Nessun anno configurato nel dataset", code=ErrorCode.CONFIG_NOT_FOUND)
 
     return cast(InspectPathsResult, _payload_for_year(cfg, year))

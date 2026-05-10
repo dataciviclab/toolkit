@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from lab_connectors.mcp.errors import ErrorCode
+
 from toolkit.core.config import load_config
 from toolkit.mcp.errors import ToolkitClientError
 
@@ -28,7 +30,7 @@ def _safe_path(config_path: str | Path) -> Path:
     if not path.is_absolute():
         path = (WORKSPACE_ROOT / path).resolve()
     if not path.exists():
-        raise ToolkitClientError(f"Config non trovata: {path}")
+        raise ToolkitClientError(f"Config non trovata: {path}", code=ErrorCode.CONFIG_NOT_FOUND)
     return path
 
 
@@ -37,5 +39,5 @@ def _load_cfg(config_path: str | Path) -> tuple[Path, Any]:
     try:
         cfg = load_config(str(config), strict_config=False)
     except Exception as exc:
-        raise ToolkitClientError(f"Load config fallito per {config}: {exc}") from exc
+        raise ToolkitClientError(f"Load config fallito per {config}: {exc}", code=ErrorCode.CONFIG_NOT_FOUND) from exc
     return config, cfg

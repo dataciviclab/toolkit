@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from lab_connectors.mcp import guard
+
 from toolkit.mcp import server as mcp_server
 from toolkit.mcp.toolkit_client import ToolkitClientError
 
@@ -27,22 +29,26 @@ def test_mcp_server_registers_expected_tools() -> None:
 
 
 def test_guard_returns_payload_on_success() -> None:
-    assert mcp_server._guard(lambda x: {"ok": x}, 123) == {"ok": 123}
+    assert guard(lambda x: {"ok": x}, 123) == {"ok": 123}
 
 
 def test_guard_wraps_toolkit_client_error() -> None:
     def boom() -> dict[str, str]:
         raise ToolkitClientError("errore client")
 
-    assert mcp_server._guard(boom) == {"error": "errore client"}
+    result = guard(boom)
+    assert result["error"] == "unexpected_error"
+    assert "errore client" in result["message"]
 
 
 def test_guard_does_not_swallow_unexpected_errors() -> None:
+    """guard() cattura OGNI eccezione e restituisce dict, non propaga."""
     def boom() -> dict[str, str]:
         raise ValueError("unexpected")
 
-    with pytest.raises(ValueError, match="unexpected"):
-        mcp_server._guard(boom)
+    result = guard(boom)
+    assert result["error"] == "unexpected_error"
+    assert "unexpected" in result["message"]
 
 
 def test_toolkit_inspect_paths_passes_none_when_year_zero(monkeypatch: pytest.MonkeyPatch) -> None:

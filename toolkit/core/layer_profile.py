@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+from lab_connectors.duckdb import safe_connect
 
 from toolkit.core.sql_utils import q_ident
 
@@ -23,8 +24,7 @@ def profile_parquet_files(files: list[Path]) -> dict[str, Any]:
     if not files:
         raise ValueError("Cannot profile empty parquet file list")
 
-    con = duckdb.connect(":memory:")
-    try:
+    with safe_connect() as con:
         if len(files) == 1:
             con.execute(
                 f"CREATE VIEW profiled_input AS SELECT * FROM read_parquet('{files[0].as_posix()}')"
@@ -35,8 +35,6 @@ def profile_parquet_files(files: list[Path]) -> dict[str, Any]:
                 f"CREATE VIEW profiled_input AS SELECT * FROM read_parquet([{paths}])"
             )
         return profile_relation(con, "profiled_input")
-    finally:
-        con.close()
 
 
 def compare_layer_profiles(

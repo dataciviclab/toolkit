@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+from lab_connectors.duckdb import safe_connect
 
 from toolkit.core.artifacts import resolve_artifact_policy, should_write
 from toolkit.core.config import ensure_dict
@@ -86,8 +87,7 @@ def run_cross_year(
     if not isinstance(tables, list) or not tables:
         raise ValueError("cross_year.tables missing or empty in dataset.yml")
 
-    con = duckdb.connect(":memory:")
-    try:
+    with safe_connect() as con:
         template_ctx = {
             "dataset": dataset,
             "years": ",".join(str(year) for year in years),
@@ -142,8 +142,6 @@ def run_cross_year(
                     "source_inputs": [serialize_metadata_path(path, root_dir) for path in files],
                 }
             )
-    finally:
-        con.close()
 
     outputs = [file_record(path) for path in written]
     metadata_payload = {

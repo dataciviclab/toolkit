@@ -7,7 +7,7 @@ import re as _re
 from pathlib import Path
 from typing import Any
 
-import duckdb
+from lab_connectors.duckdb import safe_connect
 
 from toolkit.clean._column_rules import (
     _check_max_null_pct,
@@ -106,8 +106,7 @@ def validate_clean(
             summary={"path": path_value},
         )
 
-    con = duckdb.connect(":memory:")
-    try:
+    with safe_connect() as con:
         con.execute(f"CREATE VIEW t AS SELECT * FROM read_parquet('{p.as_posix()}')")
 
         cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
@@ -137,8 +136,6 @@ def validate_clean(
         err_warn = _check_ranges(con, "t", ranges, cols)
         errors.extend(err_warn[0])
         warnings.extend(err_warn[1])
-    finally:
-        con.close()
 
     return ValidationResult(
         ok=len(errors) == 0,
@@ -346,8 +343,7 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
                 break
         if _raw_file is not None:
             try:
-                _con = duckdb.connect(":memory:")
-                try:
+                with safe_connect() as _con:
                     if _raw_file.suffix == ".parquet":
                         _query = f'DESCRIBE SELECT * FROM read_parquet("{_raw_file.as_posix()}")'
                     else:
@@ -382,8 +378,6 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
                         raw_missing_columns = sorted(
                             c for c in _expected_cols if c not in _actual_set
                         )
-                finally:
-                    _con.close()
             except Exception:
                 pass
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import duckdb
+from lab_connectors.duckdb import safe_connect
 
 from toolkit.clean.duckdb_read import read_raw_to_relation, sql_path
 from toolkit.core.layer_profile import profile_relation
@@ -39,8 +39,7 @@ def _run_sql(
     Returns:
         tuple of (source, params_used, output_profile)
     """
-    con = duckdb.connect(":memory:")
-    try:
+    with safe_connect() as con:
         read_info = read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
         con.execute(f"CREATE TABLE clean_out AS {sql_query}")
         output_profile = profile_relation(con, "clean_out")
@@ -49,5 +48,3 @@ def _run_sql(
             f"COPY clean_out TO '{sql_path(output_path)}' (FORMAT PARQUET);"
         )
         return read_info.source, read_info.params_used, output_profile
-    finally:
-        con.close()

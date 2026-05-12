@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import duckdb
+from lab_connectors.duckdb import safe_connect
 
 from toolkit.core.csv_read import (
     csv_read_option_strings,
@@ -383,58 +384,57 @@ def profile_with_read_cfg(
     warnings = list(sniff_hints.get("warnings") or [])
     robust_read_suggested = False
 
-    con = duckdb.connect(":memory:")
     try:
-        try:
-            _profile_view(
-                con,
-                file0,
-                effective_read_cfg=effective_read_cfg,
-            )
-        except Exception as e:
-            warnings.append(f"profile_read_retry: {type(e).__name__}: {e}")
-            robust_read_suggested = True
-            fallback_cfg = robust_preset(effective_read_cfg)
-            fallback_cfg.setdefault("auto_detect", False)
-            _profile_view(
-                con,
-                file0,
-                effective_read_cfg=fallback_cfg,
-            )
-
-        columns_raw, columns_norm, duckdb_types = _describe_columns(con)
-
-        # Detect column-count mismatch between header and data.
-        # When true_header_line (ground truth at line 0) has fewer tokens
-        # than what DESCRIBE returns, the file has more columns in data
-        # rows than in the header row (IRPEF comunale pattern:
-        # header=50 cols, data rows=52 cols).
-        if true_header_line is not None:
-            true_header_tokens = true_header_line.count(effective_read_cfg.get("delim") or ";") + 1
-            if len(columns_raw) > true_header_tokens:
-                warnings.append(
-                    f"header_data_cols_mismatch: header has {true_header_tokens} tokens, "
-                    f"data has {len(columns_raw)} columns; retrying with null_padding=true"
+        with safe_connect() as con:
+            try:
+                _profile_view(
+                    con,
+                    file0,
+                    effective_read_cfg=effective_read_cfg,
                 )
+            except Exception as e:
+                warnings.append(f"profile_read_retry: {type(e).__name__}: {e}")
                 robust_read_suggested = True
                 fallback_cfg = robust_preset(effective_read_cfg)
                 fallback_cfg.setdefault("auto_detect", False)
-                fallback_cfg.setdefault("null_padding", True)
                 _profile_view(
                     con,
                     file0,
                     effective_read_cfg=fallback_cfg,
                 )
-                columns_raw, columns_norm, duckdb_types = _describe_columns(con)
 
-        duckdb_type_map: dict[str, str] = {
-            raw: dtype for raw, dtype in zip(columns_raw, duckdb_types)
-        }
-        sample_rows, missingness_top = _sample_profile_rows(con, columns_raw)
-        mapping_suggestions = _build_mapping_suggestions(
-            columns_raw, sample_rows, duckdb_types=duckdb_type_map
-        )
+            columns_raw, columns_norm, duckdb_types = _describe_columns(con)
 
+            # Detect column-count mismatch between header and data.
+            # When true_header_line (ground truth at line 0) has fewer tokens
+            # than what DESCRIBE returns, the file has more columns in data
+            # rows than in the header row (IRPEF comunale pattern:
+            # header=50 cols, data rows=52 cols).
+            if true_header_line is not None:
+                true_header_tokens = true_header_line.count(effective_read_cfg.get("delim") or ";") + 1
+                if len(columns_raw) > true_header_tokens:
+                    warnings.append(
+                        f"header_data_cols_mismatch: header has {true_header_tokens} tokens, "
+                        f"data has {len(columns_raw)} columns; retrying with null_padding=true"
+                    )
+                    robust_read_suggested = True
+                    fallback_cfg = robust_preset(effective_read_cfg)
+                    fallback_cfg.setdefault("auto_detect", False)
+                    fallback_cfg.setdefault("null_padding", True)
+                    _profile_view(
+                        con,
+                        file0,
+                        effective_read_cfg=fallback_cfg,
+                    )
+                    columns_raw, columns_norm, duckdb_types = _describe_columns(con)
+
+            duckdb_type_map: dict[str, str] = {
+                raw: dtype for raw, dtype in zip(columns_raw, duckdb_types)
+            }
+            sample_rows, missingness_top = _sample_profile_rows(con, columns_raw)
+            mapping_suggestions = _build_mapping_suggestions(
+                columns_raw, sample_rows, duckdb_types=duckdb_type_map
+            )
     except Exception as e:
         warnings.append(f"profile_failed: {type(e).__name__}: {e}")
         warnings.append(
@@ -444,8 +444,6 @@ def profile_with_read_cfg(
         sample_rows, missingness_top = [], []
         mapping_suggestions = {}
         robust_read_suggested = True
-    finally:
-        con.close()
 
     return {
         "columns_raw": columns_raw,

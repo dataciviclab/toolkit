@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-import duckdb
+from lab_connectors.duckdb import safe_connect
 
 from toolkit.core.metadata import file_record, write_layer_manifest
 from toolkit.core.paths import layer_dataset_dir, to_root_relative
@@ -44,8 +44,7 @@ def validate_cross_outputs(
     if missing:
         errors.append(f"Missing required CROSS tables: {missing}")
 
-    con = duckdb.connect(":memory:")
-    try:
+    with safe_connect() as con:
         row_counts: dict[str, int] = {}
         for path in existing_files:
             try:
@@ -54,8 +53,6 @@ def validate_cross_outputs(
                 )
             except Exception as exc:
                 warnings.append(f"Could not count rows for {path.name}: {exc}")
-    finally:
-        con.close()
 
     return ValidationResult(
         ok=len(errors) == 0,

@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import duckdb
+from lab_connectors.duckdb import safe_connect
 
 from toolkit.clean.duckdb_read import read_raw_to_relation
 from toolkit.core.layer_profile import profile_relation
@@ -25,9 +25,6 @@ def _profile_raw_input(
     read_mode: str,
     logger,
 ) -> dict[str, Any]:
-    con = duckdb.connect(":memory:")
-    try:
+    with safe_connect() as con:
         read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
         return profile_relation(con, "raw_input")
-    finally:
-        con.close()

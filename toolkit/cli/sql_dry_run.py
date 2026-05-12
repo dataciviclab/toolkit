@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 import duckdb
+from lab_connectors.duckdb import safe_connect
 
 from toolkit.clean.run import _load_clean_sql
 from toolkit.core.config import ensure_dict
@@ -138,11 +139,8 @@ def validate_sql_dry_run(cfg, *, year: int, layers: list[str]) -> None:
     if not any(layer in {"clean", "mart"} for layer in layers):
         return
 
-    con = duckdb.connect(":memory:")
-    try:
+    with safe_connect() as con:
         if cfg.clean.get("sql"):
             _build_clean_preview(cfg, year=year, con=con)
         if "mart" in layers:
             _validate_mart_sql(cfg, year=year, con=con)
-    finally:
-        con.close()

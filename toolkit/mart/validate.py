@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-import duckdb
+from lab_connectors.duckdb import safe_connect
 
 from toolkit.core.config_models import MartTableRuleConfig, MartValidationSpec
 from toolkit.core.metadata import write_layer_manifest
@@ -79,108 +79,106 @@ def validate_mart(
                 f"{orphan_rules}"
             )
 
-    con = duckdb.connect(":memory:")
-    row_counts: dict[str, int] = {}
-    per_table: dict[str, Any] = {}
+    with safe_connect() as con:
+        row_counts: dict[str, int] = {}
+        per_table: dict[str, Any] = {}
 
-    for p in existing_files:
-        name = p.stem
+        for p in existing_files:
+            name = p.stem
 
-        try:
-            rc = int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{p.as_posix()}')").fetchone()[0])
-            row_counts[name] = rc
-        except Exception as e:
-            warnings.append(f"Could not count rows for {p.name}: {e}")
-            continue
-
-        rules = table_rules.get(name)
-        if not rules:
-            continue
-
-        min_rows = rules.min_rows
-        if min_rows is not None and rc < min_rows:
-            errors.append(f"[{name}] row_count too small: {rc} < {min_rows}")
-
-        con.execute(f"CREATE OR REPLACE VIEW t AS SELECT * FROM read_parquet('{p.as_posix()}')")
-        cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
-
-        # required columns
-        req_cols = rules.required_columns
-        required_result = required_columns_check(cols, req_cols)
-        errors.extend([f"[{name}] {error}" for error in required_result.errors])
-
-        # not null
-        for c in rules.not_null:
-            if c not in cols:
-                warnings.append(f"[{name}] Not-null rule column missing: '{c}'")
-                continue
-            qc = q_ident(c)
-            nnull = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {qc} IS NULL").fetchone()[0])
-            if nnull > 0:
-                errors.append(f"[{name}] Column '{c}' has NULLs: {nnull}")
-
-        # primary key duplicates
-        pk = rules.primary_key
-        if pk:
-            if not all(c in cols for c in pk):
-                warnings.append(f"[{name}] Primary key columns not all present: {pk}")
-            else:
-                key_expr = ", ".join(q_ident(c) for c in pk)
-                dup_groups = int(
-                    con.execute(
-                        f"""
-                        SELECT COUNT(*) FROM (
-                          SELECT {key_expr}, COUNT(*) AS n
-                          FROM t
-                          GROUP BY {key_expr}
-                          HAVING COUNT(*) > 1
-                        ) d
-                        """
-                    ).fetchone()[0]
-                )
-                if dup_groups > 0:
-                    errors.append(f"[{name}] PK duplicates for {pk}: groups={dup_groups}")
-
-        # ranges (violation = below min OR above max)
-        for c, rule in rules.ranges.items():
-            if c not in cols:
-                warnings.append(f"[{name}] Range rule column missing: '{c}'")
+            try:
+                rc = int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{p.as_posix()}')").fetchone()[0])
+                row_counts[name] = rc
+            except Exception as e:
+                warnings.append(f"Could not count rows for {p.name}: {e}")
                 continue
 
-            qc = q_ident(c)
-            violations: list[str] = []
-            if rule.min is not None:
-                violations.append(f"{qc} < {rule.min}")
-            if rule.max is not None:
-                violations.append(f"{qc} > {rule.max}")
-
-            if not violations:
-                warnings.append(f"[{name}] Range rule for '{c}' has no min/max, skipping")
+            rules = table_rules.get(name)
+            if not rules:
                 continue
 
-            where = f"{qc} IS NOT NULL AND (" + " OR ".join(violations) + ")"
-            bad = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {where}").fetchone()[0])
-            if bad > 0:
-                errors.append(
-                    f"[{name}] Range check failed for '{c}': bad_rows={bad} "
-                    f"rules={{'min': {rule.min}, 'max': {rule.max}}}"
-                )
+            min_rows = rules.min_rows
+            if min_rows is not None and rc < min_rows:
+                errors.append(f"[{name}] row_count too small: {rc} < {min_rows}")
 
-        per_table[name] = {
-            "columns": cols,
-            "rules": {
-                "required_columns": rules.required_columns,
-                "not_null": rules.not_null,
-                "primary_key": rules.primary_key,
-                "ranges": {
-                    column: {"min": range_rule.min, "max": range_rule.max}
-                    for column, range_rule in rules.ranges.items()
+            con.execute(f"CREATE OR REPLACE VIEW t AS SELECT * FROM read_parquet('{p.as_posix()}')")
+            cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
+
+            # required columns
+            req_cols = rules.required_columns
+            required_result = required_columns_check(cols, req_cols)
+            errors.extend([f"[{name}] {error}" for error in required_result.errors])
+
+            # not null
+            for c in rules.not_null:
+                if c not in cols:
+                    warnings.append(f"[{name}] Not-null rule column missing: '{c}'")
+                    continue
+                qc = q_ident(c)
+                nnull = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {qc} IS NULL").fetchone()[0])
+                if nnull > 0:
+                    errors.append(f"[{name}] Column '{c}' has NULLs: {nnull}")
+
+            # primary key duplicates
+            pk = rules.primary_key
+            if pk:
+                if not all(c in cols for c in pk):
+                    warnings.append(f"[{name}] Primary key columns not all present: {pk}")
+                else:
+                    key_expr = ", ".join(q_ident(c) for c in pk)
+                    dup_groups = int(
+                        con.execute(
+                            f"""
+                            SELECT COUNT(*) FROM (
+                              SELECT {key_expr}, COUNT(*) AS n
+                              FROM t
+                              GROUP BY {key_expr}
+                              HAVING COUNT(*) > 1
+                            ) d
+                            """
+                        ).fetchone()[0]
+                    )
+                    if dup_groups > 0:
+                        errors.append(f"[{name}] PK duplicates for {pk}: groups={dup_groups}")
+
+            # ranges (violation = below min OR above max)
+            for c, rule in rules.ranges.items():
+                if c not in cols:
+                    warnings.append(f"[{name}] Range rule column missing: '{c}'")
+                    continue
+
+                qc = q_ident(c)
+                violations: list[str] = []
+                if rule.min is not None:
+                    violations.append(f"{qc} < {rule.min}")
+                if rule.max is not None:
+                    violations.append(f"{qc} > {rule.max}")
+
+                if not violations:
+                    warnings.append(f"[{name}] Range rule for '{c}' has no min/max, skipping")
+                    continue
+
+                where = f"{qc} IS NOT NULL AND (" + " OR ".join(violations) + ")"
+                bad = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {where}").fetchone()[0])
+                if bad > 0:
+                    errors.append(
+                        f"[{name}] Range check failed for '{c}': bad_rows={bad} "
+                        f"rules={{'min': {rule.min}, 'max': {rule.max}}}"
+                    )
+
+            per_table[name] = {
+                "columns": cols,
+                "rules": {
+                    "required_columns": rules.required_columns,
+                    "not_null": rules.not_null,
+                    "primary_key": rules.primary_key,
+                    "ranges": {
+                        column: {"min": range_rule.min, "max": range_rule.max}
+                        for column, range_rule in rules.ranges.items()
+                    },
+                    "min_rows": rules.min_rows,
                 },
-                "min_rows": rules.min_rows,
-            },
-        }
-
-    con.close()
+            }
 
     return ValidationResult(
         ok=len(errors) == 0,

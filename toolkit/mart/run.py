@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-import duckdb
+from lab_connectors.duckdb import safe_connect
 
 from toolkit.core.artifacts import resolve_artifact_policy, should_write
 from toolkit.core.config import ensure_dict
@@ -52,8 +52,7 @@ def run_mart(
             raise FileNotFoundError(f"No CLEAN parquet found in {clean_dir}")
     clean_input_profile = profile_parquet_files(clean_files) if clean_files else None
 
-    con = duckdb.connect(":memory:")
-    try:
+    with safe_connect() as con:
         if clean_files:
             # clean_input view
             if len(clean_files) == 1:
@@ -144,8 +143,6 @@ def run_mart(
                     "output": serialize_metadata_path(out, root_dir),
                 }
             )
-    finally:
-        con.close()
 
     outputs = [file_record(p) for p in written]
     metadata_payload = {

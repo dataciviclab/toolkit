@@ -106,6 +106,7 @@ class DatasetBlock(BaseModel):
 
     name: str
     years: list[int]
+    source_id: str | None = None
     time_coverage: TimeCoverage | None = None
 
 

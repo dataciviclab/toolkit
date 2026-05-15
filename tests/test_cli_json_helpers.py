@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from toolkit.cli import cmd_inspect, cmd_status, common
+from toolkit.cli import cmd_inspect, common
 
 
 def test_cmd_status_read_json_returns_none_on_invalid_json(tmp_path: Path) -> None:

@@ -110,6 +110,31 @@ Note pratiche per `sdmx`:
 - in v1 i `filters` sono supportati solo sulle dimensioni di serie, non su `TIME_PERIOD`
 - il filtro temporale va applicato nel layer `clean.sql` (per esempio `WHERE TIME_PERIOD = '2024'`), non in `raw.sources[].args.filters`
 - il plugin restituisce un CSV normalizzato con colonne `DIM`, `DIM_label` e `value`
+
+Esempio `http_post_file`:
+
+```yaml
+raw:
+  sources:
+    - name: pensioni_dag
+      type: http_post_file
+      client:
+        timeout: 120
+        retries: 2
+      args:
+        url: "https://datipensioni.mef.gov.it/datipensioni/downloadFile"
+        post_data:
+          filename: "Dati_Tipo_Pensione_totale.csv"
+          categoria: "pensioni"
+        filename: "Dati_Tipo_Pensione_totale.csv"
+      primary: true
+```
+
+Note pratiche per `http_post_file`:
+
+- i parametri del form POST si dichiarano in `args.post_data` come coppie chiave-valore
+- il retry è sicuro solo per endpoint idempotenti (download file): per POST non-idempotenti impostare `client.retries: 0`
+- il resto del comportamento (infer estensione, extractor, caching) è identico a `http_file`
 ## clean
 
 | Campo | Tipo | Default |

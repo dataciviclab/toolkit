@@ -156,6 +156,7 @@ esegue le trasformazioni SQL su DuckDB e produce output in `root/data/`.
 | `raw.sources[].type` | Fonte |
 |---|---|
 | `http_file` | File da URL HTTP(S), anche zippato |
+| `http_post_file` | File da URL HTTP(S) via POST con form-encoded body |
 | `local_file` | File sul filesystem locale |
 | `ckan` | Dataset da portali CKAN (via API) |
 | `sdmx` | Flussi SDMX (es. ISTAT) |

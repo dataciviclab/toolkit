@@ -348,6 +348,7 @@ cross_year:
     assert "missing_columns=value" in result.output
     assert "mart: state=failed warnings=1 errors=1" in result.output
     assert "missing_tables=mart_missing" in result.output
+    assert "cross_year: state=passed warnings=0 errors=0" in result.output
 
 
 def test_status_reports_layer_profiles_from_metadata(tmp_path: Path, monkeypatch) -> None:

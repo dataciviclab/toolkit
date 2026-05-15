@@ -222,6 +222,22 @@ def status(
         )
 
     _print_validation_summaries(layers)
+
+    # cross_year
+    if bool((cfg.cross_year or {}).get("tables")):
+        from toolkit.core.paths import layer_dataset_dir
+        cross_dir = layer_dataset_dir(cfg.root, "cross", dataset)
+        cv = cross_dir / "_validate" / "cross_validation.json"
+        if cv.exists():
+            content = json.loads(cv.read_text(encoding="utf-8"))
+            ok = content.get("ok")
+            state = "passed" if ok else ("failed" if ok is False else "?")
+            errs = len(content.get("errors", []))
+            warns = len(content.get("warnings", []))
+            typer.echo("")
+            typer.echo(f"  cross_year: state={state} warnings={warns} errors={errs}")
+            _print_validation_details("cross_year", cv)
+
     _print_layer_profiles(dataset, year, layers)
 
     if record.get("status") == "FAILED" and record.get("error"):

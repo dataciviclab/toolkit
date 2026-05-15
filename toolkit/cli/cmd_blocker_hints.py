@@ -96,4 +96,4 @@ def blocker_hints(
 
 
 def register(app: typer.Typer) -> None:
-    app.command("blocker-hints")(blocker_hints)
+    app.command("blocker-hints", hidden=True)(blocker_hints)

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from toolkit.mcp._schema_utils import (
+    _check_run_record_coherence,
     _exists,
     _read_parquet_row_count,
     _schema_from_parquet,
@@ -507,7 +508,11 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
 
 
 def blocker_hints(config_path: str, year: int | None = None) -> dict[str, Any]:
-    """Diagnostic hints that flag common mismatches between declared config and actual outputs."""
+    """Diagnostic hints che segnalano mismatch comuni tra config dichiarata e output reali.
+
+    Parte dai ``warnings`` di ``summary()`` e aggiunge hint specifici
+    (coerenza run record, mart parziali, ordine layer).
+    """
     config = _safe_path(config_path)
     s = summary(str(config), year)
     layers = s.get("layers", {})
@@ -525,100 +530,63 @@ def blocker_hints(config_path: str, year: int | None = None) -> dict[str, Any]:
 
     hints: list[dict[str, str]] = []
 
-    # clean output exists but mart outputs are all missing or empty
+    # --- Da summary() warnings (non ri-verifica, eredita) ---
+    for w in s.get("warnings", []):
+        if w == "raw_output_missing":
+            hints.append({
+                "code": "raw_output_missing",
+                "severity": "blocker",
+                "message": f"raw primary_output_file '{raw.get('primary_output_file', '?')}' risolto ma file assente",
+            })
+        elif w == "clean_output_missing":
+            hints.append({
+                "code": "clean_output_missing",
+                "severity": "blocker",
+                "message": f"clean output '{clean.get('output', '?')}' risolto ma file assente",
+            })
+        elif w == "mart_outputs_missing":
+            hints.append({
+                "code": "mart_partial_outputs",
+                "severity": "warning",
+                "message": f"tutti i {mart.get('output_count', 0)} mart output sono mancanti",
+            })
+        elif w == "latest_run_record_missing":
+            hints.append({
+                "code": "latest_run_record_missing",
+                "severity": "warning",
+                "message": "latest_run reference presente ma file non trovato",
+            })
+
+    # --- Hint specifici che summary() non copre ---
     if (
         clean.get("output_exists")
         and mart.get("output_count", 0) > 0
         and mart.get("output_exists_count", 0) == 0
     ):
-        hints.append(
-            {
-                "code": "clean_but_no_mart",
-                "severity": "warning",
-                "message": "clean output esiste ma nessun mart output e' presente",
-            }
-        )
+        hints.append({
+            "code": "clean_but_no_mart",
+            "severity": "warning",
+            "message": "clean output esiste ma nessun mart output e' presente",
+        })
 
-    # clean dir missing entirely while mart dir exists
     if not clean.get("dir_exists") and mart.get("dir_exists"):
-        hints.append(
-            {
-                "code": "clean_dir_missing",
-                "severity": "blocker",
-                "message": "mart dir esiste ma clean dir manca: run order incoerente",
-            }
-        )
-
-    # latest_run record exists but the actual run file is gone
-    latest = run.get("latest_run")
-    if latest and latest.get("path") and not _exists(latest.get("path")):
-        hints.append(
-            {
-                "code": "latest_run_record_missing",
-                "severity": "warning",
-                "message": "latest_run reference presente ma file non trovato",
-            }
-        )
-
-    # resolved output path declared but file missing
-    if raw.get("primary_output_file") and not raw.get("primary_output_exists"):
-        hints.append(
-            {
-                "code": "raw_output_missing",
-                "severity": "blocker",
-                "message": f"raw primary_output_file '{raw['primary_output_file']}' risolto ma file assente",
-            }
-        )
-
-    if clean.get("output") and not clean.get("output_exists"):
-        hints.append(
-            {
-                "code": "clean_output_missing",
-                "severity": "blocker",
-                "message": f"clean output '{clean['output']}' risolto ma file assente",
-            }
-        )
+        hints.append({
+            "code": "clean_dir_missing",
+            "severity": "blocker",
+            "message": "mart dir esiste ma clean dir manca: run order incoerente",
+        })
 
     # mart with multiple outputs but only partial
     if mart.get("output_count", 0) > 1 and mart.get("missing_outputs"):
         missing = mart["missing_outputs"]
-        hints.append(
-            {
-                "code": "mart_partial_outputs",
-                "severity": "warning",
-                "message": f"{len(missing)} mart output su {mart['output_count']} mancanti: {', '.join(Path(o).name for o in missing[:3])}",
-            }
-        )
+        hints.append({
+            "code": "mart_partial_outputs",
+            "severity": "warning",
+            "message": f"{len(missing)} mart output su {mart['output_count']} mancanti: {', '.join(Path(o).name for o in missing[:3])}",
+        })
 
-    # run record references a layer status that contradicts file existence
-    if run_record:
-        layers_map = run_record.get("layers") or {}
-        for layer_name, layer_detail in layers_map.items():
-            layer_status = (
-                layer_detail.get("status") if isinstance(layer_detail, dict) else layer_detail
-            )
-            if layer_status == "SUCCESS":
-                layer_info = layers.get(layer_name, {})
-                if layer_name == "clean" and not layer_info.get("output_exists"):
-                    hints.append(
-                        {
-                            "code": "run_says_clean_success_but_output_missing",
-                            "severity": "blocker",
-                            "message": "run record dice clean SUCCESS ma output file manca",
-                        }
-                    )
-                elif (
-                    layer_name == "mart"
-                    and layer_info.get("output_exists_count", 0) == 0
-                    and layer_info.get("output_count", 0) > 0
-                ):
-                    hints.append(
-                        {
-                            "code": "run_says_mart_success_but_outputs_missing",
-                            "severity": "blocker",
-                            "message": "run record dice mart SUCCESS ma nessun output file presente",
-                        }
-                    )
+    # --- Coerenza run record (helper condiviso con review_readiness) ---
+    hints.extend(_check_run_record_coherence(run_record, layers))
 
     return {
         "dataset": s.get("dataset"),
@@ -719,42 +687,21 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
         }
     )
 
-    # --- Run record coherence ---
+    # --- Run record coherence (helper condiviso con blocker_hints) ---
     rs = run_state(str(config), target_year)
     run_record = rs.get("latest_run_record")
-    run_coherent = True
-    run_detail: str | None = None
-    if run_record:
-        layers_map = run_record.get("layers") or {}
-        for layer_name, layer_detail in layers_map.items():
-            layer_status = (
-                layer_detail.get("status") if isinstance(layer_detail, dict) else layer_detail
-            )
-            if layer_status == "SUCCESS":
-                layer_info = s.get("layers", {}).get(layer_name, {})
-                if layer_name == "clean" and not layer_info.get("output_exists"):
-                    run_coherent = False
-                    run_detail = f"run dice {layer_name} SUCCESS ma output manca"
-                elif layer_name == "mart":
-                    if (
-                        layer_info.get("output_exists_count", 0) == 0
-                        and layer_info.get("output_count", 0) > 0
-                    ):
-                        run_coherent = False
-                        run_detail = f"run dice {layer_name} SUCCESS ma nessun output presente"
-        if run_coherent:
-            run_detail = f"run record coerente ({run_record.get('status', 'unknown')})"
+    coherence_hints = _check_run_record_coherence(run_record, s.get("layers", {}))
+    run_coherent = len(coherence_hints) == 0
+    if run_coherent:
+        run_detail = f"run record coerente ({run_record.get('status', 'unknown')})" if run_record else "nessun run record (ok se output presenti)"
     else:
-        # Nessun run record: non e' un fallimento di readiness se i file esistono
-        run_detail = "nessun run record (ok se output presenti)"
+        run_detail = coherence_hints[0].get("message", "incoerenza run record")
 
-    checks.append(
-        {
-            "check": "run_record_coherent",
-            "ok": run_coherent,
-            "detail": run_detail,
-        }
-    )
+    checks.append({
+        "check": "run_record_coherent",
+        "ok": run_coherent,
+        "detail": run_detail,
+    })
 
     ok_count = sum(1 for c in checks if c["ok"])
     fail_count = sum(1 for c in checks if not c["ok"])

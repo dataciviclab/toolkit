@@ -76,6 +76,48 @@ def _read_validation_content(path: str | None) -> dict[str, Any] | None:
         return None
 
 
+def _check_run_record_coherence(
+    run_record: dict[str, Any] | None,
+    layers: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Verifica che i layer marcati SUCCESS nel run record abbiano output reali.
+
+    Ritorna una lista di hint (dict con code, severity, message).
+    Usata da blocker_hints() e review_readiness().
+    """
+    hints: list[dict[str, str]] = []
+    if not run_record:
+        return hints
+
+    layers_map = run_record.get("layers") or {}
+    for layer_name, layer_detail in layers_map.items():
+        layer_status = (
+            layer_detail.get("status") if isinstance(layer_detail, dict) else layer_detail
+        )
+        if layer_status != "SUCCESS":
+            continue
+
+        layer_info = layers.get(layer_name, {})
+
+        if layer_name == "clean" and not layer_info.get("output_exists"):
+            hints.append({
+                "code": "run_says_clean_success_but_output_missing",
+                "severity": "blocker",
+                "message": "run record dice clean SUCCESS ma output file manca",
+            })
+        elif layer_name == "mart":
+            out_count = layer_info.get("output_count", 0) or 0
+            exists_count = layer_info.get("output_exists_count", 0) or 0
+            if exists_count == 0 and out_count > 0:
+                hints.append({
+                    "code": "run_says_mart_success_but_outputs_missing",
+                    "severity": "blocker",
+                    "message": "run record dice mart SUCCESS ma nessun output file presente",
+                })
+
+    return hints
+
+
 def _validation_summary_for_layer(
     layer_dir: Path, validation_filename: str
 ) -> dict[str, Any] | None:

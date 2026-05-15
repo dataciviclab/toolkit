@@ -57,6 +57,13 @@ _BUILTIN_PLUGINS: tuple[dict[str, Any], ...] = (
         "factory": lambda cls: (lambda **client: cls(**client)),
     },
     {
+        "name": "http_post_file",
+        "module": "toolkit.plugins.http_post_file",
+        "class_name": "HttpPostFileSource",
+        "optional": False,
+        "factory": lambda cls: (lambda **client: cls(**client)),
+    },
+    {
         "name": "local_file",
         "module": "toolkit.plugins.local_file",
         "class_name": "LocalFileSource",

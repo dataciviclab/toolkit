@@ -6,6 +6,7 @@ Builtin stable sources exposed by the default runtime:
 
 - `local_file`
 - `http_file`
+- `http_post_file`
 - `ckan`
 - `sdmx`
 - `sparql`
@@ -13,6 +14,7 @@ Builtin stable sources exposed by the default runtime:
 
 from toolkit.plugins.ckan import CkanSource
 from toolkit.plugins.http_file import HttpFileSource
+from toolkit.plugins.http_post_file import HttpPostFileSource
 from toolkit.plugins.local_file import LocalFileSource
 from toolkit.plugins.sdmx import SdmxSource
 from toolkit.plugins.sparql import SparqlSource
@@ -20,6 +22,7 @@ from toolkit.plugins.sparql import SparqlSource
 __all__ = [
     "LocalFileSource",
     "HttpFileSource",
+    "HttpPostFileSource",
     "CkanSource",
     "SdmxSource",
     "SparqlSource",

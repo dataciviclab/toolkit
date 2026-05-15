@@ -45,7 +45,7 @@ def _infer_ext(stype: str, formatted_args: dict, origin: str | None = None) -> s
     if stype in {"sdmx", "sparql"}:
         return ".csv"
 
-    if stype in {"http_file", "ckan"}:
+    if stype in {"http_file", "http_post_file", "ckan"}:
         url = origin or formatted_args.get("url", "")
         return _infer_from_url(url)
 
@@ -134,6 +134,14 @@ def _fetch_sparql(stype: str, client: dict, formatted_args: dict) -> tuple[bytes
 def _fetch_http_file(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
     src = registry.create(stype, **(client or {}))
     payload = src.fetch(formatted_args["url"])
+    return payload, formatted_args["url"]
+
+
+@_register_fetch("http_post_file")
+def _fetch_http_post_file(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
+    src = registry.create(stype, **(client or {}))
+    post_data = formatted_args.get("post_data")
+    payload = src.fetch(formatted_args["url"], data=post_data)
     return payload, formatted_args["url"]
 
 

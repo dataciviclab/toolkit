@@ -38,7 +38,7 @@ def test_raw_exports() -> None:
 
 
 def test_plugins_exports() -> None:
-    assert plugins_pkg.__all__ == ["LocalFileSource", "HttpFileSource", "CkanSource", "SdmxSource", "SparqlSource"]
+    assert plugins_pkg.__all__ == ["LocalFileSource", "HttpFileSource", "HttpPostFileSource", "CkanSource", "SdmxSource", "SparqlSource"]
     assert LocalFileSource.__name__ == "LocalFileSource"
     assert HttpFileSource.__name__ == "HttpFileSource"
     assert CkanSource.__name__ == "CkanSource"

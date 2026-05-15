@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -15,6 +17,7 @@ from toolkit.core.paths import layer_dataset_dir, layer_year_dir
 from toolkit.core.run_context import RunContext
 from toolkit.mart.run import run_mart
 from toolkit.mart.validate import run_mart_validation
+from toolkit.mcp.schema_ops import blocker_hints as _blocker_hints
 from toolkit.raw.run import run_raw
 from toolkit.raw.validate import run_raw_validation
 
@@ -450,6 +453,68 @@ def run_init(
     typer.echo("Prossimo passo: toolkit run clean -c <config>")
 
 
+def run_full(
+    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
+    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
+):
+    """Esegue run all + validate all + blocker-hints in un unico comando."""
+    strict_flag = strict_config if isinstance(strict_config, bool) else False
+    cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag)
+    years_arg = years if isinstance(years, str) else None
+    selected_years = iter_selected_years(cfg, year_arg=None, years_arg=years_arg)
+    dry_flag = dry_run if isinstance(dry_run, bool) else False
+
+    results: dict[str, Any] = {
+        "config": config,
+        "years": selected_years,
+        "steps": {},
+        "status": "passed",
+    }
+
+    # Run all
+    for year in selected_years:
+        logger.info("Run all — year=%s", year)
+        run_year(cfg, year, step="all", dry_run=dry_flag, logger=logger)
+
+        if not dry_flag:
+            # Validate all
+            logger.info("Validate all — year=%s", year)
+            val_raw = run_raw_validation(cfg.root, cfg.dataset, year, logger)
+            val_clean = run_clean_validation(cfg, year, logger)
+            val_mart = run_mart_validation(cfg, year, logger)
+
+            all_passed = all(
+                r.get("passed") for r in [val_raw, val_clean, val_mart]
+            )
+            results["steps"][str(year)] = {
+                "run": "ok",
+                "validate": "passed" if all_passed else "failed",
+            }
+            if not all_passed:
+                results["status"] = "failed"
+
+            # Blocker hints (capture, not print)
+            hints = _blocker_hints(config, year or None)
+            results["steps"][str(year)]["blockers"] = len(hints.get("blockers", []))
+            results["steps"][str(year)]["warnings"] = len(hints.get("warnings", []))
+
+    if json_output:
+        typer.echo(json.dumps(results, indent=2, default=str))
+    else:
+        status = results["status"]
+        typer.echo(f"config: {config}")
+        typer.echo(f"years: {selected_years}")
+        typer.echo(f"status: {status}")
+        for y, s in results["steps"].items():
+            typer.echo(f"  {y}: run={s['run']} validate={s['validate']} blockers={s['blockers']} warnings={s['warnings']}")
+
+    if results["status"] != "passed":
+        raise typer.Exit(code=1)
+
+
 def register(app: typer.Typer) -> None:
     run_sub = typer.Typer(no_args_is_help=True, add_completion=False)
     run_sub.command("raw")(run_raw_cmd)
@@ -459,4 +524,5 @@ def register(app: typer.Typer) -> None:
     run_sub.command("cross_year")(run_cross_year_cmd)
     run_sub.command("cross-year")(run_cross_year_cmd)  # alias hyphen
     run_sub.command("init")(run_init)
+    run_sub.command("full")(run_full)
     app.add_typer(run_sub, name="run")

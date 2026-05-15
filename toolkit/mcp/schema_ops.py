@@ -26,11 +26,17 @@ from toolkit.mcp._schema_utils import (
 )
 from lab_connectors.mcp.errors import ErrorCode
 
-from toolkit.mcp.cli_adapter import inspect_paths
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import _load_cfg, _safe_path
 from toolkit.core.run_records import get_run_dir_dataset, list_runs as _list_runs_records
 from toolkit.core.csv_read import sql_str
+
+
+def _inspect_paths(*args: Any, **kwargs: Any) -> Any:
+    """Lazy import to avoid circular dependency with cli_adapter."""
+    from toolkit.mcp.cli_adapter import inspect_paths as _impl
+
+    return _impl(*args, **kwargs)
 
 
 def show_schema(config_path: str, layer: str = "clean", year: int | None = None) -> dict[str, Any]:
@@ -51,7 +57,7 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
             "entries": entries_filtered,
         }
 
-    paths = inspect_paths(str(config), year)
+    paths = _inspect_paths(str(config), year)
     if safe_layer == "clean":
         parquet_path = Path(paths["paths"]["clean"]["output"])
         payload = _schema_from_parquet(parquet_path)
@@ -85,7 +91,7 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
     sample rows, missingness e mapping suggestions per il layer raw.
     """
     config = _safe_path(config_path)
-    paths = inspect_paths(str(config), year)
+    paths = _inspect_paths(str(config), year)
     raw_dir = Path(paths["paths"]["raw"]["dir"])
     profile_path = raw_dir / "_profile"
     raw_profile_json = profile_path / "raw_profile.json"
@@ -163,7 +169,7 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
 
 def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
     config = _safe_path(config_path)
-    paths = inspect_paths(str(config), year)
+    paths = _inspect_paths(str(config), year)
     run_dir = Path(paths["paths"]["run_dir"])
     run_files = sorted(run_dir.glob("*.json")) if run_dir.exists() else []
     latest_run = paths.get("latest_run")
@@ -379,7 +385,7 @@ def run_summary(
 
 def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
     config = _safe_path(config_path)
-    paths = inspect_paths(str(config), year)
+    paths = _inspect_paths(str(config), year)
     raw_paths = paths["paths"]["raw"]
     clean_paths = paths["paths"]["clean"]
     mart_paths = paths["paths"]["mart"]
@@ -418,6 +424,19 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
     if latest_run_path and not _exists(latest_run_path):
         warnings.append("latest_run_record_missing")
 
+    # Estrai layer run status dal run record (se presente)
+    layer_run_statuses: dict[str, dict[str, Any]] = {}
+    if latest_run_record:
+        for layer_name in ("raw", "clean", "mart"):
+            layer_info = (latest_run_record.get("layers") or {}).get(layer_name, {})
+            layer_val = (latest_run_record.get("validations") or {}).get(layer_name, {})
+            layer_run_statuses[layer_name] = {
+                "status": layer_info.get("status", "PENDING"),
+                "validation_passed": layer_val.get("passed"),
+                "validation_errors": layer_val.get("errors_count", 0),
+                "validation_warnings": layer_val.get("warnings_count", 0),
+            }
+
     return {
         "dataset": paths.get("dataset"),
         "config_path": str(config_path),
@@ -433,7 +452,11 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "suggested_read_exists": (paths.get("raw_hints") or {}).get(
                     "suggested_read_exists"
                 ),
+                "encoding_suggested": (paths.get("raw_hints") or {}).get("encoding"),
+                "delim_suggested": (paths.get("raw_hints") or {}).get("delim"),
+                "decimal_suggested": (paths.get("raw_hints") or {}).get("decimal"),
                 "validation": _validation_summary_for_layer(raw_dir, "_validate/raw_validation.json"),
+                "run_status": layer_run_statuses.get("raw"),
             },
             "clean": {
                 "dir": str(clean_dir),
@@ -443,6 +466,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "manifest_exists": _exists(clean_paths.get("manifest")),
                 "metadata_exists": _exists(clean_paths.get("metadata")),
                 "validation": _validation_summary_for_layer(clean_dir, "_validate/clean_validation.json"),
+                "run_status": layer_run_statuses.get("clean"),
             },
             "mart": {
                 "dir": str(mart_dir),
@@ -454,6 +478,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "manifest_exists": _exists(mart_paths.get("manifest")),
                 "metadata_exists": _exists(mart_paths.get("metadata")),
                 "validation": _validation_summary_for_layer(mart_dir, "_validate/mart_validation.json"),
+                "run_status": layer_run_statuses.get("mart"),
             },
         },
         "run": {

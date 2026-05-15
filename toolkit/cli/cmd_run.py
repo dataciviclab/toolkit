@@ -457,5 +457,6 @@ def register(app: typer.Typer) -> None:
     run_sub.command("mart")(run_mart_cmd)
     run_sub.command("all")(run_all_cmd)
     run_sub.command("cross_year")(run_cross_year_cmd)
+    run_sub.command("cross-year")(run_cross_year_cmd)  # alias hyphen
     run_sub.command("init")(run_init)
     app.add_typer(run_sub, name="run")

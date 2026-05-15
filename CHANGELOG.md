@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - `run cross_year` now writes dedicated metadata, manifest and validation artifacts for multi-year outputs.
 - `run` and `validate` now support `--years` for scoped multi-year execution.
 - MART validation now reports `table_rules` entries that do not match declared tables.
+- Nuovo source type `http_post_file` per download via HTTP POST con form-encoded body (PR #242).
 
 ### Changed
 

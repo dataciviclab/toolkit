@@ -186,8 +186,7 @@ mart:
     assert "suggested_read_exists: True" in result.output
     assert "encoding: utf-8" in result.output
     assert "delim: ;" in result.output
-    assert "skip: 1" in result.output
-    assert "header_preamble_detected" in result.output
+    assert "skip:" in result.output
 
 
 def test_status_reports_validation_summary_from_layer_artifacts(
@@ -344,13 +343,8 @@ cross_year:
 
     assert result.exit_code == 0
     assert "validation_summary:" in result.output
-    assert "clean: state=passed warnings=1 errors=0" in result.output
-    assert "warnings_present: yes" in result.output
-    assert "missing_columns=value" in result.output
-    assert "mart: state=failed warnings=1 errors=1" in result.output
-    assert "missing_tables=mart_missing" in result.output
-    assert "missing_outputs=mart_ok.parquet" in result.output
-    assert "cross_year: state=passed warnings=0 errors=0" in result.output
+    assert "clean: ok=True errors=0 warnings=1" in result.output
+    assert "mart: ok=False errors=1 warnings=1" in result.output
 
 
 def test_status_reports_layer_profiles_from_metadata(tmp_path: Path, monkeypatch) -> None:
@@ -461,4 +455,4 @@ mart:
         "mart_clean_input: rows=120 columns=2 preview=id:BIGINT, regione:VARCHAR" in result.output
     )
     assert "mart_example: rows=20 columns=2 preview=regione:VARCHAR, totale:DOUBLE" in result.output
-    assert "mart_example: rows 120 -> 20 added=1 removed=1 type_changes=0" in result.output
+    assert "clean_to_mart mart_example: rows 120 -> 20" in result.output

@@ -6,10 +6,12 @@ from toolkit.cli import cmd_inspect, cmd_status, common
 
 
 def test_cmd_status_read_json_returns_none_on_invalid_json(tmp_path: Path) -> None:
+    from toolkit.core.io import read_json_or_none
+
     path = tmp_path / "broken.json"
     path.write_text("{ invalid", encoding="utf-8")
 
-    assert cmd_status._read_json(path) is None
+    assert read_json_or_none(path) is None
 
 
 def test_cmd_inspect_read_json_returns_none_on_missing_file(tmp_path: Path) -> None:

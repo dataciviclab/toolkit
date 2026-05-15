@@ -84,7 +84,7 @@ def _print_validation_details(layer_name: str, vpath: Path) -> None:
     if isinstance(outputs, list):
         missing = [o.get("file") for o in outputs if isinstance(o, dict) and not (Path(vpath).parent.parent / o.get("file", "")).exists()]
         if missing:
-            details.append(f"missing_outputs={','.join(missing)}")
+            details.append(f"missing_outputs={','.join(str(m) for m in missing)}")
 
     if details:
         typer.echo(f"    {' '.join(details)}")

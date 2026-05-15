@@ -63,7 +63,8 @@ class HttpPostFileSource:
             DownloadError: on network error or non-200 HTTP status.
 
         """
-        result = self._client.post(url, data=data)
+        # File download via POST is idempotent — safe to retry
+        result = self._client.post(url, data=data, retries=self.retries)
         if result.is_ok and result.response is not None:
             if result.response.status_code != 200:
                 raise DownloadError(f"HTTP {result.response.status_code} for {url}")

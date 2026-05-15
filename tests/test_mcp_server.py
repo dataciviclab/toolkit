@@ -23,6 +23,8 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_list_runs",
         "toolkit_schema_diff",
         "toolkit_csv_preview",
+        "toolkit_raw_describe",
+        "toolkit_raw_query",
     }
 
 

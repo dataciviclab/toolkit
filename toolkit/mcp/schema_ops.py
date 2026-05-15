@@ -17,7 +17,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from toolkit.cli.inspect._helpers import _compare_schema_entries, _raw_schema_payload
 from toolkit.mcp._schema_utils import (
     _exists,
     _read_parquet_row_count,
@@ -33,6 +32,24 @@ from toolkit.core.csv_read import sql_str
 
 
 def _inspect_paths(*args: Any, **kwargs: Any) -> Any:
+    """Lazy import to avoid circular dependency with cli_adapter."""
+    from toolkit.mcp.cli_adapter import inspect_paths as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def _raw_schema_payload(*args: Any, **kwargs: Any) -> Any:
+    """Lazy import to avoid circular dependency with cli/inspect."""
+    from toolkit.cli.inspect._helpers import _raw_schema_payload as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def _compare_schema_entries(*args: Any, **kwargs: Any) -> Any:
+    """Lazy import to avoid circular dependency with cli/inspect."""
+    from toolkit.cli.inspect._helpers import _compare_schema_entries as _impl
+
+    return _impl(*args, **kwargs)
     """Lazy import to avoid circular dependency with cli_adapter."""
     from toolkit.mcp.cli_adapter import inspect_paths as _impl
 

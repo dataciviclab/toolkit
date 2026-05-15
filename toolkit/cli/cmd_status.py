@@ -17,6 +17,9 @@ def _print_raw_hints(hints: dict[str, Any]) -> None:
     typer.echo("raw_hints:")
     typer.echo(f"  primary_output_file: {hints.get('primary_output_file')}")
     typer.echo(f"  suggested_read_exists: {hints.get('suggested_read_exists')}")
+    sr_path = hints.get("suggested_read_path")
+    if sr_path:
+        typer.echo(f"  suggested_read_path: {sr_path}")
     typer.echo(f"  encoding: {hints.get('encoding')}")
     typer.echo(f"  delim: {hints.get('delim')}")
     typer.echo(f"  decimal: {hints.get('decimal')}")
@@ -110,28 +113,50 @@ def status(
 
     layers = s.get("layers", {})
 
+    # Layer run status: da summary di default, dal record specifico se --run-id
+    if run_id:
+        layer_run_statuses: dict[str, dict[str, Any]] = {}
+        for layer_name in ("raw", "clean", "mart"):
+            li = (record.get("layers") or {}).get(layer_name, {})
+            lv = (record.get("validations") or {}).get(layer_name, {})
+            layer_run_statuses[layer_name] = {
+                "status": li.get("status", "PENDING"),
+                "validation_passed": lv.get("passed"),
+                "validation_errors": lv.get("errors_count", 0),
+                "validation_warnings": lv.get("warnings_count", 0),
+            }
+    else:
+        layer_run_statuses = {
+            name: (layers.get(name) or {}).get("run_status") or {}
+            for name in ("raw", "clean", "mart")
+        }
+
     typer.echo(f"dataset: {record.get('dataset', dataset)}")
     typer.echo(f"year: {record.get('year', year)}")
     typer.echo(f"run_id: {record.get('run_id')}")
     typer.echo(f"started_at: {record.get('started_at')}")
     typer.echo(f"status: {record.get('status')}")
 
-    # Raw hints da summary
+    # Raw hints da summary + inspect_paths per suggested_read_path
     raw_hints = {
         "primary_output_file": (layers.get("raw") or {}).get("primary_output_file"),
         "suggested_read_exists": (layers.get("raw") or {}).get("suggested_read_exists"),
+        "suggested_read_path": None,
         "encoding": (layers.get("raw") or {}).get("encoding_suggested"),
         "delim": (layers.get("raw") or {}).get("delim_suggested"),
         "decimal": (layers.get("raw") or {}).get("decimal_suggested"),
     }
+    # suggested_read_path non è in summary — lo ricostruiamo
+    raw_dir = (layers.get("raw") or {}).get("dir")
+    if raw_dir and raw_hints.get("suggested_read_exists"):
+        raw_hints["suggested_read_path"] = str(Path(raw_dir) / "_profile" / "suggested_read.yml")
     _print_raw_hints(raw_hints)
 
     # Layer table
     typer.echo("")
     typer.echo("layer layer_status         validation_passed errors_count warnings_count")
     for layer_name in ("raw", "clean", "mart"):
-        layer = layers.get(layer_name, {})
-        rs = layer.get("run_status") or {}
+        rs = layer_run_statuses.get(layer_name) or {}
         typer.echo(
             f"{layer_name:<5} "
             f"{str(rs.get('status', 'PENDING')):<20} "

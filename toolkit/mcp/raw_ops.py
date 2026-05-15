@@ -29,11 +29,12 @@ _MAX_ROWS_HARD_CAP = 500
 # Path resolution
 # ---------------------------------------------------------------------------
 
-_WORKSPACE_ROOT = Path(__file__).resolve().parents[2]  # toolkit/
-
-
 def _normalize_path(file_path: str) -> tuple[str, bool]:
-    """Ritorna (path_normalizzato, is_locale)."""
+    """Ritorna (path_normalizzato, is_locale).
+
+    Path relativi vengono risolti contro la CWD dell'utente,
+    non contro la directory del modulo.
+    """
     raw = (file_path or "").strip()
     if not raw:
         raise ValueError("file_path vuoto")
@@ -51,7 +52,7 @@ def _normalize_path(file_path: str) -> tuple[str, bool]:
 
     path = Path(raw).expanduser()
     if not path.is_absolute():
-        path = (_WORKSPACE_ROOT / path).resolve()
+        path = Path.cwd() / path
     if not path.exists():
         raise ValueError(f"File non trovato: {path}")
     return str(path), True

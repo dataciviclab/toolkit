@@ -50,10 +50,6 @@ def _compare_schema_entries(*args: Any, **kwargs: Any) -> Any:
     from toolkit.cli.inspect._helpers import _compare_schema_entries as _impl
 
     return _impl(*args, **kwargs)
-    """Lazy import to avoid circular dependency with cli_adapter."""
-    from toolkit.mcp.cli_adapter import inspect_paths as _impl
-
-    return _impl(*args, **kwargs)
 
 
 def show_schema(config_path: str, layer: str = "clean", year: int | None = None) -> dict[str, Any]:

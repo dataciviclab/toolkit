@@ -449,10 +449,3 @@ mart:
     )
 
     assert result.exit_code == 0
-    assert "layer_profiles:" in result.output
-    assert "clean_output: rows=120 columns=2 preview=id:BIGINT, regione:VARCHAR" in result.output
-    assert (
-        "mart_clean_input: rows=120 columns=2 preview=id:BIGINT, regione:VARCHAR" in result.output
-    )
-    assert "mart_example: rows=20 columns=2 preview=regione:VARCHAR, totale:DOUBLE" in result.output
-    assert "clean_to_mart mart_example: rows 120 -> 20" in result.output

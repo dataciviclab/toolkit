@@ -1,234 +1,126 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
-
-from toolkit.core.io import read_json_or_none as _read_json
 
 import typer
 
 from toolkit.cli.common import format_profile_preview, load_layer_profile_summaries
 from toolkit.core.config import load_config
-from toolkit.core.metadata import read_layer_metadata
-from toolkit.core.paths import layer_dataset_dir, layer_year_dir
-from toolkit.core.run_context import get_run_dir, latest_run, read_run_record
+from toolkit.core.run_context import get_run_dir, read_run_record
+from toolkit.mcp.schema_ops import summary as _summary
 
 
-def _raw_hints(root: Path, dataset: str, year: int) -> dict[str, Any]:
-    raw_dir = layer_year_dir(root, "raw", dataset, year)
-    raw_meta = read_layer_metadata(raw_dir)
-    profile_hints = raw_meta.get("profile_hints") or {}
-    suggested_read_path = raw_dir / "_profile" / "suggested_read.yml"
-    return {
-        "primary_output_file": raw_meta.get("primary_output_file"),
-        "suggested_read_exists": suggested_read_path.exists(),
-        "suggested_read_path": str(suggested_read_path),
-        "encoding": profile_hints.get("encoding_suggested"),
-        "delim": profile_hints.get("delim_suggested"),
-        "decimal": profile_hints.get("decimal_suggested"),
-        "skip": profile_hints.get("skip_suggested"),
-        "warnings": profile_hints.get("warnings") or [],
-    }
+def _print_raw_hints(hints: dict[str, Any]) -> None:
+    """Stampa i raw_hints dalla struttura di summary."""
+    typer.echo("")
+    typer.echo("raw_hints:")
+    typer.echo(f"  primary_output_file: {hints.get('primary_output_file')}")
+    typer.echo(f"  suggested_read_exists: {hints.get('suggested_read_exists')}")
+    sr_path = hints.get("suggested_read_path")
+    if sr_path:
+        typer.echo(f"  suggested_read_path: {sr_path}")
+    typer.echo(f"  encoding: {hints.get('encoding')}")
+    typer.echo(f"  delim: {hints.get('delim')}")
+    typer.echo(f"  decimal: {hints.get('decimal')}")
+    typer.echo(f"  skip: {hints.get('skip')}")
+    for w in hints.get("warnings") or []:
+        typer.echo(f"  {w}")
 
 
-def _layer_artifacts_dir(root: Path, dataset: str, year: int, layer: str) -> Path:
-    if layer == "cross_year":
-        return layer_dataset_dir(root, "cross", dataset)
-    return layer_year_dir(root, layer, dataset, year)
+def _print_validation_summaries(layers: dict[str, Any]) -> None:
+    """Stampa validation summaries dai dati di summary + validation JSON diretto."""
+    printed = False
+    for layer_name in ("clean", "mart"):
+        val = (layers.get(layer_name) or {}).get("validation")
+        if not val:
+            continue
+
+        state = "passed" if val.get("ok") else ("failed" if val.get("ok") is False else "?")
+        errs = val.get("errors_count", 0)
+        warns = val.get("warnings_count", 0)
+
+        if not printed:
+            typer.echo("")
+            typer.echo("validation_summary:")
+            printed = True
+
+        typer.echo(f"  {layer_name}: state={state} warnings={warns} errors={errs}")
+
+        # Dettagli extra letti dal validation JSON su disco
+        layer_dir = (layers.get(layer_name) or {}).get("dir")
+        if layer_dir:
+            vpath = Path(layer_dir) / f"_validate/{layer_name}_validation.json"
+            if vpath.exists():
+                _print_validation_details(layer_name, vpath)
 
 
-def _validation_counts(
-    validation_payload: dict[str, Any] | None,
-    meta_payload: dict[str, Any] | None,
-    record_summary: dict[str, Any] | None,
-) -> tuple[bool | None, int | None, int | None]:
-    if validation_payload is not None:
-        return (
-            validation_payload.get("ok"),
-            len(validation_payload.get("errors") or []),
-            len(validation_payload.get("warnings") or []),
-        )
-
-    summary = (meta_payload or {}).get("summary") or {}
-    if summary:
-        return (
-            summary.get("ok"),
-            summary.get("errors_count"),
-            summary.get("warnings_count"),
-        )
-
-    record_summary = record_summary or {}
-    if record_summary:
-        return (
-            record_summary.get("passed"),
-            record_summary.get("errors_count"),
-            record_summary.get("warnings_count"),
-        )
-
-    return None, None, None
-
-
-def _layer_validation_summary(
-    root: Path,
-    dataset: str,
-    year: int,
-    layer: str,
-    record: dict[str, Any],
-) -> dict[str, Any] | None:
-    layer_dir = _layer_artifacts_dir(root, dataset, year, layer)
-    meta_payload = read_layer_metadata(layer_dir)
-    validation_rel = meta_payload.get("validation")
-    validation_payload = None
-    validation_path = None
-    if isinstance(validation_rel, str) and validation_rel.strip():
-        validation_path = layer_dir / validation_rel
-        validation_payload = _read_json(validation_path)
-
-    record_summary = (record.get("validations") or {}).get(layer, {})
-    ok, errors_count, warnings_count = _validation_counts(
-        validation_payload,
-        meta_payload,
-        record_summary if isinstance(record_summary, dict) else {},
-    )
-
-    has_any_data = any(
-        [
-            meta_payload is not None,
-            validation_payload is not None,
-            bool(record_summary),
-            layer_dir.exists(),
-        ]
-    )
-    if not has_any_data:
-        return None
-
-    warnings = []
-    errors = []
+def _print_validation_details(layer_name: str, vpath: Path) -> None:
+    """Legge validation JSON e stampa dettagli extra (missing columns, tables, ecc.)."""
+    try:
+        content = json.loads(vpath.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    summary = content.get("summary") or {}
     details: list[str] = []
-    if validation_payload is not None:
-        warnings = [str(item) for item in (validation_payload.get("warnings") or [])]
-        errors = [str(item) for item in (validation_payload.get("errors") or [])]
 
-    if validation_path is not None and validation_payload is None:
-        details.append(f"validation_missing={validation_path.name}")
-
-    outputs = meta_payload.get("outputs") or []
-    if isinstance(outputs, list):
-        missing_outputs = []
-        for entry in outputs:
-            if not isinstance(entry, dict):
-                continue
-            file_name = entry.get("file")
-            if isinstance(file_name, str) and file_name and not (layer_dir / file_name).exists():
-                missing_outputs.append(file_name)
-        if missing_outputs:
-            details.append(f"missing_outputs={', '.join(missing_outputs)}")
-
-    summary = (validation_payload or {}).get("summary") or {}
-    if layer == "clean":
+    if layer_name == "clean":
         required = summary.get("required") or []
         columns = summary.get("columns") or []
-        if isinstance(required, list) and isinstance(columns, list):
-            missing_columns = [column for column in required if column not in set(columns)]
-            if missing_columns:
-                details.append(
-                    f"missing_columns={', '.join(str(column) for column in missing_columns)}"
-                )
-    if layer in {"mart", "cross_year"}:
+        missing_cols = [c for c in required if c not in set(columns)] if isinstance(required, list) and isinstance(columns, list) else []
+        if missing_cols:
+            details.append(f"missing_columns={','.join(str(c) for c in missing_cols)}")
+
+    if layer_name in ("mart", "cross_year"):
         required_tables = summary.get("required_tables") or []
         tables = summary.get("tables") or []
-        if isinstance(required_tables, list) and isinstance(tables, list):
-            missing_tables = [table for table in required_tables if table not in set(tables)]
-            if missing_tables:
-                details.append(
-                    f"missing_tables={', '.join(str(table) for table in missing_tables)}"
-                )
+        missing_tables = [t for t in required_tables if t not in set(tables)] if isinstance(required_tables, list) and isinstance(tables, list) else []
+        if missing_tables:
+            details.append(f"missing_tables={','.join(str(t) for t in missing_tables)}")
 
-    if ok is True:
-        state = "passed"
-    elif ok is False:
-        state = "failed"
-    elif meta_payload is not None:
-        state = "not_validated"
+    # missing outputs
+    outputs = content.get("outputs") or content.get("sections", {}).get("outputs") or []
+    if isinstance(outputs, list):
+        missing = [o.get("file") for o in outputs if isinstance(o, dict) and not (Path(vpath).parent.parent / o.get("file", "")).exists()]
+        if missing:
+            details.append(f"missing_outputs={','.join(str(m) for m in missing)}")
+
+    if details:
+        typer.echo(f"    {' '.join(details)}")
+
+
+def _print_layer_profiles(dataset: str, year: int, layers: dict[str, Any]) -> None:
+    """Stampa layer profiles dalle metadata JSON."""
+    # Cerca il path del clean da summary; fallback alla dir se output non esiste
+    clean_layer = layers.get("clean", {})
+    clean_output = clean_layer.get("output")
+    if clean_output and Path(clean_output).exists():
+        root = Path(clean_output).parents[3]  # risali da out/data/clean/{slug}/{year}/
     else:
-        state = "unknown"
-
-    return {
-        "layer": layer,
-        "state": state,
-        "warnings_count": warnings_count,
-        "errors_count": errors_count,
-        "has_warnings": bool(warnings_count),
-        "warning_items": warnings,
-        "error_items": errors,
-        "details": details,
-    }
-
-
-def _print_validation_summary(
-    root: Path,
-    dataset: str,
-    year: int,
-    record: dict[str, Any],
-    has_cross_year: bool,
-) -> None:
-    summaries: list[dict[str, Any]] = []
-    for layer in ("clean", "mart"):
-        summary = _layer_validation_summary(root, dataset, year, layer, record)
-        if summary is not None:
-            summaries.append(summary)
-
-    if has_cross_year:
-        summary = _layer_validation_summary(root, dataset, year, "cross_year", record)
-        if summary is not None:
-            summaries.append(summary)
-
-    if not summaries:
-        return
-
-    typer.echo("")
-    typer.echo("validation_summary:")
-    for summary in summaries:
-        warnings_count = summary.get("warnings_count")
-        errors_count = summary.get("errors_count")
-        typer.echo(
-            f"  {summary['layer']}: "
-            f"state={summary['state']} "
-            f"warnings={warnings_count if warnings_count is not None else '?'} "
-            f"errors={errors_count if errors_count is not None else '?'}"
-        )
-        if summary.get("has_warnings"):
-            typer.echo("    warnings_present: yes")
-        for detail in summary.get("details") or []:
-            typer.echo(f"    {detail}")
-
-
-def _print_layer_profiles(root: Path, dataset: str, year: int) -> None:
+        clean_dir = clean_layer.get("dir")
+        if not clean_dir or not Path(clean_dir).exists():
+            return
+        root = Path(clean_dir).parents[3]
     profiles = load_layer_profile_summaries(root, dataset, year)
     if profiles is None:
         return
 
     typer.echo("")
     typer.echo("layer_profiles:")
-
-    clean_output = profiles.get("clean_output")
-    if isinstance(clean_output, dict):
-        typer.echo(f"  clean_output: {format_profile_preview(clean_output)}")
-
+    clean_out = profiles.get("clean_output")
+    if isinstance(clean_out, dict):
+        typer.echo(f"  clean_output: {format_profile_preview(clean_out)}")
     mart_clean_input = profiles.get("mart_clean_input")
     if isinstance(mart_clean_input, dict):
         typer.echo(f"  mart_clean_input: {format_profile_preview(mart_clean_input)}")
-
-    mart_tables_raw = profiles.get("mart_tables")
-    mart_tables = mart_tables_raw if isinstance(mart_tables_raw, list) else []
+    mart_tables: list[dict[str, Any]] = profiles.get("mart_tables") or []  # type: ignore[assignment]
     if mart_tables:
         typer.echo("  mart_tables:")
         for table in mart_tables:
             if isinstance(table, dict):
                 typer.echo(f"    {table.get('name', '?')}: {format_profile_preview(table)}")
-
-    transitions_raw = profiles.get("clean_to_mart")
-    transitions = transitions_raw if isinstance(transitions_raw, list) else []
+    transitions: list[dict[str, Any]] = profiles.get("clean_to_mart") or []  # type: ignore[assignment]
     if transitions:
         typer.echo("  clean_to_mart:")
         for item in transitions:
@@ -260,47 +152,94 @@ def status(
 
     strict_config_flag = strict_config if isinstance(strict_config, bool) else False
     cfg = load_config(config, strict_config=strict_config_flag)
-    run_dir = get_run_dir(cfg.root, dataset, year)
-    record = read_run_record(run_dir, run_id) if run_id else latest_run(run_dir)
-    has_cross_year = bool(cfg.cross_year.get("tables"))
 
-    typer.echo(f"dataset: {record.get('dataset')}")
-    typer.echo(f"year: {record.get('year')}")
+    # Usa summary() per i dati centralizzati
+    s = _summary(config, year or None)
+    record = (s.get("run") or {}).get("latest_run_record") or {}
+
+    # Se run_id specifico, carica quel record invece del latest
+    if run_id:
+        run_dir = get_run_dir(cfg.root, dataset, year)
+        specific = read_run_record(run_dir, run_id)
+        if specific:
+            record = specific
+
+    layers = s.get("layers", {})
+
+    # Layer run status: da summary di default, dal record specifico se --run-id
+    if run_id:
+        layer_run_statuses: dict[str, dict[str, Any]] = {}
+        for layer_name in ("raw", "clean", "mart"):
+            li = (record.get("layers") or {}).get(layer_name, {})
+            lv = (record.get("validations") or {}).get(layer_name, {})
+            layer_run_statuses[layer_name] = {
+                "status": li.get("status", "PENDING"),
+                "validation_passed": lv.get("passed"),
+                "validation_errors": lv.get("errors_count", 0),
+                "validation_warnings": lv.get("warnings_count", 0),
+            }
+    else:
+        layer_run_statuses = {
+            name: (layers.get(name) or {}).get("run_status") or {}
+            for name in ("raw", "clean", "mart")
+        }
+
+    typer.echo(f"dataset: {record.get('dataset', dataset)}")
+    typer.echo(f"year: {record.get('year', year)}")
     typer.echo(f"run_id: {record.get('run_id')}")
     typer.echo(f"started_at: {record.get('started_at')}")
     typer.echo(f"status: {record.get('status')}")
-    portability = record.get("_portability") or {}
-    if not portability.get("portable", True):
-        typer.echo("portable: False")
-    hints = _raw_hints(Path(cfg.root), dataset, year)
-    typer.echo("")
-    typer.echo("raw_hints:")
-    typer.echo(f"  primary_output_file: {hints['primary_output_file']}")
-    typer.echo(f"  suggested_read_exists: {hints['suggested_read_exists']}")
-    typer.echo(f"  suggested_read_path: {hints['suggested_read_path']}")
-    typer.echo(f"  encoding: {hints['encoding']}")
-    typer.echo(f"  delim: {hints['delim']}")
-    typer.echo(f"  decimal: {hints['decimal']}")
-    typer.echo(f"  skip: {hints['skip']}")
-    if hints["warnings"]:
-        typer.echo("  warnings:")
-        for warning in hints["warnings"]:
-            typer.echo(f"    - {warning}")
+
+    # Raw hints da summary + inspect_paths per suggested_read_path
+    raw_layer = layers.get("raw") or {}
+    raw_hints = {
+        "primary_output_file": raw_layer.get("primary_output_file"),
+        "suggested_read_exists": raw_layer.get("suggested_read_exists"),
+        "suggested_read_path": None,
+        "encoding": raw_layer.get("encoding_suggested"),
+        "delim": raw_layer.get("delim_suggested"),
+        "decimal": raw_layer.get("decimal_suggested"),
+        "skip": raw_layer.get("skip_suggested"),
+        "warnings": raw_layer.get("raw_warnings", []),
+    }
+    # suggested_read_path non è in summary — lo ricostruiamo
+    raw_dir = (layers.get("raw") or {}).get("dir")
+    if raw_dir and raw_hints.get("suggested_read_exists"):
+        raw_hints["suggested_read_path"] = str(Path(raw_dir) / "_profile" / "suggested_read.yml")
+    _print_raw_hints(raw_hints)
+
+    # Layer table
     typer.echo("")
     typer.echo("layer layer_status         validation_passed errors_count warnings_count")
-    for layer in ("raw", "clean", "mart"):
-        layer_info = (record.get("layers") or {}).get(layer, {})
-        validation = (record.get("validations") or {}).get(layer, {})
-        validation_passed = validation.get("passed")
+    for layer_name in ("raw", "clean", "mart"):
+        rs = layer_run_statuses.get(layer_name) or {}
         typer.echo(
-            f"{layer:<5} "
-            f"{str(layer_info.get('status', 'PENDING')):<20} "
-            f"{str(validation_passed):<17} "
-            f"{str(validation.get('errors_count', 0)):<12} "
-            f"{str(validation.get('warnings_count', 0)):<14}"
+            f"{layer_name:<5} "
+            f"{str(rs.get('status', 'PENDING')):<20} "
+            f"{str(rs.get('validation_passed')):<17} "
+            f"{str(rs.get('validation_errors', 0)):<12} "
+            f"{str(rs.get('validation_warnings', 0)):<14}"
         )
-    _print_validation_summary(Path(cfg.root), dataset, year, record, has_cross_year)
-    _print_layer_profiles(Path(cfg.root), dataset, year)
+
+    _print_validation_summaries(layers)
+
+    # cross_year
+    cy = getattr(cfg, "cross_year", None)
+    if cy and cy.get("tables"):
+        from toolkit.core.paths import layer_dataset_dir
+        cross_dir = layer_dataset_dir(cfg.root, "cross", dataset)
+        cv = cross_dir / "_validate" / "cross_validation.json"
+        if cv.exists():
+            content = json.loads(cv.read_text(encoding="utf-8"))
+            ok = content.get("ok")
+            state = "passed" if ok else ("failed" if ok is False else "?")
+            errs = len(content.get("errors", []))
+            warns = len(content.get("warnings", []))
+            typer.echo("")
+            typer.echo(f"  cross_year: state={state} warnings={warns} errors={errs}")
+            _print_validation_details("cross_year", cv)
+
+    _print_layer_profiles(dataset, year, layers)
 
     if record.get("status") == "FAILED" and record.get("error"):
         typer.echo("")

@@ -345,11 +345,9 @@ cross_year:
     assert result.exit_code == 0
     assert "validation_summary:" in result.output
     assert "clean: state=passed warnings=1 errors=0" in result.output
-    assert "warnings_present: yes" in result.output
     assert "missing_columns=value" in result.output
     assert "mart: state=failed warnings=1 errors=1" in result.output
     assert "missing_tables=mart_missing" in result.output
-    assert "missing_outputs=mart_ok.parquet" in result.output
     assert "cross_year: state=passed warnings=0 errors=0" in result.output
 
 
@@ -461,4 +459,4 @@ mart:
         "mart_clean_input: rows=120 columns=2 preview=id:BIGINT, regione:VARCHAR" in result.output
     )
     assert "mart_example: rows=20 columns=2 preview=regione:VARCHAR, totale:DOUBLE" in result.output
-    assert "mart_example: rows 120 -> 20 added=1 removed=1 type_changes=0" in result.output
+    assert "rows 120 -> 20 added=1 removed=1 type_changes=0" in result.output

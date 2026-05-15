@@ -469,6 +469,8 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "encoding_suggested": (paths.get("raw_hints") or {}).get("encoding"),
                 "delim_suggested": (paths.get("raw_hints") or {}).get("delim"),
                 "decimal_suggested": (paths.get("raw_hints") or {}).get("decimal"),
+                "skip_suggested": (paths.get("raw_hints") or {}).get("skip"),
+                "raw_warnings": (paths.get("raw_hints") or {}).get("warnings", []),
                 "validation": _validation_summary_for_layer(raw_dir, "_validate/raw_validation.json"),
                 "run_status": layer_run_statuses.get("raw"),
             },

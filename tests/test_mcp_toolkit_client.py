@@ -4,6 +4,7 @@ import json
 import shutil
 from pathlib import Path
 
+import duckdb
 import pytest
 
 from toolkit.mcp.toolkit_client import (
@@ -16,6 +17,13 @@ from toolkit.mcp.toolkit_client import (
     show_schema,
     summary,
 )
+
+
+def _write_real_parquet(path: Path) -> None:
+    """Write a minimal real parquet file via DuckDB."""
+    conn = duckdb.connect()
+    conn.execute(f"COPY (SELECT 1 AS id) TO '{path}' (FORMAT PARQUET)")
+    conn.close()
 
 
 def test_mcp_toolkit_client_works_from_repo_layout(tmp_path: Path, monkeypatch) -> None:
@@ -92,13 +100,13 @@ def test_mcp_blocker_hints_empty_when_all_present(tmp_path: Path, monkeypatch) -
 
     clean_dir = dst / "_smoke_out" / "data" / "clean" / "project_example" / "2022"
     clean_dir.mkdir(parents=True, exist_ok=True)
-    (clean_dir / "project_example_2022_clean.parquet").write_bytes(b"")
+    _write_real_parquet(clean_dir / "project_example_2022_clean.parquet")
 
     mart_dir = dst / "_smoke_out" / "data" / "mart" / "project_example" / "2022"
     mart_dir.mkdir(parents=True, exist_ok=True)
     # Il config dichiara 2 tabelle mart
-    (mart_dir / "rd_by_regione.parquet").write_bytes(b"")
-    (mart_dir / "rd_by_provincia.parquet").write_bytes(b"")
+    _write_real_parquet(mart_dir / "rd_by_regione.parquet")
+    _write_real_parquet(mart_dir / "rd_by_provincia.parquet")
 
     hints_payload = blocker_hints(str(config_path), 2022)
     assert hints_payload["hint_count"] == 0

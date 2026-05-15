@@ -10,7 +10,7 @@ from toolkit.mcp.schema_ops import show_schema
 
 
 def schema(
-    config_path: str = typer.Argument(..., help="Path al dataset.yml", metavar="CONFIG"),
+    config: str = typer.Option(..., "--config", "-c", help="Path al dataset.yml"),
     layer: str = typer.Option("clean", "--layer", "-l", help="Layer: raw, clean, mart"),
     year: int = typer.Option(0, "--year", "-y", help="Anno (default: ultimo)"),
     json_output: bool = typer.Option(False, "--json", help="Output JSON"),
@@ -19,7 +19,7 @@ def schema(
 
     Chiama la stessa implementazione del tool MCP toolkit_show_schema.
     """
-    result = show_schema(config_path, layer, year or None)
+    result = show_schema(config, layer, year or None)
     status = result.get("status", "ok" if result.get("columns") else "empty")
 
     if json_output:

@@ -6,7 +6,6 @@ Usage:
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 from toolkit.mcp.schema_ops import blocker_hints as _blocker_hints

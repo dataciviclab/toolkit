@@ -22,7 +22,6 @@ from .toolkit_client import (
     summary as summary_impl,
     show_schema as show_schema_impl,
 )
-from .raw_ops import describe as describe_impl, query as query_impl
 
 mcp = create_mcp_server(
     name="toolkit",
@@ -124,28 +123,6 @@ def toolkit_list_runs(
 )
 def toolkit_csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     return guard(csv_preview_impl, csv_path, limit)
-
-
-@mcp.tool(
-    description="DESCRIBE + row count di un file raw (parquet/CSV/JSON/Excel). "
-    "Supporta path locale, gs://bucket/key e URL HTTPS. "
-    "Autodetect del formato dall'estensione del file.",
-    structured_output=True,
-)
-def toolkit_raw_describe(file_path: str) -> dict[str, Any]:
-    return guard(describe_impl, file_path)
-
-
-@mcp.tool(
-    description="Esegue una query SQL SELECT su file raw con DuckDB. "
-    "L'utente specifica il reader: ``SELECT * FROM read_parquet('path')``, "
-    "``read_csv('path')``, ``read_json_auto('path')``. "
-    "Supporta path locale, gs://bucket/key e URL HTTPS. "
-    "Solo SELECT e WITH consentiti. Hard cap 500 righe.",
-    structured_output=True,
-)
-def toolkit_raw_query(sql: str, max_rows: int = 100) -> dict[str, Any]:
-    return guard(query_impl, sql, max_rows)
 
 
 if __name__ == "__main__":

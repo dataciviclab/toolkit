@@ -224,7 +224,8 @@ def status(
     _print_validation_summaries(layers)
 
     # cross_year
-    if bool((cfg.cross_year or {}).get("tables")):
+    cy = getattr(cfg, "cross_year", None)
+    if cy and cy.get("tables"):
         from toolkit.core.paths import layer_dataset_dir
         cross_dir = layer_dataset_dir(cfg.root, "cross", dataset)
         cv = cross_dir / "_validate" / "cross_validation.json"

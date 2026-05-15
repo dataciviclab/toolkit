@@ -17,7 +17,7 @@ from toolkit.core.paths import layer_dataset_dir, layer_year_dir
 from toolkit.core.run_context import RunContext
 from toolkit.mart.run import run_mart
 from toolkit.mart.validate import run_mart_validation
-from toolkit.mcp.schema_ops import blocker_hints as _blocker_hints
+from toolkit.mcp.schema_ops import review_readiness as _review_readiness
 from toolkit.raw.run import run_raw
 from toolkit.raw.validate import run_raw_validation
 
@@ -460,7 +460,7 @@ def run_full(
     dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
-    """Esegue run all + validate all + blocker-hints in un unico comando."""
+    """Esegue run all + validate all + review-readiness in un unico comando."""
     strict_flag = strict_config if isinstance(strict_config, bool) else False
     cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag)
     years_arg = years if isinstance(years, str) else None
@@ -496,10 +496,12 @@ def run_full(
             if not all_passed:
                 results["status"] = "failed"
 
-            # Blocker hints (capture, not print)
-            hints = _blocker_hints(config, year or None)
-            results["steps"][str(year)]["blockers"] = len(hints.get("blockers", []))
-            results["steps"][str(year)]["warnings"] = len(hints.get("warnings", []))
+            # Review readiness (capture, not print)
+            readiness = _review_readiness(config, year or None)
+            results["steps"][str(year)]["readiness"] = readiness.get("readiness")
+            results["steps"][str(year)]["checks"] = readiness.get("check_count", 0)
+            results["steps"][str(year)]["checks_ok"] = readiness.get("ok_count", 0)
+            results["steps"][str(year)]["checks_fail"] = readiness.get("fail_count", 0)
 
     if json_output:
         typer.echo(json.dumps(results, indent=2, default=str))
@@ -509,7 +511,7 @@ def run_full(
         typer.echo(f"years: {selected_years}")
         typer.echo(f"status: {status}")
         for y, s in results["steps"].items():
-            typer.echo(f"  {y}: run={s['run']} validate={s['validate']} blockers={s['blockers']} warnings={s['warnings']}")
+            typer.echo(f"  {y}: run={s['run']} validate={s['validate']} readiness={s.get('readiness','?')} checks={s.get('checks_ok',0)}/{s.get('checks',0)}")
 
     if results["status"] != "passed":
         raise typer.Exit(code=1)

@@ -10,16 +10,20 @@ import csv
 import io
 from typing import Any
 
-import requests
+from lab_connectors.http import HttpClient
 
 from toolkit.core.exceptions import DownloadError
 
 
 class SparqlSource:
-    """Query a SPARQL endpoint and return results as CSV bytes."""
+    """Query a SPARQL endpoint and return results as CSV bytes.
+
+    Uses HttpClient.post() with retries=2 (safe because SPARQL POST
+    is idempotent: same query → same result).
+    """
 
     def __init__(self, timeout: int = 60):
-        self.timeout = timeout
+        self._client = HttpClient(timeout=timeout)
 
     def fetch(
         self,
@@ -56,16 +60,18 @@ class SparqlSource:
         }
         params: dict[str, Any] = {"query": query}
 
-        try:
-            r = requests.post(
-                endpoint,
-                data=params,
-                headers=headers,
-                timeout=self.timeout,
-            )
-        except Exception as e:
-            raise DownloadError(f"SPARQL request failed for {endpoint}: {e}") from e
+        result = self._client.post(
+            endpoint,
+            data=params,
+            headers=headers,
+            retries=2,
+        )
+        if result.is_error:
+            raise DownloadError(
+                f"SPARQL request failed for {endpoint}: {result.err}"
+            ) from result.err
 
+        r = result.response
         if r.status_code != 200:
             raise DownloadError(
                 f"SPARQL endpoint returned HTTP {r.status_code} for {endpoint}: {r.text[:200]}"
@@ -125,16 +131,18 @@ class SparqlSource:
         params: dict[str, Any] = {"query": safe_query}
 
         start = time.monotonic()
-        try:
-            r = requests.post(
-                endpoint,
-                data=params,
-                headers=headers,
-                timeout=self.timeout,
-            )
-        except Exception as e:
-            raise DownloadError(f"SPARQL probe failed for {endpoint}: {e}") from e
+        result = self._client.post(
+            endpoint,
+            data=params,
+            headers=headers,
+            retries=0,
+        )
+        if result.is_error:
+            raise DownloadError(
+                f"SPARQL probe failed for {endpoint}: {result.err}"
+            ) from result.err
 
+        r = result.response
         query_time_ms = int((time.monotonic() - start) * 1000)
 
         if r.status_code != 200:

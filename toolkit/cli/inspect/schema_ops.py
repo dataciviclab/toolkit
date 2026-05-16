@@ -10,7 +10,8 @@ from toolkit.mcp.schema_ops import show_schema
 
 
 def schema(
-    config_path: str = typer.Argument(..., help="Path al dataset.yml", metavar="CONFIG"),
+    config_path: str = typer.Argument("", metavar="CONFIG", help="Path al dataset.yml (posizionale)"),
+    config: str = typer.Option(None, "--config", "-c", help="Path al dataset.yml", hidden=True),
     layer: str = typer.Option("clean", "--layer", "-l", help="Layer: raw, clean, mart"),
     year: int = typer.Option(0, "--year", "-y", help="Anno (default: ultimo)"),
     json_output: bool = typer.Option(False, "--json", help="Output JSON"),
@@ -18,8 +19,17 @@ def schema(
     """Mostra lo schema (colonne + tipi) di raw, clean o mart.
 
     Chiama la stessa implementazione del tool MCP toolkit_show_schema.
+
+    Il path config puo' essere passato come argomento posizionale
+    (es. toolkit inspect schema path/to/dataset.yml)
+    o con l'opzione --config / -c.
     """
-    result = show_schema(config_path, layer, year or None)
+    resolved_config = config or config_path
+    if not resolved_config:
+        typer.echo("error: specificare il path al dataset.yml (argomento o --config)", err=True)
+        raise typer.Exit(code=1)
+
+    result = show_schema(resolved_config, layer, year or None)
     status = result.get("status", "ok" if result.get("columns") else "empty")
 
     if json_output:

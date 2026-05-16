@@ -1,5 +1,8 @@
 """Tests for toolkit blocker-hints CLI command.
 
+DEPRECATED: delegato a review-readiness. Tests aggiornati per la nuova
+implementazione che verifica leggibilita' parquet (non solo esistenza).
+
 contract: blocker-hints CLI public interface (--json output format, exit codes)
 policy: missing config is blocker (not warning); relative path resolution from config dir
 """
@@ -7,10 +10,18 @@ policy: missing config is blocker (not warning); relative path resolution from c
 import json
 from pathlib import Path
 
+import duckdb
 import pytest
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
+
+
+def _write_real_parquet(path: Path) -> None:
+    """Write a minimal real parquet file via DuckDB (non dummy text)."""
+    conn = duckdb.connect()
+    conn.execute(f"COPY (SELECT 1 AS id) TO '{path}' (FORMAT PARQUET)")
+    conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -172,8 +183,8 @@ class TestBlockerHintsPolicy:
         )
 
     @pytest.mark.policy
-    def test_blocker_hints_detects_clean_dir_missing_when_mart_exists(self, tmp_path: Path, monkeypatch) -> None:
-        """policy: mart dir exists but clean dir is missing is a blocker (run-order inconsistency)."""
+    def test_blocker_hints_detects_missing_layers(self, tmp_path: Path, monkeypatch) -> None:
+        """policy: mart dir without clean/raw is a blocker (delegato a review-readiness)."""
         project_dir = tmp_path / "project"
         project_dir.mkdir()
         config_path = project_dir / "dataset.yml"
@@ -200,7 +211,7 @@ mart:
         (project_dir / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
         (sql_dir / "test_table.sql").write_text("select * from clean_input", encoding="utf-8")
 
-        # Only mart dir exists, not clean dir
+        # Only mart dir exists, not clean/raw dirs
         mart_dir = project_dir / "out" / "data" / "mart" / "test_ds" / "2023"
         mart_dir.mkdir(parents=True, exist_ok=True)
         (mart_dir / "manifest.json").write_text(
@@ -224,7 +235,9 @@ mart:
         )
 
         assert result.exit_code == 0
-        assert "clean_dir_missing" in result.output
+        # Delegates to review-readiness: reports missing raw + clean as blockers
+        assert "blocker" in result.output.lower()
+        assert result.output.count("blocker") >= 1
 
     @pytest.mark.policy
     def test_blocker_hints_resolves_relative_path_from_config_dir(
@@ -272,7 +285,7 @@ mart:
 
         clean_dir = project_dir / "out" / "data" / "clean" / "test_ds" / "2023"
         clean_dir.mkdir(parents=True, exist_ok=True)
-        (clean_dir / "test_ds_2023_clean.parquet").write_text("dummy", encoding="utf-8")
+        _write_real_parquet(clean_dir / "test_ds_2023_clean.parquet")
         (clean_dir / "manifest.json").write_text(
             json.dumps({"outputs": [{"file": "test_ds_2023_clean.parquet"}]}, indent=2),
             encoding="utf-8",
@@ -280,7 +293,7 @@ mart:
 
         mart_dir = project_dir / "out" / "data" / "mart" / "test_ds" / "2023"
         mart_dir.mkdir(parents=True, exist_ok=True)
-        (mart_dir / "test_table.parquet").write_text("dummy", encoding="utf-8")
+        _write_real_parquet(mart_dir / "test_table.parquet")
         (mart_dir / "manifest.json").write_text(
             json.dumps({"outputs": [{"file": "test_table.parquet"}]}, indent=2),
             encoding="utf-8",
@@ -357,7 +370,7 @@ mart:
 
         clean_dir = project_dir / "out" / "data" / "clean" / "test_ds" / "2023"
         clean_dir.mkdir(parents=True, exist_ok=True)
-        (clean_dir / "test_ds_2023_clean.parquet").write_text("dummy parquet", encoding="utf-8")
+        _write_real_parquet(clean_dir / "test_ds_2023_clean.parquet")
         (clean_dir / "manifest.json").write_text(
             json.dumps({"outputs": [{"file": "test_ds_2023_clean.parquet"}]}, indent=2),
             encoding="utf-8",
@@ -365,7 +378,7 @@ mart:
 
         mart_dir = project_dir / "out" / "data" / "mart" / "test_ds" / "2023"
         mart_dir.mkdir(parents=True, exist_ok=True)
-        (mart_dir / "test_table.parquet").write_text("dummy parquet", encoding="utf-8")
+        _write_real_parquet(mart_dir / "test_table.parquet")
         (mart_dir / "manifest.json").write_text(
             json.dumps({"outputs": [{"file": "test_table.parquet"}]}, indent=2),
             encoding="utf-8",

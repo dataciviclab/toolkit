@@ -1,11 +1,7 @@
-"""CLI command: toolkit blocker-hints
-
-Esporta blocker_hints come interfaccia CLI pubblica, invece di chiamare
-il modulo interno toolkit.mcp.toolkit_client.
+"""CLI command: toolkit blocker-hints (DEPRECATED, use review-readiness)
 
 Usage:
-    toolkit blocker-hints --config candidates/terna-electricity-by-source/dataset.yml --year 2023
-    toolkit blocker-hints --config candidates/terna-electricity-by-source/dataset.yml --year 2023 --json
+    toolkit review-readiness --config candidates/terna-electricity-by-source/dataset.yml --year 2023
 """
 
 from __future__ import annotations
@@ -26,13 +22,17 @@ def blocker_hints(
     """
     Mostra hint diagnostici per mismatch comuni tra config dichiarato e output.
 
-    I blocker sono errori che impediscono al candidate di funzionare.
-    I warning sono segnali di possibili problemi che non bloccano l'esecuzione.
+    DEPRECATED: usa invece 'toolkit review-readiness'.
 
     Exit code:
         0 — hint generati (anche se ci sono blocker, il comando funziona)
         1 — config non trovato o errore nell'analisi
     """
+    if not as_json:
+        typer.echo(
+            "⚠️  DEPRECATED: 'toolkit blocker-hints' sara' rimosso. Usa 'toolkit review-readiness'.",
+            err=True,
+        )
     try:
         # Use load_config like other CLI commands (run, init, status) so that
         # relative paths are resolved from the config file's base_dir, not from
@@ -95,4 +95,4 @@ def blocker_hints(
 
 
 def register(app: typer.Typer) -> None:
-    app.command("blocker-hints")(blocker_hints)
+    app.command("blocker-hints", hidden=True)(blocker_hints)

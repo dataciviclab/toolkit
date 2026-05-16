@@ -19,4 +19,4 @@ def register(app: typer.Typer) -> None:
     inspect_app.command("schema")(schema)
     inspect_app.command("url")(url)
     inspect_app.command("probe")(probe)
-    app.add_typer(inspect_app, name="inspect")
+    app.add_typer(inspect_app, name="inspect", help="Ispeziona path, schema, readiness e URL del dataset.")

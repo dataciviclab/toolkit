@@ -527,4 +527,4 @@ def register(app: typer.Typer) -> None:
     run_sub.command("cross-year")(run_cross_year_cmd)  # alias hyphen
     run_sub.command("init")(run_init)
     run_sub.command("full")(run_full)
-    app.add_typer(run_sub, name="run")
+    app.add_typer(run_sub, name="run", help="Esegue la pipeline RAW → CLEAN → MART per un dataset.")

@@ -8,8 +8,8 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 - `toolkit_show_schema(config_path, layer="clean", year=0)`
 - `toolkit_run_summary(config_path, year=0)` — statistiche aggregate (totali, successi, durata media)
 - `toolkit_summary(config_path, year=0)` — dashboard diagnostico (layer + run + warnings)
-- `toolkit_blocker_hints(config_path, year=0)`
-- `toolkit_review_readiness(config_path, year=0)`
+- `toolkit_blocker_hints(config_path, year=0)` — ⚠️ deprecato, usa `toolkit_review_readiness`
+- `toolkit_review_readiness(config_path, year=0)` — (raccomandato)
 - `toolkit_list_runs(config_path, year=0, since=None, until=None, status=None, limit=20, cross_year=False)`
 - `toolkit_schema_diff(config_path)` — confronto segnali schema raw cross-year (encoding, colonne, ecc.)
 - `toolkit_csv_preview(csv_path, limit=20)` — schema + preview CSV via profiler pipeline (`sniff_source_file` + `profile_with_read_cfg`); output allineato con `RawProfile` (delim, encoding, decimal, skip, robust_read_suggested)
@@ -55,5 +55,5 @@ Sostituire il path del `command` con il Python reale del clone locale che usera'
 - `toolkit_csv_preview` legge un CSV usando la stessa pipeline di `profile_raw` (`sniff_source_file` + `profile_with_read_cfg`); restituisce schema + prime N righe + mapping_suggestions — utile per ispezionare file raw senza runnare la pipeline
 - `toolkit_run_summary` aggrega tutti i run record per dataset/year
 - `toolkit_summary` include `run.latest_run_record` (payload completo dell'ultimo run)
-- `toolkit_blocker_hints` evidenzia mismatch pratici tra output risolti e stato run
+- `toolkit_blocker_hints` ⚠️ deprecato, punta a `toolkit_review_readiness`
 - `toolkit_review_readiness` esegue check di readiness per review candidate: config valida, layer presenti, output leggibili, coerenza run record

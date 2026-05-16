@@ -510,90 +510,88 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
 
 
 def blocker_hints(config_path: str, year: int | None = None) -> dict[str, Any]:
-    """Diagnostic hints che segnalano mismatch comuni tra config dichiarata e output reali.
+    """Diagnostic hints che segnalano mismatch tra config e output reali.
 
-    Parte dai ``warnings`` di ``summary()`` e aggiunge hint specifici
-    (coerenza run record, mart parziali, ordine layer).
+    DEPRECATED: delegato a review_readiness(). Use review_readiness() instead.
     """
-    config = _safe_path(config_path)
-    s = summary(str(config), year)
-    layers = s.get("layers", {})
-    raw = layers.get("raw", {})
-    clean = layers.get("clean", {})
-    mart = layers.get("mart", {})
-    run = s.get("run", {})
+    import warnings as _warnings
+    _warnings.warn(
+        "blocker_hints() is deprecated, use review_readiness() instead",
+        DeprecationWarning, stacklevel=2,
+    )
 
-    latest_run = run.get("latest_run") if isinstance(run, dict) else None
-    run_record = None
-    if latest_run and latest_run.get("path"):
-        latest_path = Path(latest_run["path"])
-        if latest_path.exists():
-            run_record = json.loads(latest_path.read_text(encoding="utf-8"))
-
+    rr = review_readiness(config_path, year)
     hints: list[dict[str, str]] = []
 
-    # --- Da summary() warnings (non ri-verifica, eredita) ---
-    for w in s.get("warnings", []):
-        if w == "raw_output_missing":
+    # Mappa check name → hint code e severity (escluso run_record_coherent
+    # che gestiamo separatamente per preservare i singoli hint di coerenza)
+    CHECK_HINT_MAP: dict[str, tuple[str, str]] = {
+        "config_valid": ("config_invalid", "blocker"),
+        "raw_output_present": ("raw_output_missing", "blocker"),
+        "clean_output_readable": ("clean_output_missing", "blocker"),
+    }
+
+    checks_map = {c["check"]: c for c in rr.get("checks", [])}
+
+    for check in rr.get("checks", []):
+        if check["ok"]:
+            continue
+        name = check["check"]
+        detail = str(check.get("detail", ""))
+
+        if name == "mart_outputs_readable":
+            detail_list = check.get("detail", [])
+            if isinstance(detail_list, list):
+                missing = [m.get("name", "?") for m in detail_list if not m.get("readable")]
+                total = len(detail_list)
+                if not missing:
+                    continue
+                if len(missing) == total:
+                    hints.append({
+                        "code": "mart_partial_outputs",
+                        "severity": "warning",
+                        "message": f"tutti i {total} mart output sono mancanti",
+                    })
+                else:
+                    hints.append({
+                        "code": "mart_partial_outputs",
+                        "severity": "warning",
+                        "message": f"{len(missing)}/{total} mart output mancanti: {', '.join(missing[:3])}",
+                    })
+        elif name in CHECK_HINT_MAP:
+            code, severity = CHECK_HINT_MAP[name]
             hints.append({
-                "code": "raw_output_missing",
-                "severity": "blocker",
-                "message": f"raw primary_output_file '{raw.get('primary_output_file', '?')}' risolto ma file assente",
-            })
-        elif w == "clean_output_missing":
-            hints.append({
-                "code": "clean_output_missing",
-                "severity": "blocker",
-                "message": f"clean output '{clean.get('output', '?')}' risolto ma file assente",
-            })
-        elif w == "mart_outputs_missing":
-            hints.append({
-                "code": "mart_partial_outputs",
-                "severity": "warning",
-                "message": f"tutti i {mart.get('output_count', 0)} mart output sono mancanti",
-            })
-        elif w == "latest_run_record_missing":
-            hints.append({
-                "code": "latest_run_record_missing",
-                "severity": "warning",
-                "message": "latest_run reference presente ma file non trovato",
+                "code": code,
+                "severity": severity,
+                "message": detail,
             })
 
-    # --- Hint specifici che summary() non copre ---
-    if (
-        clean.get("output_exists")
-        and mart.get("output_count", 0) > 0
-        and mart.get("output_exists_count", 0) == 0
-    ):
+    # Hint aggiuntivo: clean_but_no_mart (clean ok, mart no)
+    clean_ok = checks_map.get("clean_output_readable", {}).get("ok", False)
+    mart_ok = checks_map.get("mart_outputs_readable", {}).get("ok", False)
+    if clean_ok and not mart_ok:
         hints.append({
             "code": "clean_but_no_mart",
             "severity": "warning",
             "message": "clean output esiste ma nessun mart output e' presente",
         })
 
-    if not clean.get("dir_exists") and mart.get("dir_exists"):
-        hints.append({
-            "code": "clean_dir_missing",
-            "severity": "blocker",
-            "message": "mart dir esiste ma clean dir manca: run order incoerente",
-        })
-
-    # mart with multiple outputs but only partial
-    if mart.get("output_count", 0) > 1 and mart.get("missing_outputs"):
-        missing = mart["missing_outputs"]
-        hints.append({
-            "code": "mart_partial_outputs",
-            "severity": "warning",
-            "message": f"{len(missing)} mart output su {mart['output_count']} mancanti: {', '.join(Path(o).name for o in missing[:3])}",
-        })
-
-    # --- Coerenza run record (helper condiviso con review_readiness) ---
-    hints.extend(_check_run_record_coherence(run_record, layers))
+    # Coerenza run record: riusa lo stesso helper condiviso per preservare
+    # i singoli hint di coerenza (run_says_clean_success_but_output_missing, ecc.)
+    try:
+        _config = _safe_path(config_path)
+        _s = summary(str(_config), year)
+        _rs = run_state(str(_config), year)
+        _run_record = _rs.get("latest_run_record")
+        coherence_hints = _check_run_record_coherence(_run_record, _s.get("layers", {}))
+        hints.extend(coherence_hints)
+    except Exception:
+        pass  # Se fallisce, non aggiungiamo hint di coerenza — non bloccare
 
     return {
-        "dataset": s.get("dataset"),
+        "dataset": rr.get("dataset"),
         "config_path": str(config_path),
-        "year": s.get("year"),
+        "year": rr.get("year"),
         "hint_count": len(hints),
         "hints": hints,
         "blocker_count": sum(1 for h in hints if h.get("severity") == "blocker"),

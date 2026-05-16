@@ -102,8 +102,8 @@ Il toolkit non gestisce il deployment: scrive nella directory configurata via
 |---|---|
 | `toolkit inspect paths --config dataset.yml --year 2023` | Mostra path assoluti degli output (utile nei notebook). Esempio: `toolkit inspect paths --config project-example/dataset.yml --json` |
 | `toolkit inspect schema-diff --config dataset.yml` | Confronta schema RAW tra anni configurati |
-| `toolkit blocker-hints --config dataset.yml` | Mismatch tra config e output reali |
-| `toolkit review-readiness --config dataset.yml` | Check di prontezza per review candidate |
+| `toolkit review-readiness --config dataset.yml` | Check di prontezza per review candidate (raccomandato) |
+| `toolkit blocker-hints --config dataset.yml` | ⚠️ Deprecato: usa `review-readiness` |
 | `toolkit status --dataset <name> --year <year> --latest --config dataset.yml` | Ultimo run completato |
 | `toolkit profile raw --config dataset.yml` | Profilo diagnostico del RAW (encoding, delimitatore, colonne) |
 
@@ -265,7 +265,7 @@ toolkit/
 | Problema | Soluzione |
 |---|---|
 | `toolkit: command not found` | Usa `python -m toolkit.cli.app` al posto di `toolkit` |
-| `run all` fallisce | `toolkit blocker-hints --config dataset.yml` + controlla che la fonte sia raggiungibile |
+| `run all` fallisce | `toolkit review-readiness --config dataset.yml` + controlla che la fonte sia raggiungibile |
 | "dove sono i parquet prodotti?" | `toolkit inspect paths --config dataset.yml --year <anno>` o cerca in `root/data/` |
 | "errore schema tra anni diversi" | `toolkit inspect schema-diff --config dataset.yml` per vedere il drift RAW |
 | Voglio solo un layer, non tutto | `toolkit run clean` o `toolkit run mart` — skippa i layer upstream se già presenti |

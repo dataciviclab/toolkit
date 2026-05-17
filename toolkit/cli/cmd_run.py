@@ -480,9 +480,11 @@ def run_full(
         )
         for entry in support_entries:
             logger.info("Support: %s — %s", entry.name, entry.config)
-            if dry_flag:
-                typer.echo(f"  [dry-run] support: {entry.name} — years={entry.years}")
-                continue
+
+            # In dry-run i support vengono comunque eseguiti per rendere
+            # disponibili gli output alla validazione SQL del candidate
+            # (resolve_support_payloads richiede file reali).
+            # Solo il candidate resta in dry-run.
             try:
                 support_cfg, support_logger = load_cfg_and_logger(
                     str(entry.config), strict_config=strict_flag

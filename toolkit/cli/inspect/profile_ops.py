@@ -1,11 +1,6 @@
-"""CLI command: toolkit profile (DEPRECATED, usa toolkit inspect profile).
-
-Tenuto per backward compat. La stessa logica vive in inspect/profile_ops.py.
-"""
+"""inspect profile — profilo diagnostico del RAW (encoding, delim, colonne)."""
 
 from __future__ import annotations
-
-import warnings
 
 import typer
 
@@ -16,7 +11,6 @@ from toolkit.profile.raw import profile_raw, write_raw_profile, write_suggested_
 
 
 def profile(
-    step: str = typer.Argument(..., help="raw"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
@@ -25,22 +19,14 @@ def profile(
     ),
 ):
     """
-    Profiling (assist) per i layer. Per ora: raw.
+    Profilo diagnostico del RAW: encoding, delimitatore, colonne.
 
-    ⚠️  DEPRECATO: usa 'toolkit inspect profile --config <path>' invece.
+    Scrive raw_profile.json e (opzionalmente) suggested_read.yml
+    nella directory _profile/ del raw layer.
     """
-    warnings.warn(
-        "'toolkit profile' e' deprecato. Usa 'toolkit inspect profile'.",
-        DeprecationWarning, stacklevel=2,
-    )
-
     strict_flag = strict_config if isinstance(strict_config, bool) else False
     year_val = year if isinstance(year, int) else None
     years_val = years if isinstance(years, str) else None
-
-    if step != "raw":
-        raise typer.BadParameter("step must be: raw")
-
     cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag)
     selected_years = iter_selected_years(cfg, year_arg=year_val, years_arg=years_val)
 
@@ -61,7 +47,3 @@ def profile(
             logger.info("PROFILE RAW -> %s", " | ".join(str(path) for path in written_paths))
         else:
             logger.info("PROFILE RAW -> no optional artifacts written for current policy")
-
-
-def register(app: typer.Typer) -> None:
-    app.command("profile")(profile)

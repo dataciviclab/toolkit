@@ -179,3 +179,63 @@ def test_batch_with_validate(tmp_path: Path) -> None:
     assert (root / "data" / "raw" / "validated" / str(year) / "raw_validation.json").exists()
     assert (root / "data" / "clean" / "validated" / str(year) / "_validate" / "clean_validation.json").exists()
     assert (root / "data" / "mart" / "validated" / str(year) / "_validate" / "mart_validation.json").exists()
+
+
+def test_batch_validate_respects_step(tmp_path: Path) -> None:
+    """batch --validate --step raw valida solo raw, non clean/mart."""
+    project = tmp_path / "project"
+    _write_batch_project(project, "step_raw", 2024)
+
+    configs_file = tmp_path / "configs.txt"
+    configs_file.write_text("project/dataset.yml\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--configs", str(configs_file), "--step", "raw", "--validate"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0, result.output
+    root = project / "out"
+    year = 2024
+    # Raw validation esiste
+    assert (root / "data" / "raw" / "step_raw" / str(year) / "raw_validation.json").exists()
+    # Clean/mart validation NON deve esistere (non richiesti da --step raw)
+    assert not (root / "data" / "clean" / "step_raw" / str(year) / "_validate" / "clean_validation.json").exists()
+    assert not (root / "data" / "mart" / "step_raw" / str(year) / "_validate" / "mart_validation.json").exists()
+
+
+def test_batch_validate_failure_exits_nonzero(tmp_path: Path, monkeypatch) -> None:
+    """batch --validate esce con codice 1 se una validazione fallisce."""
+    from toolkit.clean import validate as clean_validate
+
+    project = tmp_path / "project"
+    _write_batch_project(project, "failing", 2024)
+
+    configs_file = tmp_path / "configs.txt"
+    configs_file.write_text("project/dataset.yml\n", encoding="utf-8")
+
+    # Forza run_clean_validation a tornare failed.
+    # Il nome locale in cmd_batch e' un alias: va patchato per nome qualificato.
+    original = clean_validate.run_clean_validation
+
+    def mock_validate(cfg, year, logger):
+        result = original(cfg, year, logger)
+        result["passed"] = False
+        return result
+
+    monkeypatch.setattr("toolkit.clean.validate.run_clean_validation", mock_validate)
+    monkeypatch.setattr("toolkit.cli.cmd_batch.run_clean_validation", mock_validate)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--configs", str(configs_file), "--step", "all", "--validate"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 1, f"expected exit 1, got {result.exit_code}: {result.output}"
+    assert "Failures" in result.output
+    assert "validation failed" in result.output
+    assert "failing" in result.output

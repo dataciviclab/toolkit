@@ -46,4 +46,4 @@ def profile(
 
 
 def register(app: typer.Typer) -> None:
-    app.command("profile")(profile)
+    app.command("profile", hidden=True)(profile)

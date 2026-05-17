@@ -597,7 +597,7 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
         }
     )
 
-    # --- Run record coherence (helper condiviso con blocker_hints) ---
+    # --- Run record coherence (helper condiviso con _check_run_record_coherence) ---
     rs = run_state(str(config), target_year)
     run_record = rs.get("latest_run_record")
     coherence_hints = _check_run_record_coherence(run_record, s.get("layers", {}))

@@ -1,4 +1,4 @@
-"""Tests for ``toolkit run init`` command."""
+"""Tests for ``toolkit init --config`` command (ex ``toolkit run init``)."""
 
 from pathlib import Path
 
@@ -121,7 +121,7 @@ def test_run_init_fails_when_raw_has_no_profile_and_no_clean_sql(tmp_path: Path,
     )
 
     # Profile is NOT pre-created; clean.sql does NOT exist.
-    result = runner.invoke(app, ["run", "init", "-c", str(yml)])
+    result = runner.invoke(app, ["init", "--config", str(yml)])
 
     assert result.exit_code != 0
     assert "profilo" in result.output.lower() or "profile" in result.output.lower()
@@ -143,7 +143,7 @@ def test_run_init_reports_correct_scaffold_message_when_pre_existing(tmp_path: P
     # Pre-create clean.sql
     _scaffold_clean_sql(tmp_path, dataset, year)
 
-    result = runner.invoke(app, ["run", "init", "-c", str(yml)])
+    result = runner.invoke(app, ["init", "--config", str(yml)])
 
     assert result.exit_code == 0
     # Must report "gia esistente", NOT "scaffoldato"
@@ -168,7 +168,7 @@ def test_run_init_dry_run_validates_config(tmp_path: Path):
         encoding="utf-8",
     )
 
-    result = runner.invoke(app, ["run", "init", "-c", str(yml), "--dry-run"])
+    result = runner.invoke(app, ["init", "--config", str(yml), "--dry-run"])
 
     # Should fail during validation (not silently succeed with a static plan)
     assert result.exit_code != 0

@@ -694,4 +694,4 @@ def test_run_all_fails_with_bootstrap_hint_when_clean_sql_missing(tmp_path: Path
     assert result.exit_code != 0
     exc_text = str(result.exception)
     assert "CLEAN SQL file not found" in exc_text
-    assert "toolkit run init" in exc_text
+    assert "toolkit init --config" in exc_text

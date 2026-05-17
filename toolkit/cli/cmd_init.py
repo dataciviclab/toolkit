@@ -367,7 +367,7 @@ def init(
     dataset.yml completo con sql/clean.sql e sql/mart.sql placeholder.
     Pronto per toolkit run all --config dataset.yml.
 
-    Con --config: come run init (run raw + scaffold clean.sql).
+    Con --config: run raw + scaffold clean.sql se assente.
     """
     if url and config:
         typer.echo("error: specificare --url o --config, non entrambi", err=True)

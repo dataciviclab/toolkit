@@ -3,6 +3,7 @@ from __future__ import annotations
 import requests
 
 from lab_connectors.http import HttpClient, HttpResult
+from lab_connectors.testing import http_ok
 
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.sdmx import SdmxSource
@@ -90,10 +91,6 @@ PREVIEW_JSON_WITH_VALUES = """
 """
 
 
-def _ok(result, err=None):
-    return HttpResult(response=result, err=err)
-
-
 def test_sdmx_fetch_normalizes_csv(monkeypatch):
     calls = []
 
@@ -102,11 +99,11 @@ def test_sdmx_fetch_normalizes_csv(monkeypatch):
         headers = kwargs.get("headers", {})
         calls.append((url, params, headers.get("Accept") if headers else None))
         if url.endswith("/dataflow/IT1/22_289"):
-            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
+            return http_ok(200, text=DATAFLOW_XML, url=url)
         if url.endswith("/data/IT1,22_289,1.5/all"):
-            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
+            return http_ok(200, text=PREVIEW_JSON_WITH_VALUES, url=url)
         if url.endswith("/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99"):
-            return _ok(_FakeResponse(200, DATA_JSON, url))
+            return http_ok(200, text=DATA_JSON, url=url)
         raise AssertionError(f"Unexpected URL {url}")
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
@@ -138,7 +135,7 @@ def test_sdmx_fetch_normalizes_csv(monkeypatch):
 def test_sdmx_fetch_blocks_version_mismatch(monkeypatch):
     def _fake_get(self, url, **kwargs):
         if url.endswith("/dataflow/IT1/22_289"):
-            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
+            return http_ok(200, text=DATAFLOW_XML, url=url)
         raise AssertionError(f"Unexpected URL {url}")
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
@@ -154,10 +151,10 @@ def test_sdmx_fetch_blocks_version_mismatch(monkeypatch):
 def test_sdmx_fetch_rejects_unknown_filter_dimension(monkeypatch):
     def _fake_get(self, url, **kwargs):
         if url.endswith("/dataflow/IT1/22_289"):
-            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
+            return http_ok(200, text=DATAFLOW_XML, url=url)
         if url.endswith("/data/IT1,22_289,1.5/all"):
-            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
-        return _ok(_FakeResponse(404, "not found", url))
+            return http_ok(200, text=PREVIEW_JSON_WITH_VALUES, url=url)
+        return http_ok(404, text="not found", url=url)
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
 
@@ -178,11 +175,11 @@ def test_sdmx_fetch_falls_back_on_metadata_timeout(monkeypatch):
         if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
             return HttpResult(response=None, err=requests.exceptions.Timeout("metadata timeout"))
         if url == "https://esploradati.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
-            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
+            return http_ok(200, text=DATAFLOW_XML, url=url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
+            return http_ok(200, text=PREVIEW_JSON_WITH_VALUES, url=url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
-            return _ok(_FakeResponse(200, DATA_JSON, url))
+            return http_ok(200, text=DATA_JSON, url=url)
         raise AssertionError(f"Unexpected URL {url}")
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
@@ -212,10 +209,10 @@ def test_sdmx_fetch_falls_back_on_metadata_timeout(monkeypatch):
 def test_sdmx_fetch_rejects_invalid_filter_value(monkeypatch):
     def _fake_get(self, url, **kwargs):
         if url.endswith("/dataflow/IT1/22_289"):
-            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
+            return http_ok(200, text=DATAFLOW_XML, url=url)
         if url.endswith("/data/IT1,22_289,1.5/all"):
-            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
-        return _ok(_FakeResponse(404, "not found", url))
+            return http_ok(200, text=PREVIEW_JSON_WITH_VALUES, url=url)
+        return http_ok(404, text="not found", url=url)
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
 
@@ -231,9 +228,9 @@ def test_sdmx_fetch_rejects_invalid_filter_value(monkeypatch):
 def test_sdmx_fetch_rejects_invalid_filter_value_list(monkeypatch):
     def _fake_get(self, url, **kwargs):
         if url.endswith("/dataflow/IT1/22_289"):
-            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
+            return http_ok(200, text=DATAFLOW_XML, url=url)
         if url.endswith("/data/IT1,22_289,1.5/all"):
-            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
+            return http_ok(200, text=PREVIEW_JSON_WITH_VALUES, url=url)
         raise AssertionError(f"Unexpected URL {url}")
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
@@ -252,10 +249,10 @@ def test_sdmx_fetch_empty_response(monkeypatch):
 
     def _fake_get(self, url, **kwargs):
         if url.endswith("/dataflow/IT1/22_289"):
-            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
+            return http_ok(200, text=DATAFLOW_XML, url=url)
         if url.endswith("/data/IT1,22_289,1.5/all"):
-            return _ok(_FakeResponse(200, empty_data_json, url))
-        return _ok(_FakeResponse(200, empty_data_json, url))
+            return http_ok(200, text=empty_data_json, url=url)
+        return http_ok(200, text=empty_data_json, url=url)
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
 
@@ -273,15 +270,15 @@ def test_sdmx_fetch_falls_back_on_data_5xx(monkeypatch):
     def _fake_get(self, url, **kwargs):
         calls.append(url)
         if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
-            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
+            return http_ok(200, text=DATAFLOW_XML, url=url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _ok(_FakeResponse(500, "boom", url))
+            return http_ok(500, text="boom", url=url)
         if url == "https://sdmx.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
+            return http_ok(200, text=PREVIEW_JSON_WITH_VALUES, url=url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
-            return _ok(_FakeResponse(500, "boom", url))
+            return http_ok(500, text="boom", url=url)
         if url == "https://sdmx.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
-            return _ok(_FakeResponse(200, DATA_JSON, url))
+            return http_ok(200, text=DATA_JSON, url=url)
         raise AssertionError(f"Unexpected URL {url}")
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
@@ -311,11 +308,11 @@ def test_sdmx_fetch_falls_back_on_data_5xx(monkeypatch):
 def test_sdmx_fetch_does_not_fallback_on_404(monkeypatch):
     def _fake_get(self, url, **kwargs):
         if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
-            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
+            return http_ok(200, text=DATAFLOW_XML, url=url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
+            return http_ok(200, text=PREVIEW_JSON_WITH_VALUES, url=url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
-            return _ok(_FakeResponse(404, "not found", url))
+            return http_ok(404, text="not found", url=url)
         raise AssertionError(f"Unexpected URL {url}")
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
@@ -350,9 +347,9 @@ def test_sdmx_fetch_does_not_fallback_on_connection_error(monkeypatch):
     def _fake_get(self, url, **kwargs):
         calls.append(url)
         if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
-            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
+            return http_ok(200, text=DATAFLOW_XML, url=url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
-            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
+            return http_ok(200, text=PREVIEW_JSON_WITH_VALUES, url=url)
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
             return HttpResult(
                 response=None, err=requests.exceptions.ConnectionError("tls handshake failed")

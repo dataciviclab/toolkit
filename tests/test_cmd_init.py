@@ -6,18 +6,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-from lab_connectors.http import HttpClient, HttpResult
+from lab_connectors.http import HttpClient
+from lab_connectors.testing import http_ok
 
 from toolkit.cli.app import app
 from typer.testing import CliRunner
-
-
-class _FakeResp:
-    def __init__(self, content: bytes = b"", headers: dict | None = None, status_code: int = 200, url: str = ""):
-        self.content = content
-        self.headers = headers or {}
-        self.status_code = status_code
-        self.url = url
 
 
 @pytest.mark.policy
@@ -26,14 +19,10 @@ def test_init_url_generates_dataset_yml(monkeypatch, tmp_path: Path) -> None:
     csv_content = b"nome,eta,citta\nMario,30,Roma\nLucia,25,Milano\n"
 
     def fake_get(self, url, **kwargs):
-        return HttpResult(
-            response=_FakeResp(
-                content=csv_content,
-                headers={"Content-Type": "text/csv"},
-                status_code=200,
-                url=url,
-            ),
-            err=None,
+        return http_ok(
+            content=csv_content,
+            headers={"Content-Type": "text/csv"},
+            url=url,
         )
 
     monkeypatch.setattr(HttpClient, "get", fake_get)

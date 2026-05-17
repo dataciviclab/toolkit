@@ -9,16 +9,10 @@ from __future__ import annotations
 import pytest
 
 from lab_connectors.http import HttpClient, HttpResult
+from lab_connectors.testing import http_ok
 
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.http_file import HttpFileSource
-
-
-class _FakeResponse:
-    """Minimal response stub duck-typing requests.Response properties."""
-    def __init__(self, status_code: int = 200, content: bytes = b"ok") -> None:
-        self.status_code = status_code
-        self.content = content
 
 
 def test_fetch_success(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -27,7 +21,7 @@ def test_fetch_success(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def fake_get(self, url: str, **kwargs):
         results.append((url, kwargs))
-        return HttpResult(response=_FakeResponse(200, b"payload"), err=None)
+        return http_ok(200, b"payload")
 
     monkeypatch.setattr(HttpClient, "get", fake_get)
 
@@ -42,7 +36,7 @@ def test_fetch_success(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_fetch_http_status_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """Non-200 HTTP status → DownloadError with status code in message."""
     def fake_get(self, url: str, **kwargs):
-        return HttpResult(response=_FakeResponse(503, b"service unavailable"), err=None)
+        return http_ok(503, b"service unavailable")
 
     monkeypatch.setattr(HttpClient, "get", fake_get)
 
@@ -80,7 +74,7 @@ def test_ssl_fallback_semantics_preserved(monkeypatch: pytest.MonkeyPatch) -> No
     """ssl_fallback_used=True in HttpResult is transparent to caller."""
     def fake_get(self, url: str, **kwargs):
         return HttpResult(
-            response=_FakeResponse(200, b"ssl-fallback-data"),
+            response=http_ok(200, b"ssl-fallback-data").response,
             err=None,
             ssl_fallback_used=True,
         )

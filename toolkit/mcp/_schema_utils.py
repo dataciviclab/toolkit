@@ -59,6 +59,56 @@ def _read_parquet_row_count(parquet_path: Path) -> int | None:
         return None
 
 
+def _read_parquet_preview(parquet_path: Path, limit: int = 10) -> dict[str, Any]:
+    """Return schema + row preview of a parquet file via DuckDB.
+
+    Returns:
+        dict with keys: path, column_count, columns (list of {name, type}),
+        row_count, preview (list of dicts), truncated (bool).
+
+    Raises:
+        ToolkitClientError: if the file doesn't exist or can't be read.
+    """
+    if not parquet_path.exists():
+        raise ToolkitClientError(f"Parquet non trovato: {parquet_path}", code=ErrorCode.PARQUET_NOT_FOUND)
+
+    rel = f"read_parquet('{_sql_literal(str(parquet_path))}')"
+    try:
+        with duckdb.connect(database=":memory:") as conn:
+            conn.execute("PRAGMA disable_progress_bar")
+
+            # schema
+            describe = conn.execute(f"DESCRIBE SELECT * FROM {rel}").fetchall()
+            columns = [{"name": row[0], "type": row[1]} for row in describe]
+
+            # row count
+            count_row = conn.execute(f"SELECT COUNT(*) FROM {rel}").fetchone()
+            row_count = int(count_row[0]) if count_row else None
+
+            # preview
+            preview_rows = conn.execute(
+                f"SELECT * FROM {rel} LIMIT {int(limit)}"
+            ).fetchall()
+            col_names = [c["name"] for c in columns]
+            preview = [dict(zip(col_names, row)) for row in preview_rows]
+
+            truncated = bool(row_count and row_count > limit)
+
+            return {
+                "path": str(parquet_path),
+                "column_count": len(columns),
+                "columns": columns,
+                "row_count": row_count,
+                "preview": preview,
+                "truncated": truncated,
+            }
+    except Exception as exc:
+        raise ToolkitClientError(
+            f"Lettura parquet fallita per {parquet_path}: {exc}",
+            code=ErrorCode.DUCKDB_ERROR,
+        ) from exc
+
+
 def _exists(path: str | None) -> bool:
     """Return True if path is a real file/directory."""
     if not path:

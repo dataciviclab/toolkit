@@ -22,6 +22,10 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_list_runs",
         "toolkit_schema_diff",
         "toolkit_csv_preview",
+        "toolkit_list_candidates",
+        "toolkit_dataset_info",
+        "toolkit_clean_preview",
+        "toolkit_raw_preview",
     }
 
 
@@ -179,3 +183,123 @@ def test_csv_preview_ragged_csv_succeeds_with_robust_read(tmp_path: Path) -> Non
     assert result["robust_read_suggested"] is True
     # Preview still returns data
     assert len(result["preview"]) == 2
+
+
+def test_toolkit_list_candidates_passes_stage_and_filter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """list_candidates must pass stage AND status_filter through to the impl.
+
+    Nota: guard() wrappa i non-dict in ``{"result": ...}``, quindi
+    il consumer MCP vedra' ``{"result": [{"slug": ..., ...}]}``.
+    """
+    calls: dict[str, object] = {}
+
+    def fake_impl(stage: str, status_filter: str | None) -> list[dict[str, object]]:
+        calls["stage"] = stage
+        calls["status_filter"] = status_filter
+        return [{"slug": "test", "stage": stage, "status": status_filter}]
+
+    monkeypatch.setattr(mcp_server, "list_candidates_impl", fake_impl)
+
+    # Test con status_filter
+    result = mcp_server.toolkit_list_candidates("candidates", "SUCCESS")
+    assert "result" in result
+    assert result["result"][0]["stage"] == "candidates"
+    assert result["result"][0]["status"] == "SUCCESS"
+    assert calls == {"stage": "candidates", "status_filter": "SUCCESS"}
+
+    # Test con status_filter=None
+    result2 = mcp_server.toolkit_list_candidates("all", None)
+    assert result2["result"][0]["status"] is None
+
+
+def test_toolkit_dataset_info_passes_config_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """dataset_info must pass config_path to the impl."""
+    calls: dict[str, object] = {}
+
+    def fake_impl(config_path: str) -> dict[str, object]:
+        calls["config_path"] = config_path
+        return {"dataset": "test"}
+
+    monkeypatch.setattr(mcp_server, "dataset_info_impl", fake_impl)
+    result = mcp_server.toolkit_dataset_info("some/path/dataset.yml")
+
+    assert result["dataset"] == "test"
+    assert calls == {"config_path": "some/path/dataset.yml"}
+
+
+def test_toolkit_clean_preview_passes_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    """clean_preview must pass all params to the impl, converting year=0 → None."""
+    calls: dict[str, object] = {}
+
+    def fake_impl(
+        config_path: str, layer: str, mart_index: int, year: int | None, limit: int
+    ) -> dict[str, object]:
+        calls.update(
+            config_path=config_path,
+            layer=layer,
+            mart_index=mart_index,
+            year=year,
+            limit=limit,
+        )
+        return {"ok": True}
+
+    monkeypatch.setattr(mcp_server, "clean_preview_impl", fake_impl)
+    result = mcp_server.toolkit_clean_preview("d.yml", "mart", 1, 2023, 20)
+
+    assert result == {"ok": True}
+    assert calls == {
+        "config_path": "d.yml",
+        "layer": "mart",
+        "mart_index": 1,
+        "year": 2023,
+        "limit": 20,
+    }
+
+
+def test_toolkit_clean_preview_converts_year_zero_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    """clean_preview(year=0) must send year=None to the impl."""
+    calls: dict[str, object] = {}
+
+    def fake_impl(
+        config_path: str, layer: str, mart_index: int, year: int | None, limit: int
+    ) -> dict[str, object]:
+        calls["year"] = year
+        return {"ok": True}
+
+    monkeypatch.setattr(mcp_server, "clean_preview_impl", fake_impl)
+    mcp_server.toolkit_clean_preview("d.yml", "clean", 0, 0, 10)
+
+    assert calls["year"] is None
+
+
+def test_toolkit_raw_preview_passes_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    """raw_preview must pass all params to the impl, converting year=0 → None."""
+    calls: dict[str, object] = {}
+
+    def fake_impl(
+        config_path: str, year: int | None, limit: int
+    ) -> dict[str, object]:
+        calls.update(config_path=config_path, year=year, limit=limit)
+        return {"ok": True}
+
+    monkeypatch.setattr(mcp_server, "raw_preview_impl", fake_impl)
+    result = mcp_server.toolkit_raw_preview("d.yml", 2023, 30)
+
+    assert result == {"ok": True}
+    assert calls == {"config_path": "d.yml", "year": 2023, "limit": 30}
+
+
+def test_toolkit_raw_preview_converts_year_zero_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    """raw_preview(year=0) must send year=None to the impl."""
+    calls: dict[str, object] = {}
+
+    def fake_impl(
+        config_path: str, year: int | None, limit: int
+    ) -> dict[str, object]:
+        calls["year"] = year
+        return {"ok": True}
+
+    monkeypatch.setattr(mcp_server, "raw_preview_impl", fake_impl)
+    mcp_server.toolkit_raw_preview("d.yml", 0, 20)
+
+    assert calls["year"] is None

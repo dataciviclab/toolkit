@@ -2,7 +2,7 @@
 
 ToolkitClientError è un ponte verso lab_connectors.mcp.
 Tutte le eccezioni interne diventano McpError con codice UNEXPECTED
-e vengono gestite da `guard()` in server.py.
+e vengono gestite da ``guard_timed()`` in server.py.
 """
 
 from __future__ import annotations

@@ -28,7 +28,7 @@ def _write_real_parquet(path: Path) -> None:
 def test_mcp_toolkit_client_works_from_repo_layout(tmp_path: Path, monkeypatch) -> None:
     src = Path("project-example")
     dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     config_path = dst / "dataset.yml"
 
     monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
@@ -64,7 +64,7 @@ def test_mcp_toolkit_client_works_from_repo_layout(tmp_path: Path, monkeypatch) 
 def test_review_readiness_incomplete_when_no_outputs(tmp_path: Path, monkeypatch) -> None:
     src = Path("project-example")
     dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     config_path = dst / "dataset.yml"
 
     monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
@@ -84,7 +84,7 @@ def test_review_readiness_incomplete_when_no_outputs(tmp_path: Path, monkeypatch
 def test_review_readiness_ready_when_all_layers_present(tmp_path: Path, monkeypatch) -> None:
     src = Path("project-example")
     dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     config_path = dst / "dataset.yml"
 
     monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
@@ -121,7 +121,7 @@ def test_review_readiness_ready_when_all_layers_present(tmp_path: Path, monkeypa
 def test_review_readiness_needs_review_with_single_failure(tmp_path: Path, monkeypatch) -> None:
     src = Path("project-example")
     dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     config_path = dst / "dataset.yml"
 
     monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
@@ -151,7 +151,7 @@ def test_mcp_raw_profile_handles_suggested_read_yaml(tmp_path: Path, monkeypatch
     """raw_profile deve cadere su suggested_read.yml quando raw_profile.json non esiste."""
     src = Path("project-example")
     dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     config_path = dst / "dataset.yml"
 
     monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
@@ -176,7 +176,7 @@ def test_mcp_raw_profile_error_when_no_profile_file(tmp_path: Path, monkeypatch)
     """raw_profile deve fallire con errore chiaro quando non c'e' nessun profilo."""
     src = Path("project-example")
     dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     config_path = dst / "dataset.yml"
 
     monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
@@ -196,7 +196,7 @@ def test_list_runs_accepts_naive_datetime_filter(tmp_path: Path, monkeypatch) ->
     """Naive datetime in since/until must be normalized to UTC, not crash with TypeError."""
     src = Path("project-example")
     dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     config_path = dst / "dataset.yml"
 
     monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
@@ -240,7 +240,7 @@ def test_run_summary_accepts_since_until_filters(tmp_path: Path, monkeypatch) ->
     """run_summary with since/until filters must normalize naive datetimes to UTC."""
     src = Path("project-example")
     dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     config_path = dst / "dataset.yml"
 
     monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
@@ -315,7 +315,7 @@ def test_inspect_paths_cli_mcp_contract_alignment(tmp_path: Path, monkeypatch) -
 
     src = Path("project-example")
     dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     config_path = dst / "dataset.yml"
 
     monkeypatch.chdir(tmp_path)
@@ -351,10 +351,9 @@ def test_inspect_paths_cli_mcp_contract_alignment(tmp_path: Path, monkeypatch) -
 
 
 @pytest.mark.policy
-def test_inspect_paths_multi_year_requires_year(tmp_path: Path, monkeypatch) -> None:
-    """inspect_paths(year=None) su dataset multi-year deve alzare ToolkitClientError."""
+def test_inspect_paths_multi_year_defaults_to_max_year(tmp_path: Path, monkeypatch) -> None:
+    """inspect_paths(year=None) su dataset multi-year usa l'ultimo anno."""
     from toolkit.mcp.cli_adapter import inspect_paths
-    from toolkit.mcp.errors import ToolkitClientError
 
     yml = tmp_path / "dataset.yml"
     yml.write_text(
@@ -365,8 +364,11 @@ def test_inspect_paths_multi_year_requires_year(tmp_path: Path, monkeypatch) -> 
     )
     monkeypatch.chdir(tmp_path)
 
-    with pytest.raises(ToolkitClientError, match="year è obbligatorio"):
-        inspect_paths(str(yml))
+    result = inspect_paths(str(yml))
+    assert result["year"] == 2023  # max year come default
+    assert "_year_resolution" in result
+    assert result["_year_resolution"]["years_available"] == [2022, 2023]
+    assert "Usato 2023" in result["_year_resolution"]["note"]
 
 
 @pytest.mark.policy
@@ -384,7 +386,7 @@ def test_schema_diff_cli_contract_alignment(tmp_path: Path, monkeypatch) -> None
 
     src = Path("project-example")
     dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     config_path = dst / "dataset.yml"
 
     monkeypatch.chdir(tmp_path)
@@ -412,7 +414,7 @@ def test_review_readiness_mcp_contract_shape(tmp_path: Path, monkeypatch) -> Non
 
     src = Path("project-example")
     dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     config_path = dst / "dataset.yml"
 
     monkeypatch.chdir(tmp_path)
@@ -424,3 +426,236 @@ def test_review_readiness_mcp_contract_shape(tmp_path: Path, monkeypatch) -> Non
     for check in payload.get("checks", []):
         for ck in ReadinessCheck.__required_keys__:
             assert ck in check, f"ReadinessCheck: chiave '{ck}' mancante in {check.get('check')}"
+
+
+def test_clean_preview_with_real_parquet(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """clean_preview deve leggere un parquet reale e restituire schema + preview."""
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    # Crea un parquet clean reale
+    clean_dir = dst / "_smoke_out" / "data" / "clean" / "project_example" / "2022"
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    _write_real_parquet(clean_dir / "project_example_2022_clean.parquet")
+
+    from toolkit.mcp.toolkit_client import clean_preview
+
+    result = clean_preview(str(config_path), layer="clean", year=2022, limit=5)
+
+    assert result["dataset"] == "project_example"
+    assert result["layer"] == "clean"
+    assert result["column_count"] >= 1
+    assert len(result["preview"]) >= 1
+    assert "row_count" in result
+    assert "truncated" in result
+
+
+def test_clean_preview_mart_with_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """clean_preview(layer='mart') deve leggere il mart_index richiesto."""
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    # Crea output mart (due table)
+    mart_dir = dst / "_smoke_out" / "data" / "mart" / "project_example" / "2022"
+    mart_dir.mkdir(parents=True, exist_ok=True)
+    _write_real_parquet(mart_dir / "rd_by_regione.parquet")
+    _write_real_parquet(mart_dir / "rd_by_provincia.parquet")
+
+    from toolkit.mcp.toolkit_client import clean_preview
+
+    result = clean_preview(str(config_path), layer="mart", mart_index=1, year=2022, limit=5)
+
+    assert result["layer"] == "mart"
+    assert result["mart_name"] == "rd_by_provincia"
+    assert result["column_count"] >= 1
+
+
+def test_raw_preview_with_real_csv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """raw_preview deve leggere un CSV reale dal raw dir."""
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    raw_dir = dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "manifest.json").write_text(
+        json.dumps({"primary_output_file": "ispra_dettaglio_comunale_2022.csv"}), encoding="utf-8"
+    )
+    (raw_dir / "ispra_dettaglio_comunale_2022.csv").write_bytes(b"a;b\n1;2\n3;4\n")
+
+    from toolkit.mcp.toolkit_client import raw_preview
+
+    result = raw_preview(str(config_path), year=2022, limit=5)
+
+    assert result["path"].endswith("ispra_dettaglio_comunale_2022.csv")
+    assert result["column_count"] >= 2
+    assert len(result["preview"]) >= 2
+
+
+def test_dataset_info_from_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """dataset_info deve estrarre campi da dataset.yml reale senza eseguire pipeline."""
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    from toolkit.mcp.toolkit_client import dataset_info
+
+    result = dataset_info(str(config_path))
+
+    assert result["dataset"] == "project_example"
+    assert result["years"] == [2022]
+    assert "source_urls" in result
+    assert "has_clean" in result
+    assert "has_mart" in result
+    assert "raw_sources_count" in result
+    assert "mart_tables" in result
+    assert result["raw_sources_count"] >= 1
+
+
+def test_list_candidates_with_minimal_candidate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """list_candidates deve trovare candidate creati nel workspace."""
+    from toolkit.mcp import discovery as _discovery_mod
+    monkeypatch.setattr(_discovery_mod, "WORKSPACE_ROOT", tmp_path)
+
+    # Crea un candidate minimale
+    cand_dir = tmp_path / "dataset-incubator" / "candidates" / "test-candidate"
+    cand_dir.mkdir(parents=True, exist_ok=True)
+    (cand_dir / "dataset.yml").write_text(
+        "dataset:\n  name: test-candidate\n  years: [2024]\n",
+        encoding="utf-8",
+    )
+
+    from toolkit.mcp.discovery import list_candidates
+
+    result = list_candidates(stage="all")
+
+    assert isinstance(result, list)
+    slugs = [c["slug"] for c in result]
+    assert "test-candidate" in slugs
+    for item in result:
+        if item["slug"] == "test-candidate":
+            assert item["stage"] == "candidates"
+            assert item["years"] == [2024]
+            break
+
+
+def test_list_candidates_returns_sorted_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """list_candidates deve restituire lista ordinata per slug."""
+    from toolkit.mcp import discovery as _discmod
+    monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
+
+    for name in ("b-dataset", "a-dataset", "c-dataset"):
+        cand_dir = tmp_path / "dataset-incubator" / "candidates" / name
+        cand_dir.mkdir(parents=True, exist_ok=True)
+        (cand_dir / "dataset.yml").write_text(
+            f"dataset:\n  name: {name}\n  years: [2024]\n",
+            encoding="utf-8",
+        )
+
+    from toolkit.mcp.discovery import list_candidates
+
+    result = list_candidates(stage="candidates")
+    slugs = [c["slug"] for c in result]
+
+    assert slugs == sorted(slugs)
+    assert "a-dataset" in slugs
+    assert "b-dataset" in slugs
+    assert "c-dataset" in slugs
+
+
+def test_safe_path_absolute_not_found_raises_clean_error(tmp_path: Path) -> None:
+    """_safe_path con path assoluto inesistente deve alzare ToolkitClientError,
+    non RecursionError (regressione recursion loop)."""
+    from toolkit.mcp.path_safety import _safe_path
+    from toolkit.mcp.errors import ToolkitClientError
+
+    nonexistent = tmp_path / "nonexistent" / "dataset.yml"
+
+    with pytest.raises(ToolkitClientError, match="Config non trovata"):
+        _safe_path(str(nonexistent))
+
+
+def test_safe_path_slug_not_found_raises_clean_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """_safe_path con slug inesistente deve alzare ToolkitClientError,
+    non RecursionError (regressione recursion loop)."""
+    from toolkit.mcp import path_safety as _ps_mod
+    from toolkit.mcp.path_safety import _safe_path
+    from toolkit.mcp.errors import ToolkitClientError
+
+    monkeypatch.setattr(_ps_mod, "WORKSPACE_ROOT", tmp_path)
+
+    with pytest.raises(ToolkitClientError, match="Config non trovata"):
+        _safe_path("totally-nonexistent-slug")
+
+
+def test_list_candidates_status_filter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """list_candidates(status_filter='SUCCESS') deve filtrare per last_run_status."""
+    from toolkit.mcp import discovery as _discmod
+    monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
+
+    # Crea due candidate: uno senza run (status=None), l'altro mocka run SUCCESS
+    for name in ("candidate-a", "candidate-b"):
+        cand_dir = tmp_path / "dataset-incubator" / "candidates" / name
+        cand_dir.mkdir(parents=True, exist_ok=True)
+        (cand_dir / "dataset.yml").write_text(
+            f"dataset:\n  name: {name}\n  years: [2024]\n",
+            encoding="utf-8",
+        )
+
+    # Crea run record per candidate-b: status=SUCCESS
+    runs_dir = tmp_path / "out" / "data" / "_runs" / "candidate-b" / "2024"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    import json
+    (runs_dir / "run_success.json").write_text(
+        json.dumps({
+            "dataset": "candidate-b",
+            "year": 2024,
+            "run_id": "run_001",
+            "status": "SUCCESS",
+            "started_at": "2026-01-01T12:00:00+00:00",
+            "finished_at": "2026-01-01T12:01:00+00:00",
+            "layers": {"raw": {"status": "SUCCESS"}},
+        }),
+        encoding="utf-8",
+    )
+
+    from toolkit.mcp.discovery import list_candidates
+
+    # Senza filtro -> tutti e due
+    all_results = list_candidates(stage="candidates")
+    assert len(all_results) == 2
+
+    # Filtro SUCCESS -> solo candidate-b
+    success_results = list_candidates(stage="candidates", status_filter="SUCCESS")
+    assert len(success_results) == 1
+    assert success_results[0]["slug"] == "candidate-b"
+
+    # Filtro FAILED -> nessuno
+    failed_results = list_candidates(stage="candidates", status_filter="FAILED")
+    assert len(failed_results) == 0
+
+
+def test_list_candidates_status_filter_invalid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """list_candidates con status_filter non valido deve alzare errore."""
+    from toolkit.mcp import discovery as _discmod
+    from toolkit.mcp.errors import ToolkitClientError
+    monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
+
+    from toolkit.mcp.discovery import list_candidates
+
+    with pytest.raises(ToolkitClientError, match="status_filter"):
+        list_candidates(stage="candidates", status_filter="INVALID")

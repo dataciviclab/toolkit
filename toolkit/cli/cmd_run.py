@@ -6,7 +6,7 @@ from typing import Any
 
 import typer
 
-from toolkit.cli.common import iter_selected_years, load_cfg_and_logger
+from toolkit.cli.common import dump_cfg_section, iter_selected_years, load_cfg_and_logger
 from toolkit.cli.sql_dry_run import validate_sql_dry_run
 from toolkit.clean.run import run_clean
 from toolkit.clean.validate import run_clean_validation
@@ -20,15 +20,6 @@ from toolkit.mart.validate import run_mart_validation
 from toolkit.mcp.schema_ops import review_readiness as _review_readiness
 from toolkit.raw.run import run_raw
 from toolkit.raw.validate import run_raw_validation
-
-
-def _dump(cfg_section):
-    """Convert _CompatModel to dict for functions still expecting dicts."""
-    if hasattr(cfg_section, 'model_dump'):
-        return cfg_section.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True)
-    if hasattr(cfg_section, '__iter__') and not isinstance(cfg_section, str):
-        return [_dump(item) for item in cfg_section]
-    return cfg_section
 
 
 class ValidationGateError(RuntimeError):
@@ -272,11 +263,11 @@ def run_year(
             cfg.dataset,
             year,
             cfg.root,
-            _dump(cfg.raw),
+            dump_cfg_section(cfg.raw),
             base_dir=cfg.base_dir,
             run_id=context.run_id,
-            output_cfg=_dump(cfg.output),
-            clean_cfg=_dump(cfg.clean),
+            output_cfg=dump_cfg_section(cfg.output),
+            clean_cfg=dump_cfg_section(cfg.clean),
         )
 
     if "clean" in layers_to_run:
@@ -286,9 +277,9 @@ def run_year(
             cfg.dataset,
             year,
             cfg.root,
-            _dump(cfg.clean),
+            dump_cfg_section(cfg.clean),
             base_dir=cfg.base_dir,
-            output_cfg=_dump(cfg.output),
+            output_cfg=dump_cfg_section(cfg.output),
         )
 
     if "mart" in layers_to_run:
@@ -298,11 +289,11 @@ def run_year(
             cfg.dataset,
             year,
             cfg.root,
-            _dump(cfg.mart),
+            dump_cfg_section(cfg.mart),
             base_dir=cfg.base_dir,
-            clean_cfg=_dump(cfg.clean),
-            output_cfg=_dump(cfg.output),
-            support_cfg=_dump(cfg.support),
+            clean_cfg=dump_cfg_section(cfg.clean),
+            output_cfg=dump_cfg_section(cfg.output),
+            support_cfg=dump_cfg_section(cfg.support),
         )
 
     context.complete_run(success_with_warnings=run_has_validation_warnings)

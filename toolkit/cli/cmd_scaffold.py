@@ -72,7 +72,7 @@ def scaffold_clean(
             }
         else:
             typer.echo(f"Profilo RAW non trovato in {raw_profile_dir}", err=True)
-            typer.echo(f"Esegui prima: toolkit profile raw -c {config}", err=True)
+            typer.echo(f"Esegui prima: toolkit inspect profile -c {config}", err=True)
             raise typer.Exit(code=1)
     else:
         try:

@@ -464,7 +464,7 @@ def test_scaffold_clean_fails_without_profile(tmp_path: Path):
     )
     # Should fail with exit code 1
     assert result.exit_code != 0
-    assert "Esegui prima: toolkit profile raw" in result.output
+    assert "Esegui prima: toolkit inspect profile" in result.output
 
 
 def test_scaffold_clean_fails_multiple_years_without_flag(tmp_path: Path):

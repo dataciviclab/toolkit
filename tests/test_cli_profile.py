@@ -11,21 +11,33 @@ from toolkit.cli.app import app
 from toolkit.core.io import write_json_atomic
 
 
-def test_cli_profile_raw_happy_path(tmp_path: Path, monkeypatch) -> None:
+def _setup_project(tmp_path: Path) -> tuple[Path, CliRunner]:
     src = Path(__file__).resolve().parents[1] / "project-example"
     dst = tmp_path / "project-example"
     shutil.copytree(src, dst)
     shutil.rmtree(dst / "_smoke_out", ignore_errors=True)
     config_path = dst / "dataset.yml"
 
-    monkeypatch.chdir(tmp_path)
     runner = CliRunner()
-
     run_result = runner.invoke(
         app,
         ["run", "raw", "--config", str(config_path), "--strict-config"],
     )
     assert run_result.exit_code == 0, run_result.output
+
+    return config_path, runner
+
+
+def _assert_profile_written(dst: Path) -> None:
+    profile_dir = (
+        dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022" / "_profile"
+    )
+    assert (profile_dir / "raw_profile.json").exists()
+
+
+def test_cli_profile_raw_happy_path(tmp_path: Path, monkeypatch) -> None:
+    config_path, runner = _setup_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
 
     profile_result = runner.invoke(
         app,
@@ -33,17 +45,33 @@ def test_cli_profile_raw_happy_path(tmp_path: Path, monkeypatch) -> None:
     )
     assert profile_result.exit_code == 0, profile_result.output
     assert "PROFILE RAW ->" in profile_result.output
+    _assert_profile_written(tmp_path / "project-example")
 
-    profile_dir = (
-        dst
-        / "_smoke_out"
-        / "data"
-        / "raw"
-        / "project_example"
-        / "2022"
-        / "_profile"
+
+def test_inspect_profile_happy_path(tmp_path: Path, monkeypatch) -> None:
+    config_path, runner = _setup_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    profile_result = runner.invoke(
+        app,
+        ["inspect", "profile", "--config", str(config_path), "--strict-config"],
     )
-    assert (profile_dir / "raw_profile.json").exists()
+    assert profile_result.exit_code == 0, profile_result.output
+    assert "PROFILE RAW ->" in profile_result.output
+    _assert_profile_written(tmp_path / "project-example")
+
+
+def test_inspect_profile_single_year(tmp_path: Path, monkeypatch) -> None:
+    config_path, runner = _setup_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    profile_result = runner.invoke(
+        app,
+        ["inspect", "profile", "--config", str(config_path), "--year", "2022"],
+    )
+    assert profile_result.exit_code == 0, profile_result.output
+    assert "PROFILE RAW ->" in profile_result.output
+    _assert_profile_written(tmp_path / "project-example")
 
 
 def test_write_json_atomic_handles_nan(tmp_path: Path) -> None:

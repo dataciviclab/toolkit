@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 import toolkit.profile.raw as profile_raw_module
-from toolkit.cli.cmd_profile import write_suggested_read_yml
+from toolkit.profile.raw import write_suggested_read_yml
 from toolkit.profile._column_profile import _build_mapping_suggestions
 from toolkit.core.csv_read import csv_read_option_strings
 from toolkit.profile.raw import (

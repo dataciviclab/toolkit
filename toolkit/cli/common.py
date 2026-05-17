@@ -1,12 +1,34 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from toolkit.core.io import read_json_or_none as _read_json
 
 from toolkit.core.config import load_config
 from toolkit.core.logging import get_logger
 from toolkit.core.paths import layer_year_dir
+
+
+def dump_cfg_section(cfg_section: Any) -> Any:
+    """Convert _CompatModel section to dict for functions expecting dict.
+
+    _CompatModel si comporta sia come dict che come oggetto.
+    mypy non riconosce l'interfaccia ibrida, quindi va esplicitamente
+    convertito a dict prima di passarlo a funzioni tipizzate che
+    accettano ``dict[str, Any]``.
+
+    Ordine: model_dump → Mapping (reso com'e') → altra iterabile (lista) → valore nudo.
+    Un dict non deve passare per il caso lista, altrimenti ``dump_cfg_section({"a": 1})``
+    restituirebbe ``["a"]`` invece di ``{"a": 1}``.
+    """
+    if hasattr(cfg_section, "model_dump"):
+        return cfg_section.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True)
+    if isinstance(cfg_section, dict):
+        return cfg_section
+    if hasattr(cfg_section, "__iter__") and not isinstance(cfg_section, str):
+        return [dump_cfg_section(item) for item in cfg_section]
+    return cfg_section
 
 
 def load_cfg_and_logger(

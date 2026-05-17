@@ -269,6 +269,28 @@ def test_batch_stdin_requires_config_path(tmp_path: Path) -> None:
     assert "config_path" in str(result.exception) or "config_path" in result.output
 
 
+def test_batch_stdin_accepts_config_alias(tmp_path: Path) -> None:
+    """batch --stdin accetta 'config' come alias di 'config_path' (formato DI)."""
+    project = tmp_path / "project"
+    _write_batch_project(project, "config_alias", 2024)
+
+    stdin_data = json.dumps([
+        {"config": str(project / "dataset.yml"), "years": [2024]},
+    ])
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--stdin", "--step", "all"],
+        input=stdin_data,
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "config_alias" in result.output
+    assert (project / "out" / "data" / "mart" / "config_alias" / "2024" / "mart_totali.parquet").exists()
+
+
 def test_batch_stdin_mutually_exclusive_with_configs(tmp_path: Path) -> None:
     """batch --stdin e --configs insieme danno errore."""
     runner = CliRunner()

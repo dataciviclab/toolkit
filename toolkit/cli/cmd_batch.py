@@ -55,6 +55,8 @@ def _read_config_list(configs_file: Path) -> list[Path]:
 def _read_stdin() -> list[tuple[Path, list[int] | None]]:
     """Legge JSON array da stdin: [{"config_path": ..., "years": [...]}, ...].
 
+    Supporta sia ``config_path`` (preferred) che ``config`` (alias usato da
+    ``resolve_sample_run.py`` e ``run_support_datasets.py`` in DI).
     Ogni entry puo' avere years opzionale (per-config override).
     """
     raw = sys.stdin.read()
@@ -72,9 +74,11 @@ def _read_stdin() -> list[tuple[Path, list[int] | None]]:
     for entry in entries:
         if not isinstance(entry, dict):
             raise ValueError(f"Ogni elemento deve essere un oggetto JSON, got {type(entry).__name__}")
-        cp = entry.get("config_path")
+        cp = entry.get("config_path") or entry.get("config")
         if not cp or not isinstance(cp, str):
-            raise ValueError(f"Ogni elemento deve avere 'config_path' stringa, got {cp!r}")
+            raise ValueError(
+                f"Ogni elemento deve avere 'config_path' (o 'config') stringa, got {cp!r}"
+            )
         path = Path(cp)
         if not path.is_absolute():
             path = path.resolve()
@@ -121,6 +125,7 @@ def _validate_layers(cfg, year: int, layers: tuple[str, ...], logger=None) -> st
     """Run validation for the given layers only. Returns 'passed' or 'failed'.
 
     layers e' una tupla come _STEP_LAYERS[step].
+    Se nessun layer e' validabile (es. cross_year), torna '-'.
     """
     from toolkit.core.logging import get_logger
     log = logger or get_logger()
@@ -132,6 +137,8 @@ def _validate_layers(cfg, year: int, layers: tuple[str, ...], logger=None) -> st
             checks.append(run_clean_validation(cfg, year, log).get("passed"))
         elif layer == "mart":
             checks.append(run_mart_validation(cfg, year, log).get("passed"))
+    if not checks:
+        return "-"
     return "passed" if all(checks) else "failed"
 
 

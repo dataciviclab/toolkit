@@ -2,20 +2,113 @@
 
 La funzione run_profile() è pubblica cosicché cmd_profile.py (deprecato)
 possa riusarla senza duplicare logica.
+
+csv_preview() è pubblica cosicché MCP csv_preview la chiami invece di
+avere logica inline — CLI = logica, MCP = wrapper.
 """
 
 from __future__ import annotations
 
+import json
 from logging import Logger
+from pathlib import Path
 from typing import Any
 
+import duckdb
 import typer
 
 from toolkit.cli.common import dump_cfg_section, iter_selected_years, load_cfg_and_logger
 from toolkit.core.artifacts import resolve_artifact_policy, should_write
+from toolkit.core.csv_read import csv_read_option_strings, robust_preset, sql_str
 from toolkit.core.paths import layer_year_dir
 from toolkit.core.config import ToolkitConfig
-from toolkit.profile.raw import profile_raw, write_raw_profile, write_suggested_read_yml
+from toolkit.profile.raw import profile_raw, profile_with_read_cfg, sniff_source_file, write_raw_profile, write_suggested_read_yml
+
+
+def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
+    """Sniffa encoding/delim/colonne di un CSV e restituisce schema + preview.
+
+    Stessa pipeline di ``sniff_source_file`` + ``profile_with_read_cfg``
+    usata dal profiler RAW e da ``toolkit init --url``.
+
+    Output compatibile col formato ``mapping_suggestions`` del profiler.
+
+    Args:
+        csv_path: Path assoluto o relativo al CWD.
+        limit: Righe massime in preview.
+
+    Returns:
+        Dict con path, column_count, columns, row_count_estimate, preview,
+        mapping_suggestions, delim_suggested, encoding_suggested,
+        decimal_suggested, skip_suggested, robust_read_suggested.
+    """
+    path = Path(csv_path)
+    sniff_hints = sniff_source_file(path)
+    enc = sniff_hints["encoding_suggested"]
+    delim = sniff_hints["delim_suggested"]
+    dec = sniff_hints["decimal_suggested"]
+    skip_n = sniff_hints["skip_suggested"]
+
+    effective_read_cfg = {
+        "encoding": enc,
+        "delim": delim,
+        "decimal": dec,
+        "skip": skip_n,
+        "header": True,
+    }
+
+    runtime_result = profile_with_read_cfg(path, sniff_hints, effective_read_cfg)
+    mapping_suggestions = runtime_result["mapping_suggestions"]
+    robust_read_suggested = runtime_result["robust_read_suggested"]
+
+    if robust_read_suggested:
+        preview_cfg = robust_preset(effective_read_cfg)
+        preview_cfg.setdefault("auto_detect", False)
+    else:
+        preview_cfg = effective_read_cfg
+
+    read_opts = csv_read_option_strings(preview_cfg, include_header_skip=True)
+    opt_sql = f"union_by_name=true, {', '.join(read_opts)}"
+
+    with duckdb.connect(database=":memory:") as conn:
+        conn.execute("PRAGMA disable_progress_bar")
+        conn.execute(
+            f"CREATE VIEW csv_preview AS SELECT * FROM read_csv("
+            f"'{sql_str(str(path))}', {opt_sql})"
+        )
+        describe_rows = conn.execute("DESCRIBE csv_preview").fetchall()
+        col_names = [str(row[0]) for row in describe_rows]
+        duckdb_type_map = {str(row[0]): str(row[1]) for row in describe_rows}
+
+        columns_info = [
+            {"name": name, "inferred_type": dtype}
+            for name, dtype in zip(col_names, [duckdb_type_map[c] for c in col_names])
+        ]
+
+        count_result = conn.execute(
+            f"SELECT COUNT(*) FROM read_csv("
+            f"'{sql_str(str(path))}', {opt_sql})"
+        ).fetchone()
+        row_count_estimate = int(count_result[0]) if count_result else None
+
+        preview_rows = conn.execute(
+            f"SELECT * FROM csv_preview LIMIT {int(limit)}"
+        ).fetchall()
+        preview = [dict(zip(col_names, row)) for row in preview_rows]
+
+    return {
+        "path": str(path),
+        "column_count": len(columns_info),
+        "columns": columns_info,
+        "row_count_estimate": row_count_estimate,
+        "preview": preview,
+        "mapping_suggestions": mapping_suggestions,
+        "delim_suggested": delim,
+        "encoding_suggested": enc,
+        "decimal_suggested": dec,
+        "skip_suggested": skip_n,
+        "robust_read_suggested": robust_read_suggested,
+    }
 
 
 def run_profile(cfg: ToolkitConfig, years: list[int], logger: Logger) -> None:
@@ -46,19 +139,50 @@ def run_profile(cfg: ToolkitConfig, years: list[int], logger: Logger) -> None:
 
 
 def profile(
-    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    config: str = typer.Option(None, "--config", "-c", help="Path to dataset.yml"),
+    csv_path: str | None = typer.Option(None, "--csv-path", help="CSV file to preview (instead of --config)"),
     year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     strict_config: bool = typer.Option(
         False, "--strict-config", help="Treat deprecated config forms as errors"
     ),
+    json_output: bool = typer.Option(False, "--json", help="Emit JSON output"),
 ):
     """
     Profilo diagnostico del RAW: encoding, delimitatore, colonne.
 
-    Scrive raw_profile.json e (opzionalmente) suggested_read.yml
-    nella directory _profile/ del raw layer.
+    Con --config: analizza il raw layer del dataset e scrive raw_profile.json.
+    Con --csv-path: sniffa direttamente un file CSV e stampa schema + preview.
+
+    Esempi:
+        toolkit inspect profile -c dataset.yml
+        toolkit inspect profile --csv-path data/file.csv --json
     """
+    if csv_path:
+        if not Path(csv_path).exists():
+            raise typer.BadParameter(f"File non trovato: {csv_path}")
+        result = csv_preview(csv_path)
+        if json_output:
+            print(json.dumps(result, indent=2, default=str))
+        else:
+            print(f"File:    {result['path']}")
+            print(f"Encoding: {result['encoding_suggested']}")
+            print(f"Delim:   {repr(result['delim_suggested'])}")
+            print(f"Decimal: {result['decimal_suggested']}")
+            print(f"Skip:    {result['skip_suggested']}")
+            print(f"Colonne: {result['column_count']}")
+            print(f"Righe:   {result['row_count_estimate']}")
+            if result['columns']:
+                print()
+                for c in result['columns'][:12]:
+                    print(f"  {c['name']:40s} {c['inferred_type']}")
+                if len(result['columns']) > 12:
+                    print(f"  ... ({len(result['columns'])} totali)")
+        return
+
+    if not config:
+        raise typer.BadParameter("Serve --config o --csv-path")
+
     strict_flag = strict_config if isinstance(strict_config, bool) else False
     year_val = year if isinstance(year, int) else None
     years_val = years if isinstance(years, str) else None

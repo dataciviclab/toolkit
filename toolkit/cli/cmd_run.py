@@ -221,7 +221,7 @@ def run_year(
         context.mark_dry_run()
         _print_execution_plan(cfg, year, layers_to_run, context, fail_on_error)
         try:
-            validate_sql_dry_run(cfg, year=year, layers=layers_to_run)
+            validate_sql_dry_run(cfg, year=year, layers=layers_to_run, dry_run=dry_run)
         except Exception as exc:
             context.fail_run(str(exc))
             raise
@@ -451,7 +451,11 @@ def run_full(
     dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
-    """Esegue run all + validate all + review-readiness in un unico comando."""
+    """Esegue run all + validate all + review-readiness in un unico comando.
+
+    Se il dataset.yml dichiara support: [], i support vengono eseguiti
+    automaticamente prima del candidate (run all + validate per ogni anno).
+    """
     strict_flag = strict_config if isinstance(strict_config, bool) else False
     cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag)
     years_arg = years if isinstance(years, str) else None
@@ -465,34 +469,94 @@ def run_full(
         "status": "passed",
     }
 
-    # Run all
-    for year in selected_years:
-        logger.info("Run all — year=%s", year)
-        run_year(cfg, year, step="all", dry_run=dry_flag, logger=logger)
+    # Process support datasets (dichiarati in dataset.yml con support:)
+    # Vengono eseguiti prima del candidate cosi' i loro output sono disponibili
+    # per le query MART del candidate (placeholder {support.NAME.mart} ecc.).
+    # In dry-run i support vengono solo annunciati (non eseguiti): la validazione
+    # SQL del candidate usa require_exists=False e non richiede file reali.
+    support_entries = cfg.support or []
+    if support_entries:
+        logger.info(
+            "RUN FULL — processing %d support dataset(s) before candidate",
+            len(support_entries),
+        )
+        for entry in support_entries:
+            logger.info("Support: %s — %s", entry.name, entry.config)
 
-        if not dry_flag:
-            # Validate all
-            logger.info("Validate all — year=%s", year)
-            val_raw = run_raw_validation(cfg.root, cfg.dataset, year, logger)
-            val_clean = run_clean_validation(cfg, year, logger)
-            val_mart = run_mart_validation(cfg, year, logger)
+            if dry_flag:
+                typer.echo(f"  [dry-run] support: {entry.name} — years={entry.years}")
+                continue
 
-            all_passed = all(
-                r.get("passed") for r in [val_raw, val_clean, val_mart]
-            )
-            results["steps"][str(year)] = {
-                "run": "ok",
-                "validate": "passed" if all_passed else "failed",
-            }
-            if not all_passed:
+            try:
+                support_cfg, support_logger = load_cfg_and_logger(
+                    str(entry.config), strict_config=strict_flag
+                )
+            except Exception as exc:
+                logger.error("Support: cannot load config %s: %s", entry.config, exc)
                 results["status"] = "failed"
+                break  # dipendenza non disponibile, abort
 
-            # Review readiness (capture, not print)
-            readiness = _review_readiness(config, year or None)
-            results["steps"][str(year)]["readiness"] = readiness.get("readiness")
-            results["steps"][str(year)]["checks"] = readiness.get("check_count", 0)
-            results["steps"][str(year)]["checks_ok"] = readiness.get("ok_count", 0)
-            results["steps"][str(year)]["checks_fail"] = readiness.get("fail_count", 0)
+            for sy in entry.years:
+                logger.info("Support: running %s year=%s", entry.name, sy)
+                try:
+                    run_year(support_cfg, sy, step="all", logger=support_logger)
+                except Exception as exc:
+                    logger.error("Support run failed: %s year=%s — %s", entry.name, sy, exc)
+                    results["status"] = "failed"
+                    break  # dipendenza fallita, abort
+
+                # Validate all layers
+                try:
+                    sv_raw = run_raw_validation(support_cfg.root, support_cfg.dataset, sy, support_logger)
+                    sv_clean = run_clean_validation(support_cfg, sy, support_logger)
+                    sv_mart = run_mart_validation(support_cfg, sy, support_logger)
+                    all_support_passed = all(
+                        r.get("passed") for r in [sv_raw, sv_clean, sv_mart]
+                    )
+                    if not all_support_passed:
+                        logger.error("Support validation failed: %s year=%s", entry.name, sy)
+                        results["status"] = "failed"
+                        break  # dipendenza fallita, abort
+                except Exception as exc:
+                    logger.error("Support validation error: %s year=%s — %s", entry.name, sy, exc)
+                    results["status"] = "failed"
+                    break  # dipendenza fallita, abort
+
+            if results["status"] == "failed":
+                break  # esci dal loop support, vai direttamente al report
+
+    # Se un support e' fallito, non eseguire il candidate (dipendenza assente)
+    candidate_blocked = results["status"] == "failed" and not dry_flag
+
+    if not candidate_blocked:
+        # Run all
+        for year in selected_years:
+            logger.info("Run all — year=%s", year)
+            run_year(cfg, year, step="all", dry_run=dry_flag, logger=logger)
+
+            if not dry_flag:
+                # Validate all
+                logger.info("Validate all — year=%s", year)
+                val_raw = run_raw_validation(cfg.root, cfg.dataset, year, logger)
+                val_clean = run_clean_validation(cfg, year, logger)
+                val_mart = run_mart_validation(cfg, year, logger)
+
+                all_passed = all(
+                    r.get("passed") for r in [val_raw, val_clean, val_mart]
+                )
+                results["steps"][str(year)] = {
+                    "run": "ok",
+                    "validate": "passed" if all_passed else "failed",
+                }
+                if not all_passed:
+                    results["status"] = "failed"
+
+                # Review readiness (capture, not print)
+                readiness = _review_readiness(config, year or None)
+                results["steps"][str(year)]["readiness"] = readiness.get("readiness")
+                results["steps"][str(year)]["checks"] = readiness.get("check_count", 0)
+                results["steps"][str(year)]["checks_ok"] = readiness.get("ok_count", 0)
+                results["steps"][str(year)]["checks_fail"] = readiness.get("fail_count", 0)
 
     if json_output:
         typer.echo(json.dumps(results, indent=2, default=str))

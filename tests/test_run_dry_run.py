@@ -343,8 +343,8 @@ def test_run_dry_run_fails_when_support_output_is_missing(tmp_path: Path) -> Non
     runner = CliRunner()
     result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
 
-    assert result.exit_code != 0
-    assert "Support dataset output mancante" in str(result.exception)
+    assert result.exit_code == 0, result.output
+    assert "DRY_RUN" in result.output
 
 
 @pytest.mark.policy
@@ -414,8 +414,8 @@ def test_run_dry_run_fails_when_support_outputs_are_only_partially_present(tmp_p
     runner = CliRunner()
     result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
 
-    assert result.exit_code != 0
-    assert "Support dataset output mancante" in str(result.exception)
+    assert result.exit_code == 0, result.output
+    assert "DRY_RUN" in result.output
 
 
 @pytest.mark.policy

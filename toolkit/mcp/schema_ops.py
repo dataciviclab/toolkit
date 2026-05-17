@@ -504,6 +504,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
             "latest_run_record": latest_run_record,
         },
         "warnings": warnings,
+        "multi_year_hint": paths.get("_year_resolution"),
     }
 
 
@@ -654,6 +655,205 @@ def schema_diff(config_path: str) -> dict[str, Any]:
         "years": [entry["year"] for entry in entries],
         "entries": entries,
         "comparisons": comparisons,
+    }
+
+
+def clean_preview(
+    config_path: str,
+    layer: str = "clean",
+    mart_index: int = 0,
+    year: int | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Preview dati da un parquet clean o mart.
+
+    Args:
+        config_path: path a dataset.yml o slug del dataset.
+        layer: ``"clean"`` (default) o ``"mart"``.
+        mart_index: indice dell'output mart (default 0), usato solo se layer=mart.
+        year: anno del dataset. Per dataset multi-year, se omesso usa l'ultimo anno.
+        limit: numero massimo di righe in preview (default 10).
+
+    Returns:
+        Schema + preview rows del parquet. Stessa struttura di
+        ``_read_parquet_preview`` con campi aggiuntivi: dataset, year, layer.
+    """
+    config = _safe_path(config_path)
+    paths = _inspect_paths(str(config), year)
+
+    if layer == "clean":
+        parquet_path_str = paths["paths"]["clean"].get("output")
+        if not parquet_path_str:
+            raise ToolkitClientError("Nessun output clean risolto", code=ErrorCode.PARQUET_NOT_FOUND)
+        parquet_path = Path(parquet_path_str)
+    elif layer == "mart":
+        outputs = paths["paths"]["mart"].get("outputs") or []
+        if not outputs:
+            raise ToolkitClientError("Nessun output mart risolto", code=ErrorCode.PARQUET_NOT_FOUND)
+        if mart_index < 0 or mart_index >= len(outputs):
+            code = ErrorCode.INVALID_PARAMS
+            raise ToolkitClientError(
+                f"Indice mart {mart_index} non valido: {len(outputs)} output disponibili (indice 0-{len(outputs)-1})",
+                code=code,
+            )
+        parquet_path = Path(outputs[mart_index])
+    else:
+        raise ToolkitClientError("layer deve essere 'clean' o 'mart'", code=ErrorCode.INVALID_PARAMS)
+
+    # Verifica esistenza output
+    if not parquet_path.exists():
+        raise ToolkitClientError(
+            f"Output {layer} non trovato: {parquet_path}",
+            code=ErrorCode.PARQUET_NOT_FOUND,
+        )
+
+    # Verifica che sia un parquet
+    if parquet_path.suffix not in (".parquet",):
+        raise ToolkitClientError(
+            f"Formato non supportato per preview: {parquet_path.suffix}. "
+            "clean_preview supporta solo file .parquet.",
+            code=ErrorCode.INVALID_PARAMS,
+        )
+
+    from toolkit.mcp._schema_utils import _read_parquet_preview
+
+    result = _read_parquet_preview(parquet_path, limit=limit)
+    result.update({
+        "dataset": paths.get("dataset"),
+        "year": paths.get("year"),
+        "layer": layer,
+        "config_path": str(config_path),
+        "mart_name": parquet_path.stem if layer == "mart" else None,
+    })
+    return result
+
+
+def raw_preview(
+    config_path: str,
+    year: int | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Preview del raw file primario di un dataset.
+
+    Wrapper che risolve il raw file dal config_path e chiama ``csv_preview``
+    se il file è un CSV. Per file binari (XLSX) restituisce un messaggio informativo.
+
+    Args:
+        config_path: path a dataset.yml o slug del dataset.
+        year: anno del dataset. Per multi-year, se omesso usa l'ultimo anno.
+        limit: righe massime in preview (default 20).
+
+    Returns:
+        Dict con path, formato, e preview (se CSV) o messaggio (se binario).
+    """
+    from toolkit.mcp._schema_utils import _exists
+
+    config = _safe_path(config_path)
+    paths = _inspect_paths(str(config), year)
+    raw_dir = Path(paths["paths"]["raw"]["dir"])
+    primary_file = (paths.get("raw_hints") or {}).get("primary_output_file")
+    if not primary_file:
+        raise ToolkitClientError(
+            "Nessun primary_output_file nel manifest raw",
+            code=ErrorCode.ARTIFACT_NOT_FOUND,
+        )
+    raw_file = raw_dir / primary_file
+    if not _exists(str(raw_file)):
+        raise ToolkitClientError(
+            f"Raw file non trovato: {raw_file}",
+            code=ErrorCode.ARTIFACT_NOT_FOUND,
+        )
+
+    suffix = raw_file.suffix.lower()
+    if suffix in (".csv", ".tsv", ".txt"):
+        return csv_preview(str(raw_file), limit=limit)
+    elif suffix in (".xlsx", ".xls"):
+        return {
+            "path": str(raw_file),
+            "format": "xlsx",
+            "note": "File binario XLSX. Usa toolkit_show_schema(layer='raw') per lo schema delle colonne.",
+            "dataset": paths.get("dataset"),
+            "year": paths.get("year"),
+        }
+    else:
+        return {
+            "path": str(raw_file),
+            "format": suffix.lstrip("."),
+            "note": f"Formato '{suffix}' non supportato per preview raw. "
+                    "Usa toolkit_show_schema(layer='raw') per lo schema.",
+            "dataset": paths.get("dataset"),
+            "year": paths.get("year"),
+        }
+
+
+def dataset_info(config_path: str) -> dict[str, Any]:
+    """Restituisce informazioni di base da un dataset.yml.
+
+    Legge la configurazione del dataset e ne estrae i campi significativi
+    senza eseguire la pipeline.
+
+    Args:
+        config_path: path a dataset.yml o slug del dataset.
+
+    Returns:
+        Dict con: dataset, years, time_coverage, source_urls (da raw.sources),
+        has_clean, has_mart, mart_tables, support_datasets, raw_sources_count.
+    """
+    config, cfg = _load_cfg(config_path)
+
+    # Estrai URL fonti da raw.sources
+    source_urls: list[str] = []
+    raw_dict = cfg.raw.get("sources") if hasattr(cfg, "raw") else []
+    if isinstance(raw_dict, list):
+        for src in raw_dict:
+            if isinstance(src, dict):
+                args = src.get("args") or {}
+                url = args.get("url") or args.get("data_url") or args.get("endpoint")
+                if url:
+                    source_urls.append(str(url))
+
+    # Mart tables names
+    mart_tables: list[str] = []
+    if hasattr(cfg, "mart"):
+        mart_dict = cfg.mart.get("tables") if hasattr(cfg.mart, "get") else []
+        if isinstance(mart_dict, list):
+            for t in mart_dict:
+                if isinstance(t, dict):
+                    name = t.get("name")
+                    if name:
+                        mart_tables.append(str(name))
+
+    # Support datasets
+    support_list: list[dict[str, str]] = []
+    if hasattr(cfg, "support"):
+        raw_support = cfg.support if isinstance(cfg.support, list) else []
+        for sd in raw_support:
+            if hasattr(sd, "get"):
+                sname = sd.get("name")
+                if sname:
+                    support_list.append({"name": str(sname), "config": str(sd.get("config", ""))})
+
+    # Presenza layer su disco
+    out_root = cfg.root / "data" if hasattr(cfg, "root") else None
+    slug = cfg.dataset if hasattr(cfg, "dataset") else None
+    has_clean = bool(out_root and (out_root / "clean" / slug).exists()) if slug else False
+    has_mart = bool(out_root and (out_root / "mart" / slug).exists()) if slug else False
+
+    time_cov = None
+    if hasattr(cfg, "time_coverage") and cfg.time_coverage:
+        time_cov = {"start_year": cfg.time_coverage.start_year, "end_year": cfg.time_coverage.end_year}
+
+    return {
+        "dataset": cfg.dataset if hasattr(cfg, "dataset") else None,
+        "config_path": str(config),
+        "years": list(cfg.years) if hasattr(cfg, "years") else [],
+        "time_coverage": time_cov,
+        "source_urls": source_urls,
+        "raw_sources_count": len(raw_dict) if isinstance(raw_dict, list) else 0,
+        "has_clean": has_clean,
+        "has_mart": has_mart,
+        "mart_tables": mart_tables,
+        "support_datasets": support_list,
     }
 
 

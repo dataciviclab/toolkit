@@ -14,11 +14,15 @@ Use inspect_paths (with run_file_count, years_seen) or summary (with latest_run_
 from __future__ import annotations
 
 # ruff: noqa: F401
+from toolkit.mcp.discovery import list_candidates
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.cli_adapter import inspect_paths
 from toolkit.mcp.schema_ops import (
+    clean_preview,
     csv_preview,
+    dataset_info,
     list_runs,
+    raw_preview,
     raw_profile,
     review_readiness,
     run_state,

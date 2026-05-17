@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import textwrap
 from pathlib import Path
 
@@ -204,6 +205,79 @@ def test_batch_validate_respects_step(tmp_path: Path) -> None:
     # Clean/mart validation NON deve esistere (non richiesti da --step raw)
     assert not (root / "data" / "clean" / "step_raw" / str(year) / "_validate" / "clean_validation.json").exists()
     assert not (root / "data" / "mart" / "step_raw" / str(year) / "_validate" / "mart_validation.json").exists()
+
+
+def test_batch_stdin_reads_json_array(tmp_path: Path) -> None:
+    """batch --stdin legge JSON array da stdin."""
+    project = tmp_path / "project"
+    _write_batch_project(project, "stdin_test", 2024)
+
+    configs_file = tmp_path / "configs.txt"
+    configs_file.write_text("project/dataset.yml\n", encoding="utf-8")
+
+    stdin_data = json.dumps([
+        {"config_path": str(project / "dataset.yml"), "years": [2024]},
+    ])
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--stdin", "--step", "all"],
+        input=stdin_data,
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Batch Report" in result.output
+    assert "stdin_test" in result.output
+    assert (project / "out" / "data" / "mart" / "stdin_test" / "2024" / "mart_totali.parquet").exists()
+
+
+def test_batch_stdin_with_validate(tmp_path: Path) -> None:
+    """batch --stdin --validate esegue validazione con years per-config."""
+    project = tmp_path / "project"
+    _write_batch_project(project, "stdin_val", 2024)
+
+    stdin_data = json.dumps([
+        {"config_path": str(project / "dataset.yml"), "years": [2024]},
+    ])
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--stdin", "--step", "all", "--validate"],
+        input=stdin_data,
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Batch Report" in result.output
+    assert "passed" in result.output
+    root = project / "out"
+    assert (root / "data" / "raw" / "stdin_val" / "2024" / "raw_validation.json").exists()
+
+
+def test_batch_stdin_requires_config_path(tmp_path: Path) -> None:
+    """batch --stdin fallisce su JSON senza config_path."""
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--stdin"],
+        input=json.dumps([{"years": [2024]}]),
+    )
+    assert result.exit_code != 0
+    assert "config_path" in str(result.exception) or "config_path" in result.output
+
+
+def test_batch_stdin_mutually_exclusive_with_configs(tmp_path: Path) -> None:
+    """batch --stdin e --configs insieme danno errore."""
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--stdin", "--configs", "list.txt"],
+    )
+    assert result.exit_code != 0
+    assert "non entrambi" in result.output
 
 
 def test_batch_validate_failure_exits_nonzero(tmp_path: Path, monkeypatch) -> None:

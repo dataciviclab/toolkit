@@ -1,6 +1,6 @@
 """Toolkit MCP server.
 
-Espone 10 tool read-only per ispezione della pipeline toolkit.
+Espone 9 tool read-only per ispezione della pipeline toolkit.
 Usa ``lab_connectors.mcp`` per init standardizzato, error handling e logging.
 """
 
@@ -11,7 +11,6 @@ from typing import Any
 from lab_connectors.mcp import create_mcp_server, guard
 
 from .toolkit_client import (
-    blocker_hints as blocker_hints_impl,
     csv_preview as csv_preview_impl,
     inspect_paths as inspect_paths_impl,
     list_runs as list_runs_impl,
@@ -72,14 +71,6 @@ def toolkit_run_summary(
 )
 def toolkit_summary(config_path: str, year: int = 0) -> dict[str, Any]:
     return guard(summary_impl, config_path, year or None)
-
-
-@mcp.tool(
-    description="Segnala blocker e warning leggeri confrontando config dichiarata e output reali.",
-    structured_output=True,
-)
-def toolkit_blocker_hints(config_path: str, year: int = 0) -> dict[str, Any]:
-    return guard(blocker_hints_impl, config_path, year or None)
 
 
 @mcp.tool(

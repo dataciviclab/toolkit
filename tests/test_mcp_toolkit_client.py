@@ -8,7 +8,6 @@ import duckdb
 import pytest
 
 from toolkit.mcp.toolkit_client import (
-    blocker_hints,
     inspect_paths,
     list_runs,
     review_readiness,
@@ -60,111 +59,6 @@ def test_mcp_toolkit_client_works_from_repo_layout(tmp_path: Path, monkeypatch) 
     assert "clean_output_missing" in warnings
     assert "mart_outputs_missing" in warnings
 
-
-def test_mcp_blocker_hints_detects_missing_outputs(tmp_path: Path, monkeypatch) -> None:
-    src = Path("project-example")
-    dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
-    config_path = dst / "dataset.yml"
-
-    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
-
-    # Arrange: solo raw manifest, nessun output reale
-    raw_dir = dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022"
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    (raw_dir / "manifest.json").write_text(
-        json.dumps({"primary_output_file": "missing.csv"}), encoding="utf-8"
-    )
-
-    hints_payload = blocker_hints(str(config_path), 2022)
-    assert hints_payload["hint_count"] > 0
-    codes = {h["code"] for h in hints_payload["hints"]}
-    assert "raw_output_missing" in codes
-    assert "clean_output_missing" in codes
-    assert hints_payload["blocker_count"] >= 2
-
-
-def test_mcp_blocker_hints_empty_when_all_present(tmp_path: Path, monkeypatch) -> None:
-    src = Path("project-example")
-    dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
-    config_path = dst / "dataset.yml"
-
-    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
-
-    # Arrange: crea output fittizi per tutti i layer
-    raw_dir = dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022"
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    # Il filename risolto dal config e' "ispra_dettaglio_comunale_2022.csv"
-    (raw_dir / "ispra_dettaglio_comunale_2022.csv").write_bytes(b"a;b\n1;2\n")
-
-    clean_dir = dst / "_smoke_out" / "data" / "clean" / "project_example" / "2022"
-    clean_dir.mkdir(parents=True, exist_ok=True)
-    _write_real_parquet(clean_dir / "project_example_2022_clean.parquet")
-
-    mart_dir = dst / "_smoke_out" / "data" / "mart" / "project_example" / "2022"
-    mart_dir.mkdir(parents=True, exist_ok=True)
-    # Il config dichiara 2 tabelle mart
-    _write_real_parquet(mart_dir / "rd_by_regione.parquet")
-    _write_real_parquet(mart_dir / "rd_by_provincia.parquet")
-
-    hints_payload = blocker_hints(str(config_path), 2022)
-    assert hints_payload["hint_count"] == 0
-    assert hints_payload["blocker_count"] == 0
-    assert hints_payload["warning_count"] == 0
-
-
-def test_mcp_blocker_hints_run_says_clean_success_but_output_missing(
-    tmp_path: Path, monkeypatch
-) -> None:
-    src = Path("project-example")
-    dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
-    config_path = dst / "dataset.yml"
-
-    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
-
-    # Arrange: raw output presente, clean dir esiste ma output manca
-    raw_dir = dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022"
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    (raw_dir / "ispra_dettaglio_comunale_2022.csv").write_bytes(b"a;b\n1;2\n")
-    (raw_dir / "manifest.json").write_text(
-        json.dumps({"primary_output_file": "ispra_dettaglio_comunale_2022.csv"}),
-        encoding="utf-8",
-    )
-
-    clean_dir = dst / "_smoke_out" / "data" / "clean" / "project_example" / "2022"
-    clean_dir.mkdir(parents=True, exist_ok=True)
-    # clean output NON creato di proposito
-
-    # Run record che dice clean SUCCESS ma il file non c'e'
-    # Rimuovo eventuali run record preesistenti copiati dal project-example
-    run_dir = dst / "_smoke_out" / "data" / "_runs" / "project_example" / "2022"
-    if run_dir.exists():
-        for f in run_dir.glob("*.json"):
-            f.unlink()
-    run_dir.mkdir(parents=True, exist_ok=True)
-    run_record = {
-        "dataset": "project_example",
-        "year": 2022,
-        "run_id": "20260101T000000Z_abc123",
-        "status": "FAILED",
-        "layers": {
-            "raw": {"status": "SUCCESS"},
-            "clean": {
-                "status": "SUCCESS",
-                "started_at": "2026-01-01T00:00:00Z",
-                "finished_at": "2026-01-01T00:00:01Z",
-            },
-        },
-    }
-    (run_dir / "20260101T000000Z_abc123.json").write_text(json.dumps(run_record), encoding="utf-8")
-
-    hints_payload = blocker_hints(str(config_path), 2022)
-    codes = {h["code"] for h in hints_payload["hints"]}
-    assert "run_says_clean_success_but_output_missing" in codes
-    blockers = [h for h in hints_payload["hints"] if h["severity"] == "blocker"]
-    assert len(blockers) >= 1
 
 
 def test_review_readiness_incomplete_when_no_outputs(tmp_path: Path, monkeypatch) -> None:
@@ -476,32 +370,6 @@ def test_inspect_paths_multi_year_requires_year(tmp_path: Path, monkeypatch) -> 
 
 
 @pytest.mark.policy
-def test_blocker_hints_cli_contract_alignment(tmp_path: Path, monkeypatch) -> None:
-    """toolkit blocker-hints --json output matches BlockerHintsResult TypedDict."""
-    from typer.testing import CliRunner
-
-    from toolkit.cli.app import app
-    from toolkit.mcp.contracts import BlockerHintsResult, Hint
-
-    src = Path("project-example")
-    dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
-    config_path = dst / "dataset.yml"
-
-    monkeypatch.chdir(tmp_path)
-    runner = CliRunner()
-
-    result = runner.invoke(app, ["blocker-hints", "--config", str(config_path), "--year", "2022", "--json"])
-    assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
-
-    for key in BlockerHintsResult.__required_keys__:
-        assert key in payload, f"BlockerHintsResult: chiave '{key}' mancante"
-    for hint in payload.get("hints", []):
-        for key in Hint.__required_keys__:
-            assert key in hint, f"Hint: chiave '{key}' mancante in {hint.get('code')}"
-
-
 @pytest.mark.policy
 def test_schema_diff_cli_contract_alignment(tmp_path: Path, monkeypatch) -> None:
     """toolkit inspect schema-diff --json output matches SchemaDiffResult TypedDict."""

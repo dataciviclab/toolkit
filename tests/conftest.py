@@ -10,7 +10,6 @@ import pytest
 # ---- Existing Lab markers ---------------------------------------------------
 
 CORE_TESTS = {
-    "test_cli_blocker_hints.py",
     "test_cli_inspect_paths.py",
     "test_cli_path_contract.py",
     "test_cli_resume.py",

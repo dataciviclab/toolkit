@@ -72,24 +72,6 @@ class InspectPathsResult(TypedDict):
     latest_run: LatestRun | None
 
 
-# --- blocker-hints ---
-
-class Hint(TypedDict):
-    code: str
-    severity: str  # "blocker" | "warning"
-    message: str
-
-
-class BlockerHintsResult(TypedDict):
-    dataset: str | None
-    config_path: str
-    year: int | None
-    hint_count: int
-    hints: list[Hint]
-    blocker_count: int
-    warning_count: int
-
-
 # --- review-readiness (MCP only, no CLI) ---
 
 class MartOutputCheck(TypedDict):

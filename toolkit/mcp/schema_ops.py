@@ -5,7 +5,6 @@ Provides read-only diagnostics on config, layers, and run records:
 - raw_profile: content of _profile/raw_profile.json
 - run_state: run directory state and latest run record
 - summary: layer-level overview with existence checks
-- blocker_hints: common mismatches between config and outputs
 - review_readiness: readiness check for candidate review
 - schema_diff: compare RAW schema signals across configured years
 - csv_preview: schema + preview of a CSV file via DuckDB auto-detect
@@ -509,95 +508,6 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
     }
 
 
-def blocker_hints(config_path: str, year: int | None = None) -> dict[str, Any]:
-    """Diagnostic hints che segnalano mismatch tra config e output reali.
-
-    DEPRECATED: delegato a review_readiness(). Use review_readiness() instead.
-    """
-    import warnings as _warnings
-    _warnings.warn(
-        "blocker_hints() is deprecated, use review_readiness() instead",
-        DeprecationWarning, stacklevel=2,
-    )
-
-    rr = review_readiness(config_path, year)
-    hints: list[dict[str, str]] = []
-
-    # Mappa check name → hint code e severity (escluso run_record_coherent
-    # che gestiamo separatamente per preservare i singoli hint di coerenza)
-    CHECK_HINT_MAP: dict[str, tuple[str, str]] = {
-        "config_valid": ("config_invalid", "blocker"),
-        "raw_output_present": ("raw_output_missing", "blocker"),
-        "clean_output_readable": ("clean_output_missing", "blocker"),
-    }
-
-    checks_map = {c["check"]: c for c in rr.get("checks", [])}
-
-    for check in rr.get("checks", []):
-        if check["ok"]:
-            continue
-        name = check["check"]
-        detail = str(check.get("detail", ""))
-
-        if name == "mart_outputs_readable":
-            detail_list = check.get("detail", [])
-            if isinstance(detail_list, list):
-                missing = [m.get("name", "?") for m in detail_list if not m.get("readable")]
-                total = len(detail_list)
-                if not missing:
-                    continue
-                if len(missing) == total:
-                    hints.append({
-                        "code": "mart_partial_outputs",
-                        "severity": "warning",
-                        "message": f"tutti i {total} mart output sono mancanti",
-                    })
-                else:
-                    hints.append({
-                        "code": "mart_partial_outputs",
-                        "severity": "warning",
-                        "message": f"{len(missing)}/{total} mart output mancanti: {', '.join(missing[:3])}",
-                    })
-        elif name in CHECK_HINT_MAP:
-            code, severity = CHECK_HINT_MAP[name]
-            hints.append({
-                "code": code,
-                "severity": severity,
-                "message": detail,
-            })
-
-    # Hint aggiuntivo: clean_but_no_mart (clean ok, mart no)
-    clean_ok = checks_map.get("clean_output_readable", {}).get("ok", False)
-    mart_ok = checks_map.get("mart_outputs_readable", {}).get("ok", False)
-    if clean_ok and not mart_ok:
-        hints.append({
-            "code": "clean_but_no_mart",
-            "severity": "warning",
-            "message": "clean output esiste ma nessun mart output e' presente",
-        })
-
-    # Coerenza run record: riusa lo stesso helper condiviso per preservare
-    # i singoli hint di coerenza (run_says_clean_success_but_output_missing, ecc.)
-    try:
-        _config = _safe_path(config_path)
-        _s = summary(str(_config), year)
-        _rs = run_state(str(_config), year)
-        _run_record = _rs.get("latest_run_record")
-        coherence_hints = _check_run_record_coherence(_run_record, _s.get("layers", {}))
-        hints.extend(coherence_hints)
-    except Exception:
-        pass  # Se fallisce, non aggiungiamo hint di coerenza — non bloccare
-
-    return {
-        "dataset": rr.get("dataset"),
-        "config_path": str(config_path),
-        "year": rr.get("year"),
-        "hint_count": len(hints),
-        "hints": hints,
-        "blocker_count": sum(1 for h in hints if h.get("severity") == "blocker"),
-        "warning_count": sum(1 for h in hints if h.get("severity") == "warning"),
-    }
-
 
 def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any]:
     """Check minimale di readiness per review di intake/run candidate.
@@ -687,7 +597,7 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
         }
     )
 
-    # --- Run record coherence (helper condiviso con blocker_hints) ---
+    # --- Run record coherence (helper condiviso con _check_run_record_coherence) ---
     rs = run_state(str(config), target_year)
     run_record = rs.get("latest_run_record")
     coherence_hints = _check_run_record_coherence(run_record, s.get("layers", {}))

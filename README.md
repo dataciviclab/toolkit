@@ -103,7 +103,6 @@ Il toolkit non gestisce il deployment: scrive nella directory configurata via
 | `toolkit inspect paths --config dataset.yml --year 2023` | Mostra path assoluti degli output (utile nei notebook). Esempio: `toolkit inspect paths --config project-example/dataset.yml --json` |
 | `toolkit inspect schema-diff --config dataset.yml` | Confronta schema RAW tra anni configurati |
 | `toolkit review-readiness --config dataset.yml` | Check di prontezza per review candidate (raccomandato) |
-| `toolkit blocker-hints --config dataset.yml` | ⚠️ Deprecato: usa `review-readiness` |
 | `toolkit status --dataset <name> --year <year> --latest --config dataset.yml` | Ultimo run completato |
 | `toolkit profile raw --config dataset.yml` | Profilo diagnostico del RAW (encoding, delimitatore, colonne) |
 
@@ -175,7 +174,6 @@ Espone 9 tool read-only per ispezione rapida:
 | `toolkit_show_schema` | Schema di raw / clean / mart |
 | `toolkit_run_summary` | Statistiche aggregate dei run |
 | `toolkit_summary` | Dashboard diagnostico per dataset |
-| `toolkit_blocker_hints` | Mismatch tra config e output |
 | `toolkit_review_readiness` | Check di prontezza per review |
 | `toolkit_list_runs` | Run records con filtri |
 | `toolkit_schema_diff` | Confronto schema raw cross-year |

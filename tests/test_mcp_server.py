@@ -18,7 +18,6 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_raw_profile",
         "toolkit_run_summary",
         "toolkit_summary",
-        "toolkit_blocker_hints",
         "toolkit_review_readiness",
         "toolkit_list_runs",
         "toolkit_schema_diff",

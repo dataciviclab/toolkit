@@ -83,7 +83,7 @@ def _check_run_record_coherence(
     """Verifica che i layer marcati SUCCESS nel run record abbiano output reali.
 
     Ritorna una lista di hint (dict con code, severity, message).
-    Usata da blocker_hints() e review_readiness().
+    Usata da review_readiness().
     """
     hints: list[dict[str, str]] = []
     if not run_record:

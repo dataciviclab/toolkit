@@ -43,9 +43,6 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
         decimal_suggested, skip_suggested, robust_read_suggested.
     """
     path = Path(csv_path)
-    if not path.exists():
-        raise FileNotFoundError(f"CSV non trovato: {path.resolve()}")
-
     sniff_hints = sniff_source_file(path)
     enc = sniff_hints["encoding_suggested"]
     delim = sniff_hints["delim_suggested"]
@@ -162,6 +159,8 @@ def profile(
         toolkit inspect profile --csv-path data/file.csv --json
     """
     if csv_path:
+        if not Path(csv_path).exists():
+            raise typer.BadParameter(f"File non trovato: {csv_path}")
         result = csv_preview(csv_path)
         if json_output:
             print(json.dumps(result, indent=2, default=str))

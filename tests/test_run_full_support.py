@@ -14,16 +14,16 @@ PROJECT_EXAMPLE = ROOT / "project-example"
 
 
 def test_run_full_dry_run_with_support(tmp_path: Path, monkeypatch) -> None:
-    """run full --dry-run esegue i support (per output reali) ma candidate dry.
+    """run full --dry-run deve funzionare anche se il support non e' mai stato eseguito.
 
-    Regressione: resolve_support_payloads richiede file reali per i support,
-    quindi anche in dry-run i support vanno eseguiti realmente.
+    Regressione: resolve_support_payloads in dry-run usa require_exists=False,
+    quindi la validazione SQL del candidate non richiede file reali dei support.
     """
     import shutil
 
     monkeypatch.chdir(tmp_path)
 
-    # Crea un support dataset minimale (solo raw, senza validazioni)
+    # Crea un support dataset minimale
     support_dir = tmp_path / "support_ds"
     (support_dir / "data").mkdir(parents=True, exist_ok=True)
     (support_dir / "sql").mkdir(parents=True)
@@ -75,15 +75,8 @@ support:
 
     runner = CliRunner()
 
-    # Prima esegui il support (per popolare output reali)
-    sup_result = runner.invoke(
-        app,
-        ["run", "all", "--config", str(support_dir / "dataset.yml")],
-        catch_exceptions=False,
-    )
-    assert sup_result.exit_code == 0, sup_result.output
-
-    # Dry-run del candidate: deve funzionare perche' il support ha output reali
+    # NON eseguiamo il support prima. run full --dry-run deve funzionare
+    # comunque grazie a require_exists=False.
     result = runner.invoke(
         app,
         ["run", "full", "--config", str(cand_yml), "--dry-run", "--years", "2022"],
@@ -93,6 +86,8 @@ support:
     assert result.exit_code == 0, result.output
     assert "DRY_RUN" in result.output
     assert "sql_validation: OK" in result.output or "status: passed" in result.output
+    # Il support deve essere annunciato in dry-run
+    assert "support: sup" in result.output
 
 
 def test_run_full_dry_run_support_nonexistent_config_fails(tmp_path: Path, monkeypatch) -> None:

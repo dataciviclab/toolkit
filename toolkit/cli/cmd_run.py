@@ -221,7 +221,7 @@ def run_year(
         context.mark_dry_run()
         _print_execution_plan(cfg, year, layers_to_run, context, fail_on_error)
         try:
-            validate_sql_dry_run(cfg, year=year, layers=layers_to_run)
+            validate_sql_dry_run(cfg, year=year, layers=layers_to_run, dry_run=dry_run)
         except Exception as exc:
             context.fail_run(str(exc))
             raise
@@ -472,6 +472,8 @@ def run_full(
     # Process support datasets (dichiarati in dataset.yml con support:)
     # Vengono eseguiti prima del candidate cosi' i loro output sono disponibili
     # per le query MART del candidate (placeholder {support.NAME.mart} ecc.).
+    # In dry-run i support vengono solo annunciati (non eseguiti): la validazione
+    # SQL del candidate usa require_exists=False e non richiede file reali.
     support_entries = cfg.support or []
     if support_entries:
         logger.info(
@@ -481,10 +483,10 @@ def run_full(
         for entry in support_entries:
             logger.info("Support: %s — %s", entry.name, entry.config)
 
-            # In dry-run i support vengono comunque eseguiti per rendere
-            # disponibili gli output alla validazione SQL del candidate
-            # (resolve_support_payloads richiede file reali).
-            # Solo il candidate resta in dry-run.
+            if dry_flag:
+                typer.echo(f"  [dry-run] support: {entry.name} — years={entry.years}")
+                continue
+
             try:
                 support_cfg, support_logger = load_cfg_and_logger(
                     str(entry.config), strict_config=strict_flag
@@ -492,7 +494,7 @@ def run_full(
             except Exception as exc:
                 logger.error("Support: cannot load config %s: %s", entry.config, exc)
                 results["status"] = "failed"
-                continue
+                break  # dipendenza non disponibile, abort
 
             for sy in entry.years:
                 logger.info("Support: running %s year=%s", entry.name, sy)
@@ -501,7 +503,7 @@ def run_full(
                 except Exception as exc:
                     logger.error("Support run failed: %s year=%s — %s", entry.name, sy, exc)
                     results["status"] = "failed"
-                    continue
+                    break  # dipendenza fallita, abort
 
                 # Validate all layers
                 try:
@@ -514,9 +516,14 @@ def run_full(
                     if not all_support_passed:
                         logger.error("Support validation failed: %s year=%s", entry.name, sy)
                         results["status"] = "failed"
+                        break  # dipendenza fallita, abort
                 except Exception as exc:
                     logger.error("Support validation error: %s year=%s — %s", entry.name, sy, exc)
                     results["status"] = "failed"
+                    break  # dipendenza fallita, abort
+
+            if results["status"] == "failed":
+                break  # esci dal loop support, vai direttamente al report
 
     # Run all
     for year in selected_years:

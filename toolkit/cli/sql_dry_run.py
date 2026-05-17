@@ -107,7 +107,7 @@ def _build_clean_preview(
     )
 
 
-def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection) -> None:
+def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection, dry_run: bool = False) -> None:
     clean_cfg_ = ensure_dict(cfg.clean)
     mart_cfg_ = ensure_dict(cfg.mart)
     if clean_cfg_.get("sql"):
@@ -115,7 +115,10 @@ def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection) -> Non
         con.execute("CREATE OR REPLACE VIEW clean AS SELECT * FROM clean_input")
 
     tables = mart_cfg_.get("tables") or []
-    support_payloads = resolve_support_payloads(ensure_dict(cfg.support), require_exists=True)
+    # In dry-run: require_exists=False per non bloccare candidate senza support
+    # ancora generati. Se DuckDB fallisce su read_parquet (file non esiste),
+    # il dry-run lo registra come avviso ma non blocca.
+    support_payloads = resolve_support_payloads(ensure_dict(cfg.support), require_exists=not dry_run)
     template_ctx = build_runtime_template_ctx(
         dataset=cfg.dataset,
         year=year,
@@ -132,10 +135,15 @@ def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection) -> Non
         try:
             con.execute(f"EXPLAIN SELECT * FROM ({sql}) AS q LIMIT 0")
         except Exception as exc:
+            err_msg = str(exc)
+            # In dry-run, DuckDB puo' fallire su read_parquet se il file support
+            # non esiste ancora. Non e' un errore — verra' creato nel run reale.
+            if dry_run and ("No files found that match the pattern" in err_msg or "IO Error" in err_msg):
+                continue
             raise ValueError(f"MART SQL dry-run failed ({name}, {sql_path}): {exc}") from exc
 
 
-def validate_sql_dry_run(cfg, *, year: int, layers: list[str]) -> None:
+def validate_sql_dry_run(cfg, *, year: int, layers: list[str], dry_run: bool = False) -> None:
     if not any(layer in {"clean", "mart"} for layer in layers):
         return
 
@@ -143,4 +151,4 @@ def validate_sql_dry_run(cfg, *, year: int, layers: list[str]) -> None:
         if cfg.clean.get("sql"):
             _build_clean_preview(cfg, year=year, con=con)
         if "mart" in layers:
-            _validate_mart_sql(cfg, year=year, con=con)
+            _validate_mart_sql(cfg, year=year, con=con, dry_run=dry_run)

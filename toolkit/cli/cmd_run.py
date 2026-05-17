@@ -525,34 +525,38 @@ def run_full(
             if results["status"] == "failed":
                 break  # esci dal loop support, vai direttamente al report
 
-    # Run all
-    for year in selected_years:
-        logger.info("Run all — year=%s", year)
-        run_year(cfg, year, step="all", dry_run=dry_flag, logger=logger)
+    # Se un support e' fallito, non eseguire il candidate (dipendenza assente)
+    candidate_blocked = results["status"] == "failed" and not dry_flag
 
-        if not dry_flag:
-            # Validate all
-            logger.info("Validate all — year=%s", year)
-            val_raw = run_raw_validation(cfg.root, cfg.dataset, year, logger)
-            val_clean = run_clean_validation(cfg, year, logger)
-            val_mart = run_mart_validation(cfg, year, logger)
+    if not candidate_blocked:
+        # Run all
+        for year in selected_years:
+            logger.info("Run all — year=%s", year)
+            run_year(cfg, year, step="all", dry_run=dry_flag, logger=logger)
 
-            all_passed = all(
-                r.get("passed") for r in [val_raw, val_clean, val_mart]
-            )
-            results["steps"][str(year)] = {
-                "run": "ok",
-                "validate": "passed" if all_passed else "failed",
-            }
-            if not all_passed:
-                results["status"] = "failed"
+            if not dry_flag:
+                # Validate all
+                logger.info("Validate all — year=%s", year)
+                val_raw = run_raw_validation(cfg.root, cfg.dataset, year, logger)
+                val_clean = run_clean_validation(cfg, year, logger)
+                val_mart = run_mart_validation(cfg, year, logger)
 
-            # Review readiness (capture, not print)
-            readiness = _review_readiness(config, year or None)
-            results["steps"][str(year)]["readiness"] = readiness.get("readiness")
-            results["steps"][str(year)]["checks"] = readiness.get("check_count", 0)
-            results["steps"][str(year)]["checks_ok"] = readiness.get("ok_count", 0)
-            results["steps"][str(year)]["checks_fail"] = readiness.get("fail_count", 0)
+                all_passed = all(
+                    r.get("passed") for r in [val_raw, val_clean, val_mart]
+                )
+                results["steps"][str(year)] = {
+                    "run": "ok",
+                    "validate": "passed" if all_passed else "failed",
+                }
+                if not all_passed:
+                    results["status"] = "failed"
+
+                # Review readiness (capture, not print)
+                readiness = _review_readiness(config, year or None)
+                results["steps"][str(year)]["readiness"] = readiness.get("readiness")
+                results["steps"][str(year)]["checks"] = readiness.get("check_count", 0)
+                results["steps"][str(year)]["checks_ok"] = readiness.get("ok_count", 0)
+                results["steps"][str(year)]["checks_fail"] = readiness.get("fail_count", 0)
 
     if json_output:
         typer.echo(json.dumps(results, indent=2, default=str))

@@ -107,6 +107,14 @@ def _build_clean_preview(
     )
 
 
+def _all_support_expected_paths(support_payloads: list[dict[str, Any]]) -> list[str]:
+    """All support mart output paths attesi (anche se non esistono ancora)."""
+    paths: list[str] = []
+    for entry in support_payloads:
+        paths.extend(entry.get("outputs", []))
+    return paths
+
+
 def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection, dry_run: bool = False) -> None:
     clean_cfg_ = ensure_dict(cfg.clean)
     mart_cfg_ = ensure_dict(cfg.mart)
@@ -137,9 +145,12 @@ def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection, dry_ru
         except Exception as exc:
             err_msg = str(exc)
             # In dry-run, DuckDB puo' fallire su read_parquet se il file support
-            # non esiste ancora. Non e' un errore — verra' creato nel run reale.
-            if dry_run and ("No files found that match the pattern" in err_msg or "IO Error" in err_msg):
-                continue
+            # non esiste ancora (placeholder {support.*.mart}). Verifichiamo che
+            # l'errore riguardi un path support atteso, non un qualsiasi IO Error.
+            if dry_run and "No files found that match the pattern" in err_msg:
+                support_paths = _all_support_expected_paths(support_payloads)
+                if support_paths and any(sp in err_msg for sp in support_paths):
+                    continue
             raise ValueError(f"MART SQL dry-run failed ({name}, {sql_path}): {exc}") from exc
 
 

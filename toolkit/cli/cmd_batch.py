@@ -11,7 +11,7 @@ from time import perf_counter
 
 import typer
 
-from toolkit.cli.common import dump_cfg_section, iter_selected_years, load_cfg_and_logger
+from toolkit.cli.common import iter_selected_years, load_cfg_and_logger
 from toolkit.cli.cmd_run import run_cross_year_step, run_year
 from toolkit.clean.validate import run_clean_validation
 from toolkit.mart.validate import run_mart_validation

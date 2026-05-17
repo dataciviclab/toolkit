@@ -1,3 +1,9 @@
+"""CLI command: toolkit batch — esegue piu' config in sequenza.
+
+Con --validate esegue anche la validazione dopo ogni step.
+Con --years filtra gli anni da processare.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -5,8 +11,11 @@ from time import perf_counter
 
 import typer
 
-from toolkit.cli.common import load_cfg_and_logger
+from toolkit.cli.common import dump_cfg_section, iter_selected_years, load_cfg_and_logger
 from toolkit.cli.cmd_run import run_cross_year_step, run_year
+from toolkit.clean.validate import run_clean_validation
+from toolkit.mart.validate import run_mart_validation
+from toolkit.raw.validate import run_raw_validation
 
 _ALLOWED_STEPS = {"raw", "clean", "mart", "cross_year", "all"}
 
@@ -45,7 +54,7 @@ def _format_duration(seconds: float | None) -> str:
 
 
 def _print_table(rows: list[dict[str, str]]) -> None:
-    headers = ["dataset", "years", "step", "status", "duration"]
+    headers = ["dataset", "years", "step", "status", "validate", "duration"]
     widths = {header: len(header) for header in headers}
     for row in rows:
         for header in headers:
@@ -61,17 +70,38 @@ def _print_table(rows: list[dict[str, str]]) -> None:
         typer.echo(_render(row))
 
 
+def _validate_year(cfg, year: int, logger=None) -> str:
+    """Run validation for all layers. Returns 'passed' or 'failed'."""
+    from toolkit.core.logging import get_logger
+    log = logger or get_logger()
+    val_raw = run_raw_validation(cfg.root, cfg.dataset, year, log)
+    val_clean = run_clean_validation(cfg, year, log)
+    val_mart = run_mart_validation(cfg, year, log)
+    all_passed = all(r.get("passed") for r in [val_raw, val_clean, val_mart])
+    return "passed" if all_passed else "failed"
+
+
 def batch(
     configs: str = typer.Option(
         ..., "--configs", help="Path to a text file with one dataset.yml path per line"
     ),
     step: str = typer.Option("all", "--step", help="raw | clean | mart | cross_year | all"),
+    years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
+    validate: bool = typer.Option(False, "--validate", help="Run validation after each step"),
     strict_config: bool = typer.Option(
         False, "--strict-config", help="Treat deprecated config forms as errors"
     ),
 ):
     """
     Esegue più config in sequenza e stampa un report aggregato finale.
+
+    Con --validate esegue anche raw_validation, clean_validation e mart_validation
+    dopo ogni run (equivalente a run full ma su piu' config).
+
+    Con --years filtra gli anni dichiarati in ogni config.
+
+    Esempio (sostituisce run_support_datasets.py):
+        toolkit batch --configs support_list.txt --step all --validate --years 2023,2024
     """
     if step not in _ALLOWED_STEPS:
         raise typer.BadParameter("step must be one of: raw, clean, mart, cross_year, all")
@@ -79,6 +109,7 @@ def batch(
     configs_file = Path(configs)
     config_paths = _read_config_list(configs_file)
     strict_config_flag = strict_config if isinstance(strict_config, bool) else False
+    years_val = years if isinstance(years, str) else None
 
     rows: list[dict[str, str]] = []
     failures: list[dict[str, str]] = []
@@ -89,19 +120,23 @@ def batch(
         try:
             cfg, logger = load_cfg_and_logger(str(config_path), strict_config=strict_config_flag)
             dataset_label = cfg.dataset
+            selected_years = iter_selected_years(cfg, years_arg=years_val)
 
             if step == "cross_year":
                 run_started_at = perf_counter()
                 status = "FAILED"
+                validate_status = "-"
                 try:
                     run_cross_year_step(cfg, logger=logger)
                     status = "SUCCESS"
+                    if validate:
+                        validate_status = _validate_year(cfg, selected_years[0], logger) if selected_years else "-"
                 except Exception as exc:
                     failures.append(
                         {
                             "config": str(config_path),
                             "dataset": dataset_label,
-                            "years": _format_years(list(cfg.years)),
+                            "years": _format_years(selected_years),
                             "error": str(exc),
                         }
                     )
@@ -109,16 +144,18 @@ def batch(
                     rows.append(
                         {
                             "dataset": dataset_label,
-                            "years": _format_years(list(cfg.years)),
+                            "years": _format_years(selected_years),
                             "step": step,
                             "status": status,
+                            "validate": validate_status,
                             "duration": _format_duration(perf_counter() - run_started_at),
                         }
                     )
             else:
-                for year in cfg.years:
+                for year in selected_years:
                     run_started_at = perf_counter()
                     status = "FAILED"
+                    validate_status = "-"
                     try:
                         context = run_year(cfg, year, step=step, logger=logger)
                         status = context.status
@@ -131,6 +168,20 @@ def batch(
                                 "error": str(exc),
                             }
                         )
+                    else:
+                        if validate and status == "SUCCESS":
+                            try:
+                                validate_status = _validate_year(cfg, year, logger)
+                            except Exception as exc:
+                                validate_status = "failed"
+                                failures.append(
+                                    {
+                                        "config": str(config_path),
+                                        "dataset": dataset_label,
+                                        "years": str(year),
+                                        "error": f"validate: {exc}",
+                                    }
+                                )
                     finally:
                         rows.append(
                             {
@@ -138,6 +189,7 @@ def batch(
                                 "years": str(year),
                                 "step": step,
                                 "status": status,
+                                "validate": validate_status,
                                 "duration": _format_duration(perf_counter() - run_started_at),
                             }
                         )
@@ -156,6 +208,7 @@ def batch(
                     "years": "-",
                     "step": step,
                     "status": "FAILED",
+                    "validate": "-",
                     "duration": _format_duration(perf_counter() - config_started_at),
                 }
             )

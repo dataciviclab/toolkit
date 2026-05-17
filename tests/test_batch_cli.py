@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import textwrap
 from pathlib import Path
 
@@ -121,3 +122,61 @@ def test_batch_runs_configs_in_sequence_and_prints_report(tmp_path: Path) -> Non
 
     assert (project_a / "out" / "data" / "mart" / "batch_a" / "2022" / "mart_totali.parquet").exists()
     assert (project_b / "out" / "data" / "mart" / "batch_b" / "2023" / "mart_totali.parquet").exists()
+
+
+def test_batch_with_years_filter(tmp_path: Path) -> None:
+    """batch --years filtra gli anni processati."""
+    project = tmp_path / "project"
+    _write_batch_project(project, "multi_year", 2022)
+    # Aggiunge un secondo anno alla config
+    yml_path = project / "dataset.yml"
+    content = yml_path.read_text(encoding="utf-8")
+    content = content.replace("years: [2022]", "years: [2022, 2023]")
+    yml_path.write_text(content, encoding="utf-8")
+
+    configs_file = tmp_path / "configs.txt"
+    configs_file.write_text("project/dataset.yml\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--configs", str(configs_file), "--step", "all", "--years", "2022"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Batch Report" in result.output
+    # Solo 2022 processato, non 2023
+    assert "2022" in result.output
+    assert "2023" not in result.output
+    assert (project / "out" / "data" / "mart" / "multi_year" / "2022" / "mart_totali.parquet").exists()
+    # 2023 non deve essere stato processato
+    assert not (project / "out" / "data" / "mart" / "multi_year" / "2023" / "mart_totali.parquet").exists()
+
+
+def test_batch_with_validate(tmp_path: Path) -> None:
+    """batch --validate esegue validazione dopo ogni run."""
+    project = tmp_path / "project"
+    _write_batch_project(project, "validated", 2024)
+
+    configs_file = tmp_path / "configs.txt"
+    configs_file.write_text("project/dataset.yml\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--configs", str(configs_file), "--step", "all", "--validate"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Batch Report" in result.output
+    assert "validate" in result.output
+    assert "passed" in result.output
+
+    # I file di validazione devono esistere
+    root = project / "out"
+    year = 2024
+    assert (root / "data" / "raw" / "validated" / str(year) / "raw_validation.json").exists()
+    assert (root / "data" / "clean" / "validated" / str(year) / "_validate" / "clean_validation.json").exists()
+    assert (root / "data" / "mart" / "validated" / str(year) / "_validate" / "mart_validation.json").exists()

@@ -77,7 +77,7 @@ def _validate_execution_plan(cfg, step: str) -> list[str]:
             raise ValueError(
                 f"CLEAN SQL file not found: {clean_sql}\n"
                 f"This config is not bootstrapped yet.\n"
-                f"Run: toolkit run init --config <config> --years <year>\n"
+                f"Run: toolkit init --config <config> --years <year>\n"
                 f"Then review sql/clean.sql and run: toolkit run all ..."
             )
 
@@ -516,6 +516,5 @@ def register(app: typer.Typer) -> None:
     run_sub.command("all")(run_all_cmd)
     run_sub.command("cross_year")(run_cross_year_cmd)
     run_sub.command("cross-year")(run_cross_year_cmd)  # alias hyphen
-    run_sub.command("init")(run_init)
     run_sub.command("full")(run_full)
     app.add_typer(run_sub, name="run", help="Esegue la pipeline RAW → CLEAN → MART per un dataset.")

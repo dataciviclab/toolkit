@@ -1,6 +1,6 @@
 """CLI command: toolkit profile (DEPRECATED, usa toolkit inspect profile).
 
-Tenuto per backward compat. La stessa logica vive in inspect/profile_ops.py.
+Wrapper deprecato che delega a inspect/profile_ops.run_profile().
 """
 
 from __future__ import annotations
@@ -10,9 +10,6 @@ import warnings
 import typer
 
 from toolkit.cli.common import iter_selected_years, load_cfg_and_logger
-from toolkit.core.artifacts import resolve_artifact_policy, should_write
-from toolkit.core.paths import layer_year_dir
-from toolkit.profile.raw import profile_raw, write_raw_profile, write_suggested_read_yml
 
 
 def profile(
@@ -34,33 +31,18 @@ def profile(
         DeprecationWarning, stacklevel=2,
     )
 
-    strict_flag = strict_config if isinstance(strict_config, bool) else False
-    year_val = year if isinstance(year, int) else None
-    years_val = years if isinstance(years, str) else None
-
     if step != "raw":
         raise typer.BadParameter("step must be: raw")
 
+    strict_flag = strict_config if isinstance(strict_config, bool) else False
+    year_val = year if isinstance(year, int) else None
+    years_val = years if isinstance(years, str) else None
     cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag)
     selected_years = iter_selected_years(cfg, year_arg=year_val, years_arg=years_val)
 
-    for y in selected_years:
-        raw_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, y)
-        out_dir = raw_dir / "_profile"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        policy = resolve_artifact_policy(cfg.output)
+    from toolkit.cli.inspect.profile_ops import run_profile
 
-        prof = profile_raw(raw_dir, cfg.dataset, y, read_cfg=(cfg.clean or {}).get("read"))
-        paths = write_raw_profile(out_dir, prof)
-        written_paths = list(paths.values())
-
-        if should_write("profile", "suggested_read", policy, cfg):
-            written_paths.append(write_suggested_read_yml(out_dir, prof.__dict__))
-
-        if written_paths:
-            logger.info("PROFILE RAW -> %s", " | ".join(str(path) for path in written_paths))
-        else:
-            logger.info("PROFILE RAW -> no optional artifacts written for current policy")
+    run_profile(cfg, selected_years, logger)
 
 
 def register(app: typer.Typer) -> None:

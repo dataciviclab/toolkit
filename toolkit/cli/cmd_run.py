@@ -529,21 +529,29 @@ def run_full(
     candidate_blocked = results["status"] == "failed" and not dry_flag
 
     if not candidate_blocked:
-        # Run all
+        # Mart-only config (compose): non ha raw/clean, solo mart.
+        # run full usa step="mart" e valida solo mart.
+        is_mart_only = _is_mart_only_cfg(cfg)
+        run_step = "mart" if is_mart_only else "all"
+
         for year in selected_years:
-            logger.info("Run all — year=%s", year)
-            run_year(cfg, year, step="all", dry_run=dry_flag, logger=logger)
+            logger.info("Run %s — year=%s", run_step, year)
+            run_year(cfg, year, step=run_step, dry_run=dry_flag, logger=logger)
 
             if not dry_flag:
-                # Validate all
-                logger.info("Validate all — year=%s", year)
-                val_raw = run_raw_validation(cfg.root, cfg.dataset, year, logger)
-                val_clean = run_clean_validation(cfg, year, logger)
-                val_mart = run_mart_validation(cfg, year, logger)
-
-                all_passed = all(
-                    r.get("passed") for r in [val_raw, val_clean, val_mart]
-                )
+                if is_mart_only:
+                    # Validate solo mart (compose non ha raw/clean)
+                    val_mart = run_mart_validation(cfg, year, logger)
+                    all_passed = bool(val_mart.get("passed"))
+                else:
+                    # Validate all layers
+                    logger.info("Validate all — year=%s", year)
+                    val_raw = run_raw_validation(cfg.root, cfg.dataset, year, logger)
+                    val_clean = run_clean_validation(cfg, year, logger)
+                    val_mart = run_mart_validation(cfg, year, logger)
+                    all_passed = all(
+                        r.get("passed") for r in [val_raw, val_clean, val_mart]
+                    )
                 results["steps"][str(year)] = {
                     "run": "ok",
                     "validate": "passed" if all_passed else "failed",

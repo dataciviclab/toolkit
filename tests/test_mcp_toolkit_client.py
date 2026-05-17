@@ -478,6 +478,28 @@ def test_clean_preview_mart_with_index(tmp_path: Path, monkeypatch: pytest.Monke
     assert result["column_count"] >= 1
 
 
+def test_clean_preview_mart_index_negative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """clean_preview con mart_index < 0 deve alzare errore."""
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
+    config_path = dst / "dataset.yml"
+
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    # Crea output mart (due table)
+    mart_dir = dst / "_smoke_out" / "data" / "mart" / "project_example" / "2022"
+    mart_dir.mkdir(parents=True, exist_ok=True)
+    _write_real_parquet(mart_dir / "rd_by_regione.parquet")
+    _write_real_parquet(mart_dir / "rd_by_provincia.parquet")
+
+    from toolkit.mcp.errors import ToolkitClientError
+    from toolkit.mcp.toolkit_client import clean_preview
+
+    with pytest.raises(ToolkitClientError, match="Indice mart"):
+        clean_preview(str(config_path), layer="mart", mart_index=-1, year=2022, limit=5)
+
+
 def test_raw_preview_with_real_csv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """raw_preview deve leggere un CSV reale dal raw dir."""
     src = Path("project-example")
@@ -659,3 +681,15 @@ def test_list_candidates_status_filter_invalid(tmp_path: Path, monkeypatch: pyte
 
     with pytest.raises(ToolkitClientError, match="status_filter"):
         list_candidates(stage="candidates", status_filter="INVALID")
+
+
+def test_list_candidates_stage_invalid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """list_candidates con stage non valido deve alzare errore."""
+    from toolkit.mcp import discovery as _discmod
+    from toolkit.mcp.errors import ToolkitClientError
+    monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
+
+    from toolkit.mcp.discovery import list_candidates
+
+    with pytest.raises(ToolkitClientError, match="stage deve essere"):
+        list_candidates(stage="bogus")

@@ -105,6 +105,13 @@ def list_candidates(
         - has_clean: bool (presenza directory out/data/clean/{slug}/)
         - has_mart: bool (presenza directory out/data/mart/{slug}/)
     """
+    valid_stages = {"candidates", "support", "all"}
+    if stage not in valid_stages:
+        raise ToolkitClientError(
+            f"stage deve essere uno tra: {', '.join(sorted(valid_stages))} (ricevuto: {stage!r})",
+            code=ErrorCode.INVALID_PARAMS,
+        )
+
     incubator = WORKSPACE_ROOT / "dataset-incubator"
 
     dirs_to_scan: list[tuple[str, Path]] = []

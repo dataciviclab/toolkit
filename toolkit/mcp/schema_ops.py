@@ -690,10 +690,11 @@ def clean_preview(
         outputs = paths["paths"]["mart"].get("outputs") or []
         if not outputs:
             raise ToolkitClientError("Nessun output mart risolto", code=ErrorCode.PARQUET_NOT_FOUND)
-        if mart_index >= len(outputs):
+        if mart_index < 0 or mart_index >= len(outputs):
+            code = ErrorCode.INVALID_PARAMS
             raise ToolkitClientError(
-                f"Indice mart {mart_index} fuori range: {len(outputs)} output disponibili",
-                code=ErrorCode.INVALID_PARAMS,
+                f"Indice mart {mart_index} non valido: {len(outputs)} output disponibili (indice 0-{len(outputs)-1})",
+                code=code,
             )
         parquet_path = Path(outputs[mart_index])
     else:

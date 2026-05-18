@@ -47,12 +47,12 @@ mcp = create_mcp_server(
     description="Mostra il path contract risolto per un dataset config.", structured_output=True
 )
 def toolkit_inspect_paths(config_path: str, year: int = 0) -> dict[str, Any]:
-    return guard_timed(inspect_paths_impl, "toolkit_inspect_paths", config_path, year or None, logger_name="toolkit")
+    return guard_timed(inspect_paths_impl, "toolkit_inspect_paths", config_path, year or None)
 
 
 @mcp.tool(description="Mostra lo schema di raw, clean o mart.", structured_output=True)
 def toolkit_show_schema(config_path: str, layer: str = "clean", year: int = 0) -> dict[str, Any]:
-    return guard_timed(show_schema_impl, "toolkit_show_schema", config_path, layer, year or None, logger_name="toolkit")
+    return guard_timed(show_schema_impl, "toolkit_show_schema", config_path, layer, year or None)
 
 
 @mcp.tool(
@@ -60,7 +60,7 @@ def toolkit_show_schema(config_path: str, layer: str = "clean", year: int = 0) -
     structured_output=True,
 )
 def toolkit_raw_profile(config_path: str, year: int = 0) -> dict[str, Any]:
-    return guard_timed(raw_profile_impl, "toolkit_raw_profile", config_path, year or None, logger_name="toolkit")
+    return guard_timed(raw_profile_impl, "toolkit_raw_profile", config_path, year or None)
 
 
 @mcp.tool(
@@ -74,7 +74,7 @@ def toolkit_run_summary(
     since: str | None = None,
     until: str | None = None,
 ) -> dict[str, Any]:
-    return guard_timed(run_summary_impl, "toolkit_run_summary", config_path, year or None, since=since, until=until, logger_name="toolkit")
+    return guard_timed(run_summary_impl, "toolkit_run_summary", config_path, year or None, since=since, until=until)
 
 
 @mcp.tool(
@@ -82,7 +82,7 @@ def toolkit_run_summary(
     structured_output=True,
 )
 def toolkit_summary(config_path: str, year: int = 0) -> dict[str, Any]:
-    return guard_timed(summary_impl, "toolkit_summary", config_path, year or None, logger_name="toolkit")
+    return guard_timed(summary_impl, "toolkit_summary", config_path, year or None)
 
 
 @mcp.tool(
@@ -90,7 +90,7 @@ def toolkit_summary(config_path: str, year: int = 0) -> dict[str, Any]:
     structured_output=True,
 )
 def toolkit_review_readiness(config_path: str, year: int = 0) -> dict[str, Any]:
-    return guard_timed(review_readiness_impl, "toolkit_review_readiness", config_path, year or None, logger_name="toolkit")
+    return guard_timed(review_readiness_impl, "toolkit_review_readiness", config_path, year or None)
 
 
 @mcp.tool(
@@ -101,7 +101,7 @@ def toolkit_list_candidates(
     stage: str = "all",
     status_filter: str | None = None,
 ) -> dict[str, Any]:
-    return guard_timed(list_candidates_impl, "toolkit_list_candidates", stage, status_filter, logger_name="toolkit")
+    return guard_timed(list_candidates_impl, "toolkit_list_candidates", stage, status_filter)
 
 
 @mcp.tool(
@@ -109,7 +109,7 @@ def toolkit_list_candidates(
     structured_output=True,
 )
 def toolkit_dataset_info(config_path: str) -> dict[str, Any]:
-    return guard_timed(dataset_info_impl, "toolkit_dataset_info", config_path, logger_name="toolkit")
+    return guard_timed(dataset_info_impl, "toolkit_dataset_info", config_path)
 
 
 @mcp.tool(
@@ -123,7 +123,7 @@ def toolkit_clean_preview(
     year: int = 0,
     limit: int = 10,
 ) -> dict[str, Any]:
-    return guard_timed(clean_preview_impl, "toolkit_clean_preview", config_path, layer, mart_index, year or None, limit, logger_name="toolkit")
+    return guard_timed(clean_preview_impl, "toolkit_clean_preview", config_path, layer, mart_index, year or None, limit)
 
 
 @mcp.tool(
@@ -135,7 +135,7 @@ def toolkit_raw_preview(
     year: int = 0,
     limit: int = 20,
 ) -> dict[str, Any]:
-    return guard_timed(raw_preview_impl, "toolkit_raw_preview", config_path, year or None, limit, logger_name="toolkit")
+    return guard_timed(raw_preview_impl, "toolkit_raw_preview", config_path, year or None, limit)
 
 
 @mcp.tool(
@@ -143,7 +143,7 @@ def toolkit_raw_preview(
     structured_output=True,
 )
 def toolkit_schema_diff(config_path: str) -> dict[str, Any]:
-    return guard_timed(schema_diff_impl, "toolkit_schema_diff", config_path, logger_name="toolkit")
+    return guard_timed(schema_diff_impl, "toolkit_schema_diff", config_path)
 
 
 @mcp.tool(
@@ -160,7 +160,7 @@ def toolkit_list_runs(
     limit: int | None = None,
     cross_year: bool = False,
 ) -> dict[str, Any]:
-    return guard_timed(list_runs_impl, "toolkit_list_runs", config_path, year or None, since=since, until=until, status=status, limit=limit, cross_year=cross_year, logger_name="toolkit")
+    return guard_timed(list_runs_impl, "toolkit_list_runs", config_path, year or None, since=since, until=until, status=status, limit=limit, cross_year=cross_year)
 
 
 @mcp.tool(
@@ -170,7 +170,7 @@ def toolkit_list_runs(
     structured_output=True,
 )
 def toolkit_csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
-    return guard_timed(csv_preview_impl, "toolkit_csv_preview", csv_path, limit, logger_name="toolkit")
+    return guard_timed(csv_preview_impl, "toolkit_csv_preview", csv_path, limit)
 
 
 if __name__ == "__main__":

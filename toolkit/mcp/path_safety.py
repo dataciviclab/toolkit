@@ -29,6 +29,23 @@ def _safe_path(config_path: str | Path) -> Path:
     path = Path(config_path).expanduser()
     if not path.is_absolute():
         path = (WORKSPACE_ROOT / path).resolve()
+
+    # Se il path è una directory, prova dataset.yml al suo interno,
+    # in modo che i tool accettino anche path di directory (es. da list_candidates).
+    # Se manca dataset.yml, non restituire la directory: tenta risoluzione slug.
+    if path.is_dir():
+        probe = path / "dataset.yml"
+        if probe.exists():
+            return probe
+        resolved = _resolve_dataset(str(config_path))
+        if resolved is not None:
+            return resolved
+        raise ToolkitClientError(
+            f"Config non trovata: {path}. "
+            f"È una directory ma non contiene dataset.yml.",
+            code=ErrorCode.CONFIG_NOT_FOUND,
+        )
+
     if not path.exists():
         # Fallback: tenta risoluzione come slug
         resolved = _resolve_dataset(str(config_path))

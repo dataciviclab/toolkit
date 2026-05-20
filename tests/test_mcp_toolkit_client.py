@@ -624,6 +624,61 @@ def test_safe_path_slug_not_found_raises_clean_error(tmp_path: Path, monkeypatch
         _safe_path("totally-nonexistent-slug")
 
 
+def test_safe_path_directory_resolves_to_dataset_yml(tmp_path: Path) -> None:
+    """_safe_path con path directory deve restituire directory/dataset.yml se esiste."""
+    from toolkit.mcp.path_safety import _safe_path
+
+    # Crea directory con dataset.yml dentro
+    d = tmp_path / "candidates" / "test-dataset"
+    d.mkdir(parents=True)
+    yml = d / "dataset.yml"
+    yml.write_text("dataset:\n  name: test\n")
+
+    result = _safe_path(str(d))
+    assert result == yml.resolve(), (
+        f"Dovrebbe restituire {yml.resolve()}, invece ha restituito {result}"
+    )
+    assert result.suffix in (".yml", ".yaml")
+
+
+def test_safe_path_directory_without_dataset_yml_raises_error(tmp_path: Path) -> None:
+    """_safe_path con directory senza dataset.yml deve alzare ToolkitClientError,
+    non restituire la directory."""
+    from toolkit.mcp.path_safety import _safe_path
+    from toolkit.mcp.errors import ToolkitClientError
+
+    empty_dir = tmp_path / "empty-dir"
+    empty_dir.mkdir()
+
+    with pytest.raises(ToolkitClientError, match="non contiene dataset"):
+        _safe_path(str(empty_dir))
+
+
+def test_safe_path_directory_without_dataset_yml_falls_back_to_slug(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """_safe_path con directory senza dataset.yml deve tentare risoluzione slug
+    prima di alzare errore."""
+    from toolkit.mcp import path_safety as _ps_mod
+    from toolkit.mcp.path_safety import _safe_path
+
+    # Crea slug risolvibile: dataset-incubator/candidates/{slug}/dataset.yml
+    slug = "test-slug-resolved"
+    candidate_dir = tmp_path / "dataset-incubator" / "candidates" / slug
+    candidate_dir.mkdir(parents=True)
+    yml = candidate_dir / "dataset.yml"
+    yml.write_text("dataset:\n  name: resolved\n")
+
+    monkeypatch.setattr(_ps_mod, "WORKSPACE_ROOT", tmp_path)
+
+    # Una directory senza dataset.yml con lo stesso nome dello slug
+    some_dir = tmp_path / "some-other-dir"
+    some_dir.mkdir()
+
+    # _safe_path("some-other-dir") non dovrebbe risolversi
+    # _safe_path(slug) dovrebbe risolversi via slug
+    result = _safe_path(slug)
+    assert result == yml.resolve()
+
+
 def test_list_candidates_status_filter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """list_candidates(status_filter='SUCCESS') deve filtrare per last_run_status."""
     from toolkit.mcp import discovery as _discmod

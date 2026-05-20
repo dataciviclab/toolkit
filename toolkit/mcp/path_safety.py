@@ -29,6 +29,14 @@ def _safe_path(config_path: str | Path) -> Path:
     path = Path(config_path).expanduser()
     if not path.is_absolute():
         path = (WORKSPACE_ROOT / path).resolve()
+
+    # Se il path è una directory, prova dataset.yml al suo interno,
+    # in modo che i tool accettino anche path di directory (es. da list_candidates).
+    if path.is_dir():
+        probe = path / "dataset.yml"
+        if probe.exists():
+            return probe
+
     if not path.exists():
         # Fallback: tenta risoluzione come slug
         resolved = _resolve_dataset(str(config_path))

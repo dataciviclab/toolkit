@@ -1,64 +1,62 @@
 """Tests for HttpFileSource — adapter over lab_connectors.http.
 
-Tests mock the public boundary (HttpClient.get / HttpResult), not
-internal HTTP details. Retry and SSL fallback logic lives in
-lab-connectors and is tested there.
+Tests use ``FakeHttpClient`` from ``lab_connectors.testing`` instead of
+monkeypatching ``HttpClient.get``. Retry, backoff, and SSL fallback
+logic lives in lab-connectors and is tested there.
 """
 from __future__ import annotations
 
 import pytest
 
-from lab_connectors.http import HttpClient, HttpResult
+from lab_connectors.http import HttpResult
+from lab_connectors.testing import FakeHttpClient, fake_response
 
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.http_file import HttpFileSource
 
 
-class _FakeResponse:
-    """Minimal response stub duck-typing requests.Response properties."""
-    def __init__(self, status_code: int = 200, content: bytes = b"ok") -> None:
-        self.status_code = status_code
-        self.content = content
-
-
-def test_fetch_success(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_success() -> None:
     """HttpResult ok → fetch returns bytes."""
-    results: list[tuple[str, dict]] = []
-
-    def fake_get(self, url: str, **kwargs):
-        results.append((url, kwargs))
-        return HttpResult(response=_FakeResponse(200, b"payload"), err=None)
-
-    monkeypatch.setattr(HttpClient, "get", fake_get)
+    fake = FakeHttpClient()
+    fake.responses["https://example.test/data.csv"] = HttpResult(
+        response=fake_response(200, "payload"), err=None,
+    )
 
     source = HttpFileSource(timeout=15, retries=2, user_agent="ua-test")
+    source._client = fake  # inject fake
+
     payload = source.fetch("https://example.test/data.csv")
 
     assert payload == b"payload"
-    assert len(results) == 1
-    assert results[0][0] == "https://example.test/data.csv"
+    assert len(fake.requests) == 1
+    assert fake.requests[0][0] == "GET"
+    assert fake.requests[0][1] == "https://example.test/data.csv"
 
 
-def test_fetch_http_status_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_http_status_error() -> None:
     """Non-200 HTTP status → DownloadError with status code in message."""
-    def fake_get(self, url: str, **kwargs):
-        return HttpResult(response=_FakeResponse(503, b"service unavailable"), err=None)
-
-    monkeypatch.setattr(HttpClient, "get", fake_get)
+    fake = FakeHttpClient()
+    fake.responses["https://example.test/unavailable"] = HttpResult(
+        response=fake_response(503, "service unavailable"), err=None,
+    )
 
     source = HttpFileSource(retries=1)
+    source._client = fake
+
     with pytest.raises(DownloadError, match="HTTP 503"):
         source.fetch("https://example.test/unavailable")
 
 
-def test_fetch_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_connection_error() -> None:
     """HttpResult with err → DownloadError."""
-    def fake_get(self, url: str, **kwargs):
-        return HttpResult(response=None, err=ConnectionError("connection refused"))
-
-    monkeypatch.setattr(HttpClient, "get", fake_get)
+    fake = FakeHttpClient()
+    fake.responses["https://example.test/fail"] = HttpResult(
+        response=None, err=ConnectionError("connection refused"),
+    )
 
     source = HttpFileSource(retries=2)
+    source._client = fake
+
     with pytest.raises(DownloadError, match="connection refused"):
         source.fetch("https://example.test/fail")
 
@@ -76,35 +74,34 @@ def test_fetch_passes_params() -> None:
 
 
 @pytest.mark.policy
-def test_ssl_fallback_semantics_preserved(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ssl_fallback_semantics_preserved() -> None:
     """ssl_fallback_used=True in HttpResult is transparent to caller."""
-    def fake_get(self, url: str, **kwargs):
-        return HttpResult(
-            response=_FakeResponse(200, b"ssl-fallback-data"),
-            err=None,
-            ssl_fallback_used=True,
-        )
-
-    monkeypatch.setattr(HttpClient, "get", fake_get)
+    fake = FakeHttpClient()
+    fake.responses["https://example.test/ssl-expired"] = HttpResult(
+        response=fake_response(200, "ssl-fallback-data"),
+        err=None,
+        ssl_fallback_used=True,
+    )
 
     source = HttpFileSource(retries=1)
-    payload = source.fetch("https://example.test/ssl-expired")
+    source._client = fake
 
+    payload = source.fetch("https://example.test/ssl-expired")
     assert payload == b"ssl-fallback-data"
 
 
 @pytest.mark.policy
-def test_ssl_fallback_failure_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ssl_fallback_failure_propagates() -> None:
     """HttpResult with ssl_fallback_used=False and err → DownloadError."""
-    def fake_get(self, url: str, **kwargs):
-        return HttpResult(
-            response=None,
-            err=ConnectionError("fallback failed"),
-            ssl_fallback_used=False,
-        )
-
-    monkeypatch.setattr(HttpClient, "get", fake_get)
+    fake = FakeHttpClient()
+    fake.responses["https://example.test/ssl-fail"] = HttpResult(
+        response=None,
+        err=ConnectionError("fallback failed"),
+        ssl_fallback_used=False,
+    )
 
     source = HttpFileSource(retries=1)
+    source._client = fake
+
     with pytest.raises(DownloadError, match="fallback failed"):
         source.fetch("https://example.test/ssl-fail")

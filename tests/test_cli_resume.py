@@ -3,18 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from typer.testing import CliRunner
-
 from toolkit.cli import cmd_run
 from toolkit.cli.app import app
-
-
-def _write_sql(base: Path) -> None:
-    """Write standard SQL files (clean.sql + mart_example.sql)."""
-    sql_dir = base / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (base / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
+from tests.helpers import make_dataset_yml, make_standard_sql
 
 
 def _mock_all_runs(monkeypatch) -> dict:
@@ -27,27 +18,6 @@ def _mock_all_runs(monkeypatch) -> dict:
     monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
     monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
     return calls
-
-
-def _write_config(path: Path) -> None:
-    path.write_text(
-        "\n".join(
-            [
-                f'root: "{(path.parent / "out").as_posix()}"',
-                "dataset:",
-                '  name: "demo_ds"',
-                "  years: [2022]",
-                "raw: {}",
-                "clean:",
-                '  sql: "sql/clean.sql"',
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart/mart_example.sql"',
-            ]
-        ),
-        encoding="utf-8",
-    )
 
 
 def _write_old_run_record(path: Path, run_id: str) -> None:
@@ -175,10 +145,15 @@ def _write_success_with_warnings_run_record(path: Path, run_id: str) -> None:
     )
 
 
-def test_cli_resume_starts_from_first_non_success_layer(tmp_path: Path, monkeypatch) -> None:
-    config_path = tmp_path / "dataset.yml"
-    _write_config(config_path)
-    _write_sql(tmp_path)
+def test_cli_resume_starts_from_first_non_success_layer(
+    tmp_path: Path, monkeypatch, runner
+) -> None:
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml",
+        name="demo_ds",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
+    )
+    make_standard_sql(tmp_path)
 
     old_run_id = "old-run-id"
     runs_dir = tmp_path / "out" / "data" / "_runs" / "demo_ds" / "2022"
@@ -187,7 +162,6 @@ def test_cli_resume_starts_from_first_non_success_layer(tmp_path: Path, monkeypa
 
     calls = _mock_all_runs(monkeypatch)
 
-    runner = CliRunner()
     result = runner.invoke(
         app,
         [
@@ -218,11 +192,17 @@ def test_cli_resume_starts_from_first_non_success_layer(tmp_path: Path, monkeypa
     assert new_record["resumed_from"] == old_run_id
 
 
-def test_cli_resume_uses_config_root_when_cwd_differs(tmp_path: Path, monkeypatch) -> None:
+def test_cli_resume_uses_config_root_when_cwd_differs(
+    tmp_path: Path, monkeypatch, runner, chdir_tmp: Path
+) -> None:
     config_path = tmp_path / "project" / "dataset.yml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    _write_config(config_path)
-    _write_sql(config_path.parent)
+    make_dataset_yml(
+        config_path,
+        name="demo_ds",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
+    )
+    make_standard_sql(config_path.parent)
 
     old_run_id = "old-run-id"
     runs_dir = config_path.parent / "out" / "data" / "_runs" / "demo_ds" / "2022"
@@ -231,8 +211,6 @@ def test_cli_resume_uses_config_root_when_cwd_differs(tmp_path: Path, monkeypatc
 
     calls = _mock_all_runs(monkeypatch)
 
-    monkeypatch.chdir(tmp_path)
-    runner = CliRunner()
     result = runner.invoke(
         app,
         [
@@ -254,11 +232,17 @@ def test_cli_resume_uses_config_root_when_cwd_differs(tmp_path: Path, monkeypatc
     assert calls["mart"] == 1
 
 
-def test_resume_finds_latest_run(tmp_path: Path, monkeypatch) -> None:
+def test_resume_finds_latest_run(
+    tmp_path: Path, monkeypatch, runner, chdir_tmp: Path
+) -> None:
     config_path = tmp_path / "project" / "dataset.yml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    _write_config(config_path)
-    _write_sql(config_path.parent)
+    make_dataset_yml(
+        config_path,
+        name="demo_ds",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
+    )
+    make_standard_sql(config_path.parent)
 
     runs_dir = config_path.parent / "out" / "data" / "_runs" / "demo_ds" / "2022"
     _write_old_run_record(runs_dir / "old-run.json", "old-run")
@@ -275,8 +259,6 @@ def test_resume_finds_latest_run(tmp_path: Path, monkeypatch) -> None:
 
     calls = _mock_all_runs(monkeypatch)
 
-    monkeypatch.chdir(tmp_path)
-    runner = CliRunner()
     result = runner.invoke(
         app,
         [
@@ -298,10 +280,9 @@ def test_resume_finds_latest_run(tmp_path: Path, monkeypatch) -> None:
     assert calls["mart"] == 1
 
 
-def test_cli_resume_non_portable_record_warns_and_proceeds(tmp_path: Path) -> None:
+def test_cli_resume_non_portable_record_warns_and_proceeds(tmp_path: Path, runner) -> None:
     """Non-portable records warn but no longer block (--compat flag removed)."""
     config_path = tmp_path / "dataset.yml"
-    # Write config with a working local file source so resume can proceed
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     (data_dir / "dati.csv").write_text("a,b\n1,2\n", encoding="utf-8")
@@ -325,13 +306,12 @@ def test_cli_resume_non_portable_record_warns_and_proceeds(tmp_path: Path) -> No
         encoding="utf-8",
     )
 
-    _write_sql(tmp_path)
+    make_standard_sql(tmp_path)
 
     old_run_id = "old-run-id"
     runs_dir = tmp_path / "out" / "data" / "_runs" / "demo_ds" / "2022"
     _write_non_portable_run_record(runs_dir / f"{old_run_id}.json", old_run_id)
 
-    runner = CliRunner()
     result = runner.invoke(
         app,
         [
@@ -347,14 +327,18 @@ def test_cli_resume_non_portable_record_warns_and_proceeds(tmp_path: Path) -> No
         ],
     )
 
-    # Non-portable records warn but don't block; resume proceeds
     assert result.exit_code == 0, result.output
 
 
-def test_cli_resume_falls_back_to_raw_when_raw_success_artifacts_are_missing(tmp_path: Path, monkeypatch) -> None:
-    config_path = tmp_path / "dataset.yml"
-    _write_config(config_path)
-    _write_sql(tmp_path)
+def test_cli_resume_falls_back_to_raw_when_raw_success_artifacts_are_missing(
+    tmp_path: Path, monkeypatch, runner
+) -> None:
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml",
+        name="demo_ds",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
+    )
+    make_standard_sql(tmp_path)
 
     old_run_id = "old-run-id"
     runs_dir = tmp_path / "out" / "data" / "_runs" / "demo_ds" / "2022"
@@ -362,7 +346,6 @@ def test_cli_resume_falls_back_to_raw_when_raw_success_artifacts_are_missing(tmp
 
     calls = _mock_all_runs(monkeypatch)
 
-    runner = CliRunner()
     result = runner.invoke(
         app,
         [
@@ -385,10 +368,15 @@ def test_cli_resume_falls_back_to_raw_when_raw_success_artifacts_are_missing(tmp
     assert calls["mart"] == 1
 
 
-def test_cli_resume_success_with_warnings_requires_from_layer_or_exits_cleanly(tmp_path: Path) -> None:
-    config_path = tmp_path / "dataset.yml"
-    _write_config(config_path)
-    _write_sql(tmp_path)
+def test_cli_resume_success_with_warnings_requires_from_layer_or_exits_cleanly(
+    tmp_path: Path, runner
+) -> None:
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml",
+        name="demo_ds",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
+    )
+    make_standard_sql(tmp_path)
 
     run_id = "warn-run"
     runs_dir = tmp_path / "out" / "data" / "_runs" / "demo_ds" / "2022"
@@ -397,7 +385,6 @@ def test_cli_resume_success_with_warnings_requires_from_layer_or_exits_cleanly(t
     _write_layer_artifacts(tmp_path / "out", "demo_ds", 2022, "clean")
     _write_layer_artifacts(tmp_path / "out", "demo_ds", 2022, "mart")
 
-    runner = CliRunner()
     result = runner.invoke(
         app,
         [
@@ -417,10 +404,15 @@ def test_cli_resume_success_with_warnings_requires_from_layer_or_exits_cleanly(t
     assert "Use --from-layer raw|clean|mart" in result.output
 
 
-def test_cli_resume_success_with_warnings_allows_forced_from_layer(tmp_path: Path, monkeypatch) -> None:
-    config_path = tmp_path / "dataset.yml"
-    _write_config(config_path)
-    _write_sql(tmp_path)
+def test_cli_resume_success_with_warnings_allows_forced_from_layer(
+    tmp_path: Path, monkeypatch, runner
+) -> None:
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml",
+        name="demo_ds",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
+    )
+    make_standard_sql(tmp_path)
 
     run_id = "warn-run"
     runs_dir = tmp_path / "out" / "data" / "_runs" / "demo_ds" / "2022"
@@ -431,7 +423,6 @@ def test_cli_resume_success_with_warnings_allows_forced_from_layer(tmp_path: Pat
 
     calls = _mock_all_runs(monkeypatch)
 
-    runner = CliRunner()
     result = runner.invoke(
         app,
         [

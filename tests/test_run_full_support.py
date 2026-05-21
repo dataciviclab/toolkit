@@ -4,25 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from typer.testing import CliRunner
-
 from toolkit.cli.app import app
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
-PROJECT_EXAMPLE = ROOT / "project-example"
 
-
-def test_run_full_dry_run_with_support(tmp_path: Path, monkeypatch) -> None:
+def test_run_full_dry_run_with_support(
+    project_example: Path, runner, tmp_path: Path
+) -> None:
     """run full --dry-run deve funzionare anche se il support non e' mai stato eseguito.
 
     Regressione: resolve_support_payloads in dry-run usa require_exists=False,
     quindi la validazione SQL del candidate non richiede file reali dei support.
     """
-    import shutil
-
-    monkeypatch.chdir(tmp_path)
-
     # Crea un support dataset minimale
     support_dir = tmp_path / "support_ds"
     (support_dir / "data").mkdir(parents=True, exist_ok=True)
@@ -58,10 +50,7 @@ mart:
     )
 
     # Candidate che usa il support
-    cand_dir = tmp_path / "candidate"
-    shutil.copytree(PROJECT_EXAMPLE, cand_dir)
-    cand_yml = cand_dir / "dataset.yml"
-
+    cand_yml = project_example / "dataset.yml"
     cand_yml.write_text(
         cand_yml.read_text(encoding="utf-8")
         + f"""
@@ -72,8 +61,6 @@ support:
 """,
         encoding="utf-8",
     )
-
-    runner = CliRunner()
 
     # NON eseguiamo il support prima. run full --dry-run deve funzionare
     # comunque grazie a require_exists=False.
@@ -90,15 +77,11 @@ support:
     assert "support: sup" in result.output
 
 
-def test_run_full_dry_run_support_nonexistent_config_fails(tmp_path: Path, monkeypatch) -> None:
+def test_run_full_dry_run_support_nonexistent_config_fails(
+    project_example: Path, runner
+) -> None:
     """run full --dry-run fallisce se un support ha config inesistente."""
-    import shutil
-
-    monkeypatch.chdir(tmp_path)
-    cand_dir = tmp_path / "candidate"
-    shutil.copytree(PROJECT_EXAMPLE, cand_dir)
-    cand_yml = cand_dir / "dataset.yml"
-
+    cand_yml = project_example / "dataset.yml"
     cand_yml.write_text(
         cand_yml.read_text(encoding="utf-8")
         + """
@@ -110,9 +93,9 @@ support:
         encoding="utf-8",
     )
 
-    runner = CliRunner()
-
     # Il caricamento del config del support fallisce -> exit non-zero
-    result = runner.invoke(app, ["run", "full", "--config", str(cand_yml), "--dry-run", "--years", "2022"])
-
+    result = runner.invoke(
+        app,
+        ["run", "full", "--config", str(cand_yml), "--dry-run", "--years", "2022"],
+    )
     assert result.exit_code != 0

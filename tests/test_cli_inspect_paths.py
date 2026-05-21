@@ -1,27 +1,19 @@
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
-
-from typer.testing import CliRunner
 
 from toolkit.cli.app import app
 
 
 def test_inspect_paths_reports_dataset_repo_layout_from_other_cwd(
-    tmp_path: Path, monkeypatch
+    project_example: Path, runner, chdir_tmp: Path
 ) -> None:
-    src = Path("project-example")
-    dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
-    shutil.rmtree(dst / "_smoke_out", ignore_errors=True)
-    config_path = dst / "dataset.yml"
+    config_path = project_example / "dataset.yml"
 
-    runner = CliRunner()
-    monkeypatch.chdir(tmp_path)
-
-    run_result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--strict-config"])
+    run_result = runner.invoke(
+        app, ["run", "all", "--config", str(config_path), "--strict-config"]
+    )
     assert run_result.exit_code == 0, run_result.output
 
     result = runner.invoke(
@@ -31,25 +23,25 @@ def test_inspect_paths_reports_dataset_repo_layout_from_other_cwd(
 
     assert result.exit_code == 0, result.output
     assert f"config_path: {config_path}" in result.output
-    assert f"root: {dst / '_smoke_out'}" in result.output
+    assert f"root: {project_example / '_smoke_out'}" in result.output
     assert (
-        f"raw_dir: {dst / '_smoke_out' / 'data' / 'raw' / 'project_example' / '2022'}"
+        f"raw_dir: {project_example / '_smoke_out' / 'data' / 'raw' / 'project_example' / '2022'}"
         in result.output
     )
     assert (
-        f"raw_manifest: {dst / '_smoke_out' / 'data' / 'raw' / 'project_example' / '2022' / 'manifest.json'}"
+        f"raw_manifest: {project_example / '_smoke_out' / 'data' / 'raw' / 'project_example' / '2022' / 'manifest.json'}"
         in result.output
     )
     assert (
-        f"clean_output: {dst / '_smoke_out' / 'data' / 'clean' / 'project_example' / '2022' / 'project_example_2022_clean.parquet'}"
+        f"clean_output: {project_example / '_smoke_out' / 'data' / 'clean' / 'project_example' / '2022' / 'project_example_2022_clean.parquet'}"
         in result.output
     )
     assert (
-        f"clean_validation: {dst / '_smoke_out' / 'data' / 'clean' / 'project_example' / '2022' / '_validate' / 'clean_validation.json'}"
+        f"clean_validation: {project_example / '_smoke_out' / 'data' / 'clean' / 'project_example' / '2022' / '_validate' / 'clean_validation.json'}"
         in result.output
     )
     assert (
-        f"mart_manifest: {dst / '_smoke_out' / 'data' / 'mart' / 'project_example' / '2022' / 'manifest.json'}"
+        f"mart_manifest: {project_example / '_smoke_out' / 'data' / 'mart' / 'project_example' / '2022' / 'manifest.json'}"
         in result.output
     )
     assert "raw_hints:" in result.output
@@ -58,15 +50,10 @@ def test_inspect_paths_reports_dataset_repo_layout_from_other_cwd(
     assert "latest_run_status: SUCCESS" in result.output
 
 
-def test_inspect_paths_json_is_notebook_friendly(tmp_path: Path, monkeypatch) -> None:
-    src = Path("project-example")
-    dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
-    shutil.rmtree(dst / "_smoke_out", ignore_errors=True)
-    config_path = dst / "dataset.yml"
-
-    runner = CliRunner()
-    monkeypatch.chdir(tmp_path)
+def test_inspect_paths_json_is_notebook_friendly(
+    project_example: Path, runner, chdir_tmp: Path
+) -> None:
+    config_path = project_example / "dataset.yml"
 
     result = runner.invoke(
         app,
@@ -89,7 +76,6 @@ def test_inspect_paths_json_is_notebook_friendly(tmp_path: Path, monkeypatch) ->
     assert payload["config_path"] == str(config_path)
     assert payload["paths"]["clean"]["output"].endswith("project_example_2022_clean.parquet")
     assert payload["paths"]["clean"]["validation"].endswith("clean_validation.json")
-    assert payload["paths"]["clean"]["validation"].endswith("clean_validation.json")
     assert payload["paths"]["raw"]["manifest"].endswith("manifest.json")
     assert payload["paths"]["mart"]["outputs"]
     assert payload["paths"]["mart"]["metadata"].endswith("metadata.json")
@@ -99,9 +85,9 @@ def test_inspect_paths_json_is_notebook_friendly(tmp_path: Path, monkeypatch) ->
     assert payload["latest_run"] is None
 
 
-def test_inspect_paths_json_reports_resolved_support_outputs(tmp_path: Path) -> None:
-    runner = CliRunner()
-
+def test_inspect_paths_json_reports_resolved_support_outputs(
+    tmp_path: Path, runner
+) -> None:
     support_root = tmp_path / "support_out"
     support_config = tmp_path / "support_dataset.yml"
     support_config.write_text(
@@ -170,9 +156,7 @@ def test_inspect_paths_json_reports_resolved_support_outputs(tmp_path: Path) -> 
     assert support_payload["mart"].endswith("support_table.parquet")
 
 
-def test_inspect_paths_json_exposes_layer_profiles(tmp_path: Path) -> None:
-    runner = CliRunner()
-
+def test_inspect_paths_json_exposes_layer_profiles(tmp_path: Path, runner) -> None:
     config_path = tmp_path / "dataset.yml"
     root_dir = tmp_path / "out"
     config_path.write_text(

@@ -1,43 +1,36 @@
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
 
 from toolkit.cli.app import app
 from toolkit.core.io import write_json_atomic
 
 
-def _setup_project(tmp_path: Path) -> tuple[Path, CliRunner]:
-    src = Path(__file__).resolve().parents[1] / "project-example"
-    dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
-    shutil.rmtree(dst / "_smoke_out", ignore_errors=True)
-    config_path = dst / "dataset.yml"
-
-    runner = CliRunner()
+def _run_raw(project_example: Path, runner) -> Path:
+    """Run RAW layer on project-example, return config path."""
+    config_path = project_example / "dataset.yml"
     run_result = runner.invoke(
         app,
         ["run", "raw", "--config", str(config_path), "--strict-config"],
     )
     assert run_result.exit_code == 0, run_result.output
+    return config_path
 
-    return config_path, runner
 
-
-def _assert_profile_written(dst: Path) -> None:
+def _assert_profile_written(project_example: Path) -> None:
     profile_dir = (
-        dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022" / "_profile"
+        project_example / "_smoke_out" / "data" / "raw" / "project_example" / "2022" / "_profile"
     )
     assert (profile_dir / "raw_profile.json").exists()
 
 
-def test_cli_profile_raw_happy_path(tmp_path: Path, monkeypatch) -> None:
-    config_path, runner = _setup_project(tmp_path)
-    monkeypatch.chdir(tmp_path)
+def test_cli_profile_raw_happy_path(
+    project_example: Path, runner, chdir_tmp: Path
+) -> None:
+    config_path = _run_raw(project_example, runner)
 
     profile_result = runner.invoke(
         app,
@@ -45,12 +38,13 @@ def test_cli_profile_raw_happy_path(tmp_path: Path, monkeypatch) -> None:
     )
     assert profile_result.exit_code == 0, profile_result.output
     assert "PROFILE RAW ->" in profile_result.output
-    _assert_profile_written(tmp_path / "project-example")
+    _assert_profile_written(project_example)
 
 
-def test_inspect_profile_happy_path(tmp_path: Path, monkeypatch) -> None:
-    config_path, runner = _setup_project(tmp_path)
-    monkeypatch.chdir(tmp_path)
+def test_inspect_profile_happy_path(
+    project_example: Path, runner, chdir_tmp: Path
+) -> None:
+    config_path = _run_raw(project_example, runner)
 
     profile_result = runner.invoke(
         app,
@@ -58,12 +52,13 @@ def test_inspect_profile_happy_path(tmp_path: Path, monkeypatch) -> None:
     )
     assert profile_result.exit_code == 0, profile_result.output
     assert "PROFILE RAW ->" in profile_result.output
-    _assert_profile_written(tmp_path / "project-example")
+    _assert_profile_written(project_example)
 
 
-def test_inspect_profile_single_year(tmp_path: Path, monkeypatch) -> None:
-    config_path, runner = _setup_project(tmp_path)
-    monkeypatch.chdir(tmp_path)
+def test_inspect_profile_single_year(
+    project_example: Path, runner, chdir_tmp: Path
+) -> None:
+    config_path = _run_raw(project_example, runner)
 
     profile_result = runner.invoke(
         app,
@@ -71,19 +66,19 @@ def test_inspect_profile_single_year(tmp_path: Path, monkeypatch) -> None:
     )
     assert profile_result.exit_code == 0, profile_result.output
     assert "PROFILE RAW ->" in profile_result.output
-    _assert_profile_written(tmp_path / "project-example")
+    _assert_profile_written(project_example)
 
 
 SIMPLE_CSV = "a,b,c\n1,2,3\n4,5,6\n"
 
 
-def test_inspect_profile_csv_path_text_output(tmp_path: Path, monkeypatch) -> None:
+def test_inspect_profile_csv_path_text_output(
+    tmp_path: Path, runner, chdir_tmp: Path
+) -> None:
     """--csv-path stampa encoding/delim/colonne in output testo."""
     csv_file = tmp_path / "test.csv"
     csv_file.write_text(SIMPLE_CSV, encoding="utf-8")
-    monkeypatch.chdir(tmp_path)
 
-    runner = CliRunner()
     result = runner.invoke(app, ["inspect", "profile", "--csv-path", str(csv_file)])
     assert result.exit_code == 0, result.output
     assert "Encoding:" in result.output
@@ -93,13 +88,13 @@ def test_inspect_profile_csv_path_text_output(tmp_path: Path, monkeypatch) -> No
     assert "b" in result.output
 
 
-def test_inspect_profile_csv_path_json_output(tmp_path: Path, monkeypatch) -> None:
+def test_inspect_profile_csv_path_json_output(
+    tmp_path: Path, runner, chdir_tmp: Path
+) -> None:
     """--csv-path --json produce JSON parsabile con struttura attesa."""
     csv_file = tmp_path / "test.csv"
     csv_file.write_text(SIMPLE_CSV, encoding="utf-8")
-    monkeypatch.chdir(tmp_path)
 
-    runner = CliRunner()
     result = runner.invoke(
         app, ["inspect", "profile", "--csv-path", str(csv_file), "--json"]
     )
@@ -111,28 +106,24 @@ def test_inspect_profile_csv_path_json_output(tmp_path: Path, monkeypatch) -> No
     assert len(payload["preview"]) == 2  # 2 data rows
 
 
-def test_inspect_profile_csv_path_file_not_found(tmp_path: Path, monkeypatch) -> None:
+def test_inspect_profile_csv_path_file_not_found(
+    tmp_path: Path, runner, chdir_tmp: Path
+) -> None:
     """--csv-path con file inesistente deve fallire con errore leggibile."""
-    monkeypatch.chdir(tmp_path)
-    runner = CliRunner()
     result = runner.invoke(
         app, ["inspect", "profile", "--csv-path", str(tmp_path / "missing.csv")]
     )
     assert result.exit_code != 0
-    # L'eccezione può finire in result.output o result.exception
     err_text = result.output or str(result.exception or "")
     assert "CSV non trovato" in err_text or "non trovato" in err_text
 
 
-def test_inspect_profile_csv_path_requires_either_flag(tmp_path: Path, monkeypatch) -> None:
+def test_inspect_profile_csv_path_requires_either_flag(
+    tmp_path: Path, runner, chdir_tmp: Path
+) -> None:
     """Senza --config e senza --csv-path, deve dare errore."""
-    monkeypatch.chdir(tmp_path)
-    runner = CliRunner()
     result = runner.invoke(app, ["inspect", "profile"])
-    assert result.exit_code != 0
     assert result.exit_code != 0, f"Expected failure, got:\n{result.output}"
-    # Typer può emettere il messaggio con ANSI o in formato diverso in CI;
-    # controlliamo che l'output contenga l'indicazione.
     output_clean = result.output.strip()
     assert "config" in output_clean.lower() and "csv" in output_clean.lower()
 
@@ -150,11 +141,9 @@ def test_write_json_atomic_handles_nan(tmp_path: Path) -> None:
     write_json_atomic(p, data)
     loaded = json.loads(p.read_text())
     assert loaded["normal"] == 42
-    # NaN/inf serialized as strings survive the round-trip
     assert loaded["col1"] == "nan"
     assert loaded["col2"] == "inf"
     assert loaded["col3"] == "-inf"
-    # Normal finite values are preserved as JSON numbers
     assert loaded["col4"] == 3.14
 
 

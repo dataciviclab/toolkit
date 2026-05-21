@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import shutil
 from pathlib import Path
 
@@ -37,42 +39,28 @@ def _simplify_sql_project(dst: Path) -> None:
         sql_path.write_text("SELECT * FROM clean_input\n", encoding="utf-8")
 
 
-def test_artifacts_policy_minimal_behaves_like_standard(tmp_path: Path, monkeypatch):
+def test_artifacts_policy_minimal_behaves_like_standard(
+    project_example: Path, monkeypatch
+) -> None:
     """minimal policy no longer suppresses artifacts — same output as standard."""
-    src = Path("project-example")
-    dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
-    _simplify_sql_project(dst)
-    config_path = dst / "dataset.yml"
+    _simplify_sql_project(project_example)
+    config_path = project_example / "dataset.yml"
     _append_output_cfg(config_path, artifacts="minimal")
 
-    monkeypatch.chdir(dst)
+    monkeypatch.chdir(project_example)
     cfg = load_config(config_path)
     year = cfg.years[0]
     logger = _NoopLogger()
 
     run_raw(
-        cfg.dataset,
-        year,
-        cfg.root,
-        cfg.raw,
-        logger,
-        base_dir=cfg.base_dir,
-        output_cfg=cfg.output,
-        clean_cfg=cfg.clean,
+        cfg.dataset, year, cfg.root, cfg.raw, logger,
+        base_dir=cfg.base_dir, output_cfg=cfg.output, clean_cfg=cfg.clean,
     )
     profile_cmd(step="raw", config=str(config_path))
-    run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
-    run_mart(
-        cfg.dataset,
-        year,
-        cfg.root,
-        cfg.mart,
-        logger,
-        base_dir=cfg.base_dir,
-        clean_cfg=cfg.clean,
-        output_cfg=cfg.output,
-    )
+    run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger,
+              base_dir=cfg.base_dir, output_cfg=cfg.output)
+    run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger,
+             base_dir=cfg.base_dir, clean_cfg=cfg.clean, output_cfg=cfg.output)
     run_clean_validation(cfg, year, logger)
     run_mart_validation(cfg, year, logger)
 
@@ -86,11 +74,9 @@ def test_artifacts_policy_minimal_behaves_like_standard(tmp_path: Path, monkeypa
     assert (raw_dir / "metadata.json").exists()
     assert (raw_dir / "raw_validation.json").exists()
     assert (profile_dir / "suggested_read.yml").exists()
-
     assert (profile_dir / "raw_profile.json").exists()
     assert (clean_dir / "_run" / "clean_rendered.sql").exists()
     assert any((mart_dir / "_run").glob("*_rendered.sql"))
-
     assert (clean_dir / "manifest.json").exists()
     assert (clean_dir / "metadata.json").exists()
     assert (clean_dir / "_validate" / "clean_validation.json").exists()
@@ -99,41 +85,27 @@ def test_artifacts_policy_minimal_behaves_like_standard(tmp_path: Path, monkeypa
     assert (mart_dir / "_validate" / "mart_validation.json").exists()
 
 
-def test_artifacts_policy_standard_keeps_expected_artifacts(tmp_path: Path, monkeypatch):
-    src = Path("project-example")
-    dst = tmp_path / "project-example"
-    shutil.copytree(src, dst)
-    _simplify_sql_project(dst)
-    config_path = dst / "dataset.yml"
+def test_artifacts_policy_standard_keeps_expected_artifacts(
+    project_example: Path, monkeypatch
+) -> None:
+    _simplify_sql_project(project_example)
+    config_path = project_example / "dataset.yml"
     _append_output_cfg(config_path, artifacts="standard")
 
-    monkeypatch.chdir(dst)
+    monkeypatch.chdir(project_example)
     cfg = load_config(config_path)
     year = cfg.years[0]
     logger = _NoopLogger()
 
     run_raw(
-        cfg.dataset,
-        year,
-        cfg.root,
-        cfg.raw,
-        logger,
-        base_dir=cfg.base_dir,
-        output_cfg=cfg.output,
-        clean_cfg=cfg.clean,
+        cfg.dataset, year, cfg.root, cfg.raw, logger,
+        base_dir=cfg.base_dir, output_cfg=cfg.output, clean_cfg=cfg.clean,
     )
     profile_cmd(step="raw", config=str(config_path))
-    run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
-    run_mart(
-        cfg.dataset,
-        year,
-        cfg.root,
-        cfg.mart,
-        logger,
-        base_dir=cfg.base_dir,
-        clean_cfg=cfg.clean,
-        output_cfg=cfg.output,
-    )
+    run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger,
+              base_dir=cfg.base_dir, output_cfg=cfg.output)
+    run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger,
+             base_dir=cfg.base_dir, clean_cfg=cfg.clean, output_cfg=cfg.output)
     run_clean_validation(cfg, year, logger)
     run_mart_validation(cfg, year, logger)
 

@@ -3,10 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from typer.testing import CliRunner
-
 from toolkit.core.run_context import get_run_dir
 from toolkit.cli.app import app
+from tests.helpers import make_dataset_yml, make_standard_sql
 
 
 def _write_run_record(path: Path, run_id: str, started_at: str, status: str) -> None:
@@ -51,37 +50,22 @@ def _write_run_record(path: Path, run_id: str, started_at: str, status: str) -> 
     )
 
 
-def test_status_uses_same_run_dir_as_writer(tmp_path: Path, monkeypatch) -> None:
+def test_status_uses_same_run_dir_as_writer(
+    tmp_path: Path, runner, chdir_tmp: Path
+) -> None:
     project_dir = tmp_path / "project"
     project_dir.mkdir()
-    config_path = project_dir / "dataset.yml"
-
-    config_path.write_text(
-        """
-root: "./out"
-dataset:
-  name: demo_ds
-  years: [2022]
-raw: {}
-clean:
-  sql: "sql/clean.sql"
-mart:
-  tables:
-    - name: mart_example
-      sql: "sql/mart/mart_example.sql"
-""".strip(),
-        encoding="utf-8",
+    config_path = make_dataset_yml(
+        project_dir / "dataset.yml",
+        name="demo_ds",
+        root=project_dir / "out",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
     )
+    make_standard_sql(project_dir)
 
-    sql_dir = project_dir / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
-
-    monkeypatch.chdir(tmp_path)
-    runner = CliRunner()
-
-    run_result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+    run_result = runner.invoke(
+        app, ["run", "all", "--config", str(config_path), "--dry-run"]
+    )
     assert run_result.exit_code == 0
 
     run_dir = get_run_dir(project_dir / "out", "demo_ds", 2022)
@@ -108,34 +92,20 @@ mart:
     assert "status: DRY_RUN" in result.output
 
 
-def test_status_reports_raw_hints_when_raw_artifacts_exist(tmp_path: Path, monkeypatch) -> None:
+def test_status_reports_raw_hints_when_raw_artifacts_exist(
+    tmp_path: Path, runner, chdir_tmp: Path
+) -> None:
     project_dir = tmp_path / "project"
     raw_dir = project_dir / "out" / "data" / "raw" / "demo_ds" / "2022"
     raw_dir.mkdir(parents=True)
     (raw_dir / "_profile").mkdir(parents=True)
-    config_path = project_dir / "dataset.yml"
-
-    config_path.write_text(
-        """
-root: "./out"
-dataset:
-  name: demo_ds
-  years: [2022]
-raw: {}
-clean:
-  sql: "sql/clean.sql"
-mart:
-  tables:
-    - name: mart_example
-      sql: "sql/mart/mart_example.sql"
-""".strip(),
-        encoding="utf-8",
+    config_path = make_dataset_yml(
+        project_dir / "dataset.yml",
+        name="demo_ds",
+        root=project_dir / "out",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
     )
-
-    sql_dir = project_dir / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
+    make_standard_sql(project_dir)
 
     (raw_dir / "manifest.json").write_text(
         json.dumps({"primary_output_file": "demo.csv"}, indent=2),
@@ -163,9 +133,6 @@ mart:
     run_dir = get_run_dir(project_dir / "out", "demo_ds", 2022)
     _write_run_record(run_dir / "run-123.json", "run-123", "2026-03-04T10:00:00+00:00", "SUCCESS")
 
-    monkeypatch.chdir(tmp_path)
-    runner = CliRunner()
-
     result = runner.invoke(
         app,
         [
@@ -191,15 +158,14 @@ mart:
 
 
 def test_status_reports_validation_summary_from_layer_artifacts(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, runner, chdir_tmp: Path
 ) -> None:
     project_dir = tmp_path / "project"
-    config_path = project_dir / "dataset.yml"
     project_dir.mkdir()
+    config_path = project_dir / "dataset.yml"
 
     config_path.write_text(
-        """
-root: "./out"
+        """root: "./out"
 dataset:
   name: demo_ds
   years: [2022]
@@ -216,7 +182,7 @@ cross_year:
   tables:
     - name: cross_ok
       sql: "sql/cross/cross_ok.sql"
-""".strip(),
+""",
         encoding="utf-8",
     )
 
@@ -325,9 +291,6 @@ cross_year:
     run_dir = get_run_dir(project_dir / "out", "demo_ds", 2022)
     _write_run_record(run_dir / "run-123.json", "run-123", "2026-03-04T10:00:00+00:00", "FAILED")
 
-    monkeypatch.chdir(tmp_path)
-    runner = CliRunner()
-
     result = runner.invoke(
         app,
         [
@@ -351,32 +314,18 @@ cross_year:
     assert "cross_year: state=passed warnings=0 errors=0" in result.output
 
 
-def test_status_reports_layer_profiles_from_metadata(tmp_path: Path, monkeypatch) -> None:
+def test_status_reports_layer_profiles_from_metadata(
+    tmp_path: Path, runner, chdir_tmp: Path
+) -> None:
     project_dir = tmp_path / "project"
-    config_path = project_dir / "dataset.yml"
     project_dir.mkdir()
-
-    config_path.write_text(
-        """
-root: "./out"
-dataset:
-  name: demo_ds
-  years: [2022]
-raw: {}
-clean:
-  sql: "sql/clean.sql"
-mart:
-  tables:
-    - name: mart_example
-      sql: "sql/mart/mart_example.sql"
-""".strip(),
-        encoding="utf-8",
+    config_path = make_dataset_yml(
+        project_dir / "dataset.yml",
+        name="demo_ds",
+        root=project_dir / "out",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
     )
-
-    sql_dir = project_dir / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
+    make_standard_sql(project_dir)
 
     clean_dir = project_dir / "out" / "data" / "clean" / "demo_ds" / "2022"
     mart_dir = project_dir / "out" / "data" / "mart" / "demo_ds" / "2022"
@@ -436,8 +385,6 @@ mart:
     run_dir = get_run_dir(project_dir / "out", "demo_ds", 2022)
     _write_run_record(run_dir / "run-123.json", "run-123", "2026-03-04T10:00:00+00:00", "SUCCESS")
 
-    monkeypatch.chdir(tmp_path)
-    runner = CliRunner()
     result = runner.invoke(
         app,
         [

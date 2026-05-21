@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "tests/test_*.py"
+      - ".github/scripts/audit_test_markers.py"
+      - ".github/workflows/test-audit.yml"
 
 jobs:
   audit-markers:

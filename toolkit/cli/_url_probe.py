@@ -1,26 +1,30 @@
+"""HTTP probe e discovery per URL scout — probe, CKAN discovery, link extraction.
+
+Questo modulo NON e' un comando CLI. Contiene la logica di basso livello
+per ispezionare URL, rilevare portali CKAN, estrarre link candidati e
+scoprire risorse CKAN. La CLI corrispondente e' in inspect/url_ops.py.
+
+La generazione YAML scaffold vive in _url_scout_common.py (pure, senza HTTP).
+"""
+
 from __future__ import annotations
 
 import re
 from html.parser import HTMLParser
-from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
 from lab_connectors.http import HttpClient
 
-from toolkit.cli._url_scout_common import slugify
-
-# Public API — functions used by cmd_inspect.py
+# Public API
 __all__ = [
     "probe_url",
-    "_generate_yaml_scaffold",
     "_detect_ckan",
     "_discover_ckan_resources",
     "_extract_ckan_dataset_id",
     "_is_html",
     "_is_file_like",
     "_candidate_links",
-    # Constants used by cmd_inspect
     "_EXTENDED_EXTENSIONS",
     "_DEFAULT_TIMEOUT",
     "_DEFAULT_USER_AGENT",
@@ -128,7 +132,7 @@ def _discover_ckan_resources(
 ) -> list[dict[str, Any]]:
     parsed = urlparse(portal_url)
     root = f"{parsed.scheme}://{parsed.netloc}"
-    api_bases = []
+    api_bases: list[str] = []
     if parsed.path.startswith("/api/3/action"):
         api_bases.append(f"{root}/api/3/action/package_show")
     elif parsed.path.startswith("/api/3"):
@@ -171,85 +175,6 @@ def _discover_ckan_resources(
     return []
 
 
-def _generate_yaml_scaffold(
-    probe_result: dict[str, Any],
-    ckan_resources: list[dict[str, Any]] | None = None,
-    candidate_links: list[str] | None = None,
-) -> str:
-    url = probe_result["final_url"]
-    parsed = urlparse(url)
-    slug = slugify(url)
-    lines = [
-        "# Scaffold generato da scout-url --scaffold",
-        "# Verifica e modifica prima di usare",
-        "",
-        'root: "../../out"',
-        "schema_version: 1",
-        "",
-        "dataset:",
-        f'  name: "{slug}"',
-        "  years: [2024]  # TBD: inferito da URL o sorgente",
-        "",
-        "raw:",
-        "  output_policy: overwrite",
-        "  sources:",
-    ]
-
-    def _make_source_name(link: str) -> str:
-        stem = Path(urlparse(link).path).stem
-        return re.sub(r"[^a-z0-9_]", "_", (stem or "resource").lower())
-
-    def _infer_type_from_url(u: str) -> str:
-        if "/datastore/dump/" in u or "/datastore_search" in u:
-            return "ckan"
-        if "sdmx" in u.lower() or "/dataflow/" in u.lower():
-            return "sdmx"
-        return "http_file"
-
-    if ckan_resources:
-        for res in ckan_resources:
-            res_name = re.sub(r"[^a-z0-9_]", "_", (res["name"] or "resource").lower())
-            res_url = res["url"]
-            fmt = res["format"]
-            fname = Path(urlparse(res_url).path).name or f"{res_name}.{fmt}"
-            portal_base = f"{parsed.scheme}://{parsed.netloc}"
-            lines.append(f'    - name: "{res_name}"')
-            lines.append('      type: "ckan"')
-            lines.append("      args:")
-            lines.append(f'        portal_url: "{portal_base}"')
-            lines.append(f'        resource_id: "{res.get("id") or ""}"')
-            lines.append(f'        filename: "{fname}"')
-            lines.append("      primary: true")
-    elif candidate_links:
-        seen: set[str] = set()
-        for link in candidate_links:
-            if link in seen:
-                continue
-            seen.add(link)
-            link_name = _make_source_name(link)
-            fname = Path(urlparse(link).path).name
-            stype = _infer_type_from_url(link)
-            lines.append(f'    - name: "{link_name}"')
-            lines.append(f'      type: "{stype}"')
-            lines.append("      args:")
-            lines.append(f'        url: "{link}"')
-            if fname:
-                lines.append(f'        filename: "{fname}"')
-            lines.append("      primary: true")
-    else:
-        fname = Path(parsed.path).name
-        stype = _infer_type_from_url(url)
-        lines.append(f'    - name: "{slug}_source"')
-        lines.append(f'      type: "{stype}"')
-        lines.append("      args:")
-        lines.append(f'        url: "{url}"')
-        if fname:
-            lines.append(f'        filename: "{fname}"')
-        lines.append("      primary: true")
-    lines.append("")
-    return "\n".join(lines)
-
-
 def probe_url(
     url: str,
     *,
@@ -260,14 +185,12 @@ def probe_url(
     client = HttpClient(timeout=timeout, user_agent=user_agent)
 
     # --- Step 1: probe headers (HEAD preferred, GET+Range fallback) ---
-    # Some servers reject HEAD (405/403/err) but work with GET.
     head_result = client.head(url)
     range_result = None
 
     if head_result.is_ok and head_result.response is not None and head_result.response.status_code < 400:
         probe = head_result.response
     else:
-        # HEAD failed or returned error — try lightweight GET with Range
         range_result = client.get(url, headers={"Range": "bytes=0-0"})
         if range_result.is_ok and range_result.response is not None:
             probe = range_result.response

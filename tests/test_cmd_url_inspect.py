@@ -1,20 +1,20 @@
-"""Tests for toolkit/cli/cmd_url_inspect.py
+"""Tests for toolkit/cli/_url_probe.py (HTTP probe + discovery)
+and toolkit/cli/_url_scout_common.py (slugify + YAML scaffold).
 
-contract: _generate_yaml_scaffold output format (used by CLI scaffold)
+contract: generate_yaml_scaffold output format (used by CLI scaffold)
 pure_unit: _is_html, _is_file_like, _candidate_links, _detect_ckan, _extract_ckan_dataset_id
 """
 
 import pytest
 
-from toolkit.cli._url_scout_common import slugify
-from toolkit.cli.cmd_url_inspect import (
+from toolkit.cli._url_probe import (
     _candidate_links,
     _detect_ckan,
     _extract_ckan_dataset_id,
-    _generate_yaml_scaffold,
     _is_file_like,
     _is_html,
 )
+from toolkit.cli._url_scout_common import generate_yaml_scaffold, slugify
 
 
 # ---------------------------------------------------------------------------
@@ -22,7 +22,7 @@ from toolkit.cli.cmd_url_inspect import (
 # ---------------------------------------------------------------------------
 
 class TestGenerateYamlScaffold:
-    """contract: _generate_yaml_scaffold produces valid YAML with expected fields."""
+    """contract: generate_yaml_scaffold produces valid YAML with expected fields."""
 
     @pytest.mark.contract
     def test_basic_probe_result(self) -> None:
@@ -30,7 +30,7 @@ class TestGenerateYamlScaffold:
             "final_url": "https://example.com/data/dataset.csv",
             "requested_url": "https://example.com/data/dataset.csv",
         }
-        yaml = _generate_yaml_scaffold(probe_result)
+        yaml = generate_yaml_scaffold(probe_result)
         assert 'name: "dataset_' in yaml  # slug with uuid5 hash suffix
         assert '_source"' in yaml          # source name derived from slug
         assert 'type: "http_file"' in yaml
@@ -48,7 +48,7 @@ class TestGenerateYamlScaffold:
                 "url": "https://cdn.example.com/file.csv",
             }
         ]
-        yaml = _generate_yaml_scaffold(probe_result, ckan_resources=ckan_resources)
+        yaml = generate_yaml_scaffold(probe_result, ckan_resources=ckan_resources)
         assert 'type: "ckan"' in yaml
         assert 'resource_id: "res-123"' in yaml
         assert 'portal_url: "https://example.com"' in yaml
@@ -59,7 +59,7 @@ class TestGenerateYamlScaffold:
             "final_url": "https://example.com/page",
             "requested_url": "https://example.com/page",
         }
-        yaml = _generate_yaml_scaffold(probe_result, ckan_resources=[], candidate_links=None)
+        yaml = generate_yaml_scaffold(probe_result, ckan_resources=[], candidate_links=None)
         assert 'name: "page_' in yaml  # slug with uuid5 hash suffix
         assert '_source"' in yaml
         assert 'type: "http_file"' in yaml
@@ -71,7 +71,7 @@ class TestGenerateYamlScaffold:
             "final_url": "https://example.com/data/my-data-file%202023.csv",
             "requested_url": "https://example.com/data/my-data-file%202023.csv",
         }
-        yaml = _generate_yaml_scaffold(probe_result)
+        yaml = generate_yaml_scaffold(probe_result)
         assert 'name: "my_data_file_202023_' in yaml  # slug with uuid5 hash suffix
 
 
@@ -293,9 +293,9 @@ class TestSlugify:
 
     @pytest.mark.contract
     def test_slugify_used_by_scaffold(self) -> None:
-        """_generate_yaml_scaffold usa slugify (dataset name + source name contengono hash)."""
+        """generate_yaml_scaffold usa slugify internamente (dataset name contiene hash)."""
         probe = {"final_url": "https://example.com/data/dataset.csv", "requested_url": "https://example.com/data/dataset.csv"}
-        yaml = _generate_yaml_scaffold(probe)
+        yaml = generate_yaml_scaffold(probe)
         # Dataset name: "dataset_{6hex}" — contiene hash uuid5
         assert 'name: "dataset_' in yaml
         # Source name: "dataset_{6hex}_source" — stesso slug

@@ -8,16 +8,16 @@ from typing import Any
 
 import typer
 
-from toolkit.cli.cmd_url_inspect import (
+from toolkit.cli._url_probe import (
     _EXTENDED_EXTENSIONS,
     _DEFAULT_TIMEOUT,
     _DEFAULT_USER_AGENT,
     _detect_ckan,
     _discover_ckan_resources,
     _extract_ckan_dataset_id,
-    _generate_yaml_scaffold,
     probe_url,
 )
+from toolkit.cli._url_scout_common import generate_yaml_scaffold
 
 
 def url(
@@ -68,7 +68,7 @@ def url(
                     if any(ext in link.lower() for ext in _EXTENDED_EXTENSIONS)
                 ]
 
-        yaml_scaffold = _generate_yaml_scaffold(result, ckan_resources, candidate_file_links)
+        yaml_scaffold = generate_yaml_scaffold(result, ckan_resources, candidate_file_links)
 
         if run:
             assert output is not None  # guaranteed by check above

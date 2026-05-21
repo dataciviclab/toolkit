@@ -7,12 +7,12 @@ from typer.testing import CliRunner
 from lab_connectors.http import HttpClient, HttpResult
 
 from toolkit.cli.app import app
-from toolkit.cli.cmd_url_inspect import (
+from toolkit.cli._url_probe import (
     _detect_ckan,
     _extract_ckan_dataset_id,
-    _generate_yaml_scaffold,
     probe_url,
 )
+from toolkit.cli._url_scout_common import generate_yaml_scaffold
 
 
 class _ScoutHandler(BaseHTTPRequestHandler):
@@ -299,7 +299,7 @@ class TestGenerateYamlScaffold:
             "final_url": "https://example.com/data/file.csv",
             "requested_url": "https://example.com/data/file.csv",
         }
-        yaml = _generate_yaml_scaffold(probe_result)
+        yaml = generate_yaml_scaffold(probe_result)
         assert '_source"' in yaml  # source name derived from slug with hash
         assert 'type: "http_file"' in yaml
         assert 'url: "https://example.com/data/file.csv"' in yaml
@@ -312,7 +312,7 @@ class TestGenerateYamlScaffold:
             "final_url": "https://portal.com/api/3/datastore/dump/uuid.csv",
             "requested_url": "https://portal.com/api/3/datastore/dump/uuid.csv",
         }
-        yaml = _generate_yaml_scaffold(probe_result)
+        yaml = generate_yaml_scaffold(probe_result)
         assert 'type: "ckan"' in yaml
 
     def test_http_file_scaffold_with_sdmx_url(self) -> None:
@@ -320,7 +320,7 @@ class TestGenerateYamlScaffold:
             "final_url": "https://example.com/data/flow/sdmx",
             "requested_url": "https://example.com/data/flow/sdmx",
         }
-        yaml = _generate_yaml_scaffold(probe_result)
+        yaml = generate_yaml_scaffold(probe_result)
         assert 'type: "sdmx"' in yaml
 
     def test_ckan_resources_scaffold(self) -> None:
@@ -342,7 +342,7 @@ class TestGenerateYamlScaffold:
                 "url": "https://portal.it/files/data.xls",
             },
         ]
-        yaml = _generate_yaml_scaffold(probe_result, ckan_resources)
+        yaml = generate_yaml_scaffold(probe_result, ckan_resources)
         assert "type: \"ckan\"" in yaml
         assert 'resource_id: "res-uuid-1"' in yaml
         assert 'resource_id: "res-uuid-2"' in yaml
@@ -357,7 +357,7 @@ class TestGenerateYamlScaffold:
             "https://portal.it/download/data.csv",
             "https://portal.it/download/report.xlsx",
         ]
-        yaml = _generate_yaml_scaffold(probe_result, None, links)
+        yaml = generate_yaml_scaffold(probe_result, None, links)
         assert 'type: "http_file"' in yaml
         assert 'url: "https://portal.it/download/data.csv"' in yaml
         assert 'url: "https://portal.it/download/report.xlsx"' in yaml

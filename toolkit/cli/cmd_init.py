@@ -17,7 +17,8 @@ import typer
 
 from lab_connectors.http import HttpClient
 
-from toolkit.cli._url_scout_common import infer_ext, infer_filename, slugify
+from toolkit.cli._url_probe import probe_url
+from toolkit.cli._url_scout_common import _generate_raw_sources_block, infer_ext, infer_filename, slugify
 from toolkit.cli.cmd_run import run_init as _run_init
 
 logger = logging.getLogger("toolkit.cli.init")
@@ -48,7 +49,19 @@ def _scout(url: str, *, timeout: int = 60) -> None:
     tmp_dir = Path(tempfile.gettempdir())
     tmp_name = f"scout_{slug}_{uuid.uuid4().hex[:8]}"
 
-    # 1. Download sample (primi 1MB via Range header)
+    # 1. Probe URL per validazione (HEAD preferito, GET Range fallback)
+    typer.echo(f"Probing {url}...")
+    probe = probe_url(url, timeout=min(timeout, 30))
+    if probe["kind"] == "html":
+        ct = probe["content_type"]
+        typer.echo(f"error: URL returned HTML (Content-Type: {ct}), not a data file", err=True)
+        typer.echo("  Controlla che l'URL punti direttamente a un file CSV/XLSX/JSON.", err=True)
+        raise typer.Exit(code=1)
+    if probe["status_code"] >= 400:
+        typer.echo(f"error: HTTP {probe['status_code']} for {url}", err=True)
+        raise typer.Exit(code=1)
+
+    # 2. Download sample (primi 1MB via Range header)
     typer.echo(f"Downloading sample from {url}...")
     client = HttpClient(timeout=timeout)
     result = client.get(url, headers={"Range": f"bytes=0-{_SAMPLE_SIZE - 1}"})
@@ -57,16 +70,7 @@ def _scout(url: str, *, timeout: int = 60) -> None:
         raise typer.Exit(code=1)
 
     resp = result.response
-    if resp.status_code >= 400:
-        typer.echo(f"error: HTTP {resp.status_code} for {url}", err=True)
-        raise typer.Exit(code=1)
-
-    ct = (resp.headers.get("Content-Type") or "").lower()
-    if "html" in ct:
-        typer.echo(f"error: URL returned HTML (Content-Type: {ct}), not a data file", err=True)
-        typer.echo("  Controlla che l'URL punti direttamente a un file CSV/XLSX/JSON.", err=True)
-        raise typer.Exit(code=1)
-
+    ct = (resp.headers.get("Content-Type") or probe["content_type"] or "").lower()
     # Cap difensivo: anche se server ignora Range e risponde 200, tronca
     content = resp.content[:_SAMPLE_SIZE]
     ext = infer_ext(url, ct)
@@ -191,12 +195,7 @@ def _generate_dataset_yml(
     lines.append("raw:")
     lines.append("  output_policy: overwrite")
     lines.append("  sources:")
-    lines.append(f'    - name: "{slug}_source"')
-    lines.append('      type: "http_file"')
-    lines.append("      args:")
-    lines.append(f'        url: "{url}"')
-    lines.append(f'        filename: "{fname}"')
-    lines.append("      primary: true")
+    lines.extend(_generate_raw_sources_block(url, slug, fname=fname))
     lines.append("")
     lines.append("clean:")
     lines.append("  read:")

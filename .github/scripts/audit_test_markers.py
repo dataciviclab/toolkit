@@ -34,10 +34,12 @@ class TestCollector(ast.NodeVisitor):
     """
 
     def __init__(self) -> None:
+        """Initialize collector with empty results and no module-level markers."""
         self.results: list[dict] = []
         self._module_markers: set[str] = set()
 
     def visit_Module(self, node: ast.Module) -> None:
+        """Collect module-level pytestmark, then scan test functions/classes."""
         # Collect module-level pytestmark first
         for stmt in ast.iter_child_nodes(node):
             if isinstance(stmt, ast.Assign):
@@ -64,6 +66,7 @@ class TestCollector(ast.NodeVisitor):
         self.generic_visit(node)
 
     def _visit_test_function(self, node: ast.FunctionDef) -> None:
+        """Extract markers from a single test function (decorator + module-level)."""
         markers: set[str] = set()
         # Inherit module-level markers
         markers.update(self._module_markers)
@@ -82,6 +85,7 @@ class TestCollector(ast.NodeVisitor):
         )
 
     def _get_marker_name(self, node: ast.expr) -> str | None:
+        """Extract Lab marker name from a decorator via ast.unparse + regex."""
         try:
             src = ast.unparse(node)
             m = _MARKER_RE.search(src)
@@ -93,6 +97,7 @@ class TestCollector(ast.NodeVisitor):
 
 
 def collect_tests(tests_dir: Path, file_filter: list[str] | None = None) -> list[dict]:
+    """Collect all test functions from test_*.py files in directory (recursive)."""
     results = []
     pattern = "test_*.py"
     for fpath in sorted(tests_dir.glob(pattern)):
@@ -134,6 +139,7 @@ def collect_tests(tests_dir: Path, file_filter: list[str] | None = None) -> list
 
 
 def main() -> None:
+    """Parse CLI args, run audit, print results."""
     parser = argparse.ArgumentParser(
         description="Audit test markers in any repo's test directory."
     )

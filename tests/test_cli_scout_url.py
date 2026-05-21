@@ -307,21 +307,25 @@ class TestGenerateYamlScaffold:
         assert 'years: [2024]' in yaml
         assert "root:" in yaml
 
-    def test_http_file_scaffold_with_datastore_url(self) -> None:
+    def test_scaffold_fallback_datastore_url_is_http_file(self) -> None:
+        """Senza metadata CKAN, anche URL datastore produce http_file."""
         probe_result = {
             "final_url": "https://portal.com/api/3/datastore/dump/uuid.csv",
             "requested_url": "https://portal.com/api/3/datastore/dump/uuid.csv",
         }
         yaml = generate_yaml_scaffold(probe_result)
-        assert 'type: "ckan"' in yaml
+        assert 'type: "http_file"' in yaml
+        assert 'type: "ckan"' not in yaml
 
-    def test_http_file_scaffold_with_sdmx_url(self) -> None:
+    def test_scaffold_fallback_sdmx_url_is_http_file(self) -> None:
+        """Senza metadata SDMX, anche URL /dataflow/ produce http_file."""
         probe_result = {
             "final_url": "https://example.com/data/flow/sdmx",
             "requested_url": "https://example.com/data/flow/sdmx",
         }
         yaml = generate_yaml_scaffold(probe_result)
-        assert 'type: "sdmx"' in yaml
+        assert 'type: "http_file"' in yaml
+        assert 'type: "sdmx"' not in yaml
 
     def test_ckan_resources_scaffold(self) -> None:
         probe_result = {

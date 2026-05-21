@@ -64,16 +64,13 @@ def _make_source_name(link: str) -> str:
     return re.sub(r"[^a-z0-9_]", "_", (stem or "resource").lower())
 
 
-def _infer_type_from_url(u: str) -> str:
-    if "/datastore/dump/" in u or "/datastore_search" in u:
-        return "ckan"
-    if "sdmx" in u.lower() or "/dataflow/" in u.lower():
-        return "sdmx"
-    return "http_file"
-
-
 def _generate_raw_sources_block(url: str, slug: str, fname: str | None = None) -> list[str]:
     """Genera il blocco YAML raw.sources per un singolo URL.
+
+    Produce sempre type: http_file perche' da un URL nudo non abbiamo
+    i metadata necessari per CKAN (portal_url, resource_id) o SDMX
+    (flow, version). I config CKAN/SDMX completi sono generati solo
+    da generate_yaml_scaffold() quando ckan_resources sono forniti.
 
     Args:
         url: URL della fonte dati.
@@ -83,10 +80,9 @@ def _generate_raw_sources_block(url: str, slug: str, fname: str | None = None) -
     parsed = urlparse(url)
     if fname is None:
         fname = Path(parsed.path).name or f"{slug}.csv"
-    stype = _infer_type_from_url(url)
     lines = [
         f'    - name: "{slug}_source"',
-        f'      type: "{stype}"',
+        '      type: "http_file"',
         "      args:",
         f'        url: "{url}"',
         f'        filename: "{fname}"',
@@ -147,9 +143,10 @@ def generate_yaml_scaffold(
             seen.add(link)
             link_name = _make_source_name(link)
             fname = Path(urlparse(link).path).name
-            stype = _infer_type_from_url(link)
+            # Da link candidati abbiamo solo l'URL, non i metadata
+            # necessari per CKAN/SDMX → sempre http_file
             lines.append(f'    - name: "{link_name}"')
-            lines.append(f'      type: "{stype}"')
+            lines.append('      type: "http_file"')
             lines.append("      args:")
             lines.append(f'        url: "{link}"')
             if fname:

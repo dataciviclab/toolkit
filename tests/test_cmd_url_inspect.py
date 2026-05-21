@@ -76,6 +76,57 @@ class TestGenerateYamlScaffold:
 
 
 # ---------------------------------------------------------------------------
+# contract — scaffold config: ogni source type ha le chiavi obbligatorie
+# ---------------------------------------------------------------------------
+
+
+class TestScaffoldConfigContract:
+    """contract: ogni source type nello scaffold ha le chiavi obbligatorie."""
+
+    @pytest.mark.contract
+    def test_http_file_fallback_has_url_and_filename(self) -> None:
+        """http_file generato da fallback ha url + filename."""
+        probe = {"final_url": "https://example.com/data/file.csv", "requested_url": "https://example.com/data/file.csv"}
+        yaml = generate_yaml_scaffold(probe)
+        assert 'type: "http_file"' in yaml
+        assert "args:" in yaml
+        assert 'url: "https://example.com/data/file.csv"' in yaml
+        assert 'filename: "file.csv"' in yaml
+
+    @pytest.mark.contract
+    def test_http_file_candidate_links_has_url_and_filename(self) -> None:
+        """http_file da candidate_links ha url + filename."""
+        probe = {"final_url": "https://portal.it/html", "requested_url": "https://portal.it/html"}
+        links = ["https://portal.it/download/data.csv"]
+        yaml = generate_yaml_scaffold(probe, candidate_links=links)
+        assert 'type: "http_file"' in yaml
+        assert 'url: "https://portal.it/download/data.csv"' in yaml
+        assert 'filename: "data.csv"' in yaml
+
+    @pytest.mark.contract
+    def test_ckan_resources_has_portal_url_and_resource_id(self) -> None:
+        """ckan generato da risorse CKAN ha portal_url + resource_id + filename."""
+        probe = {"final_url": "https://portal.it/dataset/uuid"}
+        resources = [{"id": "res-abc", "name": "data", "format": "csv", "url": "https://portal.it/files/data.csv"}]
+        yaml = generate_yaml_scaffold(probe, ckan_resources=resources)
+        assert 'type: "ckan"' in yaml
+        assert 'portal_url: "https://portal.it"' in yaml
+        assert 'resource_id: "res-abc"' in yaml
+        assert 'filename: "data.csv"' in yaml
+
+    @pytest.mark.contract
+    def test_datastore_url_fallback_is_http_file_not_ckan(self) -> None:
+        """URL datastore senza metadata CKAN → http_file, non ckan (config incompleta)."""
+        probe = {"final_url": "https://portal.com/api/3/datastore/dump/uuid.csv"}
+        yaml = generate_yaml_scaffold(probe)
+        assert 'type: "http_file"' in yaml
+        assert 'type: "ckan"' not in yaml
+        assert 'portal_url:' not in yaml
+        # Con http_file deve avere url come argomento
+        assert 'url: "https://portal.com/api/3/datastore/dump/uuid.csv"' in yaml
+
+
+# ---------------------------------------------------------------------------
 # pure_unit — non-trivial pure logic (kept, not banale)
 # ---------------------------------------------------------------------------
 

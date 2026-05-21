@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 
@@ -53,3 +55,49 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             item.add_marker(pytest.mark.advanced)
         elif name in COMPAT_TESTS:
             item.add_marker(pytest.mark.compat)
+
+
+# ------------------------------------------------------------------
+# Shared fixtures
+# ------------------------------------------------------------------
+
+
+@pytest.fixture
+def runner():
+    """CLI runner for Typer/Click commands.
+
+    Usage::
+
+        def test_something(runner):
+            result = runner.invoke(app, ["run", "--help"])
+            assert result.exit_code == 0
+    """
+    from typer.testing import CliRunner
+
+    return CliRunner()
+
+
+@pytest.fixture
+def project_example(tmp_path: Path) -> Path:
+    """Copy ``project-example/`` to a temp directory.
+
+    Returns the path to the copy. The ``_smoke_out`` directory is
+    excluded to avoid stale artifacts in CI.
+    """
+    import shutil
+
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
+    return dst
+
+
+@pytest.fixture
+def chdir_tmp(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Chdir to a clean temp directory for the duration of the test.
+
+    Equivalent to ``monkeypatch.chdir(tmp_path)`` — saves a line in
+    every test that needs a clean working directory.
+    """
+    monkeypatch.chdir(tmp_path)
+    return tmp_path

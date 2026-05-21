@@ -1,3 +1,4 @@
+"""Tests for ``toolkit run --dry-run``."""
 from __future__ import annotations
 
 import json
@@ -6,42 +7,27 @@ from pathlib import Path
 
 import duckdb
 import pytest
-from typer.testing import CliRunner
 
 from toolkit.cli.app import app
 from toolkit.cli.cmd_run import run_year
 from toolkit.core.config import load_config
+from tests.helpers import make_dataset_yml, make_standard_sql
+
+
+# ── Basic patterns ──────────────────────────────────────────────────────────
 
 
 @pytest.mark.policy
-def test_run_dry_run_prints_plan_and_creates_only_run_record(tmp_path: Path) -> None:
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
-
-    config_path = tmp_path / "dataset.yml"
-    root_dir = tmp_path / "out"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "demo_ds"',
-                "  years: [2022]",
-                "raw: {}",
-                "clean:",
-                '  sql: "sql/clean.sql"',
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart/mart_example.sql"',
-            ]
-        ),
-        encoding="utf-8",
+def test_run_dry_run_prints_plan_and_creates_only_run_record(
+    tmp_path: Path, runner,
+) -> None:
+    make_standard_sql(tmp_path)
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
     )
+    root_dir = tmp_path / "out"
 
-    runner = CliRunner()
     result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0
@@ -64,34 +50,16 @@ def test_run_dry_run_prints_plan_and_creates_only_run_record(tmp_path: Path) -> 
 
 
 @pytest.mark.policy
-def test_run_dry_run_fails_on_clean_sql_syntax_error(tmp_path: Path) -> None:
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
+def test_run_dry_run_fails_on_clean_sql_syntax_error(tmp_path: Path, runner) -> None:
+    make_standard_sql(tmp_path)
+    # Replace clean.sql with syntax error
     (tmp_path / "sql" / "clean.sql").write_text("select from raw_input", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
 
-    config_path = tmp_path / "dataset.yml"
-    root_dir = tmp_path / "out"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "demo_ds"',
-                "  years: [2022]",
-                "raw: {}",
-                "clean:",
-                '  sql: "sql/clean.sql"',
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart/mart_example.sql"',
-            ]
-        ),
-        encoding="utf-8",
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
     )
 
-    runner = CliRunner()
     result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code != 0
@@ -99,37 +67,21 @@ def test_run_dry_run_fails_on_clean_sql_syntax_error(tmp_path: Path) -> None:
 
 
 @pytest.mark.policy
-def test_run_dry_run_fails_on_mart_sql_binding_error(tmp_path: Path) -> None:
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "sql" / "clean.sql").write_text('select "x" as value from raw_input', encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select missing_col from clean_input", encoding="utf-8")
-
-    config_path = tmp_path / "dataset.yml"
-    root_dir = tmp_path / "out"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "demo_ds"',
-                "  years: [2022]",
-                "raw: {}",
-                "clean:",
-                '  sql: "sql/clean.sql"',
-                "  read:",
-                "    columns:",
-                '      x: "VARCHAR"',
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart/mart_example.sql"',
-            ]
-        ),
-        encoding="utf-8",
+def test_run_dry_run_fails_on_mart_sql_binding_error(tmp_path: Path, runner) -> None:
+    make_standard_sql(tmp_path)
+    (tmp_path / "sql" / "clean.sql").write_text(
+        'select "x" as value from raw_input', encoding="utf-8",
+    )
+    (tmp_path / "sql" / "mart" / "mart_example.sql").write_text(
+        "select missing_col from clean_input", encoding="utf-8",
     )
 
-    runner = CliRunner()
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
+        extra="  read:\n    columns:\n      x: \"VARCHAR\"",
+    )
+
     result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code != 0
@@ -137,34 +89,19 @@ def test_run_dry_run_fails_on_mart_sql_binding_error(tmp_path: Path) -> None:
 
 
 @pytest.mark.policy
-def test_run_dry_run_accepts_unquoted_raw_columns_without_read_columns(tmp_path: Path) -> None:
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "sql" / "clean.sql").write_text("select x as value from raw_input", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
-
-    config_path = tmp_path / "dataset.yml"
-    root_dir = tmp_path / "out"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "demo_ds"',
-                "  years: [2022]",
-                "raw: {}",
-                "clean:",
-                '  sql: "sql/clean.sql"',
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart/mart_example.sql"',
-            ]
-        ),
-        encoding="utf-8",
+def test_run_dry_run_accepts_unquoted_raw_columns_without_read_columns(
+    tmp_path: Path, runner,
+) -> None:
+    make_standard_sql(tmp_path)
+    (tmp_path / "sql" / "clean.sql").write_text(
+        "select x as value from raw_input", encoding="utf-8",
     )
 
-    runner = CliRunner()
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
+    )
+
     result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0
@@ -172,43 +109,81 @@ def test_run_dry_run_accepts_unquoted_raw_columns_without_read_columns(tmp_path:
 
 
 @pytest.mark.policy
-def test_run_dry_run_accepts_mart_sql_with_root_posix_placeholder(tmp_path: Path) -> None:
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
+def test_run_dry_run_accepts_mart_sql_with_root_posix_placeholder(
+    tmp_path: Path, runner,
+) -> None:
+    make_standard_sql(tmp_path)
     root_dir = tmp_path / "out"
     lookup_path = root_dir / "lookup" / "mart_lookup_2022.parquet"
     lookup_path.parent.mkdir(parents=True, exist_ok=True)
     duckdb.execute(
         f"COPY (SELECT 1 AS lookup_value) TO '{lookup_path.as_posix()}' (FORMAT PARQUET)"
     )
-
-    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text(
+    (tmp_path / "sql" / "mart" / "mart_example.sql").write_text(
         "select * from read_parquet('{root_posix}/lookup/mart_lookup_2022.parquet')",
         encoding="utf-8",
     )
 
-    config_path = tmp_path / "dataset.yml"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "demo_ds"',
-                "  years: [2022]",
-                "raw: {}",
-                "clean:",
-                '  sql: "sql/clean.sql"',
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart/mart_example.sql"',
-            ]
-        ),
-        encoding="utf-8",
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml", root=root_dir,
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
     )
 
-    runner = CliRunner()
+    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+
+    assert result.exit_code == 0
+    assert "sql_validation: OK" in result.output
+
+
+# ── Support datasets ────────────────────────────────────────────────────────
+
+
+def _make_support_config(support_root: Path, support_config: Path,
+                          tables: list[tuple[str, str]]) -> Path:
+    """Write a support dataset.yml and return its path."""
+    make_dataset_yml(
+        support_config, root=support_root, name="lookup_ds", years=[2024],
+        clean_sql="sql/clean.sql",
+        mart_tables=tables,
+    )
+    return support_config
+
+
+@pytest.mark.policy
+def test_run_dry_run_accepts_mart_sql_with_support_placeholder(
+    tmp_path: Path, runner,
+) -> None:
+    make_standard_sql(tmp_path)
+    root_dir = tmp_path / "out"
+    support_root = tmp_path / "support_out"
+
+    support_output = (support_root / "data" / "mart" / "lookup_ds"
+                      / "2024" / "lookup_table.parquet")
+    support_output.parent.mkdir(parents=True, exist_ok=True)
+    duckdb.execute(
+        f"COPY (SELECT 7 AS lookup_value) TO '{support_output.as_posix()}' (FORMAT PARQUET)"
+    )
+
+    support_config = _make_support_config(
+        support_root, tmp_path / "support_dataset.yml",
+        [("lookup_table", "sql/lookup.sql")],
+    )
+
+    (tmp_path / "sql" / "mart" / "mart_example.sql").write_text(
+        "select * from read_parquet('{support.lookup.mart}')", encoding="utf-8",
+    )
+
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml", root=root_dir,
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
+        extra=(
+            "support:\n"
+            '  - name: "lookup"\n'
+            f'    config: "{support_config.as_posix()}"\n'
+            "    years: [2024]"
+        ),
+    )
+
     result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0
@@ -216,131 +191,33 @@ def test_run_dry_run_accepts_mart_sql_with_root_posix_placeholder(tmp_path: Path
 
 
 @pytest.mark.policy
-def test_run_dry_run_accepts_mart_sql_with_support_placeholder(tmp_path: Path) -> None:
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
+def test_run_dry_run_fails_when_support_output_is_missing(
+    tmp_path: Path, runner,
+) -> None:
+    make_standard_sql(tmp_path)
     root_dir = tmp_path / "out"
-
     support_root = tmp_path / "support_out"
-    support_output = support_root / "data" / "mart" / "lookup_ds" / "2024" / "lookup_table.parquet"
-    support_output.parent.mkdir(parents=True, exist_ok=True)
-    duckdb.execute(
-        f"COPY (SELECT 7 AS lookup_value) TO '{support_output.as_posix()}' (FORMAT PARQUET)"
+
+    support_config = _make_support_config(
+        support_root, tmp_path / "support_dataset.yml",
+        [("lookup_table", "sql/lookup.sql")],
     )
 
-    support_config = tmp_path / "support_dataset.yml"
-    support_config.write_text(
-        "\n".join(
-            [
-                f'root: "{support_root.as_posix()}"',
-                "dataset:",
-                '  name: "lookup_ds"',
-                "  years: [2024]",
-                "raw: {}",
-                "clean: {}",
-                "mart:",
-                "  tables:",
-                '    - name: "lookup_table"',
-                '      sql: "sql/lookup.sql"',
-            ]
+    (tmp_path / "sql" / "mart" / "mart_example.sql").write_text(
+        "select * from read_parquet('{support.lookup.mart}')", encoding="utf-8",
+    )
+
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml", root=root_dir,
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
+        extra=(
+            "support:\n"
+            '  - name: "lookup"\n'
+            f'    config: "{support_config.as_posix()}"\n'
+            "    years: [2024]"
         ),
-        encoding="utf-8",
     )
 
-    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text(
-        "select * from read_parquet('{support.lookup.mart}')",
-        encoding="utf-8",
-    )
-
-    config_path = tmp_path / "dataset.yml"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "demo_ds"',
-                "  years: [2022]",
-                "raw: {}",
-                "clean:",
-                '  sql: "sql/clean.sql"',
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart/mart_example.sql"',
-                "support:",
-                '  - name: "lookup"',
-                f'    config: "{support_config.as_posix()}"',
-                "    years: [2024]",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    runner = CliRunner()
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
-
-    assert result.exit_code == 0
-    assert "sql_validation: OK" in result.output
-
-
-@pytest.mark.policy
-def test_run_dry_run_fails_when_support_output_is_missing(tmp_path: Path) -> None:
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    root_dir = tmp_path / "out"
-
-    support_root = tmp_path / "support_out"
-    support_config = tmp_path / "support_dataset.yml"
-    support_config.write_text(
-        "\n".join(
-            [
-                f'root: "{support_root.as_posix()}"',
-                "dataset:",
-                '  name: "lookup_ds"',
-                "  years: [2024]",
-                "raw: {}",
-                "clean: {}",
-                "mart:",
-                "  tables:",
-                '    - name: "lookup_table"',
-                '      sql: "sql/lookup.sql"',
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text(
-        "select * from read_parquet('{support.lookup.mart}')",
-        encoding="utf-8",
-    )
-
-    config_path = tmp_path / "dataset.yml"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "demo_ds"',
-                "  years: [2022]",
-                "raw: {}",
-                "clean:",
-                '  sql: "sql/clean.sql"',
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart/mart_example.sql"',
-                "support:",
-                '  - name: "lookup"',
-                f'    config: "{support_config.as_posix()}"',
-                "    years: [2024]",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    runner = CliRunner()
     result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0, result.output
@@ -348,103 +225,57 @@ def test_run_dry_run_fails_when_support_output_is_missing(tmp_path: Path) -> Non
 
 
 @pytest.mark.policy
-def test_run_dry_run_fails_when_support_outputs_are_only_partially_present(tmp_path: Path) -> None:
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
+def test_run_dry_run_fails_when_support_outputs_are_only_partially_present(
+    tmp_path: Path, runner,
+) -> None:
+    make_standard_sql(tmp_path)
     root_dir = tmp_path / "out"
-
     support_root = tmp_path / "support_out"
-    support_output = support_root / "data" / "mart" / "lookup_ds" / "2024" / "lookup_a.parquet"
+
+    support_output = (support_root / "data" / "mart" / "lookup_ds"
+                      / "2024" / "lookup_a.parquet")
     support_output.parent.mkdir(parents=True, exist_ok=True)
     duckdb.execute(
         f"COPY (SELECT 7 AS lookup_value) TO '{support_output.as_posix()}' (FORMAT PARQUET)"
     )
 
-    support_config = tmp_path / "support_dataset.yml"
-    support_config.write_text(
-        "\n".join(
-            [
-                f'root: "{support_root.as_posix()}"',
-                "dataset:",
-                '  name: "lookup_ds"',
-                "  years: [2024]",
-                "raw: {}",
-                "clean: {}",
-                "mart:",
-                "  tables:",
-                '    - name: "lookup_a"',
-                '      sql: "sql/lookup_a.sql"',
-                '    - name: "lookup_b"',
-                '      sql: "sql/lookup_b.sql"',
-            ]
+    support_config = _make_support_config(
+        support_root, tmp_path / "support_dataset.yml",
+        [("lookup_a", "sql/lookup_a.sql"), ("lookup_b", "sql/lookup_b.sql")],
+    )
+
+    (tmp_path / "sql" / "mart" / "mart_example.sql").write_text(
+        "select * from read_parquet('{support.lookup.mart}')", encoding="utf-8",
+    )
+
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml", root=root_dir,
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
+        extra=(
+            "support:\n"
+            '  - name: "lookup"\n'
+            f'    config: "{support_config.as_posix()}"\n'
+            "    years: [2024]"
         ),
-        encoding="utf-8",
     )
 
-    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text(
-        "select * from read_parquet('{support.lookup.mart}')",
-        encoding="utf-8",
-    )
-
-    config_path = tmp_path / "dataset.yml"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "demo_ds"',
-                "  years: [2022]",
-                "raw: {}",
-                "clean:",
-                '  sql: "sql/clean.sql"',
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart/mart_example.sql"',
-                "support:",
-                '  - name: "lookup"',
-                f'    config: "{support_config.as_posix()}"',
-                "    years: [2024]",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    runner = CliRunner()
     result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0, result.output
     assert "DRY_RUN" in result.output
+
+
+# ── Logger context ──────────────────────────────────────────────────────────
 
 
 @pytest.mark.policy
 def test_run_year_logs_effective_root_context(tmp_path: Path, caplog) -> None:
-    sql_dir = tmp_path / "sql" / "mart"
-    sql_dir.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
-    (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
-
-    config_path = tmp_path / "dataset.yml"
-    root_dir = tmp_path / "out"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "demo_ds"',
-                "  years: [2022]",
-                "raw: {}",
-                "clean:",
-                '  sql: "sql/clean.sql"',
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart/mart_example.sql"',
-            ]
-        ),
-        encoding="utf-8",
+    make_standard_sql(tmp_path)
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
     )
+    root_dir = tmp_path / "out"
 
     cfg = load_config(config_path)
     logger = logging.getLogger("test.run_dry_run")
@@ -461,41 +292,25 @@ def test_run_year_logs_effective_root_context(tmp_path: Path, caplog) -> None:
     assert "root_source=yml" in caplog.text
 
 
+# ── Mart-only / compose ─────────────────────────────────────────────────────
+
+
 @pytest.mark.policy
-def test_run_dry_run_accepts_mart_only_config(tmp_path: Path) -> None:
+def test_run_dry_run_accepts_mart_only_config(tmp_path: Path, runner) -> None:
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)
     source_path = tmp_path / "external_source.parquet"
-
-    con = duckdb.connect()
-    con.execute("COPY (SELECT 1 AS value) TO ? (FORMAT PARQUET)", [str(source_path)])
-    con.close()
-
+    duckdb.execute("COPY (SELECT 1 AS value) TO ? (FORMAT PARQUET)", [str(source_path)])
     (mart_sql / "mart_example.sql").write_text(
-        f"select * from read_parquet('{source_path.as_posix()}')",
-        encoding="utf-8",
+        f"select * from read_parquet('{source_path.as_posix()}')", encoding="utf-8",
     )
 
-    config_path = tmp_path / "compose" / "dataset.yml"
-    root_dir = tmp_path / "out"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "compose_demo"',
-                "  years: [2022]",
-                "raw: {}",
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart_example.sql"',
-            ]
-        ),
-        encoding="utf-8",
+    config_path = make_dataset_yml(
+        tmp_path / "compose" / "dataset.yml",
+        name="compose_demo", clean_sql=None,
+        mart_tables=[("mart_example", "sql/mart_example.sql")],
     )
 
-    runner = CliRunner()
     result = runner.invoke(app, ["run", "mart", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0
@@ -505,31 +320,19 @@ def test_run_dry_run_accepts_mart_only_config(tmp_path: Path) -> None:
 
 
 @pytest.mark.policy
-def test_run_dry_run_all_fails_readably_on_mart_only_config(tmp_path: Path) -> None:
+def test_run_dry_run_all_fails_readably_on_mart_only_config(
+    tmp_path: Path, runner,
+) -> None:
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)
     (mart_sql / "mart_example.sql").write_text("select 1 as value", encoding="utf-8")
 
-    config_path = tmp_path / "compose" / "dataset.yml"
-    root_dir = tmp_path / "out"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "compose_demo"',
-                "  years: [2022]",
-                "raw: {}",
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart_example.sql"',
-            ]
-        ),
-        encoding="utf-8",
+    config_path = make_dataset_yml(
+        tmp_path / "compose" / "dataset.yml",
+        name="compose_demo", clean_sql=None,
+        mart_tables=[("mart_example", "sql/mart_example.sql")],
     )
 
-    runner = CliRunner()
     result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code != 0
@@ -537,40 +340,22 @@ def test_run_dry_run_all_fails_readably_on_mart_only_config(tmp_path: Path) -> N
 
 
 @pytest.mark.policy
-def test_run_mart_executes_mart_only_config(tmp_path: Path) -> None:
+def test_run_mart_executes_mart_only_config(tmp_path: Path, runner) -> None:
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)
     source_path = tmp_path / "external_source.parquet"
-
-    con = duckdb.connect()
-    con.execute("COPY (SELECT 1 AS value) TO ? (FORMAT PARQUET)", [str(source_path)])
-    con.close()
-
+    duckdb.execute("COPY (SELECT 1 AS value) TO ? (FORMAT PARQUET)", [str(source_path)])
     (mart_sql / "mart_example.sql").write_text(
-        f"select * from read_parquet('{source_path.as_posix()}')",
-        encoding="utf-8",
+        f"select * from read_parquet('{source_path.as_posix()}')", encoding="utf-8",
     )
 
-    config_path = tmp_path / "compose" / "dataset.yml"
     root_dir = tmp_path / "out"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "compose_demo"',
-                "  years: [2022]",
-                "raw: {}",
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart_example.sql"',
-            ]
-        ),
-        encoding="utf-8",
+    config_path = make_dataset_yml(
+        tmp_path / "compose" / "dataset.yml",
+        name="compose_demo", root=root_dir, clean_sql=None,
+        mart_tables=[("mart_example", "sql/mart_example.sql")],
     )
 
-    runner = CliRunner()
     result = runner.invoke(app, ["run", "mart", "--config", str(config_path)])
 
     assert result.exit_code == 0
@@ -581,114 +366,75 @@ def test_run_mart_executes_mart_only_config(tmp_path: Path) -> None:
 
 
 @pytest.mark.policy
-def test_run_mart_mart_only_ignores_stale_clean_dir(tmp_path: Path) -> None:
+def test_run_mart_mart_only_ignores_stale_clean_dir(tmp_path: Path, runner) -> None:
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)
-
-    config_path = tmp_path / "compose" / "dataset.yml"
     root_dir = tmp_path / "out"
-    stale_clean_dir = root_dir / "data" / "clean" / "compose_demo" / "2022"
-    stale_clean_dir.mkdir(parents=True, exist_ok=True)
-    stale_clean_path = stale_clean_dir / "compose_demo_2022_clean.parquet"
+    stale_clean = root_dir / "data" / "clean" / "compose_demo" / "2022"
+    stale_clean.mkdir(parents=True, exist_ok=True)
+    stale_parquet = stale_clean / "compose_demo_2022_clean.parquet"
     duckdb.execute(
-        f"COPY (SELECT 1 AS stale_value) TO '{stale_clean_path.as_posix()}' (FORMAT PARQUET)"
+        f"COPY (SELECT 1 AS stale_value) TO '{stale_parquet.as_posix()}' (FORMAT PARQUET)"
     )
-
     (mart_sql / "mart_example.sql").write_text(
-        "select stale_value from clean_input",
-        encoding="utf-8",
+        "select stale_value from clean_input", encoding="utf-8",
     )
 
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "compose_demo"',
-                "  years: [2022]",
-                "raw: {}",
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart_example.sql"',
-            ]
-        ),
-        encoding="utf-8",
+    config_path = make_dataset_yml(
+        tmp_path / "compose" / "dataset.yml",
+        name="compose_demo", clean_sql=None,
+        mart_tables=[("mart_example", "sql/mart_example.sql")],
     )
 
-    runner = CliRunner()
     result = runner.invoke(app, ["run", "mart", "--config", str(config_path)])
 
     assert result.exit_code != 0
     assert "clean_input" in str(result.exception)
-    mart_output = root_dir / "data" / "mart" / "compose_demo" / "2022" / "mart_example.parquet"
-    assert not mart_output.exists()
+    assert not (root_dir / "data" / "mart" / "compose_demo" / "2022" / "mart_example.parquet").exists()
 
 
 @pytest.mark.policy
-def test_run_all_fails_readably_on_mart_only_config(tmp_path: Path) -> None:
+def test_run_all_fails_readably_on_mart_only_config(tmp_path: Path, runner) -> None:
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)
     (mart_sql / "mart_example.sql").write_text("select 1 as value", encoding="utf-8")
 
-    config_path = tmp_path / "compose" / "dataset.yml"
-    root_dir = tmp_path / "out"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                '  name: "compose_demo"',
-                "  years: [2022]",
-                "raw: {}",
-                "mart:",
-                "  tables:",
-                '    - name: "mart_example"',
-                '      sql: "sql/mart_example.sql"',
-            ]
-        ),
-        encoding="utf-8",
+    config_path = make_dataset_yml(
+        tmp_path / "compose" / "dataset.yml",
+        name="compose_demo", clean_sql=None,
+        mart_tables=[("mart_example", "sql/mart_example.sql")],
     )
 
-    runner = CliRunner()
     result = runner.invoke(app, ["run", "all", "--config", str(config_path)])
 
     assert result.exit_code != 0
     assert "run all is not supported for mart-only / compose-only configs" in str(result.exception)
 
 
+# ── Raw sources ─────────────────────────────────────────────────────────────
+
+
 @pytest.mark.policy
-def test_run_all_fails_with_bootstrap_hint_when_clean_sql_missing(tmp_path: Path) -> None:
-    """When clean.sql does not exist, run all fails with a clear message pointing to init."""
-    # No clean.sql created — only raw dir (which exists but has no profile).
-    # Config has clean.sql declared but file does not exist.
+def test_run_all_fails_with_bootstrap_hint_when_clean_sql_missing(
+    tmp_path: Path, runner,
+) -> None:
     raw_dir = tmp_path / "data" / "raw" / "demo_ds" / "2022"
     raw_dir.mkdir(parents=True, exist_ok=True)
     (raw_dir / "demo_ds_2022.csv").write_text("col1;col2\nval1;val2\n", encoding="utf-8")
 
-    config_path = tmp_path / "dataset.yml"
-    root_dir = tmp_path / "out"
-    config_path.write_text(
-        "\n".join(
-            [
-                f'root: "{root_dir.as_posix()}"',
-                "dataset:",
-                "  name: demo_ds",
-                "  years: [2022]",
-                "raw:",
-                "  sources:",
-                "    - type: local_file",
-                "      args:",
-                "        path: data/raw/demo_ds/2022/demo_ds_2022.csv",
-                "clean:",
-                "  sql: sql/clean.sql",  # file does not exist
-            ]
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml",
+        name="demo_ds",
+        extra=(
+            "raw:\n"
+            "  sources:\n"
+            "    - type: local_file\n"
+            "      args:\n"
+            "        path: data/raw/demo_ds/2022/demo_ds_2022.csv\n"
         ),
-        encoding="utf-8",
+        clean_sql="sql/clean.sql",  # file does not exist
     )
 
-    # Profiling is NOT pre-created; clean.sql does NOT exist.
-    runner = CliRunner()
     result = runner.invoke(app, ["run", "all", "--config", str(config_path)])
 
     assert result.exit_code != 0

@@ -8,6 +8,8 @@ from urllib.parse import parse_qs, urljoin, urlparse
 
 from lab_connectors.http import HttpClient
 
+from toolkit.cli._url_scout_common import slugify
+
 # Public API — functions used by cmd_inspect.py
 __all__ = [
     "probe_url",
@@ -176,11 +178,7 @@ def _generate_yaml_scaffold(
 ) -> str:
     url = probe_result["final_url"]
     parsed = urlparse(url)
-    slug = Path(parsed.path).stem or "dataset"
-    slug = re.sub(r"[^a-z0-9_]", "_", slug.lower())
-    slug = re.sub(r"_+", "_", slug).strip("_")
-    if not slug:
-        slug = "dataset"
+    slug = slugify(url)
     lines = [
         "# Scaffold generato da scout-url --scaffold",
         "# Verifica e modifica prima di usare",

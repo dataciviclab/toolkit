@@ -33,7 +33,7 @@ def schema(
     status = result.get("status", "ok" if result.get("columns") else "empty")
 
     if json_output:
-        print(json.dumps(result, indent=2, default=str))
+        typer.echo(json.dumps(result, indent=2, default=str))
         return
 
     if status == "error":

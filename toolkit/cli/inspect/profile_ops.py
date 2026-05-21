@@ -163,21 +163,21 @@ def profile(
             raise typer.BadParameter(f"File non trovato: {csv_path}")
         result = csv_preview(csv_path)
         if json_output:
-            print(json.dumps(result, indent=2, default=str))
+            typer.echo(json.dumps(result, indent=2, default=str))
         else:
-            print(f"File:    {result['path']}")
-            print(f"Encoding: {result['encoding_suggested']}")
-            print(f"Delim:   {repr(result['delim_suggested'])}")
-            print(f"Decimal: {result['decimal_suggested']}")
-            print(f"Skip:    {result['skip_suggested']}")
-            print(f"Colonne: {result['column_count']}")
-            print(f"Righe:   {result['row_count_estimate']}")
+            typer.echo(f"File:    {result['path']}")
+            typer.echo(f"Encoding: {result['encoding_suggested']}")
+            typer.echo(f"Delim:   {repr(result['delim_suggested'])}")
+            typer.echo(f"Decimal: {result['decimal_suggested']}")
+            typer.echo(f"Skip:    {result['skip_suggested']}")
+            typer.echo(f"Colonne: {result['column_count']}")
+            typer.echo(f"Righe:   {result['row_count_estimate']}")
             if result['columns']:
-                print()
+                typer.echo("")
                 for c in result['columns'][:12]:
-                    print(f"  {c['name']:40s} {c['inferred_type']}")
+                    typer.echo(f"  {c['name']:40s} {c['inferred_type']}")
                 if len(result['columns']) > 12:
-                    print(f"  ... ({len(result['columns'])} totali)")
+                    typer.echo(f"  ... ({len(result['columns'])} totali)")
         return
 
     if not config:

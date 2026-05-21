@@ -300,7 +300,7 @@ class TestGenerateYamlScaffold:
             "requested_url": "https://example.com/data/file.csv",
         }
         yaml = _generate_yaml_scaffold(probe_result)
-        assert 'name: "file_source"' in yaml
+        assert '_source"' in yaml  # source name derived from slug with hash
         assert 'type: "http_file"' in yaml
         assert 'url: "https://example.com/data/file.csv"' in yaml
         assert 'filename: "file.csv"' in yaml
@@ -374,7 +374,7 @@ def test_scout_url_scaffold_flag_http_file() -> None:
 
     assert result.exit_code == 0
     assert "root:" in result.output
-    assert 'name: "demo_source"' in result.output
+    assert '_source"' in result.output  # source name derived from slug with hash
     assert 'type: "http_file"' in result.output
     assert "dataset:" in result.output
     assert "raw:" in result.output

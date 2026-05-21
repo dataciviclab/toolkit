@@ -39,11 +39,7 @@ def review_readiness(
         typer.echo(f"error: config file not found: {config}", err=True)
         raise typer.Exit(code=1)
     except Exception as exc:
-        exc_msg = str(exc).lower()
-        if "no such file or directory" in exc_msg or "non trovata" in exc_msg:
-            typer.echo(f"error: config file not found: {config}", err=True)
-        else:
-            typer.echo(f"error: {type(exc).__name__}: {exc}", err=True)
+        typer.echo(f"error: {type(exc).__name__}: {exc}", err=True)
         raise typer.Exit(code=1)
 
     if as_json:

@@ -30,7 +30,8 @@ class TestGenerateYamlScaffold:
             "requested_url": "https://example.com/data/dataset.csv",
         }
         yaml = _generate_yaml_scaffold(probe_result)
-        assert 'name: "dataset"' in yaml
+        assert 'name: "dataset_' in yaml  # slug with uuid5 hash suffix
+        assert '_source"' in yaml          # source name derived from slug
         assert 'type: "http_file"' in yaml
         assert 'url: "https://example.com/data/dataset.csv"' in yaml
         assert "schema_version: 1" in yaml
@@ -58,7 +59,8 @@ class TestGenerateYamlScaffold:
             "requested_url": "https://example.com/page",
         }
         yaml = _generate_yaml_scaffold(probe_result, ckan_resources=[], candidate_links=None)
-        assert 'name: "page_source"' in yaml
+        assert 'name: "page_' in yaml  # slug with uuid5 hash suffix
+        assert '_source"' in yaml
         assert 'type: "http_file"' in yaml
 
     @pytest.mark.contract
@@ -69,7 +71,7 @@ class TestGenerateYamlScaffold:
             "requested_url": "https://example.com/data/my-data-file%202023.csv",
         }
         yaml = _generate_yaml_scaffold(probe_result)
-        assert 'name: "my_data_file_202023"' in yaml
+        assert 'name: "my_data_file_202023_' in yaml  # slug with uuid5 hash suffix
 
 
 # ---------------------------------------------------------------------------

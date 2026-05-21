@@ -142,3 +142,16 @@ def test_cli_resume_from_other_cwd_falls_back_and_reuses_relative_paths(tmp_path
     assert (root / "data" / "raw" / "project_example" / "2022" / "ispra_dettaglio_comunale_2022.csv").exists()
     assert (root / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet").exists()
     assert (root / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet").exists()
+
+
+def test_cli_version_flag() -> None:
+    """contract: toolkit --version stampa versione ed esce con 0."""
+    runner = CliRunner()
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0, result.output
+    assert "toolkit " in result.output
+    # Verifica che sia una versione semver valida (es. 1.9.1)
+    version_part = result.output.strip().replace("toolkit ", "")
+    parts = version_part.split(".")
+    assert len(parts) == 3, f"versione non semver: {version_part}"
+    assert all(p.isdigit() for p in parts), f"versione non semver: {version_part}"

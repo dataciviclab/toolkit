@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, urljoin, urlparse
 
 from lab_connectors.http import HttpClient
 
-logger = logging.getLogger("toolkit.cli._url_http")
+logger = logging.getLogger("toolkit.scout.http")
 
 # ---------------------------------------------------------------------------
 # Constants

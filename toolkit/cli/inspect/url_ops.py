@@ -1,12 +1,13 @@
-"""inspect url command — probe HTTP con routing, solo ispezione.
+"""inspect url command — DEPRECATO. Usa toolkit scout <URL>.
 
-Usa tooltip.scout.probe.probe_url_routed() di default.
-Niente scaffold (usa toolkit init --url) e niente run.
+Mantenuto per retrocompatibilita'. Tutta la logica e' stata spostata
+in toolkit scout.
 """
 
 from __future__ import annotations
 
 import json
+import warnings
 from typing import Any
 
 import typer
@@ -22,14 +23,19 @@ def url(
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
 ) -> None:
     """
-    Ispeziona un URL: probe HTTP con routing automatico del tipo fonte.
+    [DEPRECATO] Usa toolkit scout <URL>.
 
-    Rileva automaticamente se l'URL e' file diretto, pagina HTML con link,
-    portale CKAN o endpoint SDMX. Output leggibile o JSON con --json.
-
-    Per generare scaffold candidate: toolkit init --url <URL>
-    Per init + raw run:             toolkit init --url <URL> --run
+    Ispeziona un URL con probe + routing automatico.
+    Sostituito da toolkit scout che offre le stesse funzionalita'
+    piu' inferenze e scaffold opzionale.
     """
+    warnings.warn(
+        "toolkit inspect url e' deprecato. Usa: toolkit scout <URL>",
+        DeprecationWarning,
+        stacklevel=1,
+    )
+    typer.echo("⚠️  DEPRECATO: usa 'toolkit scout <URL>' invece.", err=True)
+    typer.echo("")
     try:
         result = probe_url_routed(url, timeout=timeout, user_agent=user_agent)
     except RuntimeError as exc:

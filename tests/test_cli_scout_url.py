@@ -7,12 +7,9 @@ from typer.testing import CliRunner
 from lab_connectors.http import HttpClient, HttpResult
 
 from toolkit.cli.app import app
-from toolkit.cli._url_probe import (
-    _detect_ckan,
-    _extract_ckan_dataset_id,
-    probe_url,
-)
-from toolkit.cli._url_scout_common import generate_yaml_scaffold
+from toolkit.scout.http import detect_ckan_in_html, extract_ckan_dataset_id
+from toolkit.scout.probe import probe_url
+from toolkit.scout.scaffold import generate_yaml_scaffold
 
 
 class _ScoutHandler(BaseHTTPRequestHandler):
@@ -95,8 +92,8 @@ def test_scout_url_reports_file_headers_after_redirect() -> None:
     assert "status_code: 200" in result.output
     assert "content_type: text/csv; charset=utf-8" in result.output
     assert 'content_disposition: attachment; filename="demo.csv"' in result.output
-    assert "kind: file" in result.output
-    assert "candidate_links: none" in result.output
+    assert "source_type: file" in result.output
+    assert "candidate_links: 0" in result.output
 
 
 def test_scout_url_extracts_candidate_links_from_html() -> None:
@@ -111,7 +108,7 @@ def test_scout_url_extracts_candidate_links_from_html() -> None:
     assert result.exit_code == 0
     assert f"final_url: {base_url}/html" in result.output
     assert "content_type: text/html; charset=utf-8" in result.output
-    assert "kind: html" in result.output
+    assert "source_type: html" in result.output
     assert "candidate_links:" in result.output
     assert f"  - {base_url}/downloads/data.csv" in result.output
     assert f"  - {base_url}/reports/report.xlsx" in result.output
@@ -133,8 +130,8 @@ def test_scout_url_marks_opaque_non_html_response() -> None:
     assert f"final_url: {base_url}/opaque" in result.output
     assert "content_type: application/octet-stream" in result.output
     assert "content_disposition: None" in result.output
-    assert "kind: opaque" in result.output
-    assert "candidate_links: none" in result.output
+    assert "source_type: opaque" in result.output
+    assert "candidate_links: 0" in result.output
 
 
 def test_probe_url_uses_head_then_get_only_for_html(monkeypatch) -> None:
@@ -251,46 +248,46 @@ def test_probe_url_passes_timeout_and_user_agent(monkeypatch) -> None:
 class TestExtractCkanDatasetId:
     def test_uuid_from_id_param(self) -> None:
         url = "https://www.dati.gov.it/view-dataset/dataset?id=bef11a2c-300b-4578-8143-c1ce08f46fff"
-        assert _extract_ckan_dataset_id(url) == "bef11a2c-300b-4578-8143-c1ce08f46fff"
+        assert extract_ckan_dataset_id(url) == "bef11a2c-300b-4578-8143-c1ce08f46fff"
 
     def test_dataset_path_with_uuid(self) -> None:
         url = "https://example.com/dataset/bef11a2c-300b-4578-8143-c1ce08f46fff"
-        assert _extract_ckan_dataset_id(url) == "bef11a2c-300b-4578-8143-c1ce08f46fff"
+        assert extract_ckan_dataset_id(url) == "bef11a2c-300b-4578-8143-c1ce08f46fff"
 
     def test_dataset_path_with_slug(self) -> None:
         url = "https://example.com/dataset/mio-dataset-slug"
-        assert _extract_ckan_dataset_id(url) == "mio-dataset-slug"
+        assert extract_ckan_dataset_id(url) == "mio-dataset-slug"
 
     def test_non_ckan_url_returns_none(self) -> None:
         url = "https://example.com/data/file.csv"
-        assert _extract_ckan_dataset_id(url) is None
+        assert extract_ckan_dataset_id(url) is None
 
     def test_html_api_reference(self) -> None:
         html = '<a href="/api/3/action/package_show?id=abc-123">Package</a>'
         url = "https://example.com/other"
-        assert _extract_ckan_dataset_id(url, html) == "abc-123"
+        assert extract_ckan_dataset_id(url, html) == "abc-123"
 
 
 class TestDetectCkan:
     def test_detects_data_view_embed(self) -> None:
         html = b'<div data-view-embed="/dataset/...">CKAN</div>'
-        assert _detect_ckan(html) is True
+        assert detect_ckan_in_html(html) is True
 
     def test_detects_api_action(self) -> None:
         html = b'/api/3/action/package_show'
-        assert _detect_ckan(html) is True
+        assert detect_ckan_in_html(html) is True
 
     def test_detects_ckan_css_class(self) -> None:
         html = b'<div class="ckan-1000">Content</div>'
-        assert _detect_ckan(html) is True
+        assert detect_ckan_in_html(html) is True
 
     def test_detects_package_id(self) -> None:
         html = b'{"package_id": "abc-123"}'
-        assert _detect_ckan(html) is True
+        assert detect_ckan_in_html(html) is True
 
     def test_rejects_non_ckan_html(self) -> None:
         html = b'<html><body><p>Plain HTML page</p></body></html>'
-        assert _detect_ckan(html) is False
+        assert detect_ckan_in_html(html) is False
 
 
 class TestGenerateYamlScaffold:
@@ -367,35 +364,6 @@ class TestGenerateYamlScaffold:
         assert 'url: "https://portal.it/download/report.xlsx"' in yaml
 
 
-def test_scout_url_scaffold_flag_http_file() -> None:
-    server, base_url = _serve()
-    runner = CliRunner()
-    try:
-        result = runner.invoke(app, ["inspect", "url", "--scaffold", f"{base_url}/files/demo.csv"])
-    finally:
-        server.shutdown()
-        server.server_close()
-
-    assert result.exit_code == 0
-    assert "root:" in result.output
-    assert '_source"' in result.output  # source name derived from slug with hash
-    assert 'type: "http_file"' in result.output
-    assert "dataset:" in result.output
-    assert "raw:" in result.output
-
-
-def test_scout_url_scaffold_flag_html_uses_candidate_links() -> None:
-    server, base_url = _serve()
-    runner = CliRunner()
-    try:
-        result = runner.invoke(app, ["inspect", "url", "--scaffold", f"{base_url}/html"])
-    finally:
-        server.shutdown()
-        server.server_close()
-
-    assert result.exit_code == 0
-    assert "root:" in result.output
-    assert 'type: "http_file"' in result.output
-    # HTML page has links to CSV, XLSX in test server
-    assert "seriestoricheannualiinps" not in result.output  # uses data.csv stem
-    assert "data_source" in result.output or "csv" in result.output
+# --scaffold e --run sono stati rimossi da inspect url.
+# Usa: toolkit init --url <URL>  per scaffold
+# Usa: toolkit init --url <URL> --run  per scaffold + raw run

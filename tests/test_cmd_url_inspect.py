@@ -2,19 +2,19 @@
 and toolkit/cli/_url_scout_common.py (slugify + YAML scaffold).
 
 contract: generate_yaml_scaffold output format (used by CLI scaffold)
-pure_unit: _is_html, _is_file_like, _candidate_links, _detect_ckan, _extract_ckan_dataset_id
+pure_unit: is_html_content, is_file_like, extract_candidate_links, detect_ckan_in_html, extract_ckan_dataset_id
 """
 
 import pytest
 
-from toolkit.cli._url_probe import (
-    _candidate_links,
-    _detect_ckan,
-    _extract_ckan_dataset_id,
-    _is_file_like,
-    _is_html,
+from toolkit.scout.http import (
+    detect_ckan_in_html,
+    extract_candidate_links,
+    extract_ckan_dataset_id,
+    is_file_like,
+    is_html_content,
 )
-from toolkit.cli._url_scout_common import generate_yaml_scaffold, slugify
+from toolkit.scout.scaffold import generate_yaml_scaffold, slugify
 
 
 # ---------------------------------------------------------------------------
@@ -147,8 +147,8 @@ class TestIsHtml:
             (None, False),
         ],
     )
-    def test_is_html(self, content_type: str | None, expected: bool) -> None:
-        assert _is_html(content_type) is expected
+    def testis_html_content(self, content_type: str | None, expected: bool) -> None:
+        assert is_html_content(content_type) is expected
 
 
 class TestIsFileLike:
@@ -182,10 +182,10 @@ class TestIsFileLike:
             ("https://example.com/page", None, None, False),
         ],
     )
-    def test_is_file_like(
+    def testis_file_like(
         self, url: str, content_type: str | None, content_disposition: str | None, expected: bool
     ) -> None:
-        assert _is_file_like(url, content_type, content_disposition) is expected
+        assert is_file_like(url, content_type, content_disposition) is expected
 
 
 class TestCandidateLinks:
@@ -231,13 +231,13 @@ class TestCandidateLinks:
         ],
     )
     def test_candidate_links(self, html: str, base_url: str, expected_count: int) -> None:
-        links = _candidate_links(base_url, html)
+        links = extract_candidate_links(base_url, html)
         assert len(links) == expected_count
 
     @pytest.mark.pure_unit
     def test_relative_link_made_absolute(self) -> None:
         html = '<html><body><a href="/files/data.csv">CSV</a></body></html>'
-        links = _candidate_links("https://example.com", html)
+        links = extract_candidate_links("https://example.com", html)
         assert "https://example.com/files/data.csv" in links
 
 
@@ -281,7 +281,7 @@ class TestExtractCkanDatasetId:
     def test_extract_ckan_dataset_id(
         self, url: str, html: str | None, expected: str | None
     ) -> None:
-        result = _extract_ckan_dataset_id(url, html)
+        result = extract_ckan_dataset_id(url, html)
         assert result == expected
 
 
@@ -300,8 +300,8 @@ class TestDetectCkan:
             (b"", False),
         ],
     )
-    def test_detect_ckan(self, html_bytes: bytes, expected: bool) -> None:
-        assert _detect_ckan(html_bytes) is expected
+    def testdetect_ckan_in_html(self, html_bytes: bytes, expected: bool) -> None:
+        assert detect_ckan_in_html(html_bytes) is expected
 
 
 # ---------------------------------------------------------------------------

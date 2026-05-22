@@ -44,6 +44,7 @@ class SdmxSource:
         user_agent: str | None = None,
         data_base_url: str | None = None,
         metadata_base_url: str | None = None,
+        timeout_escalation: list[int] | None = None,
     ):
         self.timeout = timeout
         self.retries = retries
@@ -58,6 +59,7 @@ class SdmxSource:
             timeout=timeout,
             max_retries=retries,
             user_agent=self.user_agent,
+            timeout_escalation=timeout_escalation,
         )
 
     def _candidate_base_urls(self, agency: str, primary: str, alternate: str) -> list[str]:

@@ -22,8 +22,11 @@ class SparqlSource:
     is idempotent: same query → same result).
     """
 
-    def __init__(self, timeout: int = 60):
-        self._client = HttpClient(timeout=timeout)
+    def __init__(self, timeout: int = 60, timeout_escalation: list[int] | None = None):
+        self._client = HttpClient(
+            timeout=timeout,
+            timeout_escalation=timeout_escalation,
+        )
 
     def fetch(
         self,

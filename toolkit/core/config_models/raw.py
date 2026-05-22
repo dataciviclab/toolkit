@@ -16,6 +16,7 @@ class ClientConfig(BaseModel):
     retries: int | None = None
     user_agent: str | None = None
     headers: dict[str, str] | None = None
+    timeout_escalation: list[int] | None = None
 
     @field_validator("headers", mode="before")
     @classmethod

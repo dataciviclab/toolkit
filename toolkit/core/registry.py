@@ -75,7 +75,10 @@ _BUILTIN_PLUGINS: tuple[dict[str, Any], ...] = (
         "module": "toolkit.plugins.sparql",
         "class_name": "SparqlSource",
         "optional": False,
-        "factory": lambda cls: (lambda **client: cls(timeout=client.get("timeout", 60))),
+        "factory": lambda cls: (lambda **client: cls(
+            timeout=client.get("timeout", 60),
+            timeout_escalation=client.get("timeout_escalation"),
+        )),
     },
 )
 

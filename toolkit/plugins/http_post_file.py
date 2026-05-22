@@ -39,7 +39,13 @@ class HttpPostFileSource:
        set ``max_retries=0`` in ``raw.sources[].client``.
     """
 
-    def __init__(self, timeout: int = 60, retries: int = 2, user_agent: str | None = None):
+    def __init__(
+        self,
+        timeout: int = 60,
+        retries: int = 2,
+        user_agent: str | None = None,
+        timeout_escalation: list[int] | None = None,
+    ):
         self.timeout = timeout
         self.retries = retries
         self.user_agent = user_agent or "dataciviclab-toolkit/0.1"
@@ -47,6 +53,7 @@ class HttpPostFileSource:
             timeout=timeout,
             max_retries=retries,
             user_agent=self.user_agent,
+            timeout_escalation=timeout_escalation,
         )
 
     def fetch(self, url: str, data: dict | None = None) -> bytes:

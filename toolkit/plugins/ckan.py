@@ -46,7 +46,13 @@ def _force_https(url: str) -> str:
 class CkanSource:
     """Resolve a CKAN resource via resource_show, then download its current URL."""
 
-    def __init__(self, timeout: int = 60, retries: int = 2, user_agent: str | None = None):
+    def __init__(
+        self,
+        timeout: int = 60,
+        retries: int = 2,
+        user_agent: str | None = None,
+        timeout_escalation: list[int] | None = None,
+    ):
         self.timeout = timeout
         self.retries = retries
         self.user_agent = user_agent or "dataciviclab-toolkit/0.1"
@@ -54,6 +60,7 @@ class CkanSource:
             timeout=timeout,
             max_retries=retries,
             user_agent=self.user_agent,
+            timeout_escalation=timeout_escalation,
         )
 
     def _get_json(self, url: str, params: dict[str, str]) -> dict:

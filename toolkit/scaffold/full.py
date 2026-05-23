@@ -182,7 +182,7 @@ def suggest_mart_sql(columns: list[dict[str, Any]] | list[str], profile: dict[st
     has_numeric = _has_numeric_column(col_names, profile)
     if has_year and has_numeric:
         year_keywords = ["anno", "year", "periodo", "period"]
-        measure_keywords = ["importo", "ammontare", "valore", "costo", "spesa", "gettito", "reddito"]
+        measure_keywords = ["importo", "ammontare", "valore", "costo", "spesa", "gettito", "reddito", "canone", "prezzo", "tariffa"]
         mapping = profile.get("mapping_suggestions") or {}
         numeric_col = None
 

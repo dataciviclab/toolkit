@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import pytest
 from typer.testing import CliRunner
 
 from lab_connectors.http import HttpClient, HttpResult
@@ -76,6 +78,7 @@ def _serve() -> tuple[ThreadingHTTPServer, str]:
     return server, f"http://{host}:{port}"
 
 
+@pytest.mark.contract
 def test_scout_url_reports_file_headers_after_redirect() -> None:
     server, base_url = _serve()
     runner = CliRunner()
@@ -91,6 +94,7 @@ def test_scout_url_reports_file_headers_after_redirect() -> None:
     assert "CSV" in result.output
 
 
+@pytest.mark.contract
 def test_scout_url_extracts_candidate_links_from_html() -> None:
     server, base_url = _serve()
     runner = CliRunner()
@@ -107,6 +111,7 @@ def test_scout_url_extracts_candidate_links_from_html() -> None:
     assert f"{base_url}/reports/report.xlsx" in result.output
 
 
+@pytest.mark.contract
 def test_scout_url_marks_opaque_non_html_response() -> None:
     server, base_url = _serve()
     runner = CliRunner()
@@ -120,6 +125,7 @@ def test_scout_url_marks_opaque_non_html_response() -> None:
     assert "Source type: opaque" in result.output
 
 
+@pytest.mark.pure_unit
 def test_probe_url_uses_head_then_get_only_for_html(monkeypatch) -> None:
     calls: list[tuple[str, str]] = []  # (method, url)
 
@@ -169,6 +175,7 @@ def test_probe_url_uses_head_then_get_only_for_html(monkeypatch) -> None:
     assert calls[2] == ("get", "https://example.org/html")
 
 
+@pytest.mark.pure_unit
 def test_probe_url_falls_back_to_get_when_head_fails(monkeypatch) -> None:
     """HEAD fails with error, GET with Range succeeds → probe returns file info."""
     head_called = False
@@ -202,6 +209,7 @@ def test_probe_url_falls_back_to_get_when_head_fails(monkeypatch) -> None:
     assert "csv" in (result["content_type"] or "")
 
 
+@pytest.mark.pure_unit
 def test_probe_url_passes_timeout_and_user_agent(monkeypatch) -> None:
     """Verify probe_url creates HttpClient with the correct timeout and user-agent."""
     init_captured: dict = {}

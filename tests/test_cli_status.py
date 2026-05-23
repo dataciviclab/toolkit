@@ -3,9 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from toolkit.core.run_context import get_run_dir
+
 from toolkit.cli.app import app
 from tests.helpers import make_dataset_yml, make_standard_sql
+
+pytestmark = [pytest.mark.contract, pytest.mark.core]
 
 
 def _write_run_record(path: Path, run_id: str, started_at: str, status: str) -> None:
@@ -177,32 +181,31 @@ mart:
   tables:
     - name: mart_ok
       sql: "sql/mart/mart_ok.sql"
+    - name: multi_ok
+      sql: "sql/multi/multi_ok.sql"
+      years: [2022]
   required_tables: ["mart_ok", "mart_missing"]
-cross_year:
-  tables:
-    - name: cross_ok
-      sql: "sql/cross/cross_ok.sql"
 """,
         encoding="utf-8",
     )
 
     sql_mart_dir = project_dir / "sql" / "mart"
-    sql_cross_dir = project_dir / "sql" / "cross"
+    sql_multi_dir = project_dir / "sql" / "multi"
     sql_mart_dir.mkdir(parents=True, exist_ok=True)
-    sql_cross_dir.mkdir(parents=True, exist_ok=True)
+    sql_multi_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
     (sql_mart_dir / "mart_ok.sql").write_text("select * from clean_input", encoding="utf-8")
-    (sql_cross_dir / "cross_ok.sql").write_text("select * from clean_input", encoding="utf-8")
+    (sql_multi_dir / "multi_ok.sql").write_text("select * from clean_input", encoding="utf-8")
 
     clean_dir = project_dir / "out" / "data" / "clean" / "demo_ds" / "2022"
     mart_dir = project_dir / "out" / "data" / "mart" / "demo_ds" / "2022"
-    cross_dir = project_dir / "out" / "data" / "cross" / "demo_ds"
+    multi_dir = project_dir / "out" / "data" / "mart" / "demo_ds"
     (clean_dir / "_validate").mkdir(parents=True, exist_ok=True)
     (mart_dir / "_validate").mkdir(parents=True, exist_ok=True)
-    (cross_dir / "_validate").mkdir(parents=True, exist_ok=True)
+    (multi_dir / "_validate").mkdir(parents=True, exist_ok=True)
 
     (clean_dir / "demo_ds_2022_clean.parquet").write_text("placeholder", encoding="utf-8")
-    (cross_dir / "cross_ok.parquet").write_text("placeholder", encoding="utf-8")
+    (multi_dir / "multi_ok.parquet").write_text("placeholder", encoding="utf-8")
 
     (clean_dir / "manifest.json").write_text(
         json.dumps(
@@ -261,27 +264,11 @@ cross_year:
         encoding="utf-8",
     )
 
-    (cross_dir / "manifest.json").write_text(
+    (multi_dir / "metadata.json").write_text(
         json.dumps(
             {
-                "validation": "_validate/cross_validation.json",
-                "summary": {"ok": True, "errors_count": 0, "warnings_count": 0},
-                "outputs": [{"file": "cross_ok.parquet"}],
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-    (cross_dir / "_validate" / "cross_validation.json").write_text(
-        json.dumps(
-            {
-                "ok": True,
-                "errors": [],
-                "warnings": [],
-                "summary": {
-                    "required_tables": [],
-                    "tables": ["cross_ok"],
-                },
+                "layer": "mart_multi_year",
+                "tables": [{"name": "multi_ok", "years": [2022]}],
             },
             indent=2,
         ),
@@ -305,13 +292,13 @@ cross_year:
         ],
     )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert "validation_summary:" in result.output
     assert "clean: state=passed warnings=1 errors=0" in result.output
     assert "missing_columns=value" in result.output
     assert "mart: state=failed warnings=1 errors=1" in result.output
     assert "missing_tables=mart_missing" in result.output
-    assert "cross_year: state=passed warnings=0 errors=0" in result.output
+    assert "multi_year_mart:" in result.output
 
 
 def test_status_reports_layer_profiles_from_metadata(

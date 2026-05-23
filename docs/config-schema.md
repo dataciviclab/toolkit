@@ -14,7 +14,7 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 | `raw` | `object` | no | configurazione acquisizione RAW |
 | `clean` | `object` | no | configurazione CLEAN |
 | `mart` | `object` | no | configurazione MART |
-| `cross_year` | `object` | no | output opzionali multi-anno |
+| `cross_year` | `object` | no | ⛔ rimosso — usa `mart.tables[].years` |
 | `config` | `object` | no | policy parser config |
 | `validation` | `object` | no | solo opzioni globali del validation gate |
 | `output` | `object` | no | policy artefatti |
@@ -328,36 +328,33 @@ Errori comuni:
 - usare come chiave di `table_rules` un nome diverso da quello dichiarato in `mart.tables`
 - aspettarsi che `clean.validate` valga automaticamente anche per le tabelle MART
 
-## cross_year
+## mart.tables[].years — output multi-anno (sostituisce cross_year)
 
-`cross_year` definisce output opzionali multi-anno. Non entra nel loop annuale di `raw/clean/mart`.
+Invece del modulo `cross_year` rimosso, le tabelle MART possono dichiarare `years` per aggregare dati da più anni:
 
-L'esecuzione e esplicita:
-
-```bash
-py -m toolkit.cli.app run cross_year --config dataset.yml
+```yaml
+mart:
+  tables:
+    - name: clean_union
+      sql: sql/multi_year/clean_union.sql
+      years: [2022, 2023]
+      source_layer: clean
 ```
 
-Campi supportati:
+Campi aggiuntivi su `MartTable` (oltre a `name` e `sql`):
 
 | Campo | Tipo | Default |
 |---|---|---|
-| `cross_year.tables` | `list[CrossYearTable]` | `[]` |
-
-`CrossYearTable`:
-
-| Campo | Tipo | Default |
-|---|---|---|
-| `name` | `string` | nessuno |
-| `sql` | `string` | nessuno |
+| `years` | `list[int]` | `None` (usa anno corrente) |
 | `source_layer` | `clean \| mart` | `clean` |
 | `source_table` | `string \| null` | `null` |
 
-Note pratiche:
+Note:
 
-- con `source_layer: clean`, il runner unisce tutti i parquet annuali del layer CLEAN e li espone come view `clean_input` e `clean`
-- con `source_layer: mart`, `source_table` e obbligatorio; il runner legge `<year>/<source_table>.parquet` e lo espone come view `mart_input` e `mart`
-- gli output vengono scritti in `root/data/cross/<dataset>/`
+- quando `years` è specificato, il runner unisce tutti i parquet degli anni indicati e li espone come view `clean_input`
+- con `source_layer: mart`, `source_table` è obbligatorio; legge `<year>/<source_table>.parquet` da ogni anno
+- gli output vengono scritti in `root/data/mart/<dataset>/<name>.parquet` (livello dataset, senza anno)
+- la validazione multi-anno non produce un validation.json separato (la validazione è integrata in MART)
 
 ## validation
 
@@ -393,8 +390,7 @@ I seguenti campi legacy sono ancora accettati, ma generano warning con codice `D
 Con `config.strict: true` o `--strict-config`, gli stessi casi diventano errori.
 
 | Code | Legacy | Replacement | Status |
-|---|---|---|---|
-| `DCL013` | `cross_year.* unknown keys` | rimuovere il campo | ignored |
+|---|---|---|---|---|
 
 ## Legacy rimosso
 
@@ -466,19 +462,20 @@ mart:
         min_rows: 1
 ```
 
-### CROSS_YEAR
+### Multi-year MART
 
-Presuppone che i layer annuali richiesti esistano gia sotto `root/data/clean/...` oppure `root/data/mart/...`.
+Presuppone che i layer annuali richiesti esistano già sotto `root/data/clean/...` oppure `root/data/mart/...`.
 
 ```yaml
 dataset:
-  name: cross_demo
+  name: mart_multi_demo
   years: [2022, 2023]
 
-cross_year:
+mart:
   tables:
     - name: clean_union
-      sql: sql/cross/clean_union.sql
+      sql: sql/multi_year/clean_union.sql
+      years: [2022, 2023]
       source_layer: clean
 ```
 

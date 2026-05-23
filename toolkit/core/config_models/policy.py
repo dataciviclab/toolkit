@@ -29,7 +29,6 @@ _TOP_LEVEL_ALLOWED_KEYS = {
     "clean",
     "mart",
     "support",
-    "cross_year",
     "config",
     "validation",
     "output",
@@ -120,13 +119,10 @@ def _warn_or_reject_unknown_keys(
     from toolkit.core.config_models.raw import RawConfig
     from toolkit.core.config_models.clean import CleanConfig
     from toolkit.core.config_models.mart import MartConfig
-    from toolkit.core.config_models.cross_year import CrossYearConfig
-
     for section_name, allowed_keys, notice_key in (
         ("raw", _declared_model_keys(RawConfig), "unknown.raw"),
         ("clean", _declared_model_keys(CleanConfig), "unknown.clean"),
         ("mart", _declared_model_keys(MartConfig), "unknown.mart"),
-        ("cross_year", _declared_model_keys(CrossYearConfig), "unknown.cross_year"),
     ):
         section = normalized.get(section_name)
         if not isinstance(section, dict):

@@ -94,7 +94,7 @@ Il toolkit non gestisce il deployment: scrive nella directory configurata via
 | Cambiato solo SQL di clean | `toolkit run clean --config dataset.yml` + `toolkit run mart` |
 | Cambiato solo SQL di mart | `toolkit run mart --config dataset.yml` |
 | Run interrotto (artefatti coerenti) | `toolkit resume --dataset <name> --year <year> --config dataset.yml` |
-| Aggiunto/modificato output multi-anno | `toolkit run cross_year --config dataset.yml` |
+| Aggiunto/modificato tabella multi-anno | Aggiungere `years: [2022, 2023]` alla tabella in `mart.tables[]` |
 
 ### Diagnostica
 
@@ -111,8 +111,12 @@ Il toolkit non gestisce il deployment: scrive nella directory configurata via
 
 | Comando | Cosa fa |
 |---|---|
+| `toolkit scout <URL>` | Esplora URL esterno (HTTP/CKAN/SDMX/HTML) — probe + routing + inferenze |
+| `toolkit scout <URL> --scaffold` | Probe + scaffold candidato completo (dataset.yml, SQL, README) |
+| `toolkit scout <URL> --run` | Probe + scaffold + raw run |
+| `toolkit init --url <URL>` | Alias per `scout --scaffold` |
+| `toolkit init --config dataset.yml` | Run raw + scaffold clean.sql |
 | `toolkit scaffold <slug>` | Genera scheletro `dataset.yml` + SQL da un template |
-| `toolkit init` | Inizializza un nuovo dataset interattivamente |
 | `toolkit batch --file jobs.yml` | Esegue più dataset in sequenza |
 
 ---
@@ -135,7 +139,9 @@ clean:
   sql: sql/clean.sql
 
 mart:
-  sql: sql/mart/basic.sql
+  tables:
+    - name: basic
+      sql: sql/mart/basic.sql
 ```
 
 Il toolkit risolve i path relativi rispetto alla directory del `dataset.yml`,
@@ -147,7 +153,7 @@ esegue le trasformazioni SQL su DuckDB e produce output in `root/data/`.
 |---|---|
 | [config-schema.md](docs/config-schema.md) | Specifica completa del YAML (475 righe) |
 | [conventions.md](docs/conventions.md) | Convenzioni su path, metadata, manifest, artifact policy |
-| [advanced-workflows.md](docs/advanced-workflows.md) | Resume, run parziali, profile, cross_year |
+| [advanced-workflows.md](docs/advanced-workflows.md) | Resume, run parziali, profile, debug |
 | [notebook-contract.md](docs/notebook-contract.md) | Come leggere gli output nei notebook |
 | [feature-stability.md](docs/feature-stability.md) | Cosa è stabile, cosa sperimentale, cosa deprecated |
 
@@ -239,12 +245,11 @@ toolkit/
   .github/workflows/     # CI (ci.yml)
   toolkit/                # sorgente del package Python
     cli/                  # comandi CLI (typer)
-    core/                 # engine condiviso: config, path, run record, manifest
+    core/                 # engine condiviso: config, path, run record, manifest, multi_year_source
     core/config_models/   # modello tipizzato Pydantic di dataset.yml
     raw/                  # layer RAW: estrazione, run, validazione
     clean/                # layer CLEAN: lettura CSV/Excel, DuckDB, validazione
     mart/                 # layer MART: aggregazione SQL, validazione
-    cross/                # operazioni multi-anno
     plugins/              # plugin sorgente (http_file, ckan, sdmx, sparql, local_file)
     profile/              # profiling RAW: encoding, delimitatore, colonne
     mcp/                  # server MCP per agenti AI
@@ -280,7 +285,7 @@ toolkit/
 |---|---|
 | [config-schema.md](docs/config-schema.md) | Specifica completa YAML di `dataset.yml` |
 | [conventions.md](docs/conventions.md) | Path, manifest, artifact policy, CLEAN reader logic |
-| [advanced-workflows.md](docs/advanced-workflows.md) | Resume, run parziali, profile, cross_year, debug |
+| [advanced-workflows.md](docs/advanced-workflows.md) | Resume, run parziali, profile, debug |
 | [notebook-contract.md](docs/notebook-contract.md) | Come leggere gli output del toolkit nei notebook |
 | [feature-stability.md](docs/feature-stability.md) | Matrice stabilità: canonico, advanced, compat, deprecated |
 | [toolkit/mcp/README.md](toolkit/mcp/README.md) | Documentazione MCP server |

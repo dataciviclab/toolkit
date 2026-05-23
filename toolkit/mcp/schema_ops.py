@@ -279,7 +279,8 @@ def list_runs(
         "dataset": cfg.dataset,
         "config_path": str(config_path),
         "requested_year": year,
-        "cross_year": cross_year,
+        "all_years": cross_year,
+        "cross_year": cross_year,  # backward compat
         "filters": {
             "since": since,
             "until": until,

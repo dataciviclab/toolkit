@@ -182,16 +182,33 @@ def suggest_mart_sql(columns: list[dict[str, Any]] | list[str], profile: dict[st
     has_numeric = _has_numeric_column(col_names, profile)
     if has_year and has_numeric:
         year_keywords = ["anno", "year", "periodo", "period"]
+        measure_keywords = ["importo", "ammontare", "valore", "costo", "spesa", "gettito", "reddito"]
         mapping = profile.get("mapping_suggestions") or {}
         numeric_col = None
+
+        # 1. Cerca colonna con keyword misura (evita ID)
         for name in col_names:
             is_year_col = any(kw in name.lower() for kw in year_keywords)
             spec = mapping.get(name) or {}
             if is_year_col:
                 continue
             if spec.get("type") in ("integer", "float", "double", "bigint", "decimal", "int"):
-                numeric_col = name
-                break
+                if any(kw in name.lower() for kw in measure_keywords):
+                    numeric_col = name
+                    break
+
+        # 2. Fallback: primo numerico non-anno
+        if numeric_col is None:
+            for name in col_names:
+                is_year_col = any(kw in name.lower() for kw in year_keywords)
+                spec = mapping.get(name) or {}
+                if is_year_col:
+                    continue
+                if spec.get("type") in ("integer", "float", "double", "bigint", "decimal", "int"):
+                    numeric_col = name
+                    break
+
+        # 3. Fallback estremo: primo numerico
         if numeric_col is None:
             for name in col_names:
                 spec = mapping.get(name) or {}

@@ -160,6 +160,9 @@ def _route_html(
 
     candidate_links = extract_candidate_links(final_url, html_text)
     is_ckan = detect_ckan_in_html(html_bytes)
+    # Se l'URL contiene /dataset/, probabilmente è CKAN anche senza firme HTML
+    if not is_ckan and "/dataset/" in urlparse(final_url).path:
+        is_ckan = True
 
     if is_ckan:
         # Tentativo: se l'URL punta a un dataset specifico, fetcha le risorse

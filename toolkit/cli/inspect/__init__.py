@@ -1,5 +1,4 @@
-"""inspect subcommand package — paths, schema-diff, url, probe, schema, profile."""
-
+"""inspect subcommand package — paths, schema-diff, probe, schema, profile."""
 from __future__ import annotations
 
 import typer
@@ -8,8 +7,8 @@ from toolkit.cli.inspect.paths_ops import paths
 from toolkit.cli.inspect.profile_ops import profile
 from toolkit.cli.inspect.schema_diff_ops import schema_diff
 from toolkit.cli.inspect.schema_ops import schema
-from toolkit.cli.inspect.url_ops import url
 from toolkit.cli.inspect.probe_ops import probe
+from toolkit.cli.inspect.url_ops import url
 
 
 def register(app: typer.Typer) -> None:
@@ -19,6 +18,6 @@ def register(app: typer.Typer) -> None:
     inspect_app.command("profile")(profile)
     inspect_app.command("schema-diff")(schema_diff)
     inspect_app.command("schema")(schema)
-    inspect_app.command("url")(url)
     inspect_app.command("probe")(probe)
+    inspect_app.command("url", hidden=True, help="[DEPRECATO] Usa 'toolkit scout'.")(url)
     app.add_typer(inspect_app, name="inspect", help="Ispeziona path, schema, readiness e URL del dataset.")

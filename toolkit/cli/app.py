@@ -12,6 +12,7 @@ from toolkit.cli.cmd_scaffold import register as register_scaffold
 from toolkit.cli.cmd_batch import register as register_batch
 from toolkit.cli.cmd_review_readiness import register as register_review_readiness
 from toolkit.cli.cmd_init import register as register_init
+from toolkit.cli.cmd_scout import register as register_scout
 from toolkit.version import __version__
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -38,6 +39,7 @@ register_scaffold(app)
 register_batch(app)
 register_review_readiness(app)
 register_init(app)
+register_scout(app)
 
 
 def main():

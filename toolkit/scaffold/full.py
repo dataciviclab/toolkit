@@ -403,15 +403,18 @@ def _scaffold_hierarchy_marts(
 
         if grain_cols and metric_cols:
             grain_expr = ", ".join(f'"{c}"' for c in grain_cols)
-            sum_exprs = ",\n    ".join(
-                f'SUM("{m}") AS "totale_{m}"' for m in metric_cols[:5]
-            )
+            sum_metrics = metric_cols[:5]
+            sum_lines = []
+            for i, m in enumerate(sum_metrics):
+                comma = "," if i < len(sum_metrics) - 1 else ""
+                sum_lines.append(f'  SUM("{m}") AS "totale_{m}"{comma}')
+            sum_block = "\n".join(sum_lines)
             sql = (
                 f"-- {level_name}: aggregazione per {axis}\n"
                 f"-- Grain: {', '.join(grain_cols)}\n"
                 f"SELECT\n"
                 f"  {grain_expr},\n"
-                f"  {sum_exprs}\n"
+                f"{sum_block}\n"
                 f"FROM clean\n"
                 f"GROUP BY {grain_expr}\n"
             )

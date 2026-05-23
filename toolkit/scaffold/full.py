@@ -7,11 +7,10 @@ Dipende da:
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from toolkit.scaffold.sources import block_ckan, block_http_file, block_links, block_sdmx, infer_filename, slugify
+from toolkit.scaffold.sources import block_ckan, block_http_file, block_links, block_sdmx, infer_filename
 
 
 def _format_years(years: list[int]) -> str:

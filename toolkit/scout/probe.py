@@ -203,7 +203,7 @@ def _route_sdmx(
     elif parsed_url.query:
         from urllib.parse import parse_qs
         qs = parse_qs(parsed_url.query)
-        flow_id = (qs.get("flow") or qs.get("id") or [None])[0]
+        flow_id = next(iter(qs.get("flow") or qs.get("id") or []), None)
 
     if flow_id:
         year_min, year_max = fetch_sdmx_years(final_url, flow_id, timeout=timeout)

@@ -8,6 +8,7 @@ import typer
 
 from toolkit.cli.common import format_profile_preview, load_layer_profile_summaries
 from toolkit.core.config import load_config
+from toolkit.core.paths import layer_dataset_dir
 from toolkit.core.run_context import get_run_dir, read_run_record
 from toolkit.mcp.schema_ops import summary as _summary
 
@@ -72,7 +73,7 @@ def _print_validation_details(layer_name: str, vpath: Path) -> None:
         if missing_cols:
             details.append(f"missing_columns={','.join(str(c) for c in missing_cols)}")
 
-    if layer_name in ("mart", "cross_year"):
+    if layer_name in ("mart",):
         required_tables = summary.get("required_tables") or []
         tables = summary.get("tables") or []
         missing_tables = [t for t in required_tables if t not in set(tables)] if isinstance(required_tables, list) and isinstance(tables, list) else []
@@ -223,21 +224,21 @@ def status(
 
     _print_validation_summaries(layers)
 
-    # cross_year
-    cy = getattr(cfg, "cross_year", None)
-    if cy and cy.get("tables"):
-        from toolkit.core.paths import layer_dataset_dir
-        cross_dir = layer_dataset_dir(cfg.root, "cross", dataset)
-        cv = cross_dir / "_validate" / "cross_validation.json"
-        if cv.exists():
-            content = json.loads(cv.read_text(encoding="utf-8"))
-            ok = content.get("ok")
-            state = "passed" if ok else ("failed" if ok is False else "?")
-            errs = len(content.get("errors", []))
-            warns = len(content.get("warnings", []))
-            typer.echo("")
-            typer.echo(f"  cross_year: state={state} warnings={warns} errors={errs}")
-            _print_validation_details("cross_year", cv)
+    # multi-year mart (ex cross_year)
+    mart_cfg = getattr(cfg, "mart", None) or {}
+    multi_year_tables = [t for t in (mart_cfg.get("tables") or []) if isinstance(t, dict) and t.get("years")]
+    if multi_year_tables:
+        my_dir = layer_dataset_dir(cfg.root, "mart", dataset)
+        my_meta = my_dir / "metadata.json"
+        if my_meta.exists():
+            content = json.loads(my_meta.read_text(encoding="utf-8"))
+            my_layer = content.get("layer", "")
+            if my_layer == "mart_multi_year":
+                my_tables = content.get("tables") or []
+                typer.echo("")
+                typer.echo(f"  multi_year_mart: {len(my_tables)} table(s)")
+                for t in my_tables:
+                    typer.echo(f"    - {t.get('name', '?')} years={t.get('years', [])}")
 
     _print_layer_profiles(dataset, year, layers)
 

@@ -69,11 +69,6 @@ from toolkit.core.config_models.mart import (
     MartValidationSpec,
     TransitionConfig,
 )
-from toolkit.core.config_models.cross_year import (
-    CrossYearConfig,
-    CrossYearTableConfig,
-)
-
 # --- Loader (ToolkitConfigModel and load_config_model) ---
 from toolkit.core.config_models._loader import (
     ToolkitConfigModel,
@@ -131,9 +126,6 @@ __all__ = [
     "MartValidateConfig",
     "MartValidationSpec",
     "TransitionConfig",
-    # Cross-year
-    "CrossYearConfig",
-    "CrossYearTableConfig",
     # Loader
     "ToolkitConfigModel",
     "load_config_model",

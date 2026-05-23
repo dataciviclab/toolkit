@@ -67,8 +67,8 @@ def write_run_record(run_dir: Path, run_id: str, payload: dict) -> Path:
 # --- Query helpers -----------------------------------------------------------
 
 
-def _is_cross_year_run_dir(run_dir: Path) -> bool:
-    """Detect if run_dir is dataset-level (cross-year) vs year-level.
+def _is_dataset_level_run_dir(run_dir: Path) -> bool:
+    """Detect if run_dir is dataset-level (no year subdir) vs year-level.
 
     True when run_dir is data/_runs/{dataset} (no year subdir).
     False when run_dir is data/_runs/{dataset}/{year}.
@@ -78,7 +78,6 @@ def _is_cross_year_run_dir(run_dir: Path) -> bool:
         runs_idx = parts.index("_runs")
     except ValueError:
         return False
-    # dataset-level: data/_runs/{dataset} with no year subdir after
     if len(parts) <= runs_idx + 2:
         return True
     after_dataset = parts[runs_idx + 2]
@@ -106,9 +105,9 @@ def list_runs(
         return []
 
     all_records: list[dict[str, Any]] = []
-    # cross_year=True: run_dir is dataset-level (data/_runs/{dataset}),
-    # need rglob to find JSON in year subdirectories
-    pattern = "**/*.json" if _is_cross_year_run_dir(run_dir) else "*.json"
+    # dataset-level run_dir (data/_runs/{dataset}): need rglob to find JSON in
+    # year subdirectories
+    pattern = "**/*.json" if _is_dataset_level_run_dir(run_dir) else "*.json"
     for path in sorted(run_dir.glob(pattern)):
         try:
             record = _load_run_record(path)

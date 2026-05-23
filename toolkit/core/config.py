@@ -109,10 +109,6 @@ class ToolkitConfig:
         return _wrap_model(self._model.mart)
 
     @property
-    def cross_year(self) -> _CompatModel:
-        return _wrap_model(self._model.cross_year)
-
-    @property
     def config(self) -> _CompatModel:
         return _wrap_model(self._model.config)
 

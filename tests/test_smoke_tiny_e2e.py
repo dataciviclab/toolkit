@@ -7,12 +7,15 @@ import zipfile
 from pathlib import Path
 
 import duckdb
+import pytest
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
 from toolkit.cli.cmd_run import run_year
 from toolkit.core.config import load_config
 from toolkit.core.logging import get_logger
+
+pytestmark = [pytest.mark.smoke, pytest.mark.core]
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -256,7 +259,7 @@ def _write_cross_year_project(project_dir: Path) -> Path:
         """,
     )
     _write_text(
-        project_dir / "sql" / "cross" / "clean_union.sql",
+        project_dir / "sql" / "multi_year" / "clean_union.sql",
         """
         SELECT
           anno,
@@ -300,16 +303,15 @@ def _write_cross_year_project(project_dir: Path) -> Path:
           tables:
             - name: mart_totali
               sql: sql/mart_totali.sql
+            - name: clean_union
+              sql: sql/multi_year/clean_union.sql
+              years: [2024, 2025]
+              source_layer: clean
           required_tables: [mart_totali]
           validate:
             table_rules:
               mart_totali:
                 required_columns: [anno, totale]
-        cross_year:
-          tables:
-            - name: clean_union
-              sql: sql/cross/clean_union.sql
-              source_layer: clean
         validation:
           fail_on_error: true
         """,
@@ -425,16 +427,17 @@ def test_smoke_e2e_local_file_path_year_template(tmp_path: Path) -> None:
     assert raw_manifest["primary_output_file"] == "tiny_it_2024.csv"
 
 
-def test_smoke_e2e_cross_year_cli_flow(tmp_path: Path) -> None:
-    project_dir = tmp_path / "cross_year_project"
+def test_smoke_e2e_multi_year_mart(tmp_path: Path) -> None:
+    project_dir = tmp_path / "multi_year_mart_project"
     dataset_yml = _write_cross_year_project(project_dir)
 
     runner = CliRunner()
     run_all = runner.invoke(app, ["run", "all", "--config", str(dataset_yml)])
     assert run_all.exit_code == 0, run_all.stdout
 
-    run_cross = runner.invoke(app, ["run", "cross_year", "--config", str(dataset_yml)])
-    assert run_cross.exit_code == 0, run_cross.stdout
+    # Multi-year mart runs automatically after per-year mart processing
+    run_mart = runner.invoke(app, ["run", "mart", "--config", str(dataset_yml)])
+    assert run_mart.exit_code == 0, run_mart.stdout
 
     root = project_dir / "out"
     dataset = "tiny_cross_year"
@@ -443,27 +446,25 @@ def test_smoke_e2e_cross_year_cli_flow(tmp_path: Path) -> None:
         assert (clean_dir / f"{dataset}_{year}_clean.parquet").exists()
         assert (clean_dir / "_validate" / "clean_validation.json").exists()
 
-    cross_dir = root / "data" / "cross" / dataset
-    assert (cross_dir / "clean_union.parquet").exists()
-    assert (cross_dir / "metadata.json").exists()
-    assert (cross_dir / "manifest.json").exists()
-    assert (cross_dir / "_validate" / "cross_validation.json").exists()
+    # Multi-year mart output at dataset level (ex cross_year)
+    mart_dir = root / "data" / "mart" / dataset
+    assert (mart_dir / "clean_union.parquet").exists()
+    assert (mart_dir / "metadata.json").exists()
 
-    cross_validation = json.loads((cross_dir / "_validate" / "cross_validation.json").read_text(encoding="utf-8"))
-    assert cross_validation["ok"] is True
-
-    manifest = json.loads((cross_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["validation"] == "_validate/cross_validation.json"
-    assert manifest["summary"]["ok"] is True
+    metadata = json.loads((mart_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["layer"] == "mart_multi_year"
+    tables = metadata.get("tables") or []
+    assert any(t.get("name") == "clean_union" for t in tables)
+    assert any(t.get("years") == [2024, 2025] for t in tables)
 
     con = duckdb.connect(":memory:")
     rows = con.execute(
-        f"SELECT COUNT(*) FROM read_parquet('{(cross_dir / 'clean_union.parquet').as_posix()}')"
+        f"SELECT COUNT(*) FROM read_parquet('{(mart_dir / 'clean_union.parquet').as_posix()}')"
     ).fetchone()[0]
-    years = con.execute(
-        f"SELECT COUNT(DISTINCT anno) FROM read_parquet('{(cross_dir / 'clean_union.parquet').as_posix()}')"
+    years_count = con.execute(
+        f"SELECT COUNT(DISTINCT anno) FROM read_parquet('{(mart_dir / 'clean_union.parquet').as_posix()}')"
     ).fetchone()[0]
     con.close()
 
     assert int(rows) == 2
-    assert int(years) == 2
+    assert int(years_count) == 2

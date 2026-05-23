@@ -10,7 +10,6 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from toolkit.core.config_models.clean import CleanConfig
-from toolkit.core.config_models.cross_year import CrossYearConfig
 from toolkit.core.config_models.mart import MartConfig
 from toolkit.core.config_models.raw import RawConfig
 from toolkit.core.config_models.common import (
@@ -42,7 +41,6 @@ class ToolkitConfigModel(BaseModel):
     clean: CleanConfig = Field(default_factory=CleanConfig)
     mart: MartConfig = Field(default_factory=MartConfig)
     support: list[SupportDatasetConfig] = Field(default_factory=list)
-    cross_year: CrossYearConfig = Field(default_factory=CrossYearConfig)
     config: ConfigPolicy = Field(default_factory=ConfigPolicy)
     validation: GlobalValidationConfig = Field(default_factory=GlobalValidationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
@@ -127,7 +125,6 @@ def load_config_model(
     clean = normalized.get("clean", {}) or {}
     mart = normalized.get("mart", {}) or {}
     support = normalized.get("support", []) or []
-    cross_year = normalized.get("cross_year", {}) or {}
 
     normalized_fields: list[tuple[str, Path]] = []
     if isinstance(raw, dict):
@@ -142,9 +139,6 @@ def load_config_model(
     if isinstance(support, list):
         support, support_changes = _normalize_section_paths("support", support, base_dir=base_dir)
         normalized_fields.extend(support_changes)
-    if isinstance(cross_year, dict):
-        cross_year, cross_year_changes = _normalize_section_paths("cross_year", cross_year, base_dir=base_dir)
-        normalized_fields.extend(cross_year_changes)
     normalized_fields.append(("root", root_path))
 
     if normalized_fields:
@@ -161,7 +155,6 @@ def load_config_model(
         "clean": clean,
         "mart": mart,
         "support": support,
-        "cross_year": cross_year,
     }
 
     try:

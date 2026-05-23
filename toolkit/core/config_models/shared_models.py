@@ -46,10 +46,6 @@ _CONFIG_DEPRECATIONS: dict[str, ConfigDeprecation] = {
         code="DCL012",
         message="unknown mart config keys detected",
     ),
-    "unknown.cross_year": ConfigDeprecation(
-        code="DCL013",
-        message="unknown cross_year config keys detected",
-    ),
 }
 
 

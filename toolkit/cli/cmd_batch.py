@@ -6,9 +6,9 @@ from time import perf_counter
 import typer
 
 from toolkit.cli.common import load_cfg_and_logger
-from toolkit.cli.cmd_run import run_cross_year_step, run_year
+from toolkit.cli.cmd_run import run_year
 
-_ALLOWED_STEPS = {"raw", "clean", "mart", "cross_year", "all"}
+_ALLOWED_STEPS = {"raw", "clean", "mart", "all"}
 
 
 def _read_config_list(configs_file: Path) -> list[Path]:
@@ -65,7 +65,7 @@ def batch(
     configs: str = typer.Option(
         ..., "--configs", help="Path to a text file with one dataset.yml path per line"
     ),
-    step: str = typer.Option("all", "--step", help="raw | clean | mart | cross_year | all"),
+    step: str = typer.Option("all", "--step", help="raw | clean | mart | all"),
     strict_config: bool = typer.Option(
         False, "--strict-config", help="Treat deprecated config forms as errors"
     ),
@@ -74,7 +74,7 @@ def batch(
     Esegue più config in sequenza e stampa un report aggregato finale.
     """
     if step not in _ALLOWED_STEPS:
-        raise typer.BadParameter("step must be one of: raw, clean, mart, cross_year, all")
+        raise typer.BadParameter("step must be one of: raw, clean, mart, all")
 
     configs_file = Path(configs)
     config_paths = _read_config_list(configs_file)
@@ -90,33 +90,7 @@ def batch(
             cfg, logger = load_cfg_and_logger(str(config_path), strict_config=strict_config_flag)
             dataset_label = cfg.dataset
 
-            if step == "cross_year":
-                run_started_at = perf_counter()
-                status = "FAILED"
-                try:
-                    run_cross_year_step(cfg, logger=logger)
-                    status = "SUCCESS"
-                except Exception as exc:
-                    failures.append(
-                        {
-                            "config": str(config_path),
-                            "dataset": dataset_label,
-                            "years": _format_years(list(cfg.years)),
-                            "error": str(exc),
-                        }
-                    )
-                finally:
-                    rows.append(
-                        {
-                            "dataset": dataset_label,
-                            "years": _format_years(list(cfg.years)),
-                            "step": step,
-                            "status": status,
-                            "duration": _format_duration(perf_counter() - run_started_at),
-                        }
-                    )
-            else:
-                for year in cfg.years:
+            for year in cfg.years:
                     run_started_at = perf_counter()
                     status = "FAILED"
                     try:

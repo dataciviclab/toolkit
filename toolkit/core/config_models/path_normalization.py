@@ -53,7 +53,6 @@ _SECTION_PATH_WHITELIST: dict[str, tuple[tuple[str, ...], ...]] = {
     "clean": (("sql",),),
     "mart": (("tables", "*", "sql"),),
     "support": (("*", "config"),),
-    "cross_year": (("tables", "*", "sql"),),
 }
 
 

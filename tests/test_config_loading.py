@@ -187,10 +187,9 @@ def test_load_config_resolves_relative_paths_from_dataset_dir(tmp_path: Path):
         "  tables:\n"
         "    - name: demo_mart\n"
         "      sql: 'sql/mart/demo.sql'\n"
-        "cross_year:\n"
-        "  tables:\n"
-        "    - name: demo_cross\n"
-        "      sql: 'sql/cross/demo_cross.sql'\n"
+        "    - name: demo_multi_year\n"
+        "      sql: 'sql/multi_year/demo_multi.sql'\n"
+        "      years: [2022]\n"
         "      source_layer: clean",
     )
 
@@ -202,7 +201,12 @@ def test_load_config_resolves_relative_paths_from_dataset_dir(tmp_path: Path):
     assert cfg.raw.sources[0].args["path"] == (project_dir / "data" / "raw.csv").resolve()
     assert cfg.clean.sql == (project_dir / "sql" / "clean.sql").resolve()
     assert cfg.mart.tables[0].sql == (project_dir / "sql" / "mart" / "demo.sql").resolve()
-    assert cfg.cross_year.tables[0].sql == (project_dir / "sql" / "cross" / "demo_cross.sql").resolve()
+    # multi-year mart table path resolution (assorbe ex cross_year)
+    multi_year_table = cfg.mart.tables[1]
+    assert multi_year_table.name == "demo_multi_year"
+    assert multi_year_table.sql == (project_dir / "sql" / "multi_year" / "demo_multi.sql").resolve()
+    assert multi_year_table.years == [2022]
+    assert multi_year_table.source_layer == "clean"
 
 
 @pytest.mark.policy

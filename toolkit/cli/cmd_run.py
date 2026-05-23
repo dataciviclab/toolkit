@@ -10,12 +10,10 @@ from toolkit.cli.common import dump_cfg_section, iter_selected_years, load_cfg_a
 from toolkit.cli.sql_dry_run import validate_sql_dry_run
 from toolkit.clean.run import run_clean
 from toolkit.clean.validate import run_clean_validation
-from toolkit.cross.run import run_cross_year
-from toolkit.cross.validate import run_cross_validation
 from toolkit.core.logging import bind_logger, get_logger
 from toolkit.core.paths import layer_dataset_dir, layer_year_dir
 from toolkit.core.run_context import RunContext
-from toolkit.mart.run import run_mart
+from toolkit.mart.run import run_mart, run_mart_multi_year
 from toolkit.mart.validate import run_mart_validation
 from toolkit.mcp.schema_ops import review_readiness as _review_readiness
 from toolkit.raw.run import run_raw
@@ -39,8 +37,6 @@ def _validation_runner(layer_name: str):
 def _planned_layers(step: str) -> list[str]:
     if step == "all":
         return ["raw", "clean", "mart"]
-    if step == "cross_year":
-        return ["cross_year"]
     return [step]
 
 
@@ -90,20 +86,6 @@ def _validate_execution_plan(cfg, step: str) -> list[str]:
             if not sql_path.exists():
                 raise FileNotFoundError(f"MART SQL file not found: {sql_path}")
 
-    if "cross_year" in layers:
-        tables = cfg.cross_year.get("tables") or []
-        if not isinstance(tables, list) or not tables:
-            raise ValueError("cross_year.tables missing or empty in dataset.yml")
-        for table in tables:
-            table_sql = table.get("sql") if hasattr(table, "get") else getattr(table, "sql", None)
-            sql_path = _resolve_sql_path(cfg, table_sql)
-            if not sql_path.exists():
-                raise FileNotFoundError(f"CROSS_YEAR SQL file not found: {sql_path}")
-            source_layer = table.get("source_layer", "clean") if hasattr(table, "get") else getattr(table, "source_layer", "clean")
-            source_table = table.get("source_table") if hasattr(table, "get") else getattr(table, "source_table", None)
-            if source_layer == "mart" and not source_table:
-                raise ValueError("cross_year.tables[].source_table is required when source_layer = mart")
-
     return layers
 
 
@@ -129,59 +111,8 @@ def _print_execution_plan(cfg, year: int, layers: list[str], context: RunContext
     typer.echo(f"run_record: {context.path}")
     typer.echo("output_dirs:")
     for layer in layers:
-        if layer == "cross_year":
-            typer.echo(f"  - {layer}: {layer_dataset_dir(cfg.root, 'cross', cfg.dataset)}")
-        else:
-            typer.echo(f"  - {layer}: {layer_year_dir(cfg.root, layer, cfg.dataset, year)}")
+        typer.echo(f"  - {layer}: {layer_year_dir(cfg.root, layer, cfg.dataset, year)}")
     typer.echo("")
-
-
-def run_cross_year_step(
-    cfg,
-    *,
-    years: list[int] | None = None,
-    dry_run: bool = False,
-    logger=None,
-) -> None:
-    if logger is None:
-        logger = get_logger()
-
-    _validate_execution_plan(cfg, "cross_year")
-    output_dir = layer_dataset_dir(cfg.root, "cross", cfg.dataset)
-    selected_years = list(years) if years is not None else list(cfg.years)
-
-    if dry_run:
-        typer.echo("Execution Plan")
-        typer.echo(f"dataset: {cfg.dataset}")
-        typer.echo("scope: cross_year")
-        typer.echo("status: DRY_RUN")
-        typer.echo(f"years: {', '.join(str(year) for year in selected_years)}")
-        typer.echo("steps: cross_year")
-        typer.echo(f"output_dir: {output_dir}")
-        typer.echo("")
-        return
-
-    logger.info(
-        "RUN cross_year | dataset=%s years=%s base_dir=%s effective_root=%s root_source=%s",
-        cfg.dataset,
-        ",".join(str(year) for year in selected_years),
-        cfg.base_dir,
-        cfg.root,
-        cfg.root_source,
-    )
-    run_cross_year(
-        cfg.dataset,
-        selected_years,
-        cfg.root,
-        cfg.cross_year,
-        logger,
-        base_dir=cfg.base_dir,
-        output_cfg=cfg.output,
-    )
-    summary = run_cross_validation(cfg, selected_years, logger)
-    fail_on_error = bool((cfg.validation or {}).get("fail_on_error", True))
-    if not summary.get("passed", False) and fail_on_error:
-        raise ValidationGateError("CROSS_YEAR validation failed")
 
 
 def run_year(
@@ -282,7 +213,7 @@ def run_year(
             output_cfg=dump_cfg_section(cfg.output),
         )
 
-    if "mart" in layers_to_run:
+    if "mart" in layers_to_run and _has_single_year_mart(cfg):
         _execute_layer(
             "mart",
             run_mart,
@@ -298,6 +229,75 @@ def run_year(
 
     context.complete_run(success_with_warnings=run_has_validation_warnings)
     return context
+
+
+def _has_multi_year_mart(cfg) -> bool:
+    """Check if any mart table has an explicit ``years`` field (multi-year)."""
+    tables = (cfg.mart or {}).get("tables") or []
+    return any(
+        isinstance(t, dict) and t.get("years")
+        for t in tables
+    )
+
+
+def _has_single_year_mart(cfg) -> bool:
+    """Check if any mart table does NOT have an explicit ``years`` field.
+
+    Quando tutte le tabelle sono multi-year (hanno ``years``),
+    il per-year ``run mart`` non ha nulla da elaborare e va saltato.
+    """
+    tables = (cfg.mart or {}).get("tables") or []
+    return any(
+        isinstance(t, dict) and not t.get("years")
+        for t in tables
+    )
+
+
+def _maybe_run_multi_year_mart(
+    cfg,
+    selected_years: list[int],
+    *,
+    dry_run: bool = False,
+    logger=None,
+) -> None:
+    """Run multi-year MART tables if any table has explicit ``years``.
+
+    Da chiamare una volta per dataset (non per anno), dopo il processing
+    dei singoli anni. Sostituisce l'ex comando ``run cross_year``.
+    """
+    if not _has_multi_year_mart(cfg):
+        return
+    if logger is None:
+        logger = get_logger()
+
+    fail_on_error = bool((cfg.validation or {}).get("fail_on_error", True))
+
+    if dry_run:
+        typer.echo("  multi-year mart tables detected")
+        multi_year_dir = layer_dataset_dir(cfg.root, "mart", cfg.dataset)
+        typer.echo(f"  output_dir: {multi_year_dir}")
+        return
+
+    logger.info(
+        "MART multi-year | dataset=%s years=%s",
+        cfg.dataset,
+        ",".join(str(y) for y in selected_years),
+    )
+    try:
+        run_mart_multi_year(
+            cfg.dataset,
+            selected_years,
+            cfg.root,
+            dump_cfg_section(cfg.mart),
+            logger,
+            base_dir=cfg.base_dir,
+            output_cfg=dump_cfg_section(cfg.output),
+            support_cfg=dump_cfg_section(cfg.support),
+        )
+    except Exception as exc:
+        if fail_on_error:
+            raise ValidationGateError(f"Multi-year MART failed: {exc}")
+        logger.warning("Multi-year MART failed (non-fatal): %s", exc)
 
 
 # ---- run step wrappers for subcommand registration ----
@@ -317,12 +317,12 @@ def run(
     years_arg = years if isinstance(years, str) else None
     selected_years = iter_selected_years(cfg, years_arg=years_arg)
 
-    if step == "cross_year":
-        run_cross_year_step(cfg, years=selected_years, dry_run=dry_flag, logger=logger)
-        return
-
     for year in selected_years:
         run_year(cfg, year, step=step, dry_run=dry_flag, logger=logger)
+
+    # Multi-year mart: run once per dataset after per-year processing
+    if step in ("all", "mart"):
+        _maybe_run_multi_year_mart(cfg, selected_years, dry_run=dry_flag, logger=logger)
 
 
 def _make_step_cmd(step: str):
@@ -343,12 +343,12 @@ def _make_step_cmd(step: str):
         year_arg = year if isinstance(year, int) else None
         selected_years = iter_selected_years(cfg, year_arg=year_arg, years_arg=years_arg)
 
-        if _step == "cross_year":
-            run_cross_year_step(cfg, years=selected_years, dry_run=dry_flag, logger=logger)
-            return
-
         for year in selected_years:
             run_year(cfg, year, step=_step, dry_run=dry_flag, logger=logger)
+
+        # Multi-year mart: run once per dataset after per-year processing
+        if _step in ("all", "mart"):
+            _maybe_run_multi_year_mart(cfg, selected_years, dry_run=dry_flag, logger=logger)
 
     cmd.__name__ = f"run_{_step}_cmd"
     cmd.__doc__ = f"Esegue lo step {_step} della pipeline."
@@ -359,7 +359,6 @@ run_raw_cmd = _make_step_cmd("raw")
 run_clean_cmd = _make_step_cmd("clean")
 run_mart_cmd = _make_step_cmd("mart")
 run_all_cmd = _make_step_cmd("all")
-run_cross_year_cmd = _make_step_cmd("cross_year")
 
 
 def run_init(
@@ -566,6 +565,15 @@ def run_full(
                 results["steps"][str(year)]["checks_ok"] = readiness.get("ok_count", 0)
                 results["steps"][str(year)]["checks_fail"] = readiness.get("fail_count", 0)
 
+        # Multi-year mart: run once per dataset after per-year processing
+        if not dry_flag and _has_multi_year_mart(cfg):
+            try:
+                _maybe_run_multi_year_mart(cfg, selected_years, dry_run=False, logger=logger)
+                results["multi_year_mart"] = "ok"
+            except Exception as exc:
+                results["multi_year_mart"] = f"failed: {exc}"
+                results["status"] = "failed"
+
     if json_output:
         typer.echo(json.dumps(results, indent=2, default=str))
     else:
@@ -580,13 +588,39 @@ def run_full(
         raise typer.Exit(code=1)
 
 
+def _deprecated_cross_year_cmd(
+    ctx: typer.Context,
+    config: str = typer.Option(..., "--config", "-c"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """⚠️ RIMOSSO: sostituito da mart.tables[].years.
+
+    Il layer cross_year non esiste piu'. Definisci la tabella multi-anno
+    direttamente in mart.tables[] con il campo 'years', poi esegui:
+        toolkit run mart --config <yml>
+    """
+    typer.echo(
+        "ERRORE: 'toolkit run cross_year' non esiste piu'.\n"
+        "Il layer cross_year e' stato assorbito in MART.\n\n"
+        "Per tabelle multi-anno, aggiungi in dataset.yml:\n"
+        "  mart:\n"
+        "    tables:\n"
+        "      - name: mia_tabella\n"
+        "        sql: sql/multi_anno.sql\n"
+        "        years: [2022, 2023]\n\n"
+        "Poi esegui: toolkit run mart --config <yml>",
+        err=True,
+    )
+    raise typer.Exit(code=1)
+
+
 def register(app: typer.Typer) -> None:
     run_sub = typer.Typer(no_args_is_help=True, add_completion=False)
     run_sub.command("raw")(run_raw_cmd)
     run_sub.command("clean")(run_clean_cmd)
     run_sub.command("mart")(run_mart_cmd)
     run_sub.command("all")(run_all_cmd)
-    run_sub.command("cross_year")(run_cross_year_cmd)
-    run_sub.command("cross-year")(run_cross_year_cmd)  # alias hyphen
     run_sub.command("full")(run_full)
+    run_sub.command("cross_year")(_deprecated_cross_year_cmd)
+    run_sub.command("cross-year")(_deprecated_cross_year_cmd)  # alias hyphen
     app.add_typer(run_sub, name="run", help="Esegue la pipeline RAW → CLEAN → MART per un dataset.")

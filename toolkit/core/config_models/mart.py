@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from toolkit.core.config_models.common import (
@@ -21,6 +23,9 @@ class MartTableConfig(BaseModel):
 
     name: str
     sql: Path
+    years: list[int] | None = None
+    source_layer: Literal["clean", "mart"] = "clean"
+    source_table: str | None = None
 
     @field_validator("name")
     @classmethod

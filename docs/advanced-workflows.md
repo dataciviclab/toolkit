@@ -25,8 +25,8 @@ Regola pratica:
 - se hai cambiato `clean.sql` o la logica `clean.read`, riparti da
   `toolkit run clean` e poi `toolkit run mart`
 - se hai toccato solo SQL `mart`, preferisci `toolkit run mart`
-- se hai aggiunto o modificato solo output multi-anno, preferisci
-  `toolkit run cross_year`
+- se hai aggiunto o modificato solo tabelle multi-anno, aggiungi/aggiorna
+  `years: [...]` nella tabella `mart`
 - se un run si interrompe ma il run record e gli artefatti precedenti sono
   ancora coerenti, usa `toolkit resume`
 - se hai toccato solo notebook, docs o script locali del repo dataset, non
@@ -41,11 +41,11 @@ Matrice minima:
 | cambio `dataset.yml` con impatto su input/layer | `toolkit run all --config dataset.yml` |
 | cambio `clean.sql` o `clean.read` | `toolkit run clean --config dataset.yml` poi `toolkit run mart --config dataset.yml` |
 | cambio solo `mart.sql` | `toolkit run mart --config dataset.yml` |
-| cambio solo `cross_year` | `toolkit run cross_year --config dataset.yml` |
+| cambio solo tabella multi-anno | `toolkit run mart --config dataset.yml` |
 | run interrotto a metà con run record/artifacts coerenti | `toolkit resume ... --config dataset.yml` |
 | cambio solo notebook/docs | nessun rerun automatico |
 
-Il toolkit non impone di cancellare `raw/`, `clean/`, `mart/` o `cross/` tra un
+Il toolkit non impone di cancellare `raw/`, `clean/`, `mart/` tra un
 run e l'altro. Negli ambienti di lavoro questi output possono restare come
 cache locale finché il loro perimetro è ancora coerente con la config e con
 il layer che stai rieseguendo.

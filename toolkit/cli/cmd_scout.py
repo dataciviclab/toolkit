@@ -198,25 +198,33 @@ def _scaffold_file(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
     typer.echo(f"  Delimiter: {sniff_hints.get('delim_suggested')}")
     typer.echo(f"  Columns: {sniff_hints.get('columns_preview')}")
 
-    read_cfg: dict[str, Any] = {}
-    if sniff_hints.get("encoding_suggested"):
-        read_cfg["encoding"] = sniff_hints["encoding_suggested"]
-    if sniff_hints.get("delim_suggested"):
-        read_cfg["delim"] = sniff_hints["delim_suggested"]
-    if sniff_hints.get("skip_suggested", 0) > 0:
-        read_cfg["skip"] = sniff_hints["skip_suggested"]
-    if sniff_hints.get("robust_read_suggested"):
-        from toolkit.core.csv_read import robust_preset
-        read_cfg = robust_preset(read_cfg)
+    # XLSX → profiling via openpyxl (stesso reader del runtime clean)
+    binary_fmt = sniff_hints.get("is_binary_file")
+    if binary_fmt in ("xlsx", "xls"):
+        from toolkit.profile.raw import _profile_excel
 
-    profile = profile_with_read_cfg(sample_path, sniff_hints, read_cfg)
+        profile = _profile_excel(sample_path, None)
+        profile["is_binary_file"] = binary_fmt
+    else:
+        read_cfg: dict[str, Any] = {}
+        if sniff_hints.get("encoding_suggested"):
+            read_cfg["encoding"] = sniff_hints["encoding_suggested"]
+        if sniff_hints.get("delim_suggested"):
+            read_cfg["delim"] = sniff_hints["delim_suggested"]
+        if sniff_hints.get("skip_suggested", 0) > 0:
+            read_cfg["skip"] = sniff_hints["skip_suggested"]
+        if sniff_hints.get("robust_read_suggested"):
+            from toolkit.core.csv_read import robust_preset
+            read_cfg = robust_preset(read_cfg)
 
-    # 3. Retry skip se 0 colonne
-    retry_skip = _resolve_columns(profile, sniff_hints, read_cfg, sample_path)
-    if retry_skip is not None and retry_skip != sniff_hints.get("skip_suggested"):
-        sniff_hints["skip_suggested"] = retry_skip
-        read_cfg["skip"] = retry_skip
         profile = profile_with_read_cfg(sample_path, sniff_hints, read_cfg)
+
+        # 3. Retry skip se 0 colonne
+        retry_skip = _resolve_columns(profile, sniff_hints, read_cfg, sample_path)
+        if retry_skip is not None and retry_skip != sniff_hints.get("skip_suggested"):
+            sniff_hints["skip_suggested"] = retry_skip
+            read_cfg["skip"] = retry_skip
+            profile = profile_with_read_cfg(sample_path, sniff_hints, read_cfg)
 
     # 4. Clean read via scaffold canonico
     from toolkit.scaffold.clean import propose_clean_read

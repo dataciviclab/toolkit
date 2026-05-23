@@ -33,14 +33,22 @@ def _run_sql(
     read_cfg: dict[str, Any] | None = None,
     read_mode: str = "fallback",
     logger=None,
+    sample_rows: int | None = None,
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """Execute clean SQL against raw inputs and export result to Parquet.
+
+    If ``sample_rows`` is set, appends ``LIMIT N`` to the SQL query per
+    DuckDB syntax (``SELECT * FROM ({query}) AS _smoke LIMIT N``).
 
     Returns:
         tuple of (source, params_used, output_profile)
     """
     with safe_connect() as con:
         read_info = read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
+        if sample_rows is not None:
+            # Strip trailing semicolons: clean.sql spesso termina con ;
+            stripped = sql_query.rstrip().rstrip(";").rstrip()
+            sql_query = f"SELECT * FROM ({stripped}) AS _smoke_sample LIMIT {int(sample_rows)}"
         con.execute(f"CREATE TABLE clean_out AS {sql_query}")
         output_profile = profile_relation(con, "clean_out")
         output_path.parent.mkdir(parents=True, exist_ok=True)

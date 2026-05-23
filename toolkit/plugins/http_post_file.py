@@ -49,12 +49,15 @@ class HttpPostFileSource:
             user_agent=self.user_agent,
         )
 
-    def fetch(self, url: str, data: dict | None = None) -> bytes:
+    def fetch(self, url: str, data: dict | None = None, sample_bytes: int | None = None) -> bytes:
         """Execute a POST request and return response bytes.
 
         Args:
             url: Target URL.
             data: Form-encoded POST body (dict of key-value pairs).
+            sample_bytes: If set, adds ``Range: bytes=0-N`` header for
+                partial download (non-standard on POST, alcuni server lo
+                supportano).
 
         Returns:
             Raw response bytes.
@@ -63,11 +66,17 @@ class HttpPostFileSource:
             DownloadError: on network error or non-200 HTTP status.
 
         """
+        headers = None
+        if sample_bytes is not None:
+            headers = {"Range": f"bytes=0-{sample_bytes - 1}"}
         # File download via POST is idempotent — safe to retry
-        result = self._client.post(url, data=data, retries=self.retries)
+        result = self._client.post(url, data=data, headers=headers, retries=self.retries)
         if result.is_ok and result.response is not None:
-            if result.response.status_code != 200:
+            if result.response.status_code not in (200, 206):
                 raise DownloadError(f"HTTP {result.response.status_code} for {url}")
-            return result.response.content
+            content = result.response.content
+            if sample_bytes is not None and len(content) > sample_bytes:
+                content = content[:sample_bytes]
+            return content
         err = result.err
         raise DownloadError(str(err) if err else f"Failed to fetch {url}")

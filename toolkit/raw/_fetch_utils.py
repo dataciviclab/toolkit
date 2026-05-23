@@ -101,11 +101,13 @@ def _register_fetch(stype: str):
 @_register_fetch("ckan")
 def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
     src = registry.create(stype, **(client or {}))
+    sample_bytes = formatted_args.get("sample_bytes")
     return src.fetch(
         formatted_args["portal_url"],
         str(formatted_args["resource_id"]) if formatted_args.get("resource_id") is not None else None,
         str(formatted_args["dataset_id"]) if formatted_args.get("dataset_id") is not None else None,
         str(formatted_args["resource_name"]) if formatted_args.get("resource_name") is not None else None,
+        sample_bytes=sample_bytes,
     )
 
 
@@ -133,7 +135,8 @@ def _fetch_sparql(stype: str, client: dict, formatted_args: dict) -> tuple[bytes
 @_register_fetch("http_file")
 def _fetch_http_file(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
     src = registry.create(stype, **(client or {}))
-    payload = src.fetch(formatted_args["url"])
+    sample_bytes = formatted_args.get("sample_bytes")
+    payload = src.fetch(formatted_args["url"], sample_bytes=sample_bytes)
     return payload, formatted_args["url"]
 
 
@@ -141,7 +144,8 @@ def _fetch_http_file(stype: str, client: dict, formatted_args: dict) -> tuple[by
 def _fetch_http_post_file(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
     src = registry.create(stype, **(client or {}))
     post_data = formatted_args.get("post_data")
-    payload = src.fetch(formatted_args["url"], data=post_data)
+    sample_bytes = formatted_args.get("sample_bytes")
+    payload = src.fetch(formatted_args["url"], data=post_data, sample_bytes=sample_bytes)
     return payload, formatted_args["url"]
 
 

@@ -69,13 +69,19 @@ class CkanSource:
         err = result.err
         raise DownloadError(str(err) if err else f"Failed to fetch CKAN metadata from {url}")
 
-    def _download_bytes(self, url: str) -> bytes:
-        result = self._client.get(url)
+    def _download_bytes(self, url: str, sample_bytes: int | None = None) -> bytes:
+        headers = None
+        if sample_bytes is not None:
+            headers = {"Range": f"bytes=0-{sample_bytes - 1}"}
+        result = self._client.get(url, headers=headers)
         if result.is_ok and result.response is not None:
             response = result.response
-            if response.status_code != 200:
+            if response.status_code not in (200, 206):
                 raise DownloadError(f"HTTP {response.status_code} for {url}")
-            return response.content
+            content = response.content
+            if sample_bytes is not None and len(content) > sample_bytes:
+                content = content[:sample_bytes]
+            return content
         err = result.err
         raise DownloadError(str(err) if err else f"Failed to fetch {url}")
 
@@ -165,6 +171,7 @@ class CkanSource:
         prefer_datastore: bool,
         portal_url: str,
         api_base: str,
+        sample_bytes: int | None = None,
     ) -> tuple[bytes, str] | None:
         """Try to fetch a single resource. Returns (bytes, url) or None if all attempts fail."""
         resource_id = str(resource.get("id") or "")
@@ -175,7 +182,7 @@ class CkanSource:
                 pass
         resolved_url = _force_https(str(resource["url"]))
         try:
-            return self._download_bytes(resolved_url), resolved_url
+            return self._download_bytes(resolved_url, sample_bytes=sample_bytes), resolved_url
         except DownloadError:
             pass
         return None
@@ -188,6 +195,7 @@ class CkanSource:
         resource_name: str | None = None,
         *,
         prefer_datastore: bool = True,
+        sample_bytes: int | None = None,
     ) -> tuple[bytes, str]:
         last_err: Exception | None = None
 
@@ -196,7 +204,7 @@ class CkanSource:
             try:
                 metadata = self._get_json(api_url, {"id": str(resource_id)})
                 result = metadata.get("result") or {}
-                outcome = self._try_resource(result, prefer_datastore, portal_url, api_url)
+                outcome = self._try_resource(result, prefer_datastore, portal_url, api_url, sample_bytes=sample_bytes)
                 if outcome is not None:
                     return outcome
                 # Fallback: try datastore even if prefer_datastore=False, when URL is absent.
@@ -222,7 +230,7 @@ class CkanSource:
                 )
                 last_download_err: Exception | None = None
                 for resource in ranked_resources:
-                    outcome = self._try_resource(resource, prefer_datastore, portal_url, api_url)
+                    outcome = self._try_resource(resource, prefer_datastore, portal_url, api_url, sample_bytes=sample_bytes)
                     if outcome is not None:
                         return outcome
                     # Capture last error from the loop for a meaningful message

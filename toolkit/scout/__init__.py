@@ -14,7 +14,7 @@ Moduli:
 Scaffold non e' piu' in scout. Usa toolkit.scaffold.full e toolkit.scaffold.sources.
 """
 
-from toolkit.scout.http import (
+from toolkit.scout.http import (  # noqa: F401
     probe_url_headers,
     fetch_content,
     fetch_html_body,
@@ -34,7 +34,7 @@ from toolkit.scout.http import (
     EXTENDED_EXTENSIONS,
 )
 
-from toolkit.scout.infer import (
+from toolkit.scout.infer import (  # noqa: F401
     infer_years,
     suggest_years,
     infer_granularity,
@@ -42,16 +42,16 @@ from toolkit.scout.infer import (
     infer_topics,
 )
 
-from toolkit.scout.probe import (
+from toolkit.scout.probe import (  # noqa: F401
     probe_url,
     probe_url_routed,
 )
 
 # Backward compat — scaffold ora in toolkit.scaffold
-from toolkit.scaffold.full import (
+from toolkit.scaffold.full import (  # noqa: F401
     generate_full_scaffold,
     suggest_clean_sql,
     suggest_mart_sql,
     suggest_validation,
 )
-from toolkit.scaffold.sources import infer_ext, infer_filename, slugify
+from toolkit.scaffold.sources import infer_ext, infer_filename, slugify  # noqa: F401

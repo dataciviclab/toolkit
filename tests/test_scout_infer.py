@@ -16,7 +16,7 @@ from toolkit.scout.infer import (
     infer_years,
     suggest_years,
 )
-from toolkit.scout.scaffold import (
+from toolkit.scaffold.full import (
     suggest_clean_sql,
     suggest_mart_sql,
     suggest_validation,

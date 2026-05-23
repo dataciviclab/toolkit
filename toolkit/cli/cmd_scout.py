@@ -22,19 +22,17 @@ import typer
 
 from toolkit.cli.cmd_run import run_init as _run_init
 from toolkit.scout.http import DEFAULT_TIMEOUT, fetch_content
+from toolkit.scaffold.full import (
+    generate_full_scaffold,
+    suggest_validation,
+)
+from toolkit.scaffold.sources import infer_ext, infer_filename, slugify
 from toolkit.scout.infer import (
     infer_granularity_from_name_and_columns,
     infer_topics,
     suggest_years,
 )
-from toolkit.scout.scaffold import suggest_validation
 from toolkit.scout.probe import probe_url_routed
-from toolkit.scout.scaffold import (
-    generate_full_scaffold,
-    infer_ext,
-    infer_filename,
-    slugify,
-)
 
 _SAMPLE_SIZE = 1024 * 1024  # 1MB
 
@@ -316,7 +314,7 @@ def _scaffold_html(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
 def _scaffold_sdmx(url: str, probe_result: dict[str, Any], *, run_raw: bool = False) -> None:
     """Scaffold per endpoint SDMX."""
     slug = slugify(url)
-    from toolkit.scout.scaffold import _generate_raw_sources_block_sdmx
+    from toolkit.scaffold.sources import block_sdmx as _generate_raw_sources_block_sdmx
 
     sdmx_info = probe_result.get("sdmx_info") or {}
     year_min = sdmx_info.get("year_min")

@@ -9,7 +9,6 @@ from lab_connectors.http import HttpClient, HttpResult
 from toolkit.cli.app import app
 from toolkit.scout.http import detect_ckan_in_html, extract_ckan_dataset_id
 from toolkit.scout.probe import probe_url
-from toolkit.scout.scaffold import generate_yaml_scaffold
 
 
 class _ScoutHandler(BaseHTTPRequestHandler):
@@ -81,57 +80,44 @@ def test_scout_url_reports_file_headers_after_redirect() -> None:
     server, base_url = _serve()
     runner = CliRunner()
     try:
-        result = runner.invoke(app, ["inspect", "url", f"{base_url}/redirect-file"])
+        result = runner.invoke(app, ["scout", f"{base_url}/redirect-file"])
     finally:
         server.shutdown()
         server.server_close()
 
-    assert result.exit_code == 0
-    assert f"requested_url: {base_url}/redirect-file" in result.output
-    assert f"final_url: {base_url}/files/demo.csv" in result.output
-    assert "status_code: 200" in result.output
-    assert "content_type: text/csv; charset=utf-8" in result.output
-    assert 'content_disposition: attachment; filename="demo.csv"' in result.output
-    assert "source_type: file" in result.output
-    assert "candidate_links: 0" in result.output
+    assert result.exit_code == 0, f"scout failed: {result.output}"
+    assert "Source type: file" in result.output
+    assert "HTTP status: 200" in result.output
+    assert "CSV" in result.output
 
 
 def test_scout_url_extracts_candidate_links_from_html() -> None:
     server, base_url = _serve()
     runner = CliRunner()
     try:
-        result = runner.invoke(app, ["inspect", "url", f"{base_url}/html"])
+        result = runner.invoke(app, ["scout", f"{base_url}/html"])
     finally:
         server.shutdown()
         server.server_close()
 
-    assert result.exit_code == 0
-    assert f"final_url: {base_url}/html" in result.output
-    assert "content_type: text/html; charset=utf-8" in result.output
-    assert "source_type: html" in result.output
-    assert "candidate_links:" in result.output
-    assert f"  - {base_url}/downloads/data.csv" in result.output
-    assert f"  - {base_url}/reports/report.xlsx" in result.output
-    assert f"  - {base_url}/exports/out.csv" in result.output
-    assert "  - http://cdn.example.com/file.zip" in result.output
-    assert "  - https://example.org/api/data.json" in result.output
+    assert result.exit_code == 0, f"scout failed: {result.output}"
+    assert "Source type: html" in result.output
+    assert "Candidate links:" in result.output
+    assert f"{base_url}/downloads/data.csv" in result.output
+    assert f"{base_url}/reports/report.xlsx" in result.output
 
 
 def test_scout_url_marks_opaque_non_html_response() -> None:
     server, base_url = _serve()
     runner = CliRunner()
     try:
-        result = runner.invoke(app, ["inspect", "url", f"{base_url}/opaque"])
+        result = runner.invoke(app, ["scout", f"{base_url}/opaque"])
     finally:
         server.shutdown()
         server.server_close()
 
-    assert result.exit_code == 0
-    assert f"final_url: {base_url}/opaque" in result.output
-    assert "content_type: application/octet-stream" in result.output
-    assert "content_disposition: None" in result.output
-    assert "source_type: opaque" in result.output
-    assert "candidate_links: 0" in result.output
+    assert result.exit_code != 0, f"expected error for opaque, got: {result.output}"
+    assert "Source type: opaque" in result.output
 
 
 def test_probe_url_uses_head_then_get_only_for_html(monkeypatch) -> None:
@@ -290,80 +276,5 @@ class TestDetectCkan:
         assert detect_ckan_in_html(html) is False
 
 
-class TestGenerateYamlScaffold:
-    def test_http_file_scaffold(self) -> None:
-        probe_result = {
-            "final_url": "https://example.com/data/file.csv",
-            "requested_url": "https://example.com/data/file.csv",
-        }
-        yaml = generate_yaml_scaffold(probe_result)
-        assert '_source"' in yaml  # source name derived from slug with hash
-        assert 'type: "http_file"' in yaml
-        assert 'url: "https://example.com/data/file.csv"' in yaml
-        assert 'filename: "file.csv"' in yaml
-        assert 'years: [2024]' in yaml
-        assert "root:" in yaml
-
-    def test_scaffold_fallback_datastore_url_is_http_file(self) -> None:
-        """Senza metadata CKAN, anche URL datastore produce http_file."""
-        probe_result = {
-            "final_url": "https://portal.com/api/3/datastore/dump/uuid.csv",
-            "requested_url": "https://portal.com/api/3/datastore/dump/uuid.csv",
-        }
-        yaml = generate_yaml_scaffold(probe_result)
-        assert 'type: "http_file"' in yaml
-        assert 'type: "ckan"' not in yaml
-
-    def test_scaffold_fallback_sdmx_url_is_http_file(self) -> None:
-        """Senza metadata SDMX, anche URL /dataflow/ produce http_file."""
-        probe_result = {
-            "final_url": "https://example.com/data/flow/sdmx",
-            "requested_url": "https://example.com/data/flow/sdmx",
-        }
-        yaml = generate_yaml_scaffold(probe_result)
-        assert 'type: "http_file"' in yaml
-        assert 'type: "sdmx"' not in yaml
-
-    def test_ckan_resources_scaffold(self) -> None:
-        probe_result = {
-            "final_url": "https://portal.it/dataset/uuid",
-            "requested_url": "https://portal.it/dataset/uuid",
-        }
-        ckan_resources = [
-            {
-                "id": "res-uuid-1",
-                "name": "Main CSV",
-                "format": "csv",
-                "url": "https://portal.it/files/data.csv",
-            },
-            {
-                "id": "res-uuid-2",
-                "name": "Backup XLS",
-                "format": "xls",
-                "url": "https://portal.it/files/data.xls",
-            },
-        ]
-        yaml = generate_yaml_scaffold(probe_result, ckan_resources)
-        assert "type: \"ckan\"" in yaml
-        assert 'resource_id: "res-uuid-1"' in yaml
-        assert 'resource_id: "res-uuid-2"' in yaml
-        assert 'filename: "data.csv"' in yaml
-
-    def test_candidate_links_fallback(self) -> None:
-        probe_result = {
-            "final_url": "https://portal.it/page",
-            "requested_url": "https://portal.it/page",
-        }
-        links = [
-            "https://portal.it/download/data.csv",
-            "https://portal.it/download/report.xlsx",
-        ]
-        yaml = generate_yaml_scaffold(probe_result, None, links)
-        assert 'type: "http_file"' in yaml
-        assert 'url: "https://portal.it/download/data.csv"' in yaml
-        assert 'url: "https://portal.it/download/report.xlsx"' in yaml
-
-
-# --scaffold e --run sono stati rimossi da inspect url.
-# Usa: toolkit init --url <URL>  per scaffold
-# Usa: toolkit init --url <URL> --run  per scaffold + raw run
+# generate_yaml_scaffold rimosso.
+# Usa toolkit.scaffold.full.generate_full_scaffold per test di scaffold.

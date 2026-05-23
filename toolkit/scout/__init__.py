@@ -1,16 +1,17 @@
-"""toolkit.scout — URL probe, routing, inferenze e scaffold per candidate dataset.
+"""toolkit.scout — URL probe, routing, inferenze per candidate dataset.
 
 Strato indipendente dalla CLI, usabile da:
-- CLI (init --url, inspect url)
+- CLI (init --url, scout)
 - MCP tools (scout tools)
 - Source Observatory (source_check_fetch/analyze)
 - Notebook e script interni
 
 Moduli:
   http      → HTTP transport: probe, fetch, format detection, CKAN/SDMX
-  infer     → Inferenze pure: anni, granularità, topic, validation, SQL
+  infer     → Inferenze pure: anni, granularità, topic
   probe     → Orchestrazione: probe_url(), probe_url_routed()
-  scaffold  → Generazione YAML/SQL per candidate dataset
+
+Scaffold non e' piu' in scout. Usa toolkit.scaffold.full e toolkit.scaffold.sources.
 """
 
 from toolkit.scout.http import (
@@ -41,20 +42,16 @@ from toolkit.scout.infer import (
     infer_topics,
 )
 
-from toolkit.scout.scaffold import (
-    suggest_clean_sql,
-    suggest_mart_sql,
-    suggest_validation,
-)
-
 from toolkit.scout.probe import (
     probe_url,
     probe_url_routed,
 )
 
-from toolkit.scout.scaffold import (
-    slugify,
-    infer_ext,
-    infer_filename,
+# Backward compat — scaffold ora in toolkit.scaffold
+from toolkit.scaffold.full import (
     generate_full_scaffold,
+    suggest_clean_sql,
+    suggest_mart_sql,
+    suggest_validation,
 )
+from toolkit.scaffold.sources import infer_ext, infer_filename, slugify

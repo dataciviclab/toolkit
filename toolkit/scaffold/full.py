@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlparse
 
+from toolkit.scaffold.clean import generate_clean_sql
 from toolkit.scaffold.sources import block_ckan, block_http_file, block_links, block_sdmx, infer_filename
 
 
@@ -335,8 +336,9 @@ def generate_full_scaffold(
                         yml_lines.append(f"    {key}: {val}")
 
     if profile:
+        first_year = years[0]
+        clean_sql = generate_clean_sql(profile, slug, first_year)
         norm_cols = profile.get("columns_norm") or profile.get("columns_raw") or profile.get("columns") or []
-        clean_sql = suggest_clean_sql(norm_cols, profile)
         mart_sql = suggest_mart_sql(norm_cols, profile)
     else:
         clean_sql = "-- ATTENZIONE: profiling non ha rilevato colonne.\nSELECT 1 AS placeholder FROM raw_input\n"

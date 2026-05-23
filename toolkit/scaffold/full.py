@@ -254,6 +254,7 @@ def generate_full_scaffold(
     profile: dict[str, Any] | None = None,
     inferred_years: list[int] | None = None,
     validation_suggestions: dict[str, Any] | None = None,
+    hierarchy: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     """Genera tutti i file di un candidate dataset.
 
@@ -341,8 +342,8 @@ def generate_full_scaffold(
         norm_cols = profile.get("columns_norm") or profile.get("columns_raw") or profile.get("columns") or []
         mart_sql = suggest_mart_sql(norm_cols, profile)
     else:
-        clean_sql = "-- ATTENZIONE: profiling non ha rilevato colonne.\nSELECT 1 AS placeholder FROM raw_input\n"
         mart_sql = "-- Default mart: SELECT * FROM clean.\nSELECT * FROM clean\n"
+        clean_sql = "-- ATTENZIONE: profiling non ha rilevato colonne.\nSELECT 1 AS placeholder FROM raw_input\n"
 
     if profile:
         topics = probe_result.get("inferred_topics")
@@ -351,10 +352,86 @@ def generate_full_scaffold(
     else:
         notes = _generate_notes(None, None)
 
-    return {
+    result: dict[str, str] = {
         "dataset.yml": "\n".join(yml_lines) + "\n",
         "sql/clean.sql": clean_sql,
         "sql/mart.sql": mart_sql,
         "README.md": _generate_readme(slug, final_url),
         "notes.md": notes,
     }
+
+    if hierarchy:
+        h_col_names: list[str] = []
+        if profile:
+            h_col_names = profile.get("columns_norm") or profile.get("columns_raw") or profile.get("columns") or []
+        result.update(_scaffold_hierarchy_marts(slug, hierarchy, h_col_names, profile))
+
+    return result
+
+
+def _scaffold_hierarchy_marts(
+    slug: str,
+    hierarchy: dict[str, Any],
+    col_names: list[str],
+    profile: dict[str, Any] | None,
+) -> dict[str, str]:
+    """Genera SQL per ogni livello della gerarchia mart.
+
+    Returns dict {filename: content} con un file SQL per livello.
+    """
+    files: dict[str, str] = {}
+    axis = hierarchy.get("axis", "territoriale")
+    levels = hierarchy.get("levels", [])
+
+    for level_cfg in levels:
+        level_name = level_cfg.get("level", "unknown")
+        grain = level_cfg.get("grain", [])
+        sql_path = level_cfg.get("sql", f"sql/mart/{level_name}.sql")
+
+        # Find metric columns (numeric) for aggregation
+        metric_cols: list[str] = []
+        if profile:
+            mapping = profile.get("mapping_suggestions") or {}
+            for col in col_names:
+                spec = mapping.get(col) or {}
+                if spec.get("type") in ("integer", "float", "double", "bigint", "decimal", "int"):
+                    metric_cols.append(col)
+
+        grain_cols = [c for c in grain if c in col_names]
+        if not grain_cols:
+            grain_cols = grain  # fallback: usa i grain dichiarati anche se non in col_names
+
+        if grain_cols and metric_cols:
+            grain_expr = ", ".join(f'"{c}"' for c in grain_cols)
+            sum_exprs = ",\n    ".join(
+                f'SUM("{m}") AS "totale_{m}"' for m in metric_cols[:5]
+            )
+            sql = (
+                f"-- {level_name}: aggregazione per {axis}\n"
+                f"-- Grain: {', '.join(grain_cols)}\n"
+                f"SELECT\n"
+                f"  {grain_expr},\n"
+                f"  {sum_exprs}\n"
+                f"FROM clean\n"
+                f"GROUP BY {grain_expr}\n"
+            )
+        elif grain_cols:
+            grain_expr = ", ".join(f'"{c}"' for c in grain_cols)
+            sql = (
+                f"-- {level_name}: conteggio record per {axis}\n"
+                f"-- Grain: {', '.join(grain_cols)}\n"
+                f"SELECT\n"
+                f"  {grain_expr},\n"
+                f"  COUNT(*) AS record_count\n"
+                f"FROM clean\n"
+                f"GROUP BY {grain_expr}\n"
+            )
+        else:
+            sql = (
+                f"-- {level_name}: fallback (nessun grain riconosciuto)\n"
+                f"SELECT * FROM clean\n"
+            )
+
+        files[str(sql_path)] = sql
+
+    return files

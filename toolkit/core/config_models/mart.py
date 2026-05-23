@@ -70,11 +70,55 @@ class MartValidateConfig(BaseModel):
     transition: TransitionConfig = Field(default_factory=TransitionConfig)
 
 
+class HierarchyLevel(BaseModel):
+    """Un livello della gerarchia mart (es. comune, provincia, regione)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    level: str
+    table: str
+    grain: list[str]
+    sql: Path
+
+    @field_validator("level")
+    @classmethod
+    def _validate_level(cls, value: str) -> str:
+        v = value.strip()
+        if not v:
+            raise ValueError("mart.hierarchy.levels[].level must not be empty")
+        return v
+
+    @field_validator("table")
+    @classmethod
+    def _validate_table(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("mart.hierarchy.levels[].table must not be empty")
+        return text
+
+
+class HierarchyConfig(BaseModel):
+    """Gerarchia mart: aggregazione per asse naturale del dato."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    axis: str = Field(..., pattern=r"^(territoriale|temporale|categorico)$")
+    levels: list[HierarchyLevel] = Field(min_length=1)
+
+    @field_validator("levels")
+    @classmethod
+    def _validate_levels_order(cls, value: list[HierarchyLevel]) -> list[HierarchyLevel]:
+        if len(value) < 1:
+            raise ValueError("mart.hierarchy.levels must have at least one level")
+        return value
+
+
 class MartConfig(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     tables: list[MartTableConfig] = Field(default_factory=list)
     required_tables: list[str] = Field(default_factory=list)
+    hierarchy: HierarchyConfig | None = None
     validate_config: MartValidateConfig = Field(
         default_factory=MartValidateConfig,
         alias="validate",

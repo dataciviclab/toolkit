@@ -181,6 +181,7 @@ class TestSuggestCleanSql:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.pure_unit
 class TestSuggestMartSql:
     """pure_unit: mart.sql con GROUP BY basato su colonne e tipi."""
 

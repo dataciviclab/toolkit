@@ -239,6 +239,7 @@ def test_probe_url_passes_timeout_and_user_agent(monkeypatch) -> None:
 
 # ── Tests for CKAN detection and scaffold ───────────────────────────────────────
 
+@pytest.mark.pure_unit
 class TestExtractCkanDatasetId:
     def test_uuid_from_id_param(self) -> None:
         url = "https://www.dati.gov.it/view-dataset/dataset?id=bef11a2c-300b-4578-8143-c1ce08f46fff"
@@ -262,6 +263,7 @@ class TestExtractCkanDatasetId:
         assert extract_ckan_dataset_id(url, html) == "abc-123"
 
 
+@pytest.mark.pure_unit
 class TestDetectCkan:
     def test_detects_data_view_embed(self) -> None:
         html = b'<div data-view-embed="/dataset/...">CKAN</div>'

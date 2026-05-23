@@ -112,28 +112,28 @@ def resolve_preview_kind(url: str, content_type: str | None = None, content_disp
     if "." in path:
         ext = path.rsplit(".", 1)[-1].lower()
         if ext in _PREVIEW_KINDS:
-            return ext
+            return ext.upper()
 
     # 2. Da Content-Disposition (filename)
     fn = _filename_from_content_disposition(content_disposition)
     if fn and "." in fn:
         ext = fn.rsplit(".", 1)[-1].lower()
         if ext in _PREVIEW_KINDS:
-            return ext
+            return ext.upper()
 
     # 3. Da Content-Type
     if content_type:
         ct_lower = content_type.lower()
         if "tab-separated" in ct_lower or ct_lower in ("text/tsv", "application/tsv"):
-            return "tsv"
+            return "TSV"
         if "csv" in ct_lower:
-            return "csv"
+            return "CSV"
         if "json" in ct_lower:
-            return "json"
+            return "JSON"
         if "spreadsheetml" in ct_lower:
-            return "xlsx"
+            return "XLSX"
         if "excel" in ct_lower or "xls" in ct_lower:
-            return "xls"
+            return "XLS"
 
     return None
 
@@ -198,13 +198,20 @@ def probe_url_headers(
     *,
     timeout: int = DEFAULT_TIMEOUT,
     user_agent: str = DEFAULT_USER_AGENT,
+    client: HttpClient | None = None,
 ) -> dict[str, Any]:
     """HEAD con retry, GET+Range fallback. Ritorna header info + reachability.
+
+    Args:
+        url: URL da probe.
+        timeout: Timeout HTTP (ignorato se client è fornito).
+        user_agent: User-Agent (ignorato se client è fornito).
+        client: HttpClient opzionale. Se fornito, lo usa invece di crearne uno.
 
     Returns dict: requested_url, final_url, status_code, content_type,
                   content_disposition, method.
     """
-    client = _mk_client(timeout=timeout, user_agent=user_agent)
+    client = client or _mk_client(timeout=timeout, user_agent=user_agent)
     last_error: str | None = None
 
     # Tentativo HEAD con retry
@@ -297,12 +304,20 @@ def fetch_content(
     max_bytes: int = 1024 * 1024,
     timeout: int = DEFAULT_TIMEOUT,
     user_agent: str = DEFAULT_USER_AGENT,
+    client: HttpClient | None = None,
 ) -> dict[str, Any]:
     """GET con Range header, fallback a GET intero se Range non supportato.
 
+    Args:
+        url: URL da scaricare.
+        max_bytes: Dimensione massima in bytes.
+        timeout: Timeout HTTP (ignorato se client è fornito).
+        user_agent: User-Agent (ignorato se client è fornito).
+        client: HttpClient opzionale.
+
     Returns dict: content (bytes), content_type, status_code, final_url, method.
     """
-    client = _mk_client(timeout=timeout, user_agent=user_agent)
+    client = client or _mk_client(timeout=timeout, user_agent=user_agent)
 
     # Tentativo con Range
     range_result = client.get(url, headers={"Range": f"bytes=0-{max_bytes - 1}"})
@@ -340,9 +355,14 @@ def fetch_html_body(
     *,
     timeout: int = DEFAULT_TIMEOUT,
     user_agent: str = DEFAULT_USER_AGENT,
+    client: HttpClient | None = None,
 ) -> dict[str, Any]:
-    """GET body HTML. Ritorna dict con html_text, status_code, final_url, content_type."""
-    client = _mk_client(timeout=timeout, user_agent=user_agent)
+    """GET body HTML. Ritorna dict con html_text, status_code, final_url, content_type.
+
+    Args:
+        client: HttpClient opzionale. Se fornito, lo usa invece di crearne uno.
+    """
+    client = client or _mk_client(timeout=timeout, user_agent=user_agent)
     result = client.get(url)
     if not result.is_ok or result.response is None:
         raise RuntimeError(f"GET failed for {url}")
@@ -389,8 +409,18 @@ def extract_ckan_dataset_id(url: str, html_text: str = "") -> str | None:
     return None
 
 
-def fetch_ckan_package(portal_url: str, dataset_id: str, *, timeout: int = DEFAULT_TIMEOUT) -> dict[str, Any] | None:
-    """Fetch CKAN package_show via API."""
+def fetch_ckan_package(
+    portal_url: str,
+    dataset_id: str,
+    *,
+    timeout: int = DEFAULT_TIMEOUT,
+    client: HttpClient | None = None,
+) -> dict[str, Any] | None:
+    """Fetch CKAN package_show via API.
+
+    Args:
+        client: HttpClient opzionale. Se fornito, lo usa invece di crearne uno.
+    """
     parsed = urlparse(portal_url)
     root = f"{parsed.scheme}://{parsed.netloc}"
     api_bases: list[str] = []
@@ -402,7 +432,7 @@ def fetch_ckan_package(portal_url: str, dataset_id: str, *, timeout: int = DEFAU
         api_bases.append(f"{root}/api/3/action/package_show")
         api_bases.append(f"{root}/package_show")
 
-    client = _mk_client(timeout=timeout)
+    client = client or _mk_client(timeout=timeout)
     for api_base in api_bases:
         pkg_url = f"{api_base}?id={dataset_id}"
         try:
@@ -444,9 +474,17 @@ def discover_ckan_resources(pkg: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def fetch_sdmx_years(
-    base_url: str, flow_id: str, *, timeout: int = DEFAULT_TIMEOUT
+    base_url: str,
+    flow_id: str,
+    *,
+    timeout: int = DEFAULT_TIMEOUT,
+    client: HttpClient | None = None,
 ) -> tuple[int | None, int | None]:
-    """Chiama endpoint SDMX per ricavare year_min/year_max da TIME_PERIOD."""
+    """Chiama endpoint SDMX per ricavare year_min/year_max da TIME_PERIOD.
+
+    Args:
+        client: HttpClient opzionale. Se fornito, lo usa invece di crearne uno.
+    """
     try:
         base = base_url.split("?")[0].rstrip("/")
         if "/dataflow/" in base:
@@ -456,7 +494,7 @@ def fetch_sdmx_years(
         else:
             sdmx_root = base
         url = f"{sdmx_root}/data/{flow_id}?lastNObservations=1"
-        client = _mk_client(timeout=timeout)
+        client = client or _mk_client(timeout=timeout)
         result = client.get(url, headers={"Accept": "application/xml"})
         if not result.is_ok or result.response is None:
             return None, None

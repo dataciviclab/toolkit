@@ -39,6 +39,9 @@ from toolkit.scout.infer import (
     infer_granularity,
     infer_granularity_from_name_and_columns,
     infer_topics,
+)
+
+from toolkit.scout.scaffold import (
     suggest_clean_sql,
     suggest_mart_sql,
     suggest_validation,

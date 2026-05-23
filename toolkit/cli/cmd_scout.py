@@ -13,7 +13,6 @@ Usage:
 from __future__ import annotations
 
 import json
-import logging
 import tempfile
 import uuid
 from pathlib import Path
@@ -22,13 +21,13 @@ from typing import Any
 import typer
 
 from toolkit.cli.cmd_run import run_init as _run_init
-from toolkit.scout.http import DEFAULT_TIMEOUT, fetch_content, resolve_preview_kind
+from toolkit.scout.http import DEFAULT_TIMEOUT, fetch_content
 from toolkit.scout.infer import (
     infer_granularity_from_name_and_columns,
     infer_topics,
     suggest_years,
-    suggest_validation,
 )
+from toolkit.scout.scaffold import suggest_validation
 from toolkit.scout.probe import probe_url_routed
 from toolkit.scout.scaffold import (
     generate_full_scaffold,
@@ -36,8 +35,6 @@ from toolkit.scout.scaffold import (
     infer_filename,
     slugify,
 )
-
-logger = logging.getLogger("toolkit.cli.scout")
 
 _SAMPLE_SIZE = 1024 * 1024  # 1MB
 
@@ -104,7 +101,7 @@ def scout_url(
             _echo(f"    - {res['name']} ({res['format']})")
         if len(resources) > 3:
             _echo(f"    ... and {len(resources) - 3} more")
-        if scaffold:
+        if scaffold and not json_output:
             _scaffold_ckan(url, probe, run_raw=run_raw)
 
     elif source_type == "html":
@@ -117,7 +114,7 @@ def scout_url(
             _echo(f"    - {link}")
         if len(candidates) > 5:
             _echo(f"    ... and {len(candidates) - 5} more")
-        if scaffold:
+        if scaffold and not json_output:
             _scaffold_html(url, probe, run_raw=run_raw)
 
     elif source_type == "sdmx":
@@ -128,14 +125,14 @@ def scout_url(
         _echo(f"  SDMX flow: {flow_id}")
         if year_min and year_max:
             _echo(f"  Years: {year_min}-{year_max}")
-        if scaffold:
+        if scaffold and not json_output:
             _scaffold_sdmx(url, probe, run_raw=run_raw)
 
     elif source_type == "file":
         resolved_format = probe.get("resolved_format")
         if resolved_format:
             _echo(f"  Detected format: {resolved_format}")
-        if scaffold:
+        if scaffold and not json_output:
             _scaffold_file(url, probe, run_raw=run_raw)
 
     elif source_type == "opaque":
@@ -499,8 +496,7 @@ def scout(
     )
 
     if json_output and result is not None:
-        import json as _json
-        typer.echo(_json.dumps(result, indent=2, ensure_ascii=False))
+        typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
 
 
 def register(app: typer.Typer) -> None:

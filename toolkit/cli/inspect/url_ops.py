@@ -7,7 +7,6 @@ in toolkit scout.
 from __future__ import annotations
 
 import json
-import warnings
 from typing import Any
 
 import typer
@@ -29,13 +28,7 @@ def url(
     Sostituito da toolkit scout che offre le stesse funzionalita'
     piu' inferenze e scaffold opzionale.
     """
-    warnings.warn(
-        "toolkit inspect url e' deprecato. Usa: toolkit scout <URL>",
-        DeprecationWarning,
-        stacklevel=1,
-    )
     typer.echo("⚠️  DEPRECATO: usa 'toolkit scout <URL>' invece.", err=True)
-    typer.echo("")
     try:
         result = probe_url_routed(url, timeout=timeout, user_agent=user_agent)
     except RuntimeError as exc:

@@ -14,10 +14,12 @@ from toolkit.scout.infer import (
     infer_granularity,
     infer_topics,
     infer_years,
+    suggest_years,
+)
+from toolkit.scout.scaffold import (
     suggest_clean_sql,
     suggest_mart_sql,
     suggest_validation,
-    suggest_years,
 )
 
 

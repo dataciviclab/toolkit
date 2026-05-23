@@ -161,6 +161,14 @@ def suggest_clean_sql(columns: list[dict[str, Any]] | list[str], profile: dict[s
     return "\n".join(lines) + "\n"
 
 
+def _find_matching_column(col_names: list[str], keywords: list[str]) -> str | None:
+    """Trova la prima colonna in col_names che contiene uno dei keywords (case-insensitive)."""
+    for col in col_names:
+        if any(kw in col.lower() for kw in keywords):
+            return col
+    return None
+
+
 def suggest_mart_sql(columns: list[dict[str, Any]] | list[str], profile: dict[str, Any]) -> str:
     """Genera mart.sql con aggregazione di base."""
     if columns and isinstance(columns[0], dict):
@@ -205,9 +213,31 @@ def suggest_mart_sql(columns: list[dict[str, Any]] | list[str], profile: dict[st
                     f"ORDER BY {group_expr}\n"
                 )
     if has_year:
-        return '-- Conteggio record per anno\nSELECT\n  "anno" AS year,\n  COUNT(*) AS record_count\nFROM clean\nGROUP BY "anno"\nORDER BY "anno"\n'
+        year_col = _find_matching_column(col_names, ["anno", "year", "periodo", "period"])
+        if year_col is None:
+            year_col = "anno"
+        return (
+            f'-- Conteggio record per anno\n'
+            f'SELECT\n'
+            f'  "{year_col}" AS year,\n'
+            f'  COUNT(*) AS record_count\n'
+            f'FROM clean\n'
+            f'GROUP BY "{year_col}"\n'
+            f'ORDER BY "{year_col}"\n'
+        )
     if has_region:
-        return '-- Conteggio record per regione\nSELECT\n  "regione" AS regione,\n  COUNT(*) AS record_count\nFROM clean\nGROUP BY "regione"\nORDER BY "regione"\n'
+        region_col = _find_matching_column(col_names, ["regione", "region", "provincia", "province", "comune"])
+        if region_col is None:
+            region_col = "regione"
+        return (
+            f'-- Conteggio record per regione\n'
+            f'SELECT\n'
+            f'  "{region_col}" AS {region_col},\n'
+            f'  COUNT(*) AS record_count\n'
+            f'FROM clean\n'
+            f'GROUP BY "{region_col}"\n'
+            f'ORDER BY "{region_col}"\n'
+        )
     return "-- Default mart: SELECT * FROM clean.\n-- Personalizza per aggregazioni.\nSELECT * FROM clean\n"
 
 

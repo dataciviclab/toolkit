@@ -38,6 +38,13 @@ def infer_years(text: str) -> tuple[int | None, int | None]:
                 years.add(y1)
                 years.add(y2)
 
+    # Pattern due anni quadridigit adiacenti: "20142025" → 2014, 2025
+    adjacent = re.findall(r"(?<!\d)(20[012]\d)(20[012]\d)(?!\d)", text)
+    for y1_str, y2_str in adjacent:
+        y1, y2 = int(y1_str), int(y2_str)
+        if y1 < y2 <= y1 + 50:
+            years.update([y1, y2])
+
     # Pattern anno all'inizio stringa o dopo boundary non-digit
     for y in _YEAR_START_RE.findall(text):
         years.add(int(y))

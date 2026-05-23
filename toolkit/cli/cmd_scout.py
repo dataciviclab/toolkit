@@ -91,17 +91,27 @@ def scout_url(
 
     # Step 2: Routing per tipo fonte
     if source_type == "ckan":
+        is_portal = probe.get("ckan_portal", False)
         resources = probe.get("ckan_resources") or []
-        if not resources:
+        if is_portal and not resources:
+            _echo("  CKAN portal detected (homepage)")
+            _echo("  Nessun dataset specifico — fornisci un URL diretto a un dataset:")
+            _echo("    toolkit scout <URL_PORTALE>/dataset/<NOME_DATASET>")
+            if json_output:
+                result["ckan_portal"] = True
+                return result
+        elif not resources:
             _echo("error: CKAN portal detected but no downloadable resources found", err=True)
             raise typer.Exit(code=1)
-        _echo(f"  CKAN resources: {len(resources)} found")
-        for res in resources[:3]:
-            _echo(f"    - {res['name']} ({res['format']})")
-        if len(resources) > 3:
-            _echo(f"    ... and {len(resources) - 3} more")
+        else:
+            _echo(f"  CKAN resources: {len(resources)} found")
+            for res in resources[:3]:
+                _echo(f"    - {res['name']} ({res['format']})")
+            if len(resources) > 3:
+                _echo(f"    ... and {len(resources) - 3} more")
         if scaffold and not json_output:
-            _scaffold_ckan(url, probe, run_raw=run_raw)
+            if resources:
+                _scaffold_ckan(url, probe, run_raw=run_raw)
 
     elif source_type == "html":
         candidates = probe.get("candidate_links") or []

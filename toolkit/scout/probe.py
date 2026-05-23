@@ -162,6 +162,7 @@ def _route_html(
     is_ckan = detect_ckan_in_html(html_bytes)
 
     if is_ckan:
+        # Tentativo: se l'URL punta a un dataset specifico, fetcha le risorse
         dataset_id = extract_ckan_dataset_id(final_url, html_text)
         if dataset_id:
             pkg = fetch_ckan_package(final_url, dataset_id, timeout=timeout)
@@ -180,6 +181,14 @@ def _route_html(
                         if isinstance(t, dict)
                     ]
                     return result
+
+        # CKAN rilevato ma nessun dataset specifico — segnala comunque il portale
+        result["source_type"] = "ckan"
+        result["ckan_resources"] = None
+        result["candidate_links"] = candidate_links
+        result["sdmx_info"] = None
+        result["ckan_portal"] = True
+        return result
 
     # HTML semplice con link candidati (non CKAN)
     result["source_type"] = "html"

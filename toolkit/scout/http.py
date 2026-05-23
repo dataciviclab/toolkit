@@ -36,7 +36,15 @@ EXTENDED_EXTENSIONS = CANDIDATE_EXTENSIONS + (".sdmx", ".tds", ".xml")
 _PREVIEW_KINDS = frozenset({"csv", "json", "xlsx", "xls", "tsv"})
 
 # Firma HTML per rilevare CKAN
-_CKAN_SIGNATURES = (b"data-view-embed", b"/api/3/action", b"ckan-", b'"package_id"')
+_CKAN_SIGNATURES = (
+    b"data-view-embed",          # embedded data view
+    b"/api/3/action",            # CKAN API reference
+    b"ckan-",                    # CSS class prefix
+    b'"package_id"',             # JSON package reference
+    b'generator" content="CKAN', # HTML meta generator tag
+    b"powered by CKAN",          # footer text
+    b"data-module=\"dataset",    # CKAN dataset module
+)
 
 # Namespace SDMX per XML parsing
 _SDMX_NS = {

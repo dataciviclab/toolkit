@@ -192,8 +192,8 @@ def test_scout_scaffold_has_type_casts_in_clean_sql(tmp_path: Path) -> None:
             mart_sql = (slug_dir / "sql" / "mart.sql").read_text()
 
             # Verifica cast
-            assert clean_sql, f"clean.sql is empty"
-            assert mart_sql, f"mart.sql is empty"
+            assert clean_sql, "clean.sql is empty"
+            assert mart_sql, "mart.sql is empty"
     finally:
         server.shutdown()
         server.server_close()

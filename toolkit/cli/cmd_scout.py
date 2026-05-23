@@ -26,7 +26,7 @@ from toolkit.scaffold.full import (
     generate_full_scaffold,
     suggest_validation,
 )
-from toolkit.scaffold.sources import infer_ext, infer_filename, slugify
+from toolkit.scaffold.sources import infer_ext, slugify
 from toolkit.scout.infer import (
     infer_granularity_from_name_and_columns,
     infer_topics,
@@ -134,7 +134,7 @@ def scout_url(
             _scaffold_file(url, probe, run_raw=run_raw)
 
     elif source_type == "opaque":
-        _echo(f"error: URL returned opaque content", err=True)
+        _echo("error: URL returned opaque content", err=True)
         raise typer.Exit(code=1)
 
     else:
@@ -237,7 +237,7 @@ def _scaffold_file(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
 
     validation = suggest_validation(profile)
     if validation:
-        typer.echo(f"  Validation rules: suggested")
+        typer.echo("  Validation rules: suggested")
 
     # 6. Genera scaffold
     out_dir = Path(slug)
@@ -294,7 +294,7 @@ def _scaffold_ckan(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
         _scaffold_file(first_url, probe_result, run_raw=run_raw)
         return
     except (typer.Exit, Exception):
-        typer.echo(f"  Warning: profiling failed for resource, generating minimal scaffold")
+        typer.echo("  Warning: profiling failed for resource, generating minimal scaffold")
 
 
 def _scaffold_html(url: str, probe_result: dict[str, Any], *, run_raw: bool = False) -> None:
@@ -326,14 +326,8 @@ def _scaffold_sdmx(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
         inferred_years = [2024]
 
     # Scaffold minimo per SDMX (no profiling CSV)
-    files = generate_full_scaffold(
-        slug,
-        probe_result,
-        clean_read=None,
-        profile=None,
-        inferred_years=inferred_years,
-        validation_suggestions=None,
-    )
+    # generate_full_scaffold non usato perché SDMX ha template diverso
+    # (dataset.yml sovrascritto qui sotto)
 
     # Sovrascrivi dataset.yml con configurazione SDMX
     lines = [
@@ -400,7 +394,7 @@ def _scaffold_sdmx(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
     (out_dir / "notebooks").mkdir(exist_ok=True)
 
     typer.echo(f"\nDataset YAML generated: {out_dir / 'dataset.yml'}")
-    typer.echo(f"  source_type: sdmx")
+    typer.echo("  source_type: sdmx")
     typer.echo(f"  flow: {sdmx_info.get('flow_id', '?')}")
     if year_min and year_max:
         typer.echo(f"  years: {year_min}-{year_max}")

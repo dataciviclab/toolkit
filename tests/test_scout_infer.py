@@ -217,6 +217,7 @@ class TestSuggestMartSql:
         # "anno" e' l'unica colonna numerica, viene aggregata
         assert 'SUM("anno")' in sql
 
+    @pytest.mark.pure_unit
     def test_no_numeric_column_with_year(self) -> None:
         """Colonna anno + nessuna colonna numerica: COUNT per anno."""
         cols = ["anno", "categoria"]

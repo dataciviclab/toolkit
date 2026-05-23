@@ -12,6 +12,8 @@ from toolkit.cli.app import app
 from toolkit.scout.http import detect_ckan_in_html, extract_ckan_dataset_id
 from toolkit.scout.probe import probe_url
 
+pytestmark = pytest.mark.pure_unit  # all tests use local HTTP server or monkeypatch
+
 
 class _ScoutHandler(BaseHTTPRequestHandler):
     def do_HEAD(self) -> None:  # noqa: N802

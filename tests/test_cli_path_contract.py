@@ -4,9 +4,12 @@ import json
 import shutil
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
+
+pytestmark = pytest.mark.contract
 
 
 def _copy_project_example(dst: Path) -> Path:
@@ -155,3 +158,93 @@ def test_cli_version_flag() -> None:
     parts = version_part.split(".")
     assert len(parts) == 3, f"versione non semver: {version_part}"
     assert all(p.isdigit() for p in parts), f"versione non semver: {version_part}"
+
+
+# ---------------------------------------------------------------------------
+# smoke / sample-rows / sample-bytes / root flags (contratto CLI)
+# ---------------------------------------------------------------------------
+
+
+def test_cli_smoke_flag_parses(tmp_path: Path) -> None:
+    """contract: --smoke flag e' accettato da run mart --dry-run."""
+    project_dir = tmp_path / "project-example"
+    config_path = _copy_project_example(project_dir)
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "mart", "--config", str(config_path), "--dry-run", "--smoke"])
+    assert result.exit_code == 0, result.output
+    assert "Execution Plan" in result.output
+
+
+def test_cli_sample_rows_flag_parses(tmp_path: Path) -> None:
+    """contract: --sample-rows flag e' accettato da run all --dry-run."""
+    project_dir = tmp_path / "project-example"
+    config_path = _copy_project_example(project_dir)
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run", "--sample-rows", "500"])
+    assert result.exit_code == 0, result.output
+    assert "Execution Plan" in result.output
+
+
+def test_cli_sample_bytes_flag_parses(tmp_path: Path) -> None:
+    """contract: --sample-bytes flag e' accettato da run all --dry-run."""
+    project_dir = tmp_path / "project-example"
+    config_path = _copy_project_example(project_dir)
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run", "--sample-bytes", "5000"])
+    assert result.exit_code == 0, result.output
+    assert "Execution Plan" in result.output
+
+
+def test_cli_root_flag_overrides_output(tmp_path: Path) -> None:
+    """contract: --root flag cambia la directory di output."""
+    project_dir = tmp_path / "project-example"
+    config_path = _copy_project_example(project_dir)
+    custom_root = tmp_path / "custom_out"
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["run", "all", "--config", str(config_path), "--root", str(custom_root), "--strict-config"],
+    )
+    assert result.exit_code == 0, result.output
+    assert (custom_root / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet").exists()
+    assert (custom_root / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet").exists()
+
+
+# ---------------------------------------------------------------------------
+# toolkit.contracts path API
+# ---------------------------------------------------------------------------
+
+
+def test_contracts_layer_year_dir() -> None:
+    """contract: layer_year_dir restituisce path corretto."""
+    from toolkit.contracts import layer_year_dir
+    path = layer_year_dir("/base", "clean", "mio_dataset", 2024)
+    assert str(path) == "/base/data/clean/mio_dataset/2024"
+
+
+def test_contracts_clean_parquet_path() -> None:
+    """contract: clean_parquet_path restituisce path al parquet."""
+    from toolkit.contracts import clean_parquet_path
+    path = clean_parquet_path("/base", "mio_dataset", 2024)
+    assert str(path) == "/base/data/clean/mio_dataset/2024/mio_dataset_2024_clean.parquet"
+
+
+def test_contracts_mart_table_path() -> None:
+    """contract: mart_table_path restituisce path corretto."""
+    from toolkit.contracts import mart_table_path
+    path = mart_table_path("/base", "mio_dataset", 2024, "rd_by_regione")
+    assert str(path) == "/base/data/mart/mio_dataset/2024/rd_by_regione.parquet"
+
+
+def test_contracts_run_record_dir() -> None:
+    """contract: run_record_dir restituisce path corretto."""
+    from toolkit.contracts import run_record_dir
+    path = run_record_dir("/base", "mio_dataset", 2024)
+    assert str(path) == "/base/data/_runs/mio_dataset/2024"
+
+
+def test_contracts_constants() -> None:
+    """contract: costanti METADATA_JSON e MANIFEST_JSON esistono."""
+    from toolkit.contracts import MANIFEST_JSON, METADATA_JSON
+    assert METADATA_JSON == "metadata.json"
+    assert MANIFEST_JSON == "manifest.json"

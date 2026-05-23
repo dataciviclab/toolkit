@@ -156,13 +156,15 @@ def load_config(
     *,
     strict_config: bool = False,
     repo_root: str | Path | None = None,
+    root_override: str | Path | None = None,
 ) -> ToolkitConfig:
     model = load_config_model(path, strict_config=strict_config, repo_root=repo_root)
+    effective_root = Path(root_override).expanduser().resolve() if root_override else model.root
     return ToolkitConfig(
         base_dir=model.base_dir,
         schema_version=model.schema_version,
-        root=model.root,
-        root_source=model.root_source,
+        root=effective_root,
+        root_source="--root" if root_override else model.root_source,
         dataset=model.dataset.name,
         years=list(model.dataset.years),
         time_coverage=model.dataset.time_coverage,

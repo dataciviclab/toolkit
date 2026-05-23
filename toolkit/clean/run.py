@@ -168,6 +168,7 @@ def run_clean(
     *,
     base_dir: Path | None = None,
     output_cfg: dict[str, Any] | None = None,
+    sample_rows: int | None = None,
 ):
     clean_cfg = ensure_dict(clean_cfg)
     output_cfg = ensure_dict(output_cfg)
@@ -220,6 +221,7 @@ def run_clean(
         read_cfg=relation_read_cfg,
         read_mode=read_mode,
         logger=logger,
+        sample_rows=sample_rows,
     )
     output_profile = _normalize_output_profile(output_profile)
     output_bytes: int | None = output_path.stat().st_size if output_path.exists() else None

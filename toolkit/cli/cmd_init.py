@@ -22,6 +22,7 @@ def init(
     year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year (for --config)"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years (for --config)"),
     run: bool = typer.Option(False, "--run", "-r", help="Also execute raw run after scaffold (only with --url)"),
+    root: str | None = typer.Option(None, "--root", help="Override root output directory (es. $DCL_ROOT)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without executing"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
@@ -40,6 +41,13 @@ def init(
         raise typer.Exit(code=1)
 
     if url:
+        if root is not None:
+            typer.echo(
+                "error: --root non supportato con --url (lo scaffold genera dataset.yml "
+                "con root predefinito; usa --config dopo lo scaffold)",
+                err=True,
+            )
+            raise typer.Exit(code=1)
         scout_url(url, scaffold=True, run_raw=run, timeout=_DEFAULT_TIMEOUT)
         return
 
@@ -53,6 +61,7 @@ def init(
         years=years,
         dry_run=dry_run,
         strict_config=strict_config,
+        root_override=root,
     )
 
 

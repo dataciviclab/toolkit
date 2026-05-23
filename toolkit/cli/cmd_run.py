@@ -124,6 +124,8 @@ def run_year(
     dry_run: bool = False,
     logger=None,
     resumed_from: str | None = None,
+    sample_rows: int | None = None,
+    sample_bytes: int | None = None,
 ) -> RunContext:
     if logger is None:
         logger = get_logger()
@@ -199,9 +201,10 @@ def run_year(
             run_id=context.run_id,
             output_cfg=dump_cfg_section(cfg.output),
             clean_cfg=dump_cfg_section(cfg.clean),
+            sample_bytes=sample_bytes,
         )
 
-    if "clean" in layers_to_run:
+    if "clean" in layers_to_run and not _is_mart_only_cfg(cfg):
         _execute_layer(
             "clean",
             run_clean,
@@ -211,6 +214,7 @@ def run_year(
             dump_cfg_section(cfg.clean),
             base_dir=cfg.base_dir,
             output_cfg=dump_cfg_section(cfg.output),
+            sample_rows=sample_rows,
         )
 
     if "mart" in layers_to_run and _has_single_year_mart(cfg):
@@ -309,6 +313,8 @@ def run(
     years: str | None = None,
     dry_run: bool = False,
     strict_config: bool = False,
+    sample_rows: int | None = None,
+    sample_bytes: int | None = None,
 ):
     """Backward-compatible Python entrypoint used by tests and internal callers."""
     strict_flag = strict_config if isinstance(strict_config, bool) else False
@@ -318,7 +324,8 @@ def run(
     selected_years = iter_selected_years(cfg, years_arg=years_arg)
 
     for year in selected_years:
-        run_year(cfg, year, step=step, dry_run=dry_flag, logger=logger)
+        run_year(cfg, year, step=step, dry_run=dry_flag, logger=logger,
+                 sample_rows=sample_rows, sample_bytes=sample_bytes)
 
     # Multi-year mart: run once per dataset after per-year processing
     if step in ("all", "mart"):
@@ -333,18 +340,26 @@ def _make_step_cmd(step: str):
         config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
         year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
         years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
+        smoke: bool = typer.Option(False, "--smoke", help="Alias per --sample-rows 1000 --sample-bytes 1048576"),
+        sample_rows: int | None = typer.Option(None, "--sample-rows", help="Leggi solo N righe in CLEAN (LIMIT N sul output SQL)"),
+        sample_bytes: int | None = typer.Option(None, "--sample-bytes", help="Scarica solo N bytes in RAW (HTTP Range header + troncamento locale)"),
+        root: str | None = typer.Option(None, "--root", help="Override root output directory (es. DCL_ROOT)"),
         dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
         strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
     ):
         strict_flag = strict_config if isinstance(strict_config, bool) else False
-        cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag)
+        cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag, root_override=root)
+
         dry_flag = dry_run if isinstance(dry_run, bool) else False
         years_arg = years if isinstance(years, str) else None
         year_arg = year if isinstance(year, int) else None
         selected_years = iter_selected_years(cfg, year_arg=year_arg, years_arg=years_arg)
+        sample_rows_final = 1000 if smoke else sample_rows
+        sample_bytes_final = 1048576 if smoke else sample_bytes
 
         for year in selected_years:
-            run_year(cfg, year, step=_step, dry_run=dry_flag, logger=logger)
+            run_year(cfg, year, step=_step, dry_run=dry_flag, logger=logger,
+                     sample_rows=sample_rows_final, sample_bytes=sample_bytes_final)
 
         # Multi-year mart: run once per dataset after per-year processing
         if _step in ("all", "mart"):
@@ -367,6 +382,9 @@ def run_init(
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without executing"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
+    # Parametri interni (non CLI) — passati da cmd_init.py
+    sample_bytes: int | None = None,
+    root_override: str | None = None,
 ):
     """
     Bootstrap candidate: esegue run raw e scaffold clean.sql se assente.
@@ -375,7 +393,7 @@ def run_init(
     sql/clean.sql scaffoldato oppure skip esplicito se gia esistente.
     """
     strict_config_flag = strict_config if isinstance(strict_config, bool) else False
-    cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag)
+    cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag, root_override=root_override)
     dry_run_flag = dry_run if isinstance(dry_run, bool) else False
     years_arg = years if isinstance(years, str) else None
     year_arg = year if isinstance(year, int) else None
@@ -413,7 +431,8 @@ def run_init(
         clean_sql_path = Path(cfg.base_dir) / clean_sql_rel
         scaffold_existed_before = clean_sql_path.exists()
 
-        run_year(cfg, year, step="raw", dry_run=False, logger=logger)
+        run_year(cfg, year, step="raw", dry_run=False, logger=logger,
+                 sample_bytes=sample_bytes)
 
         typer.echo(f"[init] Bootstrap completato per {cfg.dataset}/{year}")
         typer.echo("  - raw scaricato")
@@ -446,6 +465,10 @@ def run_init(
 def run_full(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
+    smoke: bool = typer.Option(False, "--smoke", help="Alias per --sample-rows 1000 --sample-bytes 1048576"),
+    sample_rows: int | None = typer.Option(None, "--sample-rows", help="Leggi solo N righe in CLEAN (LIMIT N sul output SQL)"),
+    sample_bytes: int | None = typer.Option(None, "--sample-bytes", help="Scarica solo N bytes in RAW (HTTP Range header + troncamento locale)"),
+    root: str | None = typer.Option(None, "--root", help="Override root output directory (es. DCL_ROOT)"),
     json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
     strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
@@ -456,10 +479,12 @@ def run_full(
     automaticamente prima del candidate (run all + validate per ogni anno).
     """
     strict_flag = strict_config if isinstance(strict_config, bool) else False
-    cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag)
+    cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag, root_override=root)
     years_arg = years if isinstance(years, str) else None
     selected_years = iter_selected_years(cfg, year_arg=None, years_arg=years_arg)
     dry_flag = dry_run if isinstance(dry_run, bool) else False
+    sample_rows_final = 1000 if smoke else sample_rows
+    sample_bytes_final = 1048576 if smoke else sample_bytes
 
     results: dict[str, Any] = {
         "config": config,
@@ -535,7 +560,8 @@ def run_full(
 
         for year in selected_years:
             logger.info("Run %s — year=%s", run_step, year)
-            run_year(cfg, year, step=run_step, dry_run=dry_flag, logger=logger)
+            run_year(cfg, year, step=run_step, dry_run=dry_flag, logger=logger,
+                     sample_rows=sample_rows_final, sample_bytes=sample_bytes_final)
 
             if not dry_flag:
                 if is_mart_only:

@@ -26,11 +26,19 @@ class HttpFileSource:
             user_agent=self.user_agent,
         )
 
-    def fetch(self, url: str) -> bytes:
-        result = self._client.get(url)
+    def fetch(self, url: str, sample_bytes: int | None = None) -> bytes:
+        headers = None
+        if sample_bytes is not None:
+            headers = {"Range": f"bytes=0-{sample_bytes - 1}"}
+        result = self._client.get(url, headers=headers)
         if result.is_ok and result.response is not None:
-            if result.response.status_code != 200:
+            if result.response.status_code not in (200, 206):
                 raise DownloadError(f"HTTP {result.response.status_code} for {url}")
-            return result.response.content
+            content = result.response.content
+            # Troncamento locale: server che ignorano Range (200 invece di 206)
+            # restituiscono tutto il file. Taglia per garantire il limite byte.
+            if sample_bytes is not None and len(content) > sample_bytes:
+                content = content[:sample_bytes]
+            return content
         err = result.err
         raise DownloadError(str(err) if err else f"Failed to fetch {url}")

@@ -35,6 +35,7 @@ def run_raw(
     run_id: str | None = None,
     output_cfg: dict | None = None,
     clean_cfg: dict | None = None,
+    sample_bytes: int | None = None,
 ):
     """
     Supporta:
@@ -85,6 +86,8 @@ def run_raw(
             continue
 
         formatted_args = _format_args(args, year)
+        if sample_bytes is not None:
+            formatted_args["sample_bytes"] = sample_bytes
         payload, origin = _fetch_payload(stype, client, formatted_args)
         inputs.append(
             {

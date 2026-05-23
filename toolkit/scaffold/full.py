@@ -321,6 +321,28 @@ def generate_full_scaffold(
     yml_lines.append(f'    - name: "{slug}"')
     yml_lines.append('      sql: "sql/mart.sql"')
 
+    # Hierarchy levels → aggiunte come tabelle mart
+    if hierarchy:
+        for level_cfg in hierarchy.get("levels", []):
+            level_name = level_cfg.get("level", "unknown")
+            table_name = level_cfg.get("table", f"mart_{slug}_{level_name}")
+            sql_path = level_cfg.get("sql", f"sql/mart/{level_name}.sql")
+            yml_lines.append(f'    - name: "{table_name}"')
+            yml_lines.append(f'      sql: "{sql_path}"')
+
+        # Serializza blocco hierarchy
+        yml_lines.append("  hierarchy:")
+        yml_lines.append(f'    axis: "{hierarchy.get("axis", "territoriale")}"')
+        yml_lines.append("    levels:")
+        for level_cfg in hierarchy.get("levels", []):
+            level_name = level_cfg.get("level", "unknown")
+            grain = level_cfg.get("grain", [])
+            grain_list = ", ".join(f'"{g}"' for g in grain)
+            yml_lines.append(f'      - level: "{level_name}"')
+            yml_lines.append(f'        table: "{level_cfg.get("table", f"mart_{slug}_{level_name}")}"')
+            yml_lines.append(f"        grain: [{grain_list}]")
+            yml_lines.append(f'        sql: "{level_cfg.get("sql", f"sql/mart/{level_name}.sql")}"')
+
     if validation_suggestions:
         mv = validation_suggestions.get("mart")
         if mv:

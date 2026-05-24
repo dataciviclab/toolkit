@@ -40,6 +40,8 @@ def _validation_runner(layer_name: str):
 def _planned_layers(step: str) -> list[str]:
     if step == "all":
         return ["probe", "raw", "clean", "mart"]
+    if step == "raw":
+        return ["probe", "raw"]
     return [step]
 
 
@@ -176,14 +178,12 @@ def _run_probe(cfg, year: int, logger) -> None:
             elif stype == "ckan":
                 portal = (args.get("portal_url") or "").replace("{year}", str(year))
                 if portal:
-                    from urllib.parse import urlparse
-                    base = f"{urlparse(portal).scheme}://{urlparse(portal).netloc}"
-                    probe = probe_url_headers(base, timeout=5)
+                    probe = probe_url_headers(portal, timeout=5)
                     sc = probe.get("status_code", 0)
                     if 200 <= sc < 400:
-                        logger.info("PROBE | %s CKAN -> HTTP %s", name, sc)
+                        logger.info("PROBE | %s CKAN -> HTTP %s (%s)", name, sc, probe.get("final_url", portal))
                     else:
-                        logger.warning("PROBE | %s CKAN -> HTTP %s %s", name, sc or "ERR", base)
+                        logger.warning("PROBE | %s CKAN -> HTTP %s at %s", name, sc or "ERR", portal)
 
         except RuntimeError as exc:
             logger.warning("PROBE | %s -> unreachable: %s", name, exc)
@@ -456,6 +456,7 @@ def _make_step_cmd(step: str):
     return cmd
 
 
+run_probe_cmd = _make_step_cmd("probe")
 run_raw_cmd = _make_step_cmd("raw")
 run_clean_cmd = _make_step_cmd("clean")
 run_mart_cmd = _make_step_cmd("mart")
@@ -728,6 +729,7 @@ def _deprecated_cross_year_cmd(
 
 def register(app: typer.Typer) -> None:
     run_sub = typer.Typer(no_args_is_help=True, add_completion=False)
+    run_sub.command("probe")(run_probe_cmd)
     run_sub.command("raw")(run_raw_cmd)
     run_sub.command("clean")(run_clean_cmd)
     run_sub.command("mart")(run_mart_cmd)

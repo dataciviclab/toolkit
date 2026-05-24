@@ -464,6 +464,7 @@ class _FakeCfg:
         self.base_dir = None
 
 
+@pytest.mark.contract
 def test_probe_calls_probe_url_headers_for_http_source(monkeypatch) -> None:
     """Probe step calls scout probe for http_file sources."""
     calls = []
@@ -478,6 +479,7 @@ def test_probe_calls_probe_url_headers_for_http_source(monkeypatch) -> None:
     assert "example.com" in calls[0]
 
 
+@pytest.mark.contract
 def test_probe_skips_local_file(monkeypatch) -> None:
     """Probe step does NOT call probe_url_headers for local_file sources."""
     calls = []
@@ -491,6 +493,7 @@ def test_probe_skips_local_file(monkeypatch) -> None:
     assert calls == [], "probe_url_headers should NOT be called for local_file"
 
 
+@pytest.mark.contract
 def test_probe_does_not_block_on_error(monkeypatch) -> None:
     """Probe step logs warning but does NOT raise on unreachable source."""
     monkeypatch.setattr(
@@ -501,6 +504,7 @@ def test_probe_does_not_block_on_error(monkeypatch) -> None:
     _run_probe(_FakeCfg([{"name": "s1", "type": "http_file", "args": {"url": "https://dead.test/data.csv"}}]), 2024, logging.getLogger("t"))
 
 
+@pytest.mark.contract
 def test_probe_logs_ckan_portal(monkeypatch) -> None:
     """Probe step probes CKAN portal_url (API base, not homepage)."""
     calls = []

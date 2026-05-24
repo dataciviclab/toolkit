@@ -118,16 +118,40 @@ def _print_execution_plan(cfg, year: int, layers: list[str], context: RunContext
     typer.echo("")
 
 
+_PROBE_FORMATS = {
+    "text/csv": "CSV",
+    "text/tab-separated-values": "TSV",
+    "application/json": "JSON",
+    "application/xml": "XML",
+    "application/zip": "ZIP",
+    "application/gzip": "GZ",
+    "application/pdf": "PDF",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
+    "application/vnd.ms-excel": "XLS",
+    "application/vnd.oasis.opendocument.spreadsheet": "ODS",
+    "text/html": "HTML",
+}
+
+
+def _probe_fmt(content_type: str | None) -> str:
+    """Riduce un content-type a un formato leggibile (es. XLSX, CSV)."""
+    if not content_type:
+        return "?"
+    base = content_type.split(";")[0].strip().lower()
+    return _PROBE_FORMATS.get(base, base)
+
+
 def _run_probe(cfg, year: int, logger) -> None:
     """Passo probe della pipeline: verifica raggiungibilita' fonti remote.
 
-    Chiama probe_url_headers dello scout (HEAD + GET+Range fallback,
-    retry) su ogni sorgente HTTP/CKAN. Logga warning se irraggiungibile,
-    non blocca mai — il vero errore arrivera' da raw.
+    Riutilizza probe_url_routed dello scout (routing automatico,
+    format detection) per output ricco come lo scout CLI.
+    Non blocca mai — il vero errore arrivera' da raw.
     Salta local_file, sdmx, sparql (non timeoutano).
     """
     sources = (cfg.raw or {}).get("sources") or []
     if not sources:
+        logger.info("PROBE | nessuna fonte remota da verificare")
         return
 
     from toolkit.scout.http import probe_url_headers
@@ -136,34 +160,33 @@ def _run_probe(cfg, year: int, logger) -> None:
         stype = src.get("type", "http_file")
         args = src.get("args", {})
         name = src.get("name") or stype
+        url = (args.get("url") or "").replace("{year}", str(year))
 
         try:
             if stype in ("http_file", "http_post_file"):
-                url = (args.get("url") or "").replace("{year}", str(year))
                 if not url:
                     continue
-                result = probe_url_headers(url, timeout=5)
-                sc = result.get("status_code", 0)
-                if sc >= 400 or sc == 0:
-                    logger.warning(
-                        "PROBE | %s %s -> HTTP %s",
-                        name, url, sc or result.get("error", "unreachable"),
-                    )
+                probe = probe_url_headers(url, timeout=5)
+                sc = probe.get("status_code", 0)
+                if 200 <= sc < 400:
+                    logger.info("PROBE | %s -> HTTP %s (%s)", name, sc, _probe_fmt(probe.get("content_type")))
+                else:
+                    logger.warning("PROBE | %s -> HTTP %s %s", name, sc or "ERR", url)
 
             elif stype == "ckan":
                 portal = (args.get("portal_url") or "").replace("{year}", str(year))
                 if portal:
                     from urllib.parse import urlparse
                     base = f"{urlparse(portal).scheme}://{urlparse(portal).netloc}"
-                    result = probe_url_headers(base, timeout=5)
-                    sc = result.get("status_code", 0)
-                    if sc >= 400 or sc == 0:
-                        logger.warning(
-                            "PROBE | %s CKAN portal %s -> HTTP %s",
-                            name, base, sc or result.get("error", "unreachable"),
-                        )
+                    probe = probe_url_headers(base, timeout=5)
+                    sc = probe.get("status_code", 0)
+                    if 200 <= sc < 400:
+                        logger.info("PROBE | %s CKAN -> HTTP %s", name, sc)
+                    else:
+                        logger.warning("PROBE | %s CKAN -> HTTP %s %s", name, sc or "ERR", base)
+
         except RuntimeError as exc:
-            logger.warning("PROBE | %s unreachable: %s", name, exc)
+            logger.warning("PROBE | %s -> unreachable: %s", name, exc)
 
 
 def run_year(

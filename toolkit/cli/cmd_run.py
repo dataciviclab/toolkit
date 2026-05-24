@@ -20,6 +20,9 @@ from toolkit.raw.run import run_raw
 from toolkit.raw.validate import run_raw_validation
 
 
+
+
+
 class ValidationGateError(RuntimeError):
     pass
 
@@ -36,7 +39,9 @@ def _validation_runner(layer_name: str):
 
 def _planned_layers(step: str) -> list[str]:
     if step == "all":
-        return ["raw", "clean", "mart"]
+        return ["probe", "raw", "clean", "mart"]
+    if step == "raw":
+        return ["probe", "raw"]
     return [step]
 
 
@@ -115,6 +120,75 @@ def _print_execution_plan(cfg, year: int, layers: list[str], context: RunContext
     typer.echo("")
 
 
+_PROBE_FORMATS = {
+    "text/csv": "CSV",
+    "text/tab-separated-values": "TSV",
+    "application/json": "JSON",
+    "application/xml": "XML",
+    "application/zip": "ZIP",
+    "application/gzip": "GZ",
+    "application/pdf": "PDF",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
+    "application/vnd.ms-excel": "XLS",
+    "application/vnd.oasis.opendocument.spreadsheet": "ODS",
+    "text/html": "HTML",
+}
+
+
+def _probe_fmt(content_type: str | None) -> str:
+    """Riduce un content-type a un formato leggibile (es. XLSX, CSV)."""
+    if not content_type:
+        return "?"
+    base = content_type.split(";")[0].strip().lower()
+    return _PROBE_FORMATS.get(base, base)
+
+
+def _run_probe(cfg, year: int, logger) -> None:
+    """Passo probe della pipeline: verifica raggiungibilita' fonti remote.
+
+    Riutilizza probe_url_routed dello scout (routing automatico,
+    format detection) per output ricco come lo scout CLI.
+    Non blocca mai — il vero errore arrivera' da raw.
+    Salta local_file, sdmx, sparql (non timeoutano).
+    """
+    sources = (cfg.raw or {}).get("sources") or []
+    if not sources:
+        logger.info("PROBE | nessuna fonte remota da verificare")
+        return
+
+    from toolkit.scout.http import probe_url_headers
+
+    for src in sources:
+        stype = src.get("type", "http_file")
+        args = src.get("args", {})
+        name = src.get("name") or stype
+        url = (args.get("url") or "").replace("{year}", str(year))
+
+        try:
+            if stype in ("http_file", "http_post_file"):
+                if not url:
+                    continue
+                probe = probe_url_headers(url, timeout=5)
+                sc = probe.get("status_code", 0)
+                if 200 <= sc < 400:
+                    logger.info("PROBE | %s -> HTTP %s (%s)", name, sc, _probe_fmt(probe.get("content_type")))
+                else:
+                    logger.warning("PROBE | %s -> HTTP %s %s", name, sc or "ERR", url)
+
+            elif stype == "ckan":
+                portal = (args.get("portal_url") or "").replace("{year}", str(year))
+                if portal:
+                    probe = probe_url_headers(portal, timeout=5)
+                    sc = probe.get("status_code", 0)
+                    if 200 <= sc < 400:
+                        logger.info("PROBE | %s CKAN -> HTTP %s (%s)", name, sc, probe.get("final_url", portal))
+                    else:
+                        logger.warning("PROBE | %s CKAN -> HTTP %s at %s", name, sc or "ERR", portal)
+
+        except RuntimeError as exc:
+            logger.warning("PROBE | %s -> unreachable: %s", name, exc)
+
+
 def run_year(
     cfg,
     year: int,
@@ -190,6 +264,9 @@ def run_year(
             raise
 
     source_id = cfg.source_id
+
+    if "probe" in layers_to_run and not dry_run:
+        _run_probe(cfg, year, base_logger)
 
     if "raw" in layers_to_run:
         _execute_layer(
@@ -379,6 +456,7 @@ def _make_step_cmd(step: str):
     return cmd
 
 
+run_probe_cmd = _make_step_cmd("probe")
 run_raw_cmd = _make_step_cmd("raw")
 run_clean_cmd = _make_step_cmd("clean")
 run_mart_cmd = _make_step_cmd("mart")
@@ -651,6 +729,7 @@ def _deprecated_cross_year_cmd(
 
 def register(app: typer.Typer) -> None:
     run_sub = typer.Typer(no_args_is_help=True, add_completion=False)
+    run_sub.command("probe")(run_probe_cmd)
     run_sub.command("raw")(run_raw_cmd)
     run_sub.command("clean")(run_clean_cmd)
     run_sub.command("mart")(run_mart_cmd)

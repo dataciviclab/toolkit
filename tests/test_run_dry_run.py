@@ -33,7 +33,7 @@ def test_run_dry_run_prints_plan_and_creates_only_run_record(
     assert result.exit_code == 0
     assert "Execution Plan" in result.output
     assert "status: DRY_RUN" in result.output
-    assert "steps: raw, clean, mart" in result.output
+    assert "steps: probe, raw, clean, mart" in result.output
     assert "sql_validation: OK" in result.output
 
     runs_dir = root_dir / "data" / "_runs" / "demo_ds" / "2022"
@@ -441,3 +441,79 @@ def test_run_all_fails_with_bootstrap_hint_when_clean_sql_missing(
     exc_text = str(result.exception)
     assert "CLEAN SQL file not found" in exc_text
     assert "toolkit init --config" in exc_text
+
+
+# ── Probe step contract tests ────────────────────────────────────────────────
+
+
+def _make_probe_cfg(tmp_path: Path) -> tuple:
+    """Helper: create a minimal config and return (cfg, year)."""
+    from tests.helpers import make_dataset_yml, make_standard_sql
+    make_standard_sql(tmp_path)
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml",
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
+    )
+    return load_config(config_path), 2022
+
+
+class _FakeCfg:
+    """Minimal config mock for probe tests (ToolkitConfig e' frozen)."""
+    def __init__(self, raw_sources: list):
+        self.raw = {"sources": raw_sources} or {}
+        self.base_dir = None
+
+
+@pytest.mark.contract
+def test_probe_calls_probe_url_headers_for_http_source(monkeypatch) -> None:
+    """Probe step calls scout probe for http_file sources."""
+    calls = []
+    monkeypatch.setattr(
+        "toolkit.scout.http.probe_url_headers",
+        lambda url, timeout=5: calls.append(url) or {"status_code": 200, "content_type": "text/csv"},
+    )
+    from toolkit.cli.cmd_run import _run_probe
+    _run_probe(_FakeCfg([{"name": "s1", "type": "http_file", "args": {"url": "https://example.com/data.csv"}}]), 2024, logging.getLogger("t"))
+
+    assert len(calls) == 1
+    assert "example.com" in calls[0]
+
+
+@pytest.mark.contract
+def test_probe_skips_local_file(monkeypatch) -> None:
+    """Probe step does NOT call probe_url_headers for local_file sources."""
+    calls = []
+    monkeypatch.setattr(
+        "toolkit.scout.http.probe_url_headers",
+        lambda url, timeout=5: calls.append(url) or {"status_code": 200},
+    )
+    from toolkit.cli.cmd_run import _run_probe
+    _run_probe(_FakeCfg([{"name": "s1", "type": "local_file", "args": {"path": "data/file.csv"}}]), 2024, logging.getLogger("t"))
+
+    assert calls == [], "probe_url_headers should NOT be called for local_file"
+
+
+@pytest.mark.contract
+def test_probe_does_not_block_on_error(monkeypatch) -> None:
+    """Probe step logs warning but does NOT raise on unreachable source."""
+    monkeypatch.setattr(
+        "toolkit.scout.http.probe_url_headers",
+        lambda url, timeout=5: (_ for _ in ()).throw(RuntimeError("ConnectionError")),
+    )
+    from toolkit.cli.cmd_run import _run_probe
+    _run_probe(_FakeCfg([{"name": "s1", "type": "http_file", "args": {"url": "https://dead.test/data.csv"}}]), 2024, logging.getLogger("t"))
+
+
+@pytest.mark.contract
+def test_probe_logs_ckan_portal(monkeypatch) -> None:
+    """Probe step probes CKAN portal_url (API base, not homepage)."""
+    calls = []
+    monkeypatch.setattr(
+        "toolkit.scout.http.probe_url_headers",
+        lambda url, timeout=5: calls.append(url) or {"status_code": 200},
+    )
+    from toolkit.cli.cmd_run import _run_probe
+    _run_probe(_FakeCfg([{"name": "s1", "type": "ckan", "args": {"portal_url": "https://ckan.test/api/3/action"}}]), 2024, logging.getLogger("t"))
+
+    assert len(calls) == 1
+    assert "ckan.test/api/3/action" in calls[0], "should probe the full portal_url, not just scheme://host"

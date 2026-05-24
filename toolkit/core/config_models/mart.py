@@ -114,6 +114,29 @@ class HierarchyLevel(BaseModel):
             )
         return text
 
+    @field_validator("source_table")
+    @classmethod
+    def _validate_source_table(cls, value: str | None) -> str | None:
+        if value is not None:
+            text = value.strip()
+            if text and not re.fullmatch(_SAFE_SQL_IDENTIFIER_RE, text):
+                raise ValueError(
+                    "mart.hierarchy.levels[].source_table must be a safe SQL identifier "
+                    "(letters, numbers, underscore; cannot start with a number)"
+                )
+        return value
+
+    @field_validator("grain")
+    @classmethod
+    def _validate_grain(cls, value: list[str]) -> list[str]:
+        for g in value:
+            if not re.fullmatch(_SAFE_SQL_IDENTIFIER_RE, g.strip()):
+                raise ValueError(
+                    f"mart.hierarchy.levels[].grain element '{g}' must be a safe SQL identifier "
+                    "(letters, numbers, underscore; cannot start with a number)"
+                )
+        return value
+
 
 class HierarchyConfig(BaseModel):
     """Gerarchia mart: aggregazione per asse naturale del dato."""

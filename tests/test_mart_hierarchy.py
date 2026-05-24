@@ -91,7 +91,8 @@ def test_hierarchy_count_fallback(tmp_path: Path) -> None:
         "CREATE VIEW clean_input AS SELECT * FROM (VALUES ('Roma','Lazio','X'),('Milano','Lombardia','Y')) "
         "AS t(comune, regione, codice)"
     )
-    mart_dir = tmp_path / "m"; mart_dir.mkdir()
+    mart_dir = tmp_path / "m"
+    mart_dir.mkdir()
     written, _, _ = _run_hierarchy_levels(
         con, {"hierarchy": {"axis": "x", "levels": [{"level": "c", "table": "h_c", "grain": ["comune"]}]}},
         "test", 2024, mart_dir, logger=_null_logger,
@@ -107,7 +108,8 @@ def test_hierarchy_edge_cases(tmp_path: Path) -> None:
     """Empty config returns empty; numeric grain not treated as metric."""
     con = duckdb.connect()
     _setup_clean_view(con)
-    d = tmp_path / "d"; d.mkdir()
+    d = tmp_path / "d"
+    d.mkdir()
 
     # Empty hierarchy → empty result
     w, e, r = _run_hierarchy_levels(con, {}, "t", 2024, d, logger=_null_logger)
@@ -129,7 +131,8 @@ def test_hierarchy_edge_cases(tmp_path: Path) -> None:
 
     # Missing source → ValueError (separate connection without clean_input)
     con2 = duckdb.connect()
-    d2 = tmp_path / "d2"; d2.mkdir()
+    d2 = tmp_path / "d2"
+    d2.mkdir()
     with pytest.raises(ValueError, match="source table.*not found"):
         _run_hierarchy_levels(
             con2, {"hierarchy": {"axis": "x", "levels": [{"level": "x", "table": "x", "grain": ["comune"]}]}},

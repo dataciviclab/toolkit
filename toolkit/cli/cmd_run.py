@@ -39,7 +39,7 @@ def _validation_runner(layer_name: str):
 
 def _planned_layers(step: str) -> list[str]:
     if step == "all":
-        return ["raw", "clean", "mart"]
+        return ["probe", "raw", "clean", "mart"]
     return [step]
 
 
@@ -118,13 +118,13 @@ def _print_execution_plan(cfg, year: int, layers: list[str], context: RunContext
     typer.echo("")
 
 
-def _preflight_check(cfg, year: int, logger) -> None:
-    """Probe rapido delle fonti remote prima di run raw.
+def _run_probe(cfg, year: int, logger) -> None:
+    """Passo probe della pipeline: verifica raggiungibilita' fonti remote.
 
-    Riutilizza probe_url_headers dello scout (HEAD + GET+Range fallback,
-    retry, timeout). Salta local_file, sdmx, sparql (non timeoutano).
-    In caso di fallimento logga warning e prosegue — il vero errore
-    arrivera' da raw se la fonte e' effettivamente giu'.
+    Chiama probe_url_headers dello scout (HEAD + GET+Range fallback,
+    retry) su ogni sorgente HTTP/CKAN. Logga warning se irraggiungibile,
+    non blocca mai — il vero errore arrivera' da raw.
+    Salta local_file, sdmx, sparql (non timeoutano).
     """
     sources = (cfg.raw or {}).get("sources") or []
     if not sources:
@@ -146,7 +146,7 @@ def _preflight_check(cfg, year: int, logger) -> None:
                 sc = result.get("status_code", 0)
                 if sc >= 400 or sc == 0:
                     logger.warning(
-                        "PRE-FLIGHT | %s %s -> HTTP %s",
+                        "PROBE | %s %s -> HTTP %s",
                         name, url, sc or result.get("error", "unreachable"),
                     )
 
@@ -159,13 +159,11 @@ def _preflight_check(cfg, year: int, logger) -> None:
                     sc = result.get("status_code", 0)
                     if sc >= 400 or sc == 0:
                         logger.warning(
-                            "PRE-FLIGHT | %s CKAN portal %s -> HTTP %s",
+                            "PROBE | %s CKAN portal %s -> HTTP %s",
                             name, base, sc or result.get("error", "unreachable"),
                         )
-
-            # local_file, sdmx, sparql: skip probe
         except RuntimeError as exc:
-            logger.warning("PRE-FLIGHT | %s unreachable: %s", name, exc)
+            logger.warning("PROBE | %s unreachable: %s", name, exc)
 
 
 def run_year(
@@ -244,8 +242,8 @@ def run_year(
 
     source_id = cfg.source_id
 
-    if "raw" in layers_to_run and not dry_run:
-        _preflight_check(cfg, year, base_logger)
+    if "probe" in layers_to_run and not dry_run:
+        _run_probe(cfg, year, base_logger)
 
     if "raw" in layers_to_run:
         _execute_layer(

@@ -58,7 +58,7 @@ def test_cli_dry_run_resolves_sql_from_config_dir_not_cwd(tmp_path: Path, monkey
 
     assert result.exit_code == 0
     assert "Execution Plan" in result.output
-    assert "steps: raw, clean, mart" in result.output
+    assert "steps: probe, raw, clean, mart" in result.output
 
 
 def test_cli_commands_use_dataset_yml_dir_as_path_base(tmp_path: Path, monkeypatch) -> None:

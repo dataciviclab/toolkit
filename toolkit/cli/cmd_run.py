@@ -137,32 +137,35 @@ def _preflight_check(cfg, year: int, logger) -> None:
         args = src.get("args", {})
         name = src.get("name") or stype
 
-        if stype in ("http_file", "http_post_file"):
-            url = (args.get("url") or "").replace("{year}", str(year))
-            if not url:
-                continue
-            result = probe_url_headers(url, timeout=5)
-            sc = result.get("status_code", 0)
-            if sc >= 400 or sc == 0:
-                logger.warning(
-                    "PRE-FLIGHT | %s %s -> HTTP %s",
-                    name, url, sc or result.get("error", "unreachable"),
-                )
-
-        elif stype == "ckan":
-            portal = (args.get("portal_url") or "").replace("{year}", str(year))
-            if portal:
-                from urllib.parse import urlparse
-                base = f"{urlparse(portal).scheme}://{urlparse(portal).netloc}"
-                result = probe_url_headers(base, timeout=5)
+        try:
+            if stype in ("http_file", "http_post_file"):
+                url = (args.get("url") or "").replace("{year}", str(year))
+                if not url:
+                    continue
+                result = probe_url_headers(url, timeout=5)
                 sc = result.get("status_code", 0)
                 if sc >= 400 or sc == 0:
                     logger.warning(
-                        "PRE-FLIGHT | %s CKAN portal %s -> HTTP %s",
-                        name, base, sc or result.get("error", "unreachable"),
+                        "PRE-FLIGHT | %s %s -> HTTP %s",
+                        name, url, sc or result.get("error", "unreachable"),
                     )
 
-        # local_file, sdmx, sparql: skip probe
+            elif stype == "ckan":
+                portal = (args.get("portal_url") or "").replace("{year}", str(year))
+                if portal:
+                    from urllib.parse import urlparse
+                    base = f"{urlparse(portal).scheme}://{urlparse(portal).netloc}"
+                    result = probe_url_headers(base, timeout=5)
+                    sc = result.get("status_code", 0)
+                    if sc >= 400 or sc == 0:
+                        logger.warning(
+                            "PRE-FLIGHT | %s CKAN portal %s -> HTTP %s",
+                            name, base, sc or result.get("error", "unreachable"),
+                        )
+
+            # local_file, sdmx, sparql: skip probe
+        except RuntimeError as exc:
+            logger.warning("PRE-FLIGHT | %s unreachable: %s", name, exc)
 
 
 def run_year(

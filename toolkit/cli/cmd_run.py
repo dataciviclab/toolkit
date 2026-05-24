@@ -20,6 +20,10 @@ from toolkit.raw.run import run_raw
 from toolkit.raw.validate import run_raw_validation
 
 
+class PreflightCheckError(ValueError):
+    """Fonte irraggiungibile: fallimento rapido prima di run raw."""
+
+
 class ValidationGateError(RuntimeError):
     pass
 
@@ -115,6 +119,59 @@ def _print_execution_plan(cfg, year: int, layers: list[str], context: RunContext
     typer.echo("")
 
 
+def _preflight_check(cfg, year: int, logger) -> None:
+    """Probe rapido delle fonti raw prima dello scaricamento.
+
+    Fallisce subito se una fonte e' irraggiungibile, invece di lasciare
+    raw in attesa fino al timeout globale. Usa lo stesso HttpClient
+    dei plugin (lab_connectors.http), con timeout breve.
+    """
+    sources = (cfg.raw or {}).get("sources") or []
+    if not sources:
+        return
+
+    from lab_connectors.http import HttpClient
+
+    errors: list[str] = []
+    for src in sources:
+        stype = src.get("type", "http_file")
+        args = src.get("args", {})
+        name = src.get("name") or stype
+
+        try:
+            if stype in ("http_file", "http_post_file"):
+                url = (args.get("url") or "").replace("{year}", str(year))
+                if not url:
+                    continue
+                client = HttpClient(timeout=5)
+                result = client.head(url)
+                if not result.is_ok or not result.response or not result.response.ok:
+                    status = result.response.status_code if result.response else "no_response"
+                    err_msg = str(result.err) if result.err else f"HTTP {status}"
+                    errors.append(f"  [{name}] {url} -> {err_msg}")
+
+            elif stype == "ckan":
+                portal = (args.get("portal_url") or "").replace("{year}", str(year))
+                if portal:
+                    client = HttpClient(timeout=5)
+                    result = client.head(portal)
+                    if not result.is_ok or not result.response or not result.response.ok:
+                        status = result.response.status_code if result.response else "no_response"
+                        err_msg = str(result.err) if result.err else f"HTTP {status}"
+                        errors.append(f"  [{name}] CKAN portal {portal} -> {err_msg}")
+
+            # local_file, sdmx, sparql: skip probe —
+            # local file non timeouta, sdmx/sparql fetch e' gia' leggero
+
+        except Exception as exc:
+            errors.append(f"  [{name}] probe error: {exc}")
+
+    if errors:
+        raise PreflightCheckError(
+            "Pre-flight check fallito — fonti irraggiungibili:\n" + "\n".join(errors)
+        )
+
+
 def run_year(
     cfg,
     year: int,
@@ -190,6 +247,9 @@ def run_year(
             raise
 
     source_id = cfg.source_id
+
+    if "raw" in layers_to_run and not dry_run:
+        _preflight_check(cfg, year, base_logger)
 
     if "raw" in layers_to_run:
         _execute_layer(

@@ -465,12 +465,12 @@ class _FakeCfg:
 
 
 @pytest.mark.contract
-def test_probe_calls_probe_url_headers_for_http_source(monkeypatch) -> None:
-    """Probe step calls scout probe for http_file sources."""
+def test_probe_calls_quick_head_for_http_source(monkeypatch) -> None:
+    """Probe step calls _quick_head for http_file sources."""
     calls = []
     monkeypatch.setattr(
-        "toolkit.scout.http.probe_url_headers",
-        lambda url, timeout=5: calls.append(url) or {"status_code": 200, "content_type": "text/csv"},
+        "toolkit.cli.cmd_run._quick_head",
+        lambda url, timeout=3: calls.append(url) or {"status_code": 200, "content_type": "text/csv"},
     )
     from toolkit.cli.cmd_run import _run_probe
     _run_probe(_FakeCfg([{"name": "s1", "type": "http_file", "args": {"url": "https://example.com/data.csv"}}]), 2024, logging.getLogger("t"))
@@ -479,38 +479,35 @@ def test_probe_calls_probe_url_headers_for_http_source(monkeypatch) -> None:
     assert "example.com" in calls[0]
 
 
-@pytest.mark.contract
 def test_probe_skips_local_file(monkeypatch) -> None:
-    """Probe step does NOT call probe_url_headers for local_file sources."""
+    """Probe step does NOT call _quick_head for local_file sources."""
     calls = []
     monkeypatch.setattr(
-        "toolkit.scout.http.probe_url_headers",
-        lambda url, timeout=5: calls.append(url) or {"status_code": 200},
+        "toolkit.cli.cmd_run._quick_head",
+        lambda url, timeout=3: calls.append(url) or {"status_code": 200},
     )
     from toolkit.cli.cmd_run import _run_probe
     _run_probe(_FakeCfg([{"name": "s1", "type": "local_file", "args": {"path": "data/file.csv"}}]), 2024, logging.getLogger("t"))
 
-    assert calls == [], "probe_url_headers should NOT be called for local_file"
+    assert calls == [], "_quick_head should NOT be called for local_file"
 
 
-@pytest.mark.contract
 def test_probe_does_not_block_on_error(monkeypatch) -> None:
     """Probe step logs warning but does NOT raise on unreachable source."""
     monkeypatch.setattr(
-        "toolkit.scout.http.probe_url_headers",
-        lambda url, timeout=5: (_ for _ in ()).throw(RuntimeError("ConnectionError")),
+        "toolkit.cli.cmd_run._quick_head",
+        lambda url, timeout=3: {"status_code": 0, "error": "ConnectionRefused"},
     )
     from toolkit.cli.cmd_run import _run_probe
     _run_probe(_FakeCfg([{"name": "s1", "type": "http_file", "args": {"url": "https://dead.test/data.csv"}}]), 2024, logging.getLogger("t"))
 
 
-@pytest.mark.contract
 def test_probe_logs_ckan_portal(monkeypatch) -> None:
     """Probe step probes CKAN portal_url (API base, not homepage)."""
     calls = []
     monkeypatch.setattr(
-        "toolkit.scout.http.probe_url_headers",
-        lambda url, timeout=5: calls.append(url) or {"status_code": 200},
+        "toolkit.cli.cmd_run._quick_head",
+        lambda url, timeout=3: calls.append(url) or {"status_code": 200},
     )
     from toolkit.cli.cmd_run import _run_probe
     _run_probe(_FakeCfg([{"name": "s1", "type": "ckan", "args": {"portal_url": "https://ckan.test/api/3/action"}}]), 2024, logging.getLogger("t"))

@@ -143,11 +143,25 @@ def _probe_fmt(content_type: str | None) -> str:
     return _PROBE_FORMATS.get(base, base)
 
 
-def _run_probe(cfg, year: int, logger) -> None:
-    """Passo probe della pipeline: verifica raggiungibilita' fonti remote.
+def _quick_head(url: str, timeout: int = 3) -> dict:
+    """HEAD veloce senza retry. Ritorna dict con status_code e content_type."""
+    from lab_connectors.http import HttpClient
+    try:
+        client = HttpClient(timeout=timeout)
+        result = client.head(url)
+        if result.response is not None:
+            ct = result.response.headers.get("Content-Type", "") if result.response.headers else ""
+            return {"status_code": result.response.status_code, "content_type": ct, "final_url": str(result.response.url)}
+        return {"status_code": 0, "error": str(result.err) if result.err else "no_response"}
+    except Exception as exc:
+        return {"status_code": 0, "error": type(exc).__name__}
 
-    Riutilizza probe_url_routed dello scout (routing automatico,
-    format detection) per output ricco come lo scout CLI.
+
+def _run_probe(cfg, year: int, logger) -> None:
+    """Passo probe della pipeline: HEAD veloce (3s) su fonti remote.
+
+    A differenza di scout probe_url_headers (che fa retry + GET+Range),
+    qui usiamo un singolo HEAD per non appesantire il run in CI.
     Non blocca mai — il vero errore arrivera' da raw.
     Salta local_file, sdmx, sparql (non timeoutano).
     """
@@ -156,37 +170,31 @@ def _run_probe(cfg, year: int, logger) -> None:
         logger.info("PROBE | nessuna fonte remota da verificare")
         return
 
-    from toolkit.scout.http import probe_url_headers
-
     for src in sources:
         stype = src.get("type", "http_file")
         args = src.get("args", {})
         name = src.get("name") or stype
         url = (args.get("url") or "").replace("{year}", str(year))
 
-        try:
-            if stype in ("http_file", "http_post_file"):
-                if not url:
-                    continue
-                probe = probe_url_headers(url, timeout=5)
+        if stype in ("http_file", "http_post_file"):
+            if not url:
+                continue
+            probe = _quick_head(url)
+            sc = probe.get("status_code", 0)
+            if 200 <= sc < 400:
+                logger.info("PROBE | %s -> HTTP %s (%s)", name, sc, _probe_fmt(probe.get("content_type")))
+            else:
+                logger.warning("PROBE | %s -> %s", name, probe.get("error", f"HTTP {sc}"))
+
+        elif stype == "ckan":
+            portal = (args.get("portal_url") or "").replace("{year}", str(year))
+            if portal:
+                probe = _quick_head(portal)
                 sc = probe.get("status_code", 0)
                 if 200 <= sc < 400:
-                    logger.info("PROBE | %s -> HTTP %s (%s)", name, sc, _probe_fmt(probe.get("content_type")))
+                    logger.info("PROBE | %s CKAN -> HTTP %s", name, sc)
                 else:
-                    logger.warning("PROBE | %s -> HTTP %s %s", name, sc or "ERR", url)
-
-            elif stype == "ckan":
-                portal = (args.get("portal_url") or "").replace("{year}", str(year))
-                if portal:
-                    probe = probe_url_headers(portal, timeout=5)
-                    sc = probe.get("status_code", 0)
-                    if 200 <= sc < 400:
-                        logger.info("PROBE | %s CKAN -> HTTP %s (%s)", name, sc, probe.get("final_url", portal))
-                    else:
-                        logger.warning("PROBE | %s CKAN -> HTTP %s at %s", name, sc or "ERR", portal)
-
-        except RuntimeError as exc:
-            logger.warning("PROBE | %s -> unreachable: %s", name, exc)
+                    logger.warning("PROBE | %s CKAN -> %s", name, probe.get("error", f"HTTP {sc}"))
 
 
 def run_year(

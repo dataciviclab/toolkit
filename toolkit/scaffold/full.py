@@ -271,7 +271,6 @@ def generate_full_scaffold(
     profile: dict[str, Any] | None = None,
     inferred_years: list[int] | None = None,
     validation_suggestions: dict[str, Any] | None = None,
-    hierarchy: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     """Genera tutti i file di un candidate dataset.
 
@@ -337,21 +336,6 @@ def generate_full_scaffold(
     yml_lines.append("  tables:")
     yml_lines.append(f'    - name: "{slug}"')
     yml_lines.append('      sql: "sql/mart.sql"')
-
-    # Hierarchia: genera tabelle aggregate a runtime (nessun SQL da scrivere)
-    if hierarchy:
-        yml_lines.append("  hierarchy:")
-        yml_lines.append(f'    axis: "{hierarchy.get("axis", "territoriale")}"')
-        yml_lines.append("    levels:")
-        for level_cfg in hierarchy.get("levels", []):
-            level_name = level_cfg.get("level", "unknown")
-            grain = level_cfg.get("grain", [])
-            grain_list = ", ".join(f'"{g}"' for g in grain)
-            yml_lines.append(f'      - level: "{level_name}"')
-            yml_lines.append(f'        table: "{level_cfg.get("table", f"h_{slug}_{level_name}")}"')
-            yml_lines.append(f"        grain: [{grain_list}]")
-            if "source_table" in level_cfg and level_cfg.get("source_table"):
-                yml_lines.append(f'        source_table: "{level_cfg["source_table"]}"')
 
     if validation_suggestions:
         mv = validation_suggestions.get("mart")

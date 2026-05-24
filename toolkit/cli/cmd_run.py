@@ -20,8 +20,7 @@ from toolkit.raw.run import run_raw
 from toolkit.raw.validate import run_raw_validation
 
 
-class PreflightCheckError(ValueError):
-    """Fonte irraggiungibile: fallimento rapido prima di run raw."""
+
 
 
 class ValidationGateError(RuntimeError):
@@ -120,61 +119,50 @@ def _print_execution_plan(cfg, year: int, layers: list[str], context: RunContext
 
 
 def _preflight_check(cfg, year: int, logger) -> None:
-    """Probe rapido delle fonti raw prima dello scaricamento.
+    """Probe rapido delle fonti remote prima di run raw.
 
-    Fallisce subito se una fonte e' irraggiungibile, invece di lasciare
-    raw in attesa fino al timeout globale. Usa lo stesso HttpClient
-    dei plugin (lab_connectors.http), con timeout breve.
+    Riutilizza probe_url_headers dello scout (HEAD + GET+Range fallback,
+    retry, timeout). Salta local_file, sdmx, sparql (non timeoutano).
+    In caso di fallimento logga warning e prosegue — il vero errore
+    arrivera' da raw se la fonte e' effettivamente giu'.
     """
     sources = (cfg.raw or {}).get("sources") or []
     if not sources:
         return
 
-    from lab_connectors.http import HttpClient
+    from toolkit.scout.http import probe_url_headers
 
-    errors: list[str] = []
     for src in sources:
         stype = src.get("type", "http_file")
         args = src.get("args", {})
         name = src.get("name") or stype
 
-        try:
-            if stype in ("http_file", "http_post_file"):
-                url = (args.get("url") or "").replace("{year}", str(year))
-                if not url:
-                    continue
-                client = HttpClient(timeout=5)
-                result = client.head(url)
-                if not result.is_ok or result.response is None or not result.response.ok:
-                    status = result.response.status_code if result.response is not None else "no_response"
-                    err_msg = str(result.err) if result.err else f"HTTP {status}"
-                    errors.append(f"  [{name}] {url} -> {err_msg}")
+        if stype in ("http_file", "http_post_file"):
+            url = (args.get("url") or "").replace("{year}", str(year))
+            if not url:
+                continue
+            result = probe_url_headers(url, timeout=5)
+            sc = result.get("status_code", 0)
+            if sc >= 400 or sc == 0:
+                logger.warning(
+                    "PRE-FLIGHT | %s %s -> HTTP %s",
+                    name, url, sc or result.get("error", "unreachable"),
+                )
 
-            elif stype == "ckan":
-                # Probe the portal base URL (strip api path) to check server reachability
-                portal = (args.get("portal_url") or "").replace("{year}", str(year))
-                if portal:
-                    # Use portal root for HEAD (api endpoints may reject non-GET)
-                    from urllib.parse import urlparse
-                    parsed = urlparse(portal)
-                    base = f"{parsed.scheme}://{parsed.netloc}"
-                    client = HttpClient(timeout=5)
-                    result = client.head(base)
-                    if not result.is_ok or result.response is None or not result.response.ok:
-                        status = result.response.status_code if result.response is not None else "no_response"
-                        err_msg = str(result.err) if result.err else f"HTTP {status}"
-                        errors.append(f"  [{name}] CKAN portal {base} -> {err_msg}")
+        elif stype == "ckan":
+            portal = (args.get("portal_url") or "").replace("{year}", str(year))
+            if portal:
+                from urllib.parse import urlparse
+                base = f"{urlparse(portal).scheme}://{urlparse(portal).netloc}"
+                result = probe_url_headers(base, timeout=5)
+                sc = result.get("status_code", 0)
+                if sc >= 400 or sc == 0:
+                    logger.warning(
+                        "PRE-FLIGHT | %s CKAN portal %s -> HTTP %s",
+                        name, base, sc or result.get("error", "unreachable"),
+                    )
 
-            # local_file, sdmx, sparql: skip probe —
-            # local file non timeouta, sdmx/sparql fetch e' gia' leggero
-
-        except Exception as exc:
-            errors.append(f"  [{name}] probe error: {exc}")
-
-    if errors:
-        raise PreflightCheckError(
-            "Pre-flight check fallito — fonti irraggiungibili:\n" + "\n".join(errors)
-        )
+        # local_file, sdmx, sparql: skip probe
 
 
 def run_year(

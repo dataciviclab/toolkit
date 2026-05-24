@@ -102,11 +102,16 @@ def _register_fetch(stype: str):
 def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
     src = registry.create(stype, **(client or {}))
     sample_bytes = formatted_args.get("sample_bytes")
+    # Se l'args specifica prefer_datastore: false, forza il download diretto
+    prefer_ds = formatted_args.get("prefer_datastore", True)
+    if isinstance(prefer_ds, str):
+        prefer_ds = prefer_ds.lower() in ("true", "1", "yes")
     return src.fetch(
         formatted_args["portal_url"],
         str(formatted_args["resource_id"]) if formatted_args.get("resource_id") is not None else None,
         str(formatted_args["dataset_id"]) if formatted_args.get("dataset_id") is not None else None,
         str(formatted_args["resource_name"]) if formatted_args.get("resource_name") is not None else None,
+        prefer_datastore=prefer_ds,
         sample_bytes=sample_bytes,
     )
 

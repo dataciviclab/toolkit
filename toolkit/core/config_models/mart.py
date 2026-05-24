@@ -76,14 +76,22 @@ class MartValidateConfig(BaseModel):
 
 
 class HierarchyLevel(BaseModel):
-    """Un livello della gerarchia mart (es. comune, provincia, regione)."""
+    """Un livello della gerarchia mart (es. comune, provincia, regione).
+
+    A runtime, la query di aggregazione viene generata automaticamente:
+    - colonne metriche scoperte per introspection dalla source
+    - GROUP BY sulle colonne grain
+    - SUM per ogni metrica numerica
+
+    Non richiede un file SQL: il config è attivo.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     level: str
     table: str
     grain: list[str]
-    sql: Path
+    source_table: str | None = None
 
     @field_validator("level")
     @classmethod
@@ -99,7 +107,35 @@ class HierarchyLevel(BaseModel):
         text = value.strip()
         if not text:
             raise ValueError("mart.hierarchy.levels[].table must not be empty")
+        if not re.fullmatch(_SAFE_SQL_IDENTIFIER_RE, text):
+            raise ValueError(
+                "mart.hierarchy.levels[].table must be a safe SQL identifier "
+                "(letters, numbers, underscore; cannot start with a number)"
+            )
         return text
+
+    @field_validator("source_table")
+    @classmethod
+    def _validate_source_table(cls, value: str | None) -> str | None:
+        if value is not None:
+            text = value.strip()
+            if text and not re.fullmatch(_SAFE_SQL_IDENTIFIER_RE, text):
+                raise ValueError(
+                    "mart.hierarchy.levels[].source_table must be a safe SQL identifier "
+                    "(letters, numbers, underscore; cannot start with a number)"
+                )
+        return value
+
+    @field_validator("grain")
+    @classmethod
+    def _validate_grain(cls, value: list[str]) -> list[str]:
+        for g in value:
+            if not re.fullmatch(_SAFE_SQL_IDENTIFIER_RE, g.strip()):
+                raise ValueError(
+                    f"mart.hierarchy.levels[].grain element '{g}' must be a safe SQL identifier "
+                    "(letters, numbers, underscore; cannot start with a number)"
+                )
+        return value
 
 
 class HierarchyConfig(BaseModel):

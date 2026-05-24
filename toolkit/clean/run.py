@@ -124,6 +124,7 @@ def _select_clean_inputs(
 def _clean_metadata_payload(
     *,
     dataset: str,
+    source_id: str | None = None,
     year: int,
     base_dir: Path | None,
     root_dir: Path,
@@ -139,7 +140,7 @@ def _clean_metadata_payload(
     outputs: list[dict[str, Any]],
     policy: str,
 ) -> dict[str, Any]:
-    metadata_payload = {
+    metadata_payload: dict[str, Any] = {
         "layer": "clean",
         "dataset": dataset,
         "year": year,
@@ -156,6 +157,8 @@ def _clean_metadata_payload(
         "outputs": outputs,
         "input_files": [p.name for p in input_files],
     }
+    if source_id:
+        metadata_payload["source_id"] = source_id
     return metadata_payload
 
 
@@ -169,6 +172,7 @@ def run_clean(
     base_dir: Path | None = None,
     output_cfg: dict[str, Any] | None = None,
     sample_rows: int | None = None,
+    source_id: str | None = None,
 ):
     clean_cfg = ensure_dict(clean_cfg)
     output_cfg = ensure_dict(output_cfg)
@@ -229,6 +233,7 @@ def run_clean(
     outputs = [file_record(output_path)]
     metadata_payload = _clean_metadata_payload(
         dataset=dataset,
+        source_id=source_id,
         year=year,
         base_dir=base_dir,
         root_dir=root_dir,

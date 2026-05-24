@@ -88,6 +88,7 @@ class ToolkitConfig:
     root: Path
     root_source: str
     dataset: str
+    source_id: str | None
     years: list[int]
     time_coverage: TimeCoverage | None
 
@@ -166,6 +167,7 @@ def load_config(
         root=effective_root,
         root_source="--root" if root_override else model.root_source,
         dataset=model.dataset.name,
+        source_id=model.dataset.source_id,
         years=list(model.dataset.years),
         time_coverage=model.dataset.time_coverage,
         _model=model,

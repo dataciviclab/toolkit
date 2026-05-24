@@ -34,6 +34,7 @@ def run_mart_multi_year(
     base_dir: Path | None = None,
     output_cfg: dict[str, Any] | None = None,
     support_cfg: list[dict[str, Any]] | None = None,
+    source_id: str | None = None,
 ) -> dict[str, Any]:
     """Run multi-year MART tables (tables with explicit ``years`` in config).
 
@@ -128,7 +129,7 @@ def run_mart_multi_year(
             })
 
     outputs = [file_record(p) for p in written]
-    metadata_payload = {
+    metadata_payload: dict[str, Any] = {
         "layer": "mart_multi_year",
         "dataset": dataset,
         "years": dataset_years,
@@ -137,6 +138,8 @@ def run_mart_multi_year(
         "output_paths": [serialize_metadata_path(p, root_dir) for p in written],
         "tables": executed,
     }
+    if source_id:
+        metadata_payload["source_id"] = source_id
     metadata_path = write_metadata(multi_year_dir, metadata_payload)
     write_layer_manifest(
         multi_year_dir,
@@ -157,6 +160,126 @@ def run_mart_multi_year(
 
 
 # ---------------------------------------------------------------------------
+# Hierarchy levels: generatore runtime di tabelle aggregate
+# ---------------------------------------------------------------------------
+
+_NUMERIC_TYPES = {
+    "INTEGER", "BIGINT", "HUGEINT", "SMALLINT", "TINYINT",
+    "DOUBLE", "FLOAT", "DECIMAL", "REAL",
+}
+
+
+def _run_hierarchy_levels(
+    con,
+    mart_cfg: dict[str, Any],
+    dataset: str,
+    year: int,
+    mart_dir: Path,
+    *,
+    logger,
+) -> tuple[list[Path], list[dict[str, Any]], int]:
+    """Genera ed esegue tabelle mart per ogni livello gerarchico.
+
+    Ogni livello produce una tabella aggregata: SELECT grain, SUM(metrics)
+    FROM source GROUP BY grain. Le colonne metriche sono scoperte per
+    introspection dalla tabella sorgente (tutte le colonne numeriche).
+
+    Returns (written_paths, executed_records, total_rows).
+    """
+    hierarchy = mart_cfg.get("hierarchy")
+    if not hierarchy:
+        return [], [], 0
+
+    levels = hierarchy.get("levels", [])
+    if not levels:
+        return [], [], 0
+
+    written: list[Path] = []
+    executed: list[dict[str, Any]] = []
+    total_rows = 0
+
+    for level_cfg in levels:
+        level_name = level_cfg.get("level", "unknown")
+        table_name = level_cfg.get("table", f"h_{level_name}")
+        grain = level_cfg.get("grain", [])
+        source_table = level_cfg.get("source_table") or "clean_input"
+
+        if not grain:
+            logger.warning("hierarchy level '%s' has no grain columns — skipping", level_name)
+            continue
+
+        # Verify source table exists before profiling
+        try:
+            con.execute(f"SELECT COUNT(*) FROM {source_table}").fetchone()
+        except Exception:
+            raise ValueError(
+                f"hierarchy level '{level_name}' source table '{source_table}' not found. "
+                "Hierarchy levels need clean parquet files (run 'toolkit run clean' first) "
+                "or a source_table that references an existing mart table."
+            )
+
+        # Discover metric columns (all numeric types not used as grain)
+        # DuckDB types may include precision like DECIMAL(3,1), BIGINT etc.
+        # Use startswith to catch parameterized types
+        source_profile = profile_relation(con, source_table)
+        grain_lower = [g.lower() for g in grain]
+        metric_cols = [
+            c["name"] for c in source_profile.get("columns", [])
+            if any(c["type"].upper().startswith(num_t) for num_t in _NUMERIC_TYPES)
+            and c["name"].lower() not in grain_lower
+        ]
+
+        # Build grain expression (safe quoting via double-quote)
+        grain_expr = ", ".join(f'"{g}"' for g in grain)
+
+        if metric_cols:
+            # Cap metrics at 30 to avoid absurdly wide tables
+            sum_metrics = metric_cols[:30]
+            sum_expr = ",\n  ".join(f'SUM("{m}") AS "{m}"' for m in sum_metrics)
+            sql = (
+                f'-- {level_name}: aggregazione gerarchica\n'
+                f"SELECT\n"
+                f"  {grain_expr},\n"
+                f"  {sum_expr}\n"
+                f"FROM {source_table}\n"
+                f"GROUP BY {grain_expr}"
+            )
+        else:
+            # No metric columns → count records per grain
+            sql = (
+                f'-- {level_name}: conteggio record\n'
+                f"SELECT\n"
+                f"  {grain_expr},\n"
+                f"  COUNT(*) AS record_count\n"
+                f"FROM {source_table}\n"
+                f"GROUP BY {grain_expr}"
+            )
+
+        # Execute hierarchy level as a mart table
+        con.execute(f'CREATE OR REPLACE TABLE "{table_name}" AS {sql}')
+        output_profile = profile_relation(con, table_name)
+        row_count = int(output_profile.get("row_count") or 0)
+        total_rows += row_count
+
+        out = mart_dir / f"{table_name}.parquet"
+        con.execute(f"COPY \"{table_name}\" TO '{out}' (FORMAT PARQUET);")
+        written.append(out)
+
+        executed.append({
+            "name": table_name,
+            "level": level_name,
+            "grain": grain,
+            "source": source_table,
+            "metric_columns": metric_cols[:30],
+            "row_count": row_count,
+        })
+
+        logger.info("  hierarchy level '%s' -> %s (%d rows)", level_name, out, row_count)
+
+    return written, executed, total_rows
+
+
+# ---------------------------------------------------------------------------
 # Single-year mart tables
 # ---------------------------------------------------------------------------
 
@@ -172,6 +295,7 @@ def run_mart(
     clean_cfg: dict[str, Any] | None = None,
     output_cfg: dict[str, Any] | None = None,
     support_cfg: list[dict[str, Any]] | None = None,
+    source_id: str | None = None,
 ):
     mart_cfg = ensure_dict(mart_cfg)
     clean_cfg = ensure_dict(clean_cfg)
@@ -208,8 +332,12 @@ def run_mart(
             con.execute("CREATE OR REPLACE VIEW clean AS SELECT * FROM clean_input")
 
         tables = mart_cfg.get("tables") or []
-        if not isinstance(tables, list) or not tables:
-            raise ValueError("mart.tables missing or empty in dataset.yml")
+        has_hierarchy = bool(mart_cfg.get("hierarchy"))
+        if not isinstance(tables, list) or (not tables and not has_hierarchy):
+            raise ValueError(
+                "mart.tables missing or empty in dataset.yml "
+                "(add explicit tables or a hierarchy section)"
+            )
 
         support_payloads = resolve_support_payloads(support_cfg, require_exists=True)
         template_ctx = build_runtime_template_ctx(
@@ -290,8 +418,17 @@ def run_mart(
                 }
             )
 
+        # Hierarchy levels: generates aggregation tables from clean data
+        if has_hierarchy:
+            hierarchy_written, hierarchy_executed, hierarchy_rows = _run_hierarchy_levels(
+                con, mart_cfg, dataset, year, mart_dir, logger=logger,
+            )
+            written.extend(hierarchy_written)
+            executed.extend(hierarchy_executed)
+            total_rows += hierarchy_rows
+
     outputs = [file_record(p) for p in written]
-    metadata_payload = {
+    metadata_payload: dict[str, Any] = {
         "layer": "mart",
         "dataset": dataset,
         "year": year,
@@ -301,10 +438,13 @@ def run_mart(
         "output_paths": [serialize_metadata_path(p, root_dir) for p in written],
         "template_ctx": public_template_ctx(template_ctx),
         "tables": executed,
+        "hierarchy_enabled": bool(mart_cfg.get("hierarchy")),
         "clean_input_profile": clean_input_profile,
         "table_profiles": table_profiles,
         "transition_profiles": transition_profiles,
     }
+    if source_id:
+        metadata_payload["source_id"] = source_id
     metadata_path = write_metadata(
         mart_dir,
         metadata_payload,

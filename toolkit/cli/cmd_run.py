@@ -141,14 +141,14 @@ def run_year(
         year=year,
         run_id=context.run_id,
     )
-    base_logger.info(
-        "RUN context | dataset=%s year=%s base_dir=%s effective_root=%s root_source=%s",
-        cfg.dataset,
-        year,
-        cfg.base_dir,
-        cfg.root,
-        cfg.root_source,
+    log_ctx = (
+        f"RUN context | dataset={cfg.dataset}"
+        f"{f' source_id={cfg.source_id}' if cfg.source_id else ''}"
+        f" year={year} base_dir={cfg.base_dir}"
+        f" effective_root={cfg.root}"
+        f" root_source={cfg.root_source}"
     )
+    base_logger.info(log_ctx)
 
     if dry_run:
         context.mark_dry_run()
@@ -189,6 +189,8 @@ def run_year(
             context.fail_run(str(exc))
             raise
 
+    source_id = cfg.source_id
+
     if "raw" in layers_to_run:
         _execute_layer(
             "raw",
@@ -202,6 +204,7 @@ def run_year(
             output_cfg=dump_cfg_section(cfg.output),
             clean_cfg=dump_cfg_section(cfg.clean),
             sample_bytes=sample_bytes,
+            source_id=source_id,
         )
 
     if "clean" in layers_to_run and not _is_mart_only_cfg(cfg):
@@ -215,6 +218,7 @@ def run_year(
             base_dir=cfg.base_dir,
             output_cfg=dump_cfg_section(cfg.output),
             sample_rows=sample_rows,
+            source_id=source_id,
         )
 
     if "mart" in layers_to_run and _has_single_year_mart(cfg):
@@ -229,6 +233,7 @@ def run_year(
             clean_cfg=dump_cfg_section(cfg.clean),
             output_cfg=dump_cfg_section(cfg.output),
             support_cfg=dump_cfg_section(cfg.support),
+            source_id=source_id,
         )
 
     context.complete_run(success_with_warnings=run_has_validation_warnings)
@@ -245,16 +250,19 @@ def _has_multi_year_mart(cfg) -> bool:
 
 
 def _has_single_year_mart(cfg) -> bool:
-    """Check if any mart table does NOT have an explicit ``years`` field.
+    """Check if any mart table does NOT have an explicit ``years`` field,
+    OR if a hierarchy section is defined (runtime-generated aggregation).
 
-    Quando tutte le tabelle sono multi-year (hanno ``years``),
-    il per-year ``run mart`` non ha nulla da elaborare e va saltato.
+    Quando tutte le tabelle sono multi-year (hanno ``years``) e non c'è
+    hierarchy, il per-year ``run mart`` non ha nulla da elaborare.
     """
     tables = (cfg.mart or {}).get("tables") or []
-    return any(
+    has_single_year = any(
         isinstance(t, dict) and not t.get("years")
         for t in tables
     )
+    has_hierarchy = bool((cfg.mart or {}).get("hierarchy"))
+    return has_single_year or has_hierarchy
 
 
 def _maybe_run_multi_year_mart(
@@ -297,6 +305,7 @@ def _maybe_run_multi_year_mart(
             base_dir=cfg.base_dir,
             output_cfg=dump_cfg_section(cfg.output),
             support_cfg=dump_cfg_section(cfg.support),
+            source_id=cfg.source_id,
         )
     except Exception as exc:
         if fail_on_error:

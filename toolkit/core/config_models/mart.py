@@ -107,6 +107,11 @@ class HierarchyLevel(BaseModel):
         text = value.strip()
         if not text:
             raise ValueError("mart.hierarchy.levels[].table must not be empty")
+        if not re.fullmatch(_SAFE_SQL_IDENTIFIER_RE, text):
+            raise ValueError(
+                "mart.hierarchy.levels[].table must be a safe SQL identifier "
+                "(letters, numbers, underscore; cannot start with a number)"
+            )
         return text
 
 

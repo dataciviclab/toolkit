@@ -218,13 +218,15 @@ def _run_hierarchy_levels(
                 "or a source_table that references an existing mart table."
             )
 
-        # Discover metric columns (all numeric types)
+        # Discover metric columns (all numeric types not used as grain)
         # DuckDB types may include precision like DECIMAL(3,1), BIGINT etc.
         # Use startswith to catch parameterized types
         source_profile = profile_relation(con, source_table)
+        grain_lower = [g.lower() for g in grain]
         metric_cols = [
             c["name"] for c in source_profile.get("columns", [])
             if any(c["type"].upper().startswith(num_t) for num_t in _NUMERIC_TYPES)
+            and c["name"].lower() not in grain_lower
         ]
 
         # Build grain expression (safe quoting via double-quote)

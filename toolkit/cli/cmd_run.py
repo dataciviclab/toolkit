@@ -145,20 +145,25 @@ def _preflight_check(cfg, year: int, logger) -> None:
                     continue
                 client = HttpClient(timeout=5)
                 result = client.head(url)
-                if not result.is_ok or not result.response or not result.response.ok:
-                    status = result.response.status_code if result.response else "no_response"
+                if not result.is_ok or result.response is None or not result.response.ok:
+                    status = result.response.status_code if result.response is not None else "no_response"
                     err_msg = str(result.err) if result.err else f"HTTP {status}"
                     errors.append(f"  [{name}] {url} -> {err_msg}")
 
             elif stype == "ckan":
+                # Probe the portal base URL (strip api path) to check server reachability
                 portal = (args.get("portal_url") or "").replace("{year}", str(year))
                 if portal:
+                    # Use portal root for HEAD (api endpoints may reject non-GET)
+                    from urllib.parse import urlparse
+                    parsed = urlparse(portal)
+                    base = f"{parsed.scheme}://{parsed.netloc}"
                     client = HttpClient(timeout=5)
-                    result = client.head(portal)
-                    if not result.is_ok or not result.response or not result.response.ok:
-                        status = result.response.status_code if result.response else "no_response"
+                    result = client.head(base)
+                    if not result.is_ok or result.response is None or not result.response.ok:
+                        status = result.response.status_code if result.response is not None else "no_response"
                         err_msg = str(result.err) if result.err else f"HTTP {status}"
-                        errors.append(f"  [{name}] CKAN portal {portal} -> {err_msg}")
+                        errors.append(f"  [{name}] CKAN portal {base} -> {err_msg}")
 
             # local_file, sdmx, sparql: skip probe —
             # local file non timeouta, sdmx/sparql fetch e' gia' leggero

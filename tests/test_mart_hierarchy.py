@@ -104,6 +104,54 @@ def test_hierarchy_count_fallback(tmp_path: Path) -> None:
     con.close()
 
 
+def test_hierarchy_exclude_metrics(tmp_path: Path) -> None:
+    """exclude_metrics rimuove colonne numeriche dalla lista metriche."""
+    con = duckdb.connect()
+    con.execute(
+        "CREATE VIEW clean_input AS SELECT * FROM (VALUES "
+        "  ('Lazio', 2023, 100, 50.5), "
+        "  ('Lombardia', 2023, 200, 75.2), "
+        "  ('Lazio', 2024, 150, 60.0) "
+        ") AS t(regione, anno, valore, costo)"
+    )
+    mart_dir = tmp_path / "m"
+    mart_dir.mkdir()
+
+    # exclude_metrics=['anno'] — anno è numerico ma non deve essere sommato
+    written, executed, _ = _run_hierarchy_levels(
+        con, {
+            "hierarchy": {
+                "axis": "territoriale",
+                "levels": [
+                    {"level": "regione", "table": "h_reg", "grain": ["regione"],
+                     "exclude_metrics": ["anno"]},
+                ],
+            }
+        },
+        "test", 2024, mart_dir, logger=_null_logger,
+    )
+    assert len(written) == 1
+
+    # 'anno' non deve apparire come metrica (solo valore e costo)
+    cols = con.execute(
+        f"DESCRIBE SELECT * FROM read_parquet('{mart_dir / 'h_reg.parquet'}')"
+    ).fetchall()
+    col_names = [c[0].lower() for c in cols]
+
+    assert "regione" in col_names
+    assert "valore" in col_names     # SUM(valore) — metrica
+    assert "costo" in col_names      # SUM(costo) — metrica
+    assert "anno" not in col_names, f"anno should be excluded but found in: {col_names}"
+
+    # Verify the SUM values are correct (compare as floats due to DuckDB Decimal)
+    rows = con.execute(
+        f"SELECT regione, CAST(valore AS DOUBLE), CAST(costo AS DOUBLE) FROM read_parquet('{mart_dir / 'h_reg.parquet'}') ORDER BY regione"
+    ).fetchall()
+    assert ("Lazio", 250.0, 110.5) in rows  # 100+150, 50.5+60.0
+    assert ("Lombardia", 200.0, 75.2) in rows
+    con.close()
+
+
 def test_hierarchy_edge_cases(tmp_path: Path) -> None:
     """Empty config returns empty; numeric grain not treated as metric."""
     con = duckdb.connect()

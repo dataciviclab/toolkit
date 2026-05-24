@@ -36,6 +36,7 @@ def run_raw(
     output_cfg: dict | None = None,
     clean_cfg: dict | None = None,
     sample_bytes: int | None = None,
+    source_id: str | None = None,
 ):
     """
     Supporta:
@@ -182,24 +183,24 @@ def run_raw(
         except Exception as exc:
             logger.warning("RAW profile/scaffold generation failed: %s: %s", type(exc).__name__, exc)
 
-    metadata_path = write_metadata(
-        out_dir,
-        {
-            "layer": "raw",
-            "dataset": dataset,
-            "year": year,
-            "run_id": run_id,
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-            "config_hash": config_hash_for_year(base_dir, year),
-            "inputs": inputs,
-            "outputs": [
-                {"file": f["file"], "sha256": f["sha256"], "bytes": f["bytes"]}
-                for f in files_written
-            ],
-            "files": files_written,
-            "profile_hints": profile_hints,
-        },
-    )
+    metadata_payload = {
+        "layer": "raw",
+        "dataset": dataset,
+        "year": year,
+        "run_id": run_id,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "config_hash": config_hash_for_year(base_dir, year),
+        "inputs": inputs,
+        "outputs": [
+            {"file": f["file"], "sha256": f["sha256"], "bytes": f["bytes"]}
+            for f in files_written
+        ],
+        "files": files_written,
+        "profile_hints": profile_hints,
+    }
+    if source_id:
+        metadata_payload["source_id"] = source_id
+    metadata_path = write_metadata(out_dir, metadata_payload)
 
     # --- QA RAW ---
     result = validate_raw_output(out_dir, files_written)

@@ -76,14 +76,22 @@ class MartValidateConfig(BaseModel):
 
 
 class HierarchyLevel(BaseModel):
-    """Un livello della gerarchia mart (es. comune, provincia, regione)."""
+    """Un livello della gerarchia mart (es. comune, provincia, regione).
+
+    A runtime, la query di aggregazione viene generata automaticamente:
+    - colonne metriche scoperte per introspection dalla source
+    - GROUP BY sulle colonne grain
+    - SUM per ogni metrica numerica
+
+    Non richiede un file SQL: il config è attivo.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     level: str
     table: str
     grain: list[str]
-    sql: Path
+    source_table: str | None = None
 
     @field_validator("level")
     @classmethod

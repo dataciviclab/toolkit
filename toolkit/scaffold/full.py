@@ -338,16 +338,8 @@ def generate_full_scaffold(
     yml_lines.append(f'    - name: "{slug}"')
     yml_lines.append('      sql: "sql/mart.sql"')
 
-    # Hierarchy levels → aggiunte come tabelle mart
+    # Hierarchia: genera tabelle aggregate a runtime (nessun SQL da scrivere)
     if hierarchy:
-        for level_cfg in hierarchy.get("levels", []):
-            level_name = level_cfg.get("level", "unknown")
-            table_name = level_cfg.get("table", f"mart_{slug}_{level_name}")
-            sql_path = level_cfg.get("sql", f"sql/mart/{level_name}.sql")
-            yml_lines.append(f'    - name: "{table_name}"')
-            yml_lines.append(f'      sql: "{sql_path}"')
-
-        # Serializza blocco hierarchy
         yml_lines.append("  hierarchy:")
         yml_lines.append(f'    axis: "{hierarchy.get("axis", "territoriale")}"')
         yml_lines.append("    levels:")
@@ -356,9 +348,10 @@ def generate_full_scaffold(
             grain = level_cfg.get("grain", [])
             grain_list = ", ".join(f'"{g}"' for g in grain)
             yml_lines.append(f'      - level: "{level_name}"')
-            yml_lines.append(f'        table: "{level_cfg.get("table", f"mart_{slug}_{level_name}")}"')
+            yml_lines.append(f'        table: "{level_cfg.get("table", f"h_{slug}_{level_name}")}"')
             yml_lines.append(f"        grain: [{grain_list}]")
-            yml_lines.append(f'        sql: "{level_cfg.get("sql", f"sql/mart/{level_name}.sql")}"')
+            if "source_table" in level_cfg and level_cfg.get("source_table"):
+                yml_lines.append(f'        source_table: "{level_cfg["source_table"]}"')
 
     if validation_suggestions:
         mv = validation_suggestions.get("mart")
@@ -399,81 +392,4 @@ def generate_full_scaffold(
         "notes.md": notes,
     }
 
-    if hierarchy:
-        h_col_names: list[str] = []
-        if profile:
-            h_col_names = profile.get("columns_norm") or profile.get("columns_raw") or profile.get("columns") or []
-        result.update(_scaffold_hierarchy_marts(slug, hierarchy, h_col_names, profile))
-
     return result
-
-
-def _scaffold_hierarchy_marts(
-    slug: str,
-    hierarchy: dict[str, Any],
-    col_names: list[str],
-    profile: dict[str, Any] | None,
-) -> dict[str, str]:
-    """Genera SQL per ogni livello della gerarchia mart.
-
-    Returns dict {filename: content} con un file SQL per livello.
-    """
-    files: dict[str, str] = {}
-    axis = hierarchy.get("axis", "territoriale")
-    levels = hierarchy.get("levels", [])
-
-    for level_cfg in levels:
-        level_name = level_cfg.get("level", "unknown")
-        grain = level_cfg.get("grain", [])
-        sql_path = level_cfg.get("sql", f"sql/mart/{level_name}.sql")
-
-        # Find metric columns (numeric) for aggregation
-        metric_cols: list[str] = []
-        if profile:
-            mapping = profile.get("mapping_suggestions") or {}
-            for col in col_names:
-                spec = mapping.get(col) or {}
-                if spec.get("type") in ("integer", "float", "double", "bigint", "decimal", "int"):
-                    metric_cols.append(col)
-
-        grain_cols = [c for c in grain if c in col_names]
-        if not grain_cols:
-            grain_cols = grain  # fallback: usa i grain dichiarati anche se non in col_names
-
-        if grain_cols and metric_cols:
-            grain_expr = ", ".join(f'"{c}"' for c in grain_cols)
-            sum_metrics = metric_cols[:5]
-            sum_lines = []
-            for i, m in enumerate(sum_metrics):
-                comma = "," if i < len(sum_metrics) - 1 else ""
-                sum_lines.append(f'  SUM("{m}") AS "totale_{m}"{comma}')
-            sum_block = "\n".join(sum_lines)
-            sql = (
-                f"-- {level_name}: aggregazione per {axis}\n"
-                f"-- Grain: {', '.join(grain_cols)}\n"
-                f"SELECT\n"
-                f"  {grain_expr},\n"
-                f"{sum_block}\n"
-                f"FROM clean\n"
-                f"GROUP BY {grain_expr}\n"
-            )
-        elif grain_cols:
-            grain_expr = ", ".join(f'"{c}"' for c in grain_cols)
-            sql = (
-                f"-- {level_name}: conteggio record per {axis}\n"
-                f"-- Grain: {', '.join(grain_cols)}\n"
-                f"SELECT\n"
-                f"  {grain_expr},\n"
-                f"  COUNT(*) AS record_count\n"
-                f"FROM clean\n"
-                f"GROUP BY {grain_expr}\n"
-            )
-        else:
-            sql = (
-                f"-- {level_name}: fallback (nessun grain riconosciuto)\n"
-                f"SELECT * FROM clean\n"
-            )
-
-        files[str(sql_path)] = sql
-
-    return files

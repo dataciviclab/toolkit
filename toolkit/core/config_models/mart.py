@@ -92,6 +92,7 @@ class HierarchyLevel(BaseModel):
     table: str
     grain: list[str]
     source_table: str | None = None
+    exclude_metrics: list[str] = Field(default_factory=list)
 
     @field_validator("level")
     @classmethod
@@ -133,6 +134,17 @@ class HierarchyLevel(BaseModel):
             if not re.fullmatch(_SAFE_SQL_IDENTIFIER_RE, g.strip()):
                 raise ValueError(
                     f"mart.hierarchy.levels[].grain element '{g}' must be a safe SQL identifier "
+                    "(letters, numbers, underscore; cannot start with a number)"
+                )
+        return value
+
+    @field_validator("exclude_metrics")
+    @classmethod
+    def _validate_exclude_metrics(cls, value: list[str]) -> list[str]:
+        for m in value:
+            if not re.fullmatch(_SAFE_SQL_IDENTIFIER_RE, m.strip()):
+                raise ValueError(
+                    f"mart.hierarchy.levels[].exclude_metrics element '{m}' must be a safe SQL identifier "
                     "(letters, numbers, underscore; cannot start with a number)"
                 )
         return value

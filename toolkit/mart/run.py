@@ -229,6 +229,13 @@ def _run_hierarchy_levels(
             and c["name"].lower() not in grain_lower
         ]
 
+        # Remove excluded columns from metrics (e.g. year, codes — numeric
+        # columns that are dimensions rather than additive metrics)
+        exclude_metrics = level_cfg.get("exclude_metrics") or []
+        if exclude_metrics:
+            excluded_lower = [e.lower() for e in exclude_metrics]
+            metric_cols = [c for c in metric_cols if c.lower() not in excluded_lower]
+
         # Build grain expression (safe quoting via double-quote)
         grain_expr = ", ".join(f'"{g}"' for g in grain)
 

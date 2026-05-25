@@ -382,11 +382,11 @@ def test_run_clean_accepts_decimal_read_option(tmp_path: Path):
 
 def test_run_clean_default_mode_selects_latest(tmp_path: Path, monkeypatch, caplog) -> None:
     """Senza clean.read.mode esplicito, il default è 'latest' (file più recente)."""
-    import time
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    _write_csv(raw_dir / "small.csv", "a\n1\n")
-    time.sleep(1.1)  # mtime diverso per testare 'latest'
+    small_file = _write_csv(raw_dir / "small.csv", "a\n1\n")
     large_file = _write_csv(raw_dir / "large.csv", "a\n" + ("1\n" * 20))
+    os.utime(small_file, (100, 100))
+    os.utime(large_file, (200, 200))
 
     sql_path = _write_clean_sql(tmp_path)
     logger_name = "tests.clean_input_selection.default_mode"
@@ -402,18 +402,18 @@ def test_run_clean_default_mode_selects_latest(tmp_path: Path, monkeypatch, capl
             logger=logger,
         )
 
-    # 'latest' seleziona il file più recente (large.csv è stato creato dopo)
+    # 'latest' seleziona il file con mtime più recente
     assert seen["input_files"] == [large_file]
     # Nessun warning legacy: 'latest' è il default documentato
     assert "defaulting to largest file (legacy)" not in caplog.text
 
 
 def test_clean_manifest_missing_warns_and_selects_with_default_mode(tmp_path: Path, monkeypatch, caplog) -> None:
-    import time
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    _write_csv(raw_dir / "small.csv", "a\n1\n")
-    time.sleep(1.1)  # mtime diverso per testare 'latest' (nuovo default)
+    small_file = _write_csv(raw_dir / "small.csv", "a\n1\n")
     large_file = _write_csv(raw_dir / "large.csv", "a\n" + ("1\n" * 20))
+    os.utime(small_file, (100, 100))
+    os.utime(large_file, (200, 200))
 
     sql_path = _write_clean_sql(tmp_path)
     logger_name = "tests.clean_input_selection.manifest_missing"
@@ -434,11 +434,11 @@ def test_clean_manifest_missing_warns_and_selects_with_default_mode(tmp_path: Pa
 
 
 def test_clean_manifest_points_missing_file_falls_back_and_warns(tmp_path: Path, monkeypatch, caplog) -> None:
-    import time
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    _write_csv(raw_dir / "small.csv", "a\n1\n")
-    time.sleep(1.1)  # mtime diverso per testare 'latest' (nuovo default)
+    small_file = _write_csv(raw_dir / "small.csv", "a\n1\n")
     large_file = _write_csv(raw_dir / "large.csv", "a\n" + ("1\n" * 20))
+    os.utime(small_file, (100, 100))
+    os.utime(large_file, (200, 200))
     write_raw_manifest(
         raw_dir,
         {

@@ -1,0 +1,69 @@
+name: Task — attività sul toolkit
+description: Attività operativa sul motore pipeline, plugin, CLI o MCP server.
+title: "[Task] "
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Usa questo template per tracciare un'attività concreta sul toolkit.
+
+        Per segnalare un bug, usa il template **Bug — pipeline o plugin**.
+
+  - type: textarea
+    id: objective
+    attributes:
+      label: Obiettivo
+      description: Cosa deve essere fatto?
+      placeholder: Descrivi il task in modo chiaro e sintetico.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Contesto
+      description: Perché è necessario? Quale problema risolve?
+      placeholder: Spiega il contesto o il bisogno che genera questo task.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area del toolkit
+      description: Dove cade principalmente questo task?
+      options:
+        - Pipeline (core / raw / clean / mart)
+        - Plugin sorgente
+        - CLI
+        - Server MCP
+        - Profiler
+        - Config / validazione
+        - Docs
+        - CI / dipendenze
+        - Altro
+    validations:
+      required: true
+
+  - type: textarea
+    id: completion_criteria
+    attributes:
+      label: Criteri di completamento
+      description: Cosa deve essere vero quando il task è finito?
+      placeholder: |
+        - [ ] pytest -m core passa
+        - [ ] documentazione aggiornata
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: links
+    attributes:
+      label: Collegamenti
+      description: Issue correlate, Discussion, PR.
+      placeholder: |
+        - Issue correlata: #
+        - Discussion: link
+        - PR: #

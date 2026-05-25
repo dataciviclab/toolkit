@@ -1,0 +1,107 @@
+name: Bug — pipeline o plugin
+description: Segnala un bug nel motore pipeline, in un plugin sorgente, nella CLI o nel server MCP.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Usa questo template per segnalare un problema tecnico nel toolkit.
+
+        Se il dubbio è su un dataset specifico (config errata, run candidate), apri prima in `dataset-incubator`.
+
+  - type: input
+    id: version
+    attributes:
+      label: Versione / commit
+      description: Output di `git describe --tags` o commit SHA.
+      placeholder: es. v0.12.0-5-g3a4b2c1
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema
+      description: Descrivi in modo chiaro e sintetico il bug.
+      placeholder: Il comando X fallisce con Y quando Z...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Riproduzione
+      description: Comando esatto, dataset.yml o codice per riprodurre.
+      placeholder: |
+        ```
+        python -m toolkit.cli.app run all --config percorso/dataset.yml
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Output / trace
+      description: Incolla l'output completo (log, trace, codice errore).
+      placeholder: Incolla qui l'output del comando.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamento atteso
+      description: Cosa doveva succedere invece?
+      placeholder: Il run doveva completare con successo e produrre il parquet in output/...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area del toolkit
+      description: Dove si manifesta il bug?
+      options:
+        - Pipeline (core / raw / clean / mart)
+        - Plugin sorgente (http_file / ckan / sdmx / sparql / local_file)
+        - CLI
+        - Server MCP
+        - Profiler (raw profile)
+        - Config / validazione dataset.yml
+        - Path / artifact policy
+        - Altro
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severità
+      options:
+        - Bloccante (pipeline non funziona)
+        - Grave (funzionalità principale rotta)
+        - Moderata (funzionalità secondaria)
+        - Minore (estetica, errore non bloccante)
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround (opzionale)
+      description: Se esiste un modo per aggirare il problema.
+      placeholder: Usare --year X invece di run all...
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Note aggiuntive
+      description: Ambiente, frequenza, ipotesi sulla causa.
+      placeholder: Ubuntu 22.04, Python 3.12, succede ogni volta...
+    validations:
+      required: false

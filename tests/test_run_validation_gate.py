@@ -189,6 +189,7 @@ def _make_full_config(tmp_path: Path, root: str | None = None) -> tuple[Path, ob
     return config_path, cfg
 
 
+@pytest.mark.regression
 def test_clean_validation_skips_min_rows_in_sample_mode(tmp_path: Path) -> None:
     """run_clean_validation con sample_mode=True ignora min_rows."""
     config_path, cfg = _make_full_config(tmp_path)
@@ -208,6 +209,7 @@ def test_clean_validation_skips_min_rows_in_sample_mode(tmp_path: Path) -> None:
     assert result.get("passed") is False, f"Expected failed in normal mode, got: {result}"
 
 
+@pytest.mark.regression
 def test_mart_validation_skips_min_rows_in_sample_mode(tmp_path: Path) -> None:
     """run_mart_validation con sample_mode=True ignora table_rules.*.min_rows."""
     config_path, cfg = _make_full_config(tmp_path)
@@ -236,6 +238,7 @@ def test_mart_validation_skips_min_rows_in_sample_mode(tmp_path: Path) -> None:
     assert result.get("passed") is False, f"Expected failed in normal mode, got: {result}"
 
 
+@pytest.mark.regression
 def test_run_full_second_validation_block_uses_sample_mode(tmp_path: Path, monkeypatch) -> None:
     """Il blocco di validazione finale in run_full() riceve sample_mode=True con --sample-rows."""
     config_path = tmp_path / "dataset.yml"

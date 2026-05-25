@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import json
 import textwrap
 from pathlib import Path
 
+import pytest
 import shutil
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
 
+pytestmark = pytest.mark.contract
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -85,23 +88,22 @@ def _write_batch_project(project_dir: Path, dataset: str, year: int) -> Path:
     return project_dir / "dataset.yml"
 
 
+def _write_configs_file(tmp_path: Path, *project_names: str) -> Path:
+    configs_file = tmp_path / "configs.txt"
+    configs_file.write_text(
+        "\n".join(f"{p}/dataset.yml" for p in project_names) + "\n",
+        encoding="utf-8",
+    )
+    return configs_file
+
+
 def test_batch_runs_configs_in_sequence_and_prints_report(tmp_path: Path) -> None:
     project_a = tmp_path / "project_a"
     project_b = tmp_path / "project_b"
     _write_batch_project(project_a, "batch_a", 2022)
     _write_batch_project(project_b, "batch_b", 2023)
 
-    configs_file = tmp_path / "configs.txt"
-    configs_file.write_text(
-        "\n".join(
-            [
-                "project_a/dataset.yml",
-                "project_b/dataset.yml",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    configs_file = _write_configs_file(tmp_path, "project_a", "project_b")
 
     runner = CliRunner()
     result = runner.invoke(
@@ -121,3 +123,103 @@ def test_batch_runs_configs_in_sequence_and_prints_report(tmp_path: Path) -> Non
 
     assert (project_a / "out" / "data" / "mart" / "batch_a" / "2022" / "mart_totali.parquet").exists()
     assert (project_b / "out" / "data" / "mart" / "batch_b" / "2023" / "mart_totali.parquet").exists()
+
+
+def test_batch_smoke_flag(tmp_path: Path) -> None:
+    """--smoke usa root/smoke/ come output e sample_rows=1000."""
+    project = tmp_path / "project"
+    _write_batch_project(project, "batch_smoke", 2023)
+    configs_file = _write_configs_file(tmp_path, "project")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--configs", str(configs_file), "--step", "all", "--smoke"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert "Batch Report" in result.output
+    assert "batch_smoke" in result.output
+    assert "SUCCESS" in result.output
+
+    # Smoke NON scrive in out/data/ (dati reali)
+    data_clean = project / "out" / "data" / "clean" / "batch_smoke" / "2023"
+    assert not data_clean.exists(), "smoke must NOT write to out/data/"
+
+    # Smoke scrive in out/smoke/data/
+    smoke_clean = project / "out" / "smoke" / "data" / "clean" / "batch_smoke" / "2023" / "batch_smoke_2023_clean.parquet"
+    assert smoke_clean.exists(), f"smoke clean output not found: {smoke_clean}"
+    smoke_mart = project / "out" / "smoke" / "data" / "mart" / "batch_smoke" / "2023" / "mart_totali.parquet"
+    assert smoke_mart.exists(), f"smoke mart output not found: {smoke_mart}"
+
+
+def test_batch_dry_run_flag(tmp_path: Path) -> None:
+    """--dry-run stampa il piano ma non crea file (usa --step raw per evitare
+    la validazione SQL dry-run che ha una limitazione DuckDB con alias)."""
+    project = tmp_path / "project"
+    _write_batch_project(project, "batch_dry", 2023)
+    configs_file = _write_configs_file(tmp_path, "project")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--configs", str(configs_file), "--step", "raw", "--dry-run"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert "batch_dry" in result.output
+    assert "DRY_RUN" in result.output
+
+    # --dry-run non deve creare file di output
+    raw_out = project / "out" / "data" / "raw" / "batch_dry" / "2023"
+    assert not raw_out.exists(), f"dry-run should not create output directory: {raw_out}"
+
+
+def test_batch_json_output(tmp_path: Path) -> None:
+    """--json produce output JSON puro su stdout (log silenziato)."""
+    project = tmp_path / "project"
+    _write_batch_project(project, "batch_json", 2023)
+    configs_file = _write_configs_file(tmp_path, "project")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--configs", str(configs_file), "--step", "all", "--json"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    # stdout deve essere JSON puro, parsabile direttamente
+    report = json.loads(result.output)
+    assert report["summary"]["total"] == 1
+    assert report["summary"]["passed"] == 1
+    assert report["rows"][0]["dataset"] == "batch_json"
+    assert report["rows"][0]["status"] == "SUCCESS"
+
+
+def test_batch_dry_run_with_json(tmp_path: Path) -> None:
+    """--dry-run --json: stdout JSON puro (execution plan silenziato)."""
+    project = tmp_path / "project"
+    _write_batch_project(project, "batch_dry_json", 2023)
+    configs_file = _write_configs_file(tmp_path, "project")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--configs", str(configs_file), "--step", "raw", "--dry-run", "--json"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    # stdout deve essere JSON puro, parsabile direttamente
+    report = json.loads(result.output)
+    assert report["summary"]["total"] == 1
+    assert report["summary"]["passed"] == 1
+    assert report["rows"][0]["dataset"] == "batch_dry_json"
+    assert report["rows"][0]["status"] == "DRY_RUN"
+
+    # Nessun file creato (dry-run)
+    raw_out = project / "out" / "data" / "raw" / "batch_dry_json" / "2023"
+    assert not raw_out.exists()

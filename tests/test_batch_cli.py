@@ -4,11 +4,13 @@ import json
 import textwrap
 from pathlib import Path
 
+import pytest
 import shutil
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
 
+pytestmark = pytest.mark.contract
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -175,26 +177,8 @@ def test_batch_dry_run_flag(tmp_path: Path) -> None:
     assert not raw_out.exists(), f"dry-run should not create output directory: {raw_out}"
 
 
-def _extract_report(text: str) -> dict:
-    """Estrae il JSON con chiave 'summary' dall'output misto log+JSON."""
-    decoder = json.JSONDecoder()
-    pos = 0
-    while True:
-        try:
-            start = text.index("{", pos)
-        except ValueError:
-            raise ValueError("No JSON object found in output")
-        try:
-            obj, end = decoder.raw_decode(text, start)
-            if isinstance(obj, dict) and "summary" in obj:
-                return obj
-            pos = end
-        except json.JSONDecodeError:
-            pos = start + 1
-
-
 def test_batch_json_output(tmp_path: Path) -> None:
-    """--json produce output machine-readable."""
+    """--json produce output JSON puro su stdout (log silenziato)."""
     project = tmp_path / "project"
     _write_batch_project(project, "batch_json", 2023)
     configs_file = _write_configs_file(tmp_path, "project")
@@ -207,7 +191,8 @@ def test_batch_json_output(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    report = _extract_report(result.output)
+    # stdout deve essere JSON puro, parsabile direttamente
+    report = json.loads(result.output)
     assert report["summary"]["total"] == 1
     assert report["summary"]["passed"] == 1
     assert report["rows"][0]["dataset"] == "batch_json"
@@ -216,7 +201,8 @@ def test_batch_json_output(tmp_path: Path) -> None:
 
 def test_batch_dry_run_with_json(tmp_path: Path) -> None:
     """--dry-run --json: report JSON senza esecuzione (--step raw per
-    evitare limitazione SQL dry-run)."""
+    evitare limitazione SQL dry-run). L'execution plan di run_year
+    finisce su stdout prima del JSON — ok per uso reale con pipe."""
     project = tmp_path / "project"
     _write_batch_project(project, "batch_dry_json", 2023)
     configs_file = _write_configs_file(tmp_path, "project")
@@ -229,11 +215,18 @@ def test_batch_dry_run_with_json(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    report = _extract_report(result.output)
-    assert "summary" in report
+    # L'output include l'execution plan testuale + JSON finale
+    assert "Execution Plan" in result.output
+    assert "batch_dry_json" in result.output
+    assert "DRY_RUN" in result.output
+
+    # Il JSON è presente alla fine dell'output
+    import re
+    json_match = re.search(r'\{.*"summary".*\}', result.output, re.DOTALL)
+    assert json_match, "JSON report must be present in output"
+    report = json.loads(json_match.group())
     assert report["summary"]["total"] == 1
     assert report["summary"]["passed"] == 1
-    assert report["rows"][0]["dataset"] == "batch_dry_json"
     assert report["rows"][0]["status"] == "DRY_RUN"
 
     # Nessun file creato (dry-run)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -11,6 +12,15 @@ from toolkit.cli.common import load_cfg_and_logger
 from toolkit.cli.cmd_run import run_year
 
 _ALLOWED_STEPS = {"raw", "clean", "mart", "all"}
+
+
+def _silence_logger() -> None:
+    """Silenzia il logger 'toolkit' per output JSON pulito su stdout."""
+    logger = logging.getLogger("toolkit")
+    logger.setLevel(logging.CRITICAL + 1)
+    logger.handlers.clear()
+    logger.addHandler(logging.NullHandler())
+    logger.propagate = False
 
 
 def _read_config_list(configs_file: Path) -> list[Path]:
@@ -137,6 +147,8 @@ def batch(
                 _cfg0, _logger0 = load_cfg_and_logger(
                     str(config_path), strict_config=strict_config_flag
                 )
+                if json_output:
+                    _silence_logger()
                 cfg, logger = load_cfg_and_logger(
                     str(config_path),
                     strict_config=strict_config_flag,
@@ -146,6 +158,11 @@ def batch(
                 cfg, logger = load_cfg_and_logger(
                     str(config_path), strict_config=strict_config_flag
                 )
+
+            # Quando --json è attivo, silenzia il logger dopo ogni
+            # load_cfg_and_logger (che resetta il logger a ogni chiamata)
+            if json_output:
+                _silence_logger()
             dataset_label = cfg.dataset
 
             for year in cfg.years:

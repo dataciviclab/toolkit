@@ -67,11 +67,7 @@ def _selection_params(read_cfg: dict[str, Any], logger) -> tuple[str, str, bool,
         selection_mode = "explicit"
         allow_ambiguous = True
     elif selection_mode is None:
-        logger.warning(
-            "CLEAN input selection defaulting to largest file (legacy). "
-            "Set clean.read.mode: largest explicitly to silence this warning."
-        )
-        selection_mode = "largest"
+        selection_mode = "latest"
 
     return str(selection_mode), glob_pattern, prefer_from_raw_run, allow_ambiguous
 

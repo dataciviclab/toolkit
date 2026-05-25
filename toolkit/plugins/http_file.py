@@ -36,9 +36,15 @@ class HttpFileSource:
                 raise DownloadError(f"HTTP {result.response.status_code} for {url}")
             content = result.response.content
             # Troncamento locale: server che ignorano Range (200 invece di 206)
-            # restituiscono tutto il file. Taglia per garantire il limite byte.
+            # restituiscono tutto il file. Taglia per garantire il limite byte,
+            # poi tronca all'ultima linea completa (evita CSV con quote non
+            # chiuse, JSON troncato, ecc.).
             if sample_bytes is not None and len(content) > sample_bytes:
                 content = content[:sample_bytes]
+                # Trova l'ultimo newline per chiudere l'ultima linea completa
+                last_newline = content.rfind(b"\n")
+                if last_newline > 0:
+                    content = content[: last_newline + 1]
             return content
         err = result.err
         raise DownloadError(str(err) if err else f"Failed to fetch {url}")

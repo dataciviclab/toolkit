@@ -81,6 +81,9 @@ class CkanSource:
             content = response.content
             if sample_bytes is not None and len(content) > sample_bytes:
                 content = content[:sample_bytes]
+                last_newline = content.rfind(b"\n")
+                if last_newline > 0:
+                    content = content[: last_newline + 1]
             return content
         err = result.err
         raise DownloadError(str(err) if err else f"Failed to fetch {url}")

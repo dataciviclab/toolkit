@@ -576,6 +576,7 @@ def run_full(
     dry_flag = dry_run if isinstance(dry_run, bool) else False
     sample_rows_final = 1000 if smoke else sample_rows
     sample_bytes_final = 1048576 if smoke else sample_bytes
+    sample_mode = sample_rows_final is not None or sample_bytes_final is not None
 
     results: dict[str, Any] = {
         "config": config,
@@ -623,8 +624,8 @@ def run_full(
                 # Validate all layers
                 try:
                     sv_raw = run_raw_validation(support_cfg.root, support_cfg.dataset, sy, support_logger)
-                    sv_clean = run_clean_validation(support_cfg, sy, support_logger)
-                    sv_mart = run_mart_validation(support_cfg, sy, support_logger)
+                    sv_clean = run_clean_validation(support_cfg, sy, support_logger, sample_mode=sample_mode)
+                    sv_mart = run_mart_validation(support_cfg, sy, support_logger, sample_mode=sample_mode)
                     all_support_passed = all(
                         r.get("passed") for r in [sv_raw, sv_clean, sv_mart]
                     )
@@ -657,14 +658,14 @@ def run_full(
             if not dry_flag:
                 if is_mart_only:
                     # Validate solo mart (compose non ha raw/clean)
-                    val_mart = run_mart_validation(cfg, year, logger)
+                    val_mart = run_mart_validation(cfg, year, logger, sample_mode=sample_mode)
                     all_passed = bool(val_mart.get("passed"))
                 else:
                     # Validate all layers
                     logger.info("Validate all — year=%s", year)
                     val_raw = run_raw_validation(cfg.root, cfg.dataset, year, logger)
-                    val_clean = run_clean_validation(cfg, year, logger)
-                    val_mart = run_mart_validation(cfg, year, logger)
+                    val_clean = run_clean_validation(cfg, year, logger, sample_mode=sample_mode)
+                    val_mart = run_mart_validation(cfg, year, logger, sample_mode=sample_mode)
                     all_passed = all(
                         r.get("passed") for r in [val_raw, val_clean, val_mart]
                     )

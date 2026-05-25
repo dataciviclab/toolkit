@@ -170,11 +170,13 @@ Note pratiche per `http_post_file`:
 | `trim_whitespace` | `bool` | `true` |
 | `sample_size` | `int \| null` | `null` |
 | `sheet_name` | `string \| int \| null` | `null` |
-| `mode` | `explicit \| latest \| largest \| all \| null` | `null` |
+| `mode` | `explicit \| latest \| largest \| all \| null` | `latest`¹ |
 | `glob` | `string` | `*` |
 | `prefer_from_raw_run` | `bool` | `true` |
 | `allow_ambiguous` | `bool` | `false` |
 | `include` | `list[string] \| null` | `null` |
+
+¹ Il default runtime è `latest` (file raw più recente). Se `include` è specificato e `mode` è omesso, il default diventa `explicit`. Precedenza: `explicit` > `include`, `latest` > altrimenti.
 
 Note pratiche:
 

@@ -11,6 +11,8 @@ from toolkit.clean.input_selection import _metadata_candidates, list_raw_candida
 from toolkit.clean.run import run_clean
 from toolkit.core.manifest import write_raw_manifest
 
+pytestmark = pytest.mark.contract
+
 
 class _NoopLogger:
     def info(self, *_args, **_kwargs):

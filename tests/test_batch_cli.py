@@ -200,9 +200,7 @@ def test_batch_json_output(tmp_path: Path) -> None:
 
 
 def test_batch_dry_run_with_json(tmp_path: Path) -> None:
-    """--dry-run --json: report JSON senza esecuzione (--step raw per
-    evitare limitazione SQL dry-run). L'execution plan di run_year
-    finisce su stdout prima del JSON — ok per uso reale con pipe."""
+    """--dry-run --json: stdout JSON puro (execution plan silenziato)."""
     project = tmp_path / "project"
     _write_batch_project(project, "batch_dry_json", 2023)
     configs_file = _write_configs_file(tmp_path, "project")
@@ -215,18 +213,11 @@ def test_batch_dry_run_with_json(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    # L'output include l'execution plan testuale + JSON finale
-    assert "Execution Plan" in result.output
-    assert "batch_dry_json" in result.output
-    assert "DRY_RUN" in result.output
-
-    # Il JSON è presente alla fine dell'output
-    import re
-    json_match = re.search(r'\{.*"summary".*\}', result.output, re.DOTALL)
-    assert json_match, "JSON report must be present in output"
-    report = json.loads(json_match.group())
+    # stdout deve essere JSON puro, parsabile direttamente
+    report = json.loads(result.output)
     assert report["summary"]["total"] == 1
     assert report["summary"]["passed"] == 1
+    assert report["rows"][0]["dataset"] == "batch_dry_json"
     assert report["rows"][0]["status"] == "DRY_RUN"
 
     # Nessun file creato (dry-run)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from pathlib import Path
@@ -12,6 +13,22 @@ from toolkit.cli.common import load_cfg_and_logger
 from toolkit.cli.cmd_run import run_year
 
 _ALLOWED_STEPS = {"raw", "clean", "mart", "all"}
+
+
+@contextlib.contextmanager
+def _silence_typer_echo() -> Any:
+    """Silenzia typer.echo durante run_year quando --json è attivo.
+
+    run_year(dry_run=True) stampa l'execution plan via typer.echo
+    su stdout. Per output JSON puro, intercettiamo temporaneamente
+    typer.echo e lo sostituiamo con un no-op.
+    """
+    original_echo = typer.echo
+    typer.echo = lambda *args, **kwargs: None
+    try:
+        yield
+    finally:
+        typer.echo = original_echo
 
 
 def _silence_logger() -> None:
@@ -169,15 +186,20 @@ def batch(
                 run_started_at = perf_counter()
                 status = "FAILED"
                 try:
-                    context = run_year(
-                        cfg,
-                        year,
-                        step=step,
-                        dry_run=dry_flag,
-                        logger=logger,
-                        sample_rows=sample_rows_final,
-                        sample_bytes=sample_bytes_final,
-                    )
+                    # Quando --json è attivo, silenzia typer.echo durante
+                    # run_year per evitare che execution plan (dry-run)
+                    # o altri echo contaminino stdout JSON
+                    _run_ctx = _silence_typer_echo() if json_output else contextlib.nullcontext()
+                    with _run_ctx:
+                        context = run_year(
+                            cfg,
+                            year,
+                            step=step,
+                            dry_run=dry_flag,
+                            logger=logger,
+                            sample_rows=sample_rows_final,
+                            sample_bytes=sample_bytes_final,
+                        )
                     status = context.status
                 except Exception as exc:
                     failures.append(

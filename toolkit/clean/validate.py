@@ -251,7 +251,7 @@ def validate_promotion(
     )
 
 
-def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
+def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -> dict[str, Any]:
     out_dir = layer_year_dir(cfg.root, "clean", cfg.dataset, year)
     parquet = out_dir / f"{cfg.dataset}_{year}_clean.parquet"
 
@@ -262,6 +262,11 @@ def run_clean_validation(cfg, year: int, logger) -> dict[str, Any]:
             "validate": clean_cfg.get("validate") or {},
         }
     )
+
+    # In sample mode (--sample-rows / --sample-bytes), min_rows non e' applicabile:
+    # il campione non e' rappresentativo per validazioni quantitative.
+    if sample_mode:
+        spec.validate.min_rows = None
 
     result = validate_clean(
         parquet,

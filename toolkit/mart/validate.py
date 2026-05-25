@@ -209,7 +209,7 @@ def validate_mart(
     )
 
 
-def run_mart_validation(cfg, year: int, logger) -> dict[str, Any]:
+def run_mart_validation(cfg, year: int, logger, *, sample_mode: bool = False) -> dict[str, Any]:
     mart_dir = layer_year_dir(cfg.root, "mart", cfg.dataset, year)
 
     mart_cfg: dict[str, Any] = cfg.mart or {}
@@ -224,6 +224,11 @@ def run_mart_validation(cfg, year: int, logger) -> dict[str, Any]:
             "validate": mart_cfg.get("validate") or {},
         }
     )
+
+    # In sample mode, min_rows non e' applicabile (campione non rappresentativo).
+    if sample_mode:
+        for rule in spec.validate.table_rules.values():
+            rule.min_rows = None
 
     result = validate_mart(
         mart_dir,

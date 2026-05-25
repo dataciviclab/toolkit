@@ -239,6 +239,7 @@ def run_year(
 
     base_logger.info(f"RUN -> step={step} dataset={cfg.dataset} year={year}")
     run_has_validation_warnings = False
+    sample_mode = sample_rows is not None or sample_bytes is not None
 
     def _execute_layer(layer_name: str, target, *args, **kwargs) -> None:
         nonlocal run_has_validation_warnings
@@ -251,7 +252,10 @@ def run_year(
             if isinstance(metrics, dict):
                 context.set_layer_metrics(layer_name, **metrics)
 
-            summary = _validation_runner(layer_name)(cfg, year, layer_logger)
+            validation_kwargs = {}
+            if layer_name in ("clean", "mart"):
+                validation_kwargs["sample_mode"] = sample_mode
+            summary = _validation_runner(layer_name)(cfg, year, layer_logger, **validation_kwargs)
             context.set_validation(layer_name, summary)
             if not summary.get("passed", False):
                 message = f"{layer_name.upper()} validation failed"

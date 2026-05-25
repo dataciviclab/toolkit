@@ -11,6 +11,8 @@ from toolkit.clean.input_selection import _metadata_candidates, list_raw_candida
 from toolkit.clean.run import run_clean
 from toolkit.core.manifest import write_raw_manifest
 
+pytestmark = pytest.mark.contract
+
 
 class _NoopLogger:
     def info(self, *_args, **_kwargs):
@@ -378,13 +380,16 @@ def test_run_clean_accepts_decimal_read_option(tmp_path: Path):
 
 # Legacy behavior kept for compatibility
 
-def test_run_clean_legacy_mode_warns_and_keeps_largest_selection(tmp_path: Path, monkeypatch, caplog) -> None:
+def test_run_clean_default_mode_selects_latest(tmp_path: Path, monkeypatch, caplog) -> None:
+    """Senza clean.read.mode esplicito, il default è 'latest' (file più recente)."""
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    _write_csv(raw_dir / "small.csv", "a\n1\n")
+    small_file = _write_csv(raw_dir / "small.csv", "a\n1\n")
     large_file = _write_csv(raw_dir / "large.csv", "a\n" + ("1\n" * 20))
+    os.utime(small_file, (100, 100))
+    os.utime(large_file, (200, 200))
 
     sql_path = _write_clean_sql(tmp_path)
-    logger_name = "tests.clean_input_selection.legacy_mode"
+    logger_name = "tests.clean_input_selection.default_mode"
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.WARNING)
     logger.propagate = True
@@ -397,15 +402,18 @@ def test_run_clean_legacy_mode_warns_and_keeps_largest_selection(tmp_path: Path,
             logger=logger,
         )
 
+    # 'latest' seleziona il file con mtime più recente
     assert seen["input_files"] == [large_file]
-    assert "defaulting to largest file (legacy)" in caplog.text
-    assert "clean.read.mode: largest explicitly" in caplog.text
+    # Nessun warning legacy: 'latest' è il default documentato
+    assert "defaulting to largest file (legacy)" not in caplog.text
 
 
-def test_clean_manifest_missing_warns_and_selects_legacy(tmp_path: Path, monkeypatch, caplog) -> None:
+def test_clean_manifest_missing_warns_and_selects_with_default_mode(tmp_path: Path, monkeypatch, caplog) -> None:
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    _write_csv(raw_dir / "small.csv", "a\n1\n")
+    small_file = _write_csv(raw_dir / "small.csv", "a\n1\n")
     large_file = _write_csv(raw_dir / "large.csv", "a\n" + ("1\n" * 20))
+    os.utime(small_file, (100, 100))
+    os.utime(large_file, (200, 200))
 
     sql_path = _write_clean_sql(tmp_path)
     logger_name = "tests.clean_input_selection.manifest_missing"
@@ -427,8 +435,10 @@ def test_clean_manifest_missing_warns_and_selects_legacy(tmp_path: Path, monkeyp
 
 def test_clean_manifest_points_missing_file_falls_back_and_warns(tmp_path: Path, monkeypatch, caplog) -> None:
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    _write_csv(raw_dir / "small.csv", "a\n1\n")
+    small_file = _write_csv(raw_dir / "small.csv", "a\n1\n")
     large_file = _write_csv(raw_dir / "large.csv", "a\n" + ("1\n" * 20))
+    os.utime(small_file, (100, 100))
+    os.utime(large_file, (200, 200))
     write_raw_manifest(
         raw_dir,
         {

@@ -60,6 +60,7 @@ def _failed_summary() -> dict[str, object]:
     }
 
 
+@pytest.mark.contract
 def test_run_stops_after_failed_validation_when_fail_on_error_true(tmp_path: Path, monkeypatch) -> None:
     config_path = tmp_path / "dataset.yml"
     _write_config(config_path, fail_on_error=True)
@@ -83,6 +84,7 @@ def test_run_stops_after_failed_validation_when_fail_on_error_true(tmp_path: Pat
     assert record["validations"]["clean"]["passed"] is False
 
 
+@pytest.mark.contract
 def test_run_continues_after_failed_validation_when_fail_on_error_false(tmp_path: Path, monkeypatch) -> None:
     config_path = tmp_path / "dataset.yml"
     _write_config(config_path, fail_on_error=False)

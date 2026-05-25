@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Discussioni e orientamento
+    url: https://github.com/orgs/dataciviclab/discussions
+    about: Per domande, idee e confronto iniziale usa le Discussions dell'organizzazione.
+  - name: Issue dataset specifici
+    url: https://github.com/dataciviclab/dataset-incubator/issues/new/choose
+    about: Per problemi su un candidate o config dataset, apri in dataset-incubator.

@@ -241,7 +241,12 @@ def run_year(
     run_has_validation_warnings = False
     sample_mode = sample_rows is not None or sample_bytes is not None
 
-    def _execute_layer(layer_name: str, target, *args, **kwargs) -> None:
+    def _execute_layer(layer_name: str, target, *args, **kwargs) -> bool:
+        """Esegue un layer e restituisce True se ok, False se fallito.
+
+        Con fail_on_error: false, il fallimento viene loggato ma non
+        ri-lanciato. I layer downstream vengono skippati.
+        """
         nonlocal run_has_validation_warnings
 
         layer_logger = bind_logger(base_logger, layer=layer_name)
@@ -262,10 +267,18 @@ def run_year(
                 if fail_on_error:
                     raise ValidationGateError(message)
                 run_has_validation_warnings = True
+            return True
         except Exception as exc:
             context.fail_layer(layer_name, str(exc))
-            context.fail_run(str(exc))
-            raise
+            if fail_on_error:
+                context.fail_run(str(exc))
+                raise
+            run_has_validation_warnings = True
+            base_logger.warning(
+                "SKIP %s layer for %s (%s) — source unreachable? %s",
+                layer_name, cfg.dataset, year, exc,
+            )
+            return False
 
     source_id = cfg.source_id
 
@@ -273,7 +286,7 @@ def run_year(
         _run_probe(cfg, year, base_logger)
 
     if "raw" in layers_to_run:
-        _execute_layer(
+        if not _execute_layer(
             "raw",
             run_raw,
             cfg.dataset,
@@ -286,10 +299,13 @@ def run_year(
             clean_cfg=dump_cfg_section(cfg.clean),
             sample_bytes=sample_bytes,
             source_id=source_id,
-        )
-
+        ):
+            # RAW fallito: skip layer downstream (clean, mart)
+            # per evitare output stale con dati di run precedenti
+            layers_to_run = []
+    
     if "clean" in layers_to_run and not _is_mart_only_cfg(cfg):
-        _execute_layer(
+        if not _execute_layer(
             "clean",
             run_clean,
             cfg.dataset,
@@ -300,7 +316,9 @@ def run_year(
             output_cfg=dump_cfg_section(cfg.output),
             sample_rows=sample_rows,
             source_id=source_id,
-        )
+        ):
+            # CLEAN fallito: skip mart per evitare output stale
+            layers_to_run = [layer for layer in layers_to_run if layer != "mart"]
 
     if "mart" in layers_to_run and _has_single_year_mart(cfg):
         _execute_layer(
@@ -650,6 +668,8 @@ def run_full(
         is_mart_only = _is_mart_only_cfg(cfg)
         run_step = "mart" if is_mart_only else "all"
 
+        fail_on_error_flag = bool((cfg.validation or {}).get("fail_on_error", True))
+
         for year in selected_years:
             logger.info("Run %s — year=%s", run_step, year)
             run_year(cfg, year, step=run_step, dry_run=dry_flag, logger=logger,
@@ -673,7 +693,7 @@ def run_full(
                     "run": "ok",
                     "validate": "passed" if all_passed else "failed",
                 }
-                if not all_passed:
+                if not all_passed and fail_on_error_flag:
                     results["status"] = "failed"
 
                 # Review readiness (capture, not print)
@@ -690,7 +710,8 @@ def run_full(
                 results["multi_year_mart"] = "ok"
             except Exception as exc:
                 results["multi_year_mart"] = f"failed: {exc}"
-                results["status"] = "failed"
+                if fail_on_error_flag:
+                    results["status"] = "failed"
 
     if json_output:
         typer.echo(json.dumps(results, indent=2, default=str))

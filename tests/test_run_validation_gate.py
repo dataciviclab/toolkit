@@ -7,6 +7,8 @@ import pytest
 
 from toolkit.cli import cmd_run
 
+pytestmark = pytest.mark.contract
+
 
 def _write_config(path: Path, *, fail_on_error: bool) -> None:
     sql_dir = path.parent / "sql" / "mart"
@@ -60,7 +62,6 @@ def _failed_summary() -> dict[str, object]:
     }
 
 
-@pytest.mark.contract
 def test_run_stops_after_failed_validation_when_fail_on_error_true(tmp_path: Path, monkeypatch) -> None:
     config_path = tmp_path / "dataset.yml"
     _write_config(config_path, fail_on_error=True)
@@ -84,7 +85,6 @@ def test_run_stops_after_failed_validation_when_fail_on_error_true(tmp_path: Pat
     assert record["validations"]["clean"]["passed"] is False
 
 
-@pytest.mark.contract
 def test_run_continues_after_failed_validation_when_fail_on_error_false(tmp_path: Path, monkeypatch) -> None:
     config_path = tmp_path / "dataset.yml"
     _write_config(config_path, fail_on_error=False)
@@ -129,14 +129,13 @@ def test_run_skips_layer_on_execution_failure_when_fail_on_error_false(tmp_path:
     # Non deve lanciare eccezione — skip del layer invece di crash
     cmd_run.run(step="all", config=str(config_path))
 
-    assert calls["raw"] == 1  # RAW è stato chiamato e fallito
-    # Pipeline continua anche dopo RAW fallito (non crasha)
-    # CLEAN e MART vengono comunque eseguiti (e falliranno in produzione
-    # per mancanza di input, ma nei test sono mockati)
-    assert True  # se arriviamo qui senza eccezione, il test è passato
+    assert calls["raw"] == 1   # RAW è stato chiamato (e fallito)
+    assert calls["clean"] == 0  # CLEAN NON viene chiamato (RAW fallito)
+    assert calls["mart"] == 0   # MART NON viene chiamato (RAW fallito)
 
     record = _read_run_record(tmp_path / "out")
     assert record["layers"]["raw"]["status"] == "FAILED"
+    assert record["status"] == "SUCCESS_WITH_WARNINGS"  # non SUCCESS falso
 
 
 def _write_config_with_min_rows(path: Path, *, min_rows: int) -> None:

@@ -9,6 +9,8 @@ from lab_connectors.http import HttpResult
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.sparql import SparqlSource, _sparql_json_to_csv
 
+pytestmark = pytest.mark.contract
+
 
 def _http_ok(status=200, text="", headers=None):
     """Build success HttpResult for sparql responses."""
@@ -128,7 +130,7 @@ def test_sparql_fetch_invalid_json():
 
 
 def test_sparql_fetch_unsupported_content_type_raises():
-    """Unsupported Content-Type raises DownloadError."""
+    """Unsupported Content-Type (es. application/xml) raise DownloadError."""
     with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
         mock_cls.return_value.post.return_value = _http_ok(
             status=200,
@@ -142,6 +144,45 @@ def test_sparql_fetch_unsupported_content_type_raises():
                 "SELECT * WHERE { }",
                 accept_format="csv",
             )
+
+
+def test_sparql_fetch_text_plain_csv_fallback():
+    """text/plain con corpo CSV non deve fallire (fallback)."""
+    csv_body = "col1,col2\na,1\nb,2\n"
+    with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+        mock_cls.return_value.post.return_value = _http_ok(
+            status=200,
+            text=csv_body,
+            headers={"Content-Type": "text/plain"},
+        )
+        source = SparqlSource()
+        result, endpoint = source.fetch(
+            "https://example.test/sparql",
+            "SELECT * WHERE { }",
+            accept_format="csv",
+        )
+        assert result == csv_body.encode("utf-8")
+        assert endpoint == "https://example.test/sparql"
+
+
+def test_sparql_fetch_text_plain_json_fallback():
+    """text/plain con corpo SPARQL JSON deve convertirsi in CSV."""
+    json_body = '{"head": {"vars": ["s","p"]}, "results": {"bindings": [{"s": {"value": "x"}, "p": {"value": "y"}}]}}'
+    with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+        mock_cls.return_value.post.return_value = _http_ok(
+            status=200,
+            text=json_body,
+            headers={"Content-Type": "text/plain"},
+        )
+        source = SparqlSource()
+        result, endpoint = source.fetch(
+            "https://example.test/sparql",
+            "SELECT * WHERE { }",
+            accept_format="csv",
+        )
+        assert result  # non vuoto
+        assert b"s,p" in result
+        assert b"x,y" in result
 
 
 def test_sparql_fetch_unsupported_accept_format_raises():

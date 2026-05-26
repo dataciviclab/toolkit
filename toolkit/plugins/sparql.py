@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 from typing import Any
 
 from lab_connectors.http import HttpClient
@@ -86,6 +87,21 @@ class SparqlSource:
             csv_bytes = _sparql_json_to_csv(r.text)
             return csv_bytes, endpoint
 
+        # Fallback per Content-Type text/plain: alcuni endpoint SPARQL
+        # (es. dati.camera.it) rispondono con Content-Type sbagliato
+        # ma corpo CSV o JSON valido. Altri Content-Type (es. application/xml)
+        # rimangono errore.
+        if "text/plain" in content_type:
+            stripped = r.text.strip()
+            if stripped.startswith("{"):
+                try:
+                    return _sparql_json_to_csv(r.text), endpoint
+                except (DownloadError, json.JSONDecodeError):
+                    pass
+            else:
+                # Assume CSV — se non è CSV, fallirà in CLEAN con errore chiaro
+                return r.content, endpoint
+
         raise DownloadError(
             f"Unsupported Content-Type '{content_type}' for SPARQL fetch. "
             "Expected 'text/csv' or 'application/sparql-results+json'."
@@ -111,7 +127,6 @@ class SparqlSource:
             dict with keys: variables, row_count, null_counts, distinct_counts,
             sample_rows, warnings, query_time_ms, endpoint.
         """
-        import json
         import time
 
         if not endpoint:
@@ -221,8 +236,6 @@ def _sparql_json_to_csv(json_text: str) -> bytes:
     Assumes all bindings share the same set of variables (homogeneous schema).
     Extra keys in later bindings or missing keys produce empty values silently.
     """
-    import json
-
     try:
         payload = json.loads(json_text)
     except json.JSONDecodeError as e:

@@ -145,55 +145,55 @@ def test_scout_json_output() -> None:
 
 
 @pytest.mark.policy
-def test_scout_scaffold_generates_dataset_yml(tmp_path: Path) -> None:
+def test_scout_scaffold_generates_dataset_yml(tmp_path: Path, monkeypatch) -> None:
     """toolkit scout --scaffold genera dataset.yml valido (YAML parsabile)."""
     server, base_url = _serve()
     runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
     try:
-        with runner.isolated_filesystem(temp_dir=tmp_path) as td:
-            result = runner.invoke(app, ["scout", "--scaffold", f"{base_url}/files/multi_col.csv"])
-            assert result.exit_code == 0, f"scout --scaffold failed: {result.output}"
+        result = runner.invoke(app, ["scout", "--scaffold", f"{base_url}/files/multi_col.csv"])
+        assert result.exit_code == 0, f"scout --scaffold failed: {result.output}"
 
-            # Trova la directory generata
-            dirs = [d for d in Path(td).iterdir() if d.is_dir()]
-            assert len(dirs) >= 1, f"no directories created in {td}"
-            slug_dir = dirs[0]
+        # Trova la directory generata
+        dirs = [d for d in tmp_path.iterdir() if d.is_dir()]
+        assert len(dirs) >= 1, f"no directories created in {tmp_path}"
+        slug_dir = dirs[0]
 
-            # dataset.yml valido
-            yml_path = slug_dir / "dataset.yml"
-            assert yml_path.exists(), f"dataset.yml not found at {yml_path}"
-            data = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
-            assert data["dataset"]["name"].startswith("multi_col")
-            assert data["raw"]["sources"][0]["type"] == "http_file"
-            assert "clean" in data
-            assert "mart" in data
+        # dataset.yml valido
+        yml_path = slug_dir / "dataset.yml"
+        assert yml_path.exists(), f"dataset.yml not found at {yml_path}"
+        data = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
+        assert data["dataset"]["name"].startswith("multi_col")
+        assert data["raw"]["sources"][0]["type"] == "http_file"
+        assert "clean" in data
+        assert "mart" in data
 
-            # SQL files
-            assert (slug_dir / "sql" / "clean.sql").exists()
-            assert (slug_dir / "sql" / "mart.sql").exists()
+        # SQL files
+        assert (slug_dir / "sql" / "clean.sql").exists()
+        assert (slug_dir / "sql" / "mart.sql").exists()
     finally:
         server.shutdown()
         server.server_close()
 
 
 @pytest.mark.policy
-def test_scout_scaffold_has_type_casts_in_clean_sql(tmp_path: Path) -> None:
+def test_scout_scaffold_has_type_casts_in_clean_sql(tmp_path: Path, monkeypatch) -> None:
     """clean.sql generato da scout --scaffold ha TRY_CAST per colonne numeriche."""
     server, base_url = _serve()
     runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
     try:
-        with runner.isolated_filesystem(temp_dir=tmp_path) as td:
-            result = runner.invoke(app, ["scout", "--scaffold", f"{base_url}/files/multi_col.csv"])
-            assert result.exit_code == 0
+        result = runner.invoke(app, ["scout", "--scaffold", f"{base_url}/files/multi_col.csv"])
+        assert result.exit_code == 0
 
-            dirs = [d for d in Path(td).iterdir() if d.is_dir()]
-            slug_dir = dirs[0]
-            clean_sql = (slug_dir / "sql" / "clean.sql").read_text()
-            mart_sql = (slug_dir / "sql" / "mart.sql").read_text()
+        dirs = [d for d in tmp_path.iterdir() if d.is_dir()]
+        slug_dir = dirs[0]
+        clean_sql = (slug_dir / "sql" / "clean.sql").read_text()
+        mart_sql = (slug_dir / "sql" / "mart.sql").read_text()
 
-            # Verifica cast
-            assert clean_sql, "clean.sql is empty"
-            assert mart_sql, "mart.sql is empty"
+        # Verifica cast
+        assert clean_sql, "clean.sql is empty"
+        assert mart_sql, "mart.sql is empty"
     finally:
         server.shutdown()
         server.server_close()

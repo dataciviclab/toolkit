@@ -187,11 +187,10 @@ def test_toolkit_probe_url_error_has_error_code(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(mcp_server, "probe_url_impl", failing_impl)
 
-    from lab_connectors.mcp import ErrorCode as LabErrorCode
-
     payload = mcp_server.toolkit_probe_url("https://example.gov.it", timeout=15)
     assert "error" in payload
     assert "message" in payload
+    assert payload["error"] == "unexpected_error"
 
 
 def test_toolkit_probe_url_returns_payload(monkeypatch: pytest.MonkeyPatch) -> None:

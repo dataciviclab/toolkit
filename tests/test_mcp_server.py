@@ -26,6 +26,12 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_dataset_info",
         "toolkit_clean_preview",
         "toolkit_raw_preview",
+        "toolkit_probe_url",
+        "toolkit_probe_url_routed",
+        "toolkit_infer_topic",
+        "toolkit_ckan_package_show",
+        "toolkit_html_extract_links",
+        "toolkit_sparql_query",
     }
 
 

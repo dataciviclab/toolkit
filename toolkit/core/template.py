@@ -5,17 +5,6 @@ from pathlib import Path
 from typing import Any
 
 _UNRESOLVED_PLACEHOLDER_RE = re.compile(r"\{[A-Za-z_][A-Za-z0-9_.]*\}")
-_SQL_COMMENT_LINE_RE = re.compile(r"^\s*--.*$", re.MULTILINE)
-
-
-def _strip_sql_comments(sql: str) -> str:
-    """Remove SQL single-line comments (-- ...) from the text.
-
-    Used to avoid false positives when checking for unresolved template
-    placeholders — DuckDB error messages embedded in SQL comments can
-    contain ``{n}`` or similar patterns that are not actual placeholders.
-    """
-    return _SQL_COMMENT_LINE_RE.sub("", sql)
 
 
 def render_template(text: str, ctx: dict[str, Any]) -> str:
@@ -24,18 +13,11 @@ def render_template(text: str, ctx: dict[str, Any]) -> str:
 
     Supports only plain placeholders such as `{year}` and `{dataset}`.
     This is intentionally not a general templating engine.
-
-    SQL comments (``-- ...``) are excluded from the unresolved-placeholder
-    check so that DuckDB error messages embedded in comments do not trigger
-    false positives.
     """
     out = text
     for k, v in sorted(ctx.items(), key=lambda item: len(item[0]), reverse=True):
         out = out.replace("{" + k + "}", str(v))
-    # Strip comments before checking for unresolved placeholders, so
-    # that {n} or other patterns in DuckDB error messages don't break.
-    code_only = _strip_sql_comments(out)
-    unresolved = sorted(set(_UNRESOLVED_PLACEHOLDER_RE.findall(code_only)))
+    unresolved = sorted(set(_UNRESOLVED_PLACEHOLDER_RE.findall(out)))
     if unresolved:
         raise ValueError(
             "Template contains unresolved placeholders after render: "

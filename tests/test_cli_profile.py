@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.contract
-
 from toolkit.cli.app import app
 from toolkit.core.io import write_json_atomic
+
+pytestmark = pytest.mark.contract
 
 
 def _run_raw(project_example: Path, runner) -> Path:

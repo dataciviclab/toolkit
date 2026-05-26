@@ -5,8 +5,6 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.contract
-
 from toolkit.cli.app import app
 from toolkit.scaffold.clean import (
     generate_clean_sql,
@@ -14,6 +12,8 @@ from toolkit.scaffold.clean import (
     _snake_case,
     _map_duckdb_type,
 )
+
+pytestmark = pytest.mark.contract
 
 
 # --- unit tests for scaffold.clean ---

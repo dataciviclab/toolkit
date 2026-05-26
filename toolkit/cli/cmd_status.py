@@ -10,7 +10,7 @@ from toolkit.cli.common import format_profile_preview, load_layer_profile_summar
 from toolkit.core.config import load_config
 from toolkit.core.paths import layer_dataset_dir
 from toolkit.core.run_context import get_run_dir, read_run_record
-from toolkit.mcp.schema_ops import summary as _summary
+from toolkit.cli.inspect.readiness_ops import summary as _summary
 
 
 def _print_raw_hints(hints: dict[str, Any]) -> None:

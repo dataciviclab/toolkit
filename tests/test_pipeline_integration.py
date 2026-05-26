@@ -4,14 +4,17 @@ import shutil
 from pathlib import Path
 
 import duckdb
+import pytest
 
 from toolkit.clean.run import run_clean
-from toolkit.cli.cmd_profile import profile as profile_cmd
+from toolkit.cli.inspect.profile_ops import run_profile as run_profile_fn
 from toolkit.core.config import load_config
 from toolkit.clean.validate import run_clean_validation
 from toolkit.mart.run import run_mart
 from toolkit.mart.validate import run_mart_validation
 from toolkit.raw.run import run_raw
+
+pytestmark = pytest.mark.policy
 
 
 class _NoopLogger:
@@ -56,7 +59,7 @@ def test_artifacts_policy_minimal_behaves_like_standard(
         cfg.dataset, year, cfg.root, cfg.raw, logger,
         base_dir=cfg.base_dir, output_cfg=cfg.output, clean_cfg=cfg.clean,
     )
-    profile_cmd(step="raw", config=str(config_path))
+    run_profile_fn(cfg, [year], logger)
     run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger,
               base_dir=cfg.base_dir, output_cfg=cfg.output)
     run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger,
@@ -101,7 +104,7 @@ def test_artifacts_policy_standard_keeps_expected_artifacts(
         cfg.dataset, year, cfg.root, cfg.raw, logger,
         base_dir=cfg.base_dir, output_cfg=cfg.output, clean_cfg=cfg.clean,
     )
-    profile_cmd(step="raw", config=str(config_path))
+    run_profile_fn(cfg, [year], logger)
     run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger,
               base_dir=cfg.base_dir, output_cfg=cfg.output)
     run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger,

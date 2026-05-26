@@ -60,7 +60,7 @@ def _generate_readme(slug: str, url: str) -> str:
         "## Output minimo atteso\n\n-\n\n"
         "## Criterio di promozione\n\n-\n\n"
         "## Stato\n\n- intake\n\n"
-        "## Prossimo passo\n\n- run init --url poi run all\n"
+        "## Prossimo passo\n\n- scout URL poi run all\n"
     )
 
 
@@ -135,30 +135,35 @@ def _has_numeric_column(columns: list[dict[str, Any]] | list[str], profile: dict
 
 
 def suggest_clean_sql(columns: list[dict[str, Any]] | list[str], profile: dict[str, Any]) -> str:
-    """Genera clean.sql con TRY_CAST suggeriti basati sul profilo."""
+    """Genera clean.sql con TRY_CAST suggeriti basati sul profilo.
+
+    Nota: delega a generate_clean_sql() in toolkit.scaffold.clean.
+    Mantenuta per backward compat — usa generate_clean_sql direttamente.
+    """
+    from toolkit.scaffold.clean import generate_clean_sql
+
     if columns and isinstance(columns[0], dict):
         col_names = [c.get("name", f"col{i}") for i, c in enumerate(columns)]
     else:
         col_names = list(columns) if columns else []
     if not col_names:
         return "-- ATTENZIONE: profiling non ha rilevato colonne.\nSELECT 1 AS placeholder FROM raw_input\n"
-    mapping = profile.get("mapping_suggestions") or {}
-    lines = ["-- Auto-generated. Personalizza le trasformazioni.", "SELECT"]
-    select_parts = []
+
+    # Build a synthetic profile dict compatible with generate_clean_sql.
+    # Ensure ALL columns in col_names have a mapping entry — existing mapping
+    # is used where available, defaulting to VARCHAR for anything missing.
+    synthetic_profile: dict[str, Any] = dict(profile)
+    existing_mapping = synthetic_profile.get("mapping_suggestions") or {}
+    synthetic_profile["mapping_suggestions"] = dict(existing_mapping)
+
     for name in col_names:
-        spec = mapping.get(name) or {}
-        raw_type = spec.get("type", "text") if isinstance(spec, dict) else "text"
-        if raw_type in ("integer", "bigint", "int"):
-            select_parts.append(f'  TRY_CAST("{name}" AS BIGINT) AS "{name}"')
-        elif raw_type in ("float", "double", "decimal"):
-            select_parts.append(f'  TRY_CAST("{name}" AS DOUBLE) AS "{name}"')
-        elif raw_type in ("date",):
-            select_parts.append(f'  TRY_CAST("{name}" AS DATE) AS "{name}"')
-        else:
-            select_parts.append(f'  "{name}"')
-    lines.append(",\n".join(select_parts))
-    lines.append("FROM raw_input")
-    return "\n".join(lines) + "\n"
+        if name in existing_mapping:
+            continue  # keep existing type hint
+        # Default: VARCHAR. This matches generate_clean_sql behavior for
+        # untyped columns and avoids silently dropping columns from output.
+        synthetic_profile["mapping_suggestions"][name] = {"type": "string"}
+
+    return generate_clean_sql(synthetic_profile, "candidate", 2024)
 
 
 def _find_matching_column(col_names: list[str], keywords: list[str]) -> str | None:

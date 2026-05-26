@@ -11,7 +11,7 @@ Percorso canonico:
 
 Questa categoria include anche tooling di supporto che non va confuso con il runtime principale del toolkit:
 
-- `toolkit.profile`
+- `inspect profile`
 - `resume`
 - run parziali per layer
 
@@ -84,7 +84,7 @@ Il comando verifica anche gli artefatti minimi del layer precedente prima di rip
 
 ## Profile RAW
 
-`toolkit profile raw --config dataset.yml` genera hint utili per `clean.read` quando il RAW è sporco, ambiguo o poco noto.
+`toolkit inspect profile --config dataset.yml` genera il profilo diagnostico RAW (encoding, delimitatore, colonne, statistiche).
 
 Artefatti principali:
 
@@ -93,8 +93,8 @@ Artefatti principali:
 
 Nota pratica:
 
-- `run raw` scrive già un `suggested_read.yml` leggero e conservativo quando il file primario e` profilabile
-- `profile raw` resta il comando da usare quando vuoi profiling più ricco e report diagnostici
+- `run raw` scrive già un profilo leggero e conservativo quando il file primario è profilabile
+- `inspect profile` produce lo stesso profilo ma con output CLI leggibile, utile per debug rapido
 
 `raw_profile.json` è il nome canonico del profilo RAW. `profile.json` non è più scritto.
 
@@ -113,7 +113,7 @@ Opzioni utili ma avanzate:
 Uso consigliato:
 
 - repo dataset nuovi: configurazione esplicita e `--strict-config`
-- `profile raw` solo se serve capire meglio il formato RAW
+- `inspect profile` se vuoi vedere il profilo RAW a schermo senza aprire il JSON
 - `inspect schema-diff` quando vuoi confrontare rapidamente hints e colonne tra piu anni senza aprire a mano i metadata RAW
 
 ## Artifact policy

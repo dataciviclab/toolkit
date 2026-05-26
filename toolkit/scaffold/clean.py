@@ -4,17 +4,6 @@ from pathlib import Path
 from typing import Any
 
 
-def _normalize_colname(name: str) -> str:
-    """Normalize a column name for comparison (same logic as _snake_case)."""
-    import re
-
-    s = name.strip()
-    s = re.sub(r"([a-z])([A-Z])", r"\1_\2", s)
-    s = re.sub(r"[^a-zA-Z0-9]+", "_", s)
-    s = re.sub(r"_+", "_", s).lower().strip("_")
-    return s or name
-
-
 def _snake_case(name: str) -> str:
     """Convert a column name to snake_case (best-effort)."""
     import re
@@ -60,25 +49,46 @@ def _map_duckdb_type(raw_type: str) -> str:
     return "VARCHAR"
 
 
-def _has_anno_column(profile: dict[str, Any]) -> bool:
-    """Check if any raw column name looks like a year column after normalization.
+def _find_anno_raw_column(profile: dict[str, Any]) -> str | None:
+    """Find the raw column name that looks like a year column.
 
-    Checks both mapping_suggestions (explicit config) and columns_raw (raw file
-    header) so we don't inject a duplicate anno even when the raw CSV has the
-    column but the candidate hasn't mapped it yet.
+    Returns the raw (un-normalized) column name, or None if no year column
+    is found. Checks both mapping_suggestions and columns_raw.
     """
-    # Collect candidate column names from both sources
     mapping = profile.get("mapping_suggestions", {})
     if mapping:
-        col_names = list(mapping.keys())
+        col_names: list[str] = list(mapping.keys())
     else:
         col_names = profile.get("columns_raw", [])
 
     for col in col_names:
         normalized = _snake_case(col).lower()
         if normalized in ("anno", "anno_di_imposta", "anno_imposta", "year", "tax_year"):
-            return True
-    return False
+            return col
+    return None
+
+
+def _has_anno_column(profile: dict[str, Any]) -> bool:
+    """Check if any raw column name looks like a year column after normalization."""
+    return _find_anno_raw_column(profile) is not None
+
+
+def _select_expr(
+    raw_col: str,
+    sql_type: str,
+    out_name: str,
+) -> str:
+    """Build a SELECT expression for one column with smart transformations.
+
+    - VARCHAR columns: TRIM instead of TRY_CAST (avoids unnecessary type coercion)
+      Comma-decimal numbers are handled by clean.read.decimal in dataset.yml
+      (see propose_clean_read()), not by REPLACE in SQL — DuckDB's read_csv
+      native decimal support is more reliable and avoids DOUBLE→STRING round-trips.
+    """
+    if sql_type == "VARCHAR":
+        return f'trim("{raw_col}") AS {out_name}'
+
+    return f'TRY_CAST("{raw_col}" AS {sql_type}) AS {out_name}'
 
 
 def _columns_spec(
@@ -90,7 +100,7 @@ def _columns_spec(
         # Fallback to columns_raw if mapping is empty
         columns_raw = profile.get("columns_raw", [])
         if columns_raw:
-            select_exprs = [f'TRY_CAST("{c}" AS VARCHAR) AS {_snake_case(c)}' for c in columns_raw]
+            select_exprs = [f'trim("{c}") AS {_snake_case(c)}' for c in columns_raw]
             columns_spec = {c: "VARCHAR" for c in columns_raw}
             return select_exprs, columns_spec
         return ["*"], {}
@@ -102,10 +112,9 @@ def _columns_spec(
     for raw_col, spec in mapping.items():
         raw_type = spec.get("type", "str")
         sql_type = _map_duckdb_type(raw_type)
-
         out_name = _snake_case(raw_col)
 
-        select_exprs.append(f'TRY_CAST("{raw_col}" AS {sql_type}) AS {out_name}')
+        select_exprs.append(_select_expr(raw_col, sql_type, out_name))
         columns_spec[raw_col] = sql_type
 
     return select_exprs, columns_spec
@@ -160,8 +169,12 @@ def generate_clean_sql(
     view (created by clean.read at runtime). All CSV parsing options belong
     in ``clean.read`` in dataset.yml — run ``propose_clean_read()`` to get
     the suggested config.
-    """
 
+    Improvements over basic TRY_CAST scaffold:
+    - TRIM for VARCHAR columns (mirrors real usage)
+    - WHERE clause filtering null years (if anno column exists in source)
+    - Comma-decimal handling via clean.read.decimal config (see propose_clean_read())
+    """
     file_used = profile.get("file_used", "")
 
     # Build SELECT expressions
@@ -170,7 +183,8 @@ def generate_clean_sql(
     # If the CSV doesn't have a column named "anno" (after normalization),
     # inject {year}::INTEGER AS anno so the clean layer has it without requiring
     # a special mapping.
-    if not _has_anno_column(profile):
+    has_real_anno = _has_anno_column(profile)
+    if not has_real_anno:
         select_exprs.insert(0, "{year}::INTEGER AS anno")
 
     # Build header comment
@@ -180,15 +194,14 @@ def generate_clean_sql(
 
     encoding = profile.get("encoding_suggested")
     delim = profile.get("delim_suggested")
-    decimal = profile.get("decimal_suggested")
 
     meta_parts = []
     if encoding:
         meta_parts.append(f"Encoding: {encoding}")
     if delim:
         meta_parts.append(f"Delimiter: {delim}")
-    if decimal:
-        meta_parts.append(f"Decimal: {decimal}")
+    if profile.get("decimal_suggested"):
+        meta_parts.append(f"Decimal: {profile['decimal_suggested']}")
 
     if meta_parts:
         header_parts.append(f"-- {' | '.join(meta_parts)}")
@@ -208,7 +221,10 @@ def generate_clean_sql(
         "-- CSV parsing options (delim, columns, encoding, header, skip) "
         "belong in clean.read in dataset.yml."
     )
-    header_parts.append("-- Run: toolkit run clean -c dataset.yml")
+    header_parts.append(
+        "-- Pass --run to execute raw and clean in one step, or run:"
+    )
+    header_parts.append("--   toolkit run clean -c dataset.yml")
     header_parts.append("")
 
     # Build SELECT clause
@@ -218,6 +234,17 @@ def generate_clean_sql(
     sql_lines.append("SELECT")
     sql_lines.append(select_block)
     sql_lines.append("FROM raw_input")
+
+    # WHERE clause: filter out null years when the CSV has a real anno column.
+    # This mirrors real clean.sql patterns (e.g. terna, civile-flussi).
+    if has_real_anno:
+        anno_raw = _find_anno_raw_column(profile)
+        if anno_raw is not None:
+            # Use TRY_CAST for safety — some years may be non-integer (e.g. "2024a")
+            sql_lines.append(
+                f"WHERE try_cast(\"{anno_raw}\" AS INTEGER) IS NOT NULL"
+            )
+
     sql_lines.append("")
 
     return "\n".join(sql_lines)
@@ -234,8 +261,8 @@ def _names_match(keys: list[str], header_names: list[str]) -> bool:
     """Check if mapping keys and header names refer to the same columns after normalization."""
     if len(keys) != len(header_names):
         return False
-    norm_keys = [_normalize_colname(k) for k in keys]
-    norm_hdr = [_normalize_colname(h) for h in header_names]
+    norm_keys = [_snake_case(k) for k in keys]
+    norm_hdr = [_snake_case(h) for h in header_names]
     return norm_keys == norm_hdr
 
 

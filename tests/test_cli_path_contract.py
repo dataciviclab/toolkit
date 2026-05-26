@@ -79,7 +79,7 @@ def test_cli_commands_use_dataset_yml_dir_as_path_base(tmp_path: Path, monkeypat
 
     profile_result = runner.invoke(
         app,
-        ["profile", "raw", "--config", str(config_path), "--strict-config"],
+        ["inspect", "profile", "--config", str(config_path), "--strict-config"],
     )
     assert profile_result.exit_code == 0, profile_result.output
 

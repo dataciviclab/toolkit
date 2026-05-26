@@ -1,0 +1,341 @@
+"""Tests per toolkit/scaffold/clean.py — generazione clean.sql.
+
+pure_unit: _select_expr, _columns_spec, generate_clean_sql, _find_anno_raw_column
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+from toolkit.scaffold.clean import (
+    _columns_spec,
+    _find_anno_raw_column,
+    _has_anno_column,
+    _select_expr,
+    generate_clean_sql,
+)
+
+
+# ---------------------------------------------------------------------------
+# pure_unit: _select_expr
+# ---------------------------------------------------------------------------
+
+class TestSelectExpr:
+    """pure_unit: _select_expr sceglie TRIM / REPLACE / TRY_CAST per tipo."""
+
+    @pytest.mark.pure_unit
+    def test_varchar_gets_trim(self) -> None:
+        """VARCHAR columns use TRIM instead of unnecessary TRY_CAST."""
+        result = _select_expr("Nome", "VARCHAR", "nome")
+        assert result == 'trim("Nome") AS nome'
+
+    @pytest.mark.pure_unit
+    def test_integer_gets_try_cast(self) -> None:
+        """Integer columns get TRY_CAST to BIGINT."""
+        result = _select_expr("Anno", "BIGINT", "anno")
+        assert result == 'TRY_CAST("Anno" AS BIGINT) AS anno'
+
+    @pytest.mark.pure_unit
+    def test_double_gets_try_cast(self) -> None:
+        """Double columns get TRY_CAST to DOUBLE."""
+        result = _select_expr("Valore", "DOUBLE", "valore")
+        assert result == 'TRY_CAST("Valore" AS DOUBLE) AS valore'
+
+    @pytest.mark.pure_unit
+    def test_double_gets_plain_try_cast(self) -> None:
+        """Double columns always get plain TRY_CAST (no REPLACE — handled by clean.read)."""
+        result = _select_expr("Importo", "DOUBLE", "importo")
+        assert result == 'TRY_CAST("Importo" AS DOUBLE) AS importo'
+        assert "REPLACE" not in result
+
+    @pytest.mark.pure_unit
+    def test_bigint_gets_plain_try_cast(self) -> None:
+        """BIGINT columns always get plain TRY_CAST."""
+        result = _select_expr("Anno", "BIGINT", "anno")
+        assert result == 'TRY_CAST("Anno" AS BIGINT) AS anno'
+        assert "REPLACE" not in result
+
+    @pytest.mark.pure_unit
+    def test_date_gets_try_cast(self) -> None:
+        """DATE columns get TRY_CAST."""
+        result = _select_expr("Data", "DATE", "data")
+        assert 'TRY_CAST("Data" AS DATE)' in result
+
+    @pytest.mark.pure_unit
+    def test_boolean_gets_try_cast(self) -> None:
+        """BOOLEAN columns get TRY_CAST."""
+        result = _select_expr("Attivo", "BOOLEAN", "attivo")
+        assert 'TRY_CAST("Attivo" AS BOOLEAN)' in result
+
+
+# ---------------------------------------------------------------------------
+# pure_unit: _find_anno_raw_column / _has_anno_column
+# ---------------------------------------------------------------------------
+
+class TestFindAnnoColumn:
+    """pure_unit: rilevamento colonna anno nel profilo."""
+
+    @pytest.mark.pure_unit
+    def test_finds_anno_in_mapping(self) -> None:
+        """Trova 'Anno' nel mapping_suggestions."""
+        profile: dict[str, Any] = {
+            "mapping_suggestions": {
+                "Anno": {"type": "int"},
+                "Valore": {"type": "float"},
+            },
+        }
+        assert _find_anno_raw_column(profile) == "Anno"
+        assert _has_anno_column(profile) is True
+
+    @pytest.mark.pure_unit
+    def test_finds_anno_in_columns_raw(self) -> None:
+        """Trova 'Anno' in columns_raw (fallback senza mapping)."""
+        profile: dict[str, Any] = {
+            "mapping_suggestions": {},
+            "columns_raw": ["Anno", "Nome", "Valore"],
+        }
+        assert _find_anno_raw_column(profile) == "Anno"
+        assert _has_anno_column(profile) is True
+
+    @pytest.mark.pure_unit
+    def test_recognizes_year_variants(self) -> None:
+        """Riconosce varianti: anno_di_imposta, YEAR, tax_year."""
+        for col_name in ["anno_di_imposta", "YEAR", "Anno Imposta", "Tax_Year"]:
+            profile: dict[str, Any] = {
+                "mapping_suggestions": {col_name: {"type": "int"}},
+            }
+            assert _find_anno_raw_column(profile) == col_name, f"Failed for {col_name}"
+
+    @pytest.mark.pure_unit
+    def test_no_anno_column(self) -> None:
+        """Nessuna colonna anno → None / False."""
+        profile: dict[str, Any] = {
+            "mapping_suggestions": {
+                "Nome": {"type": "str"},
+                "Valore": {"type": "float"},
+            },
+        }
+        assert _find_anno_raw_column(profile) is None
+        assert _has_anno_column(profile) is False
+
+    @pytest.mark.pure_unit
+    def test_empty_profile(self) -> None:
+        """Profilo vuoto → None / False."""
+        assert _find_anno_raw_column({}) is None
+        assert _has_anno_column({}) is False
+
+
+# ---------------------------------------------------------------------------
+# pure_unit: _columns_spec
+# ---------------------------------------------------------------------------
+
+class TestColumnsSpec:
+    """pure_unit: _columns_spec produce espressioni SELECT corrette."""
+
+    @pytest.mark.pure_unit
+    def test_mixed_types(self) -> None:
+        """Mapping misto: VARCHAR → TRIM, numerici → TRY_CAST."""
+        profile: dict[str, Any] = {
+            "mapping_suggestions": {
+                "Nome": {"type": "str"},
+                "Anno": {"type": "int"},
+                "Valore": {"type": "float"},
+            },
+        }
+        exprs, spec = _columns_spec(profile, 2024)
+        assert 'trim("Nome") AS nome' in exprs
+        assert 'TRY_CAST("Anno" AS BIGINT) AS anno' in exprs
+        assert 'TRY_CAST("Valore" AS DOUBLE) AS valore' in exprs
+        assert spec["Nome"] == "VARCHAR"
+        assert spec["Anno"] == "BIGINT"
+        assert spec["Valore"] == "DOUBLE"
+
+    @pytest.mark.pure_unit
+    def test_comma_decimal(self) -> None:
+        """Con decimal_suggested=',', colonne DOUBLE usano TRY_CAST normale
+        (REPLACE non serve: clean.read.decimal gestito da DuckDB)."""
+        profile: dict[str, Any] = {
+            "decimal_suggested": ",",
+            "mapping_suggestions": {
+                "Nome": {"type": "str"},
+                "Importo": {"type": "float"},
+            },
+        }
+        exprs, _ = _columns_spec(profile, 2024)
+        joined = "\n".join(exprs)
+        assert 'trim("Nome") AS nome' in joined
+        assert 'TRY_CAST("Importo" AS DOUBLE)' in joined
+        assert "REPLACE" not in joined
+
+    @pytest.mark.pure_unit
+    def test_no_mapping_fallback(self) -> None:
+        """Senza mapping: TRIM per tutte le colonne raw."""
+        profile: dict[str, Any] = {
+            "mapping_suggestions": {},
+            "columns_raw": ["Col1", "Col2"],
+        }
+        exprs, spec = _columns_spec(profile, 2024)
+        assert 'trim("Col1") AS col1' in exprs
+        assert 'trim("Col2") AS col2' in exprs
+        assert spec == {"Col1": "VARCHAR", "Col2": "VARCHAR"}
+
+    @pytest.mark.pure_unit
+    def test_no_mapping_no_columns(self) -> None:
+        """Senza mapping né columns_raw: wildcard."""
+        profile: dict[str, Any] = {}
+        exprs, _ = _columns_spec(profile, 2024)
+        assert exprs == ["*"]
+
+
+# ---------------------------------------------------------------------------
+# pure_unit: generate_clean_sql
+# ---------------------------------------------------------------------------
+
+class TestGenerateCleanSql:
+    """pure_unit: generate_clean_sql produce clean.sql completo."""
+
+    @pytest.mark.pure_unit
+    def test_basic_without_anno_column(self) -> None:
+        """Senza colonna anno: inject {year}, nessun WHERE."""
+        profile: dict[str, Any] = {
+            "mapping_suggestions": {
+                "Nome": {"type": "str"},
+                "Valore": {"type": "float"},
+            },
+        }
+        sql = generate_clean_sql(profile, "test_dataset", 2024)
+        assert "{year}::INTEGER AS anno" in sql
+        assert "FROM raw_input" in sql
+        assert "WHERE" not in sql
+        assert 'trim("Nome")' in sql
+        assert 'TRY_CAST("Valore"' in sql
+
+    @pytest.mark.pure_unit
+    def test_with_real_anno_column_adds_where(self) -> None:
+        """Con colonna Anno reale: nessun inject, WHERE aggiunto."""
+        profile: dict[str, Any] = {
+            "file_used": "data_2024.csv",
+            "mapping_suggestions": {
+                "Anno": {"type": "int"},
+                "Regione": {"type": "str"},
+                "Valore": {"type": "float"},
+            },
+        }
+        sql = generate_clean_sql(profile, "test_dataset", 2024)
+        assert "{year}::INTEGER" not in sql  # non injectato
+        assert 'TRY_CAST("Anno" AS BIGINT) AS anno' in sql
+        assert 'WHERE try_cast("Anno" AS INTEGER) IS NOT NULL' in sql
+        assert 'trim("Regione")' in sql
+
+    @pytest.mark.pure_unit
+    def test_with_anno_di_imposta_adds_where(self) -> None:
+        """Con anno_di_imposta: WHERE sulla colonna corretta."""
+        profile: dict[str, Any] = {
+            "mapping_suggestions": {
+                "Anno di imposta": {"type": "int"},
+                "Reddito": {"type": "float"},
+            },
+        }
+        sql = generate_clean_sql(profile, "irpef", 2024)
+        assert 'WHERE try_cast("Anno di imposta" AS INTEGER) IS NOT NULL' in sql
+        assert "{year}::INTEGER" not in sql
+
+    @pytest.mark.pure_unit
+    def test_comma_decimal_in_header(self) -> None:
+        """Con decimal_suggested=',': info nel commento, non REPLACE nel SQL."""
+        profile: dict[str, Any] = {
+            "decimal_suggested": ",",
+            "encoding_suggested": "utf-8",
+            "delim_suggested": ";",
+            "mapping_suggestions": {
+                "Anno": {"type": "int"},
+                "Importo": {"type": "float"},
+            },
+        }
+        sql = generate_clean_sql(profile, "test", 2024)
+        assert "REPLACE" not in sql
+        assert "Decimal: ," in sql  # nel commento header
+        assert "Encoding: utf-8" in sql
+        assert "Delimiter: ;" in sql
+
+    @pytest.mark.pure_unit
+    def test_warnings_in_comment(self) -> None:
+        """Warning del profilo appaiono come commento."""
+        profile: dict[str, Any] = {
+            "mapping_suggestions": {"A": {"type": "str"}},
+            "warnings": ["header_preamble_detected: ...", "encoding_fallback: latin-1"],
+        }
+        sql = generate_clean_sql(profile, "test", 2024)
+        assert "Warnings from profiling:" in sql
+        assert "header_preamble_detected" in sql
+        assert "encoding_fallback" in sql
+
+    @pytest.mark.pure_unit
+    def test_header_comments(self) -> None:
+        """Commenti intestazione: generazione, source, meta, run hint."""
+        profile: dict[str, Any] = {
+            "file_used": "dati.csv",
+            "mapping_suggestions": {"X": {"type": "str"}},
+        }
+        sql = generate_clean_sql(profile, "mio_dataset", 2024)
+        assert "Generated by toolkit scaffold clean" in sql
+        assert "Source: data/raw/mio_dataset/2024/dati.csv" in sql
+        assert "toolkit run clean" in sql
+
+    @pytest.mark.pure_unit
+    def test_empty_mapping(self) -> None:
+        """Senza mapping ne' columns_raw: SELECT * FROM raw_input."""
+        profile: dict[str, Any] = {}
+        sql = generate_clean_sql(profile, "test", 2024)
+        assert "SELECT" in sql
+        assert "{year}::INTEGER AS anno" in sql  # injected
+        assert "FROM raw_input" in sql
+
+    @pytest.mark.pure_unit
+    def test_where_uses_try_cast_for_safety(self) -> None:
+        """WHERE usa try_cast (non CAST) per gestire valori non interi."""
+        profile: dict[str, Any] = {
+            "mapping_suggestions": {
+                "Anno": {"type": "int"},
+            },
+        }
+        sql = generate_clean_sql(profile, "test", 2024)
+        assert "try_cast" in sql
+        assert "CAST" not in sql.split("WHERE")[1] if "WHERE" in sql else ""
+
+    @pytest.mark.pure_unit
+    def test_sql_ends_with_newline(self) -> None:
+        """Il SQL generato termina con newline."""
+        profile: dict[str, Any] = {
+            "mapping_suggestions": {"A": {"type": "str"}},
+        }
+        sql = generate_clean_sql(profile, "test", 2024)
+        assert sql.endswith("\n")
+
+
+# ---------------------------------------------------------------------------
+# pure_unit: integrazione con suggest_clean_sql (full.py)
+# ---------------------------------------------------------------------------
+
+class TestSuggestCleanSqlIntegration:
+    """pure_unit: suggest_clean_sql aggiornato coerentemente."""
+
+    @pytest.mark.pure_unit
+    def test_varchar_gets_trim(self) -> None:
+        """suggest_clean_sql applica TRIM alle colonne VARCHAR."""
+        from toolkit.scaffold.full import suggest_clean_sql
+
+        cols = ["nome", "categoria", "valore"]
+        profile: dict[str, Any] = {
+            "mapping_suggestions": {
+                "nome": {"type": "str"},
+                "categoria": {"type": "str"},
+                "valore": {"type": "float"},
+            },
+        }
+        sql = suggest_clean_sql(cols, profile)
+        assert 'trim("nome")' in sql
+        assert 'trim("categoria")' in sql
+        assert 'TRY_CAST("valore" AS DOUBLE)' in sql

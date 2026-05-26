@@ -13,6 +13,8 @@ from toolkit.scaffold.clean import (
     _map_duckdb_type,
 )
 
+pytestmark = pytest.mark.contract
+
 
 # --- unit tests for scaffold.clean ---
 
@@ -504,7 +506,7 @@ def test_scaffold_clean_on_project_example(project_example: Path, runner):
     # First run profile raw to generate the profile
     result = runner.invoke(
         app,
-        ["profile", "raw", "-c", str(project_example / "dataset.yml")],
+        ["inspect", "profile", "-c", str(project_example / "dataset.yml")],
     )
     assert result.exit_code == 0
 

@@ -100,7 +100,7 @@ def test_scout_file_url_shows_probe_info() -> None:
     assert "Source type: file" in result.output
     assert "HTTP status: 200" in result.output
     assert "csv" in result.output
-    assert "Next: toolkit init --url" in result.output
+    assert "Next: toolkit scout" in result.output
 
 
 @pytest.mark.policy
@@ -118,7 +118,7 @@ def test_scout_html_shows_candidate_links() -> None:
     assert "Source type: html" in result.output
     assert "Candidate links:" in result.output
     assert f"{base_url}/downloads/data.csv" in result.output
-    assert "Next: toolkit init --url" in result.output
+    assert "Next: toolkit scout" in result.output
 
 
 @pytest.mark.policy
@@ -222,7 +222,7 @@ def test_scout_shows_404_status() -> None:
 
 @pytest.mark.policy
 def test_scout_shows_next_steps_for_file() -> None:
-    """toolkit scout per file mostra suggerimento init --url."""
+    """toolkit scout per file mostra suggerimento scout --scaffold."""
     server, base_url = _serve()
     runner = CliRunner()
     try:
@@ -232,4 +232,4 @@ def test_scout_shows_next_steps_for_file() -> None:
         server.server_close()
 
     assert result.exit_code == 0
-    assert "Next: toolkit init --url" in result.output
+    assert "Next: toolkit scout" in result.output

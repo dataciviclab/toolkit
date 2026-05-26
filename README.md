@@ -114,8 +114,6 @@ Il toolkit non gestisce il deployment: scrive nella directory configurata via
 | `toolkit scout <URL>` | Esplora URL esterno (HTTP/CKAN/SDMX/HTML) — probe + routing + inferenze |
 | `toolkit scout <URL> --scaffold` | Probe + scaffold candidato completo (dataset.yml, SQL, README) |
 | `toolkit scout <URL> --run` | Probe + scaffold + raw run |
-| `toolkit init --url <URL>` | Alias per `scout --scaffold` |
-| `toolkit init --config dataset.yml` | Run raw + scaffold clean.sql |
 | `toolkit scaffold <slug>` | Genera scheletro `dataset.yml` + SQL da un template |
 | `toolkit batch --file jobs.yml` | Esegue più dataset in sequenza |
 

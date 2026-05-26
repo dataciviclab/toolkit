@@ -1,8 +1,6 @@
 """inspect profile — profilo diagnostico del RAW (encoding, delim, colonne).
 
-La funzione run_profile() è pubblica cosicché cmd_profile.py (deprecato)
-possa riusarla senza duplicare logica.
-
+run_profile() è usata da inspect/profile e da test_pipeline_integration.
 csv_preview() è pubblica cosicché MCP csv_preview la chiami invece di
 avere logica inline — CLI = logica, MCP = wrapper.
 """
@@ -29,7 +27,7 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     """Sniffa encoding/delim/colonne di un CSV e restituisce schema + preview.
 
     Stessa pipeline di ``sniff_source_file`` + ``profile_with_read_cfg``
-    usata dal profiler RAW e da ``toolkit init --url``.
+    usata dal profiler RAW e da ``toolkit scout --scaffold``.
 
     Output compatibile col formato ``mapping_suggestions`` del profiler.
 

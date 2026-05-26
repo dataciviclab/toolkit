@@ -78,7 +78,7 @@ def _validate_execution_plan(cfg, step: str) -> list[str]:
             raise ValueError(
                 f"CLEAN SQL file not found: {clean_sql}\n"
                 f"This config is not bootstrapped yet.\n"
-                f"Run: toolkit init --config <config> --years <year>\n"
+                f"Run: toolkit run raw -c <config> -y <year>\n"
                 f"Then review sql/clean.sql and run: toolkit run all ..."
             )
 

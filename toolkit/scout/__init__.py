@@ -1,7 +1,7 @@
 """toolkit.scout — URL probe, routing, inferenze per candidate dataset.
 
 Strato indipendente dalla CLI, usabile da:
-- CLI (init --url, scout)
+- CLI (scout, scout --scaffold)
 - MCP tools (scout tools)
 - Source Observatory (source_check_fetch/analyze)
 - Notebook e script interni

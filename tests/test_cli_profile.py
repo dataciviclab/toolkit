@@ -34,7 +34,7 @@ def test_cli_profile_raw_happy_path(
 
     profile_result = runner.invoke(
         app,
-        ["profile", "raw", "--config", str(config_path), "--strict-config"],
+        ["inspect", "profile", "--config", str(config_path), "--strict-config"],
     )
     assert profile_result.exit_code == 0, profile_result.output
     assert "PROFILE RAW ->" in profile_result.output

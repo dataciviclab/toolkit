@@ -360,7 +360,7 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
                         if raw_probe_reason:
                             merged_warnings.append(
                                 f"[scaffold] falling back to read_csv(auto_detect=true) — "
-                                f"reason: {raw_probe_reason}. Run 'toolkit init --config' to generate a profile."
+                                f"reason: {raw_probe_reason}. Run 'toolkit run raw -c <config>' to generate a profile."
                             )
                     _col_rows = _con.execute(_query).fetchall()
                     _actual_raw_col_names = [str(r[0]) for r in _col_rows]
@@ -390,7 +390,7 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
         raw_probe_source = "unavailable"
         merged_warnings.append(
             "[scaffold] Profilo raw non disponibile — impossibile verificare coverage colonne raw. "
-            "Considera eseguire 'toolkit init --config' per generare il profilo."
+            "Considera eseguire 'toolkit run raw -c <config>' per generare il profilo."
         )
 
     row_drop_pct = (

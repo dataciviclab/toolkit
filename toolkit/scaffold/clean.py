@@ -4,17 +4,6 @@ from pathlib import Path
 from typing import Any
 
 
-def _normalize_colname(name: str) -> str:
-    """Normalize a column name for comparison (same logic as _snake_case)."""
-    import re
-
-    s = name.strip()
-    s = re.sub(r"([a-z])([A-Z])", r"\1_\2", s)
-    s = re.sub(r"[^a-zA-Z0-9]+", "_", s)
-    s = re.sub(r"_+", "_", s).lower().strip("_")
-    return s or name
-
-
 def _snake_case(name: str) -> str:
     """Convert a column name to snake_case (best-effort)."""
     import re
@@ -272,8 +261,8 @@ def _names_match(keys: list[str], header_names: list[str]) -> bool:
     """Check if mapping keys and header names refer to the same columns after normalization."""
     if len(keys) != len(header_names):
         return False
-    norm_keys = [_normalize_colname(k) for k in keys]
-    norm_hdr = [_normalize_colname(h) for h in header_names]
+    norm_keys = [_snake_case(k) for k in keys]
+    norm_hdr = [_snake_case(h) for h in header_names]
     return norm_keys == norm_hdr
 
 

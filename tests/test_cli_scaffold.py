@@ -504,7 +504,7 @@ def test_scaffold_clean_on_project_example(project_example: Path, runner):
     # First run profile raw to generate the profile
     result = runner.invoke(
         app,
-        ["profile", "raw", "-c", str(project_example / "dataset.yml")],
+        ["inspect", "profile", "-c", str(project_example / "dataset.yml")],
     )
     assert result.exit_code == 0
 

@@ -264,8 +264,13 @@ def run_year(
                 run_has_validation_warnings = True
         except Exception as exc:
             context.fail_layer(layer_name, str(exc))
-            context.fail_run(str(exc))
-            raise
+            if fail_on_error:
+                context.fail_run(str(exc))
+                raise
+            base_logger.warning(
+                "SKIP %s layer for %s (%s) — source unreachable? %s",
+                layer_name, cfg.dataset, year, exc,
+            )
 
     source_id = cfg.source_id
 
@@ -650,6 +655,8 @@ def run_full(
         is_mart_only = _is_mart_only_cfg(cfg)
         run_step = "mart" if is_mart_only else "all"
 
+        fail_on_error_flag = bool((cfg.validation or {}).get("fail_on_error", True))
+
         for year in selected_years:
             logger.info("Run %s — year=%s", run_step, year)
             run_year(cfg, year, step=run_step, dry_run=dry_flag, logger=logger,
@@ -673,7 +680,7 @@ def run_full(
                     "run": "ok",
                     "validate": "passed" if all_passed else "failed",
                 }
-                if not all_passed:
+                if not all_passed and fail_on_error_flag:
                     results["status"] = "failed"
 
                 # Review readiness (capture, not print)
@@ -690,7 +697,8 @@ def run_full(
                 results["multi_year_mart"] = "ok"
             except Exception as exc:
                 results["multi_year_mart"] = f"failed: {exc}"
-                results["status"] = "failed"
+                if fail_on_error_flag:
+                    results["status"] = "failed"
 
     if json_output:
         typer.echo(json.dumps(results, indent=2, default=str))

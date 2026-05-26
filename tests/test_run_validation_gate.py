@@ -107,6 +107,38 @@ def test_run_continues_after_failed_validation_when_fail_on_error_false(tmp_path
     assert record["validations"]["clean"]["passed"] is False
 
 
+def test_run_skips_layer_on_execution_failure_when_fail_on_error_false(tmp_path: Path, monkeypatch) -> None:
+    """Con fail_on_error: false, un layer che fallisce (source irraggiungibile)
+    viene skippato, non blocca la pipeline."""
+    config_path = tmp_path / "dataset.yml"
+    _write_config(config_path, fail_on_error=False)
+
+    calls = {"raw": 0, "clean": 0, "mart": 0}
+
+    def _failing_raw(*args, **kwargs):
+        calls["raw"] += 1
+        raise RuntimeError("simulated source unreachable")
+
+    monkeypatch.setattr(cmd_run, "run_raw", _failing_raw)
+    monkeypatch.setattr(cmd_run, "run_clean", lambda *args, **kwargs: calls.__setitem__("clean", calls["clean"] + 1))
+    monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1))
+    monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: _failed_summary())
+    monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: _failed_summary())
+    monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: _failed_summary())
+
+    # Non deve lanciare eccezione — skip del layer invece di crash
+    cmd_run.run(step="all", config=str(config_path))
+
+    assert calls["raw"] == 1  # RAW è stato chiamato e fallito
+    # Pipeline continua anche dopo RAW fallito (non crasha)
+    # CLEAN e MART vengono comunque eseguiti (e falliranno in produzione
+    # per mancanza di input, ma nei test sono mockati)
+    assert True  # se arriviamo qui senza eccezione, il test è passato
+
+    record = _read_run_record(tmp_path / "out")
+    assert record["layers"]["raw"]["status"] == "FAILED"
+
+
 def _write_config_with_min_rows(path: Path, *, min_rows: int) -> None:
     """Config con min_rows per clean e mart, pochi dati raw."""
     sql_dir = path.parent / "sql" / "mart"

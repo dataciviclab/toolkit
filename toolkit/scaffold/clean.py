@@ -97,10 +97,12 @@ def _columns_spec(
     """Build SELECT expressions and read_csv columns spec from mapping_suggestions."""
     mapping = profile.get("mapping_suggestions", {})
     if not mapping:
-        # Fallback to columns_raw if mapping is empty
+        # Fallback to columns_raw if mapping is empty (e.g. Excel profiling,
+        # or profiling that failed to infer types). Use trim(CAST(... AS VARCHAR))
+        # to safely handle both text and numeric columns.
         columns_raw = profile.get("columns_raw", [])
         if columns_raw:
-            select_exprs = [f'trim("{c}") AS {_snake_case(c)}' for c in columns_raw]
+            select_exprs = [f'trim(CAST("{c}" AS VARCHAR)) AS {_snake_case(c)}' for c in columns_raw]
             columns_spec = {c: "VARCHAR" for c in columns_raw}
             return select_exprs, columns_spec
         return ["*"], {}

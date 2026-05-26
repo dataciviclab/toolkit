@@ -155,7 +155,7 @@ def suggest_clean_sql(columns: list[dict[str, Any]] | list[str], profile: dict[s
         elif raw_type in ("date",):
             select_parts.append(f'  TRY_CAST("{name}" AS DATE) AS "{name}"')
         else:
-            select_parts.append(f'  "{name}"')
+            select_parts.append(f'  trim("{name}")')
     lines.append(",\n".join(select_parts))
     lines.append("FROM raw_input")
     return "\n".join(lines) + "\n"

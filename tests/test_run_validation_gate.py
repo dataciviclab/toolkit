@@ -138,6 +138,37 @@ def test_run_skips_layer_on_execution_failure_when_fail_on_error_false(tmp_path:
     assert record["status"] == "SUCCESS_WITH_WARNINGS"  # non SUCCESS falso
 
 
+
+
+def test_run_skips_mart_after_clean_failure_when_fail_on_error_false(tmp_path: Path, monkeypatch) -> None:
+    """Con fail_on_error: false, CLEAN fallito skippa MART (nessun output stale)."""
+    config_path = tmp_path / "dataset.yml"
+    _write_config(config_path, fail_on_error=False)
+
+    calls = {"raw": 0, "clean": 0, "mart": 0}
+
+    def _failing_clean(*args, **kwargs):
+        calls["clean"] += 1
+        raise RuntimeError("simulated clean failure")
+
+    monkeypatch.setattr(cmd_run, "run_raw", lambda *args, **kwargs: calls.__setitem__("raw", calls["raw"] + 1))
+    monkeypatch.setattr(cmd_run, "run_clean", _failing_clean)
+    monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1))
+    monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: _ok_summary())
+    monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: _failed_summary())
+    monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: _ok_summary())
+
+    cmd_run.run(step="all", config=str(config_path))
+
+    assert calls["raw"] == 1    # RAW ok
+    assert calls["clean"] == 1   # CLEAN chiamato (e fallito)
+    assert calls["mart"] == 0    # MART NON chiamato (CLEAN fallito)
+
+    record = _read_run_record(tmp_path / "out")
+    assert record["layers"]["clean"]["status"] == "FAILED"
+    assert record["status"] == "SUCCESS_WITH_WARNINGS"
+
+
 def _write_config_with_min_rows(path: Path, *, min_rows: int) -> None:
     """Config con min_rows per clean e mart, pochi dati raw."""
     sql_dir = path.parent / "sql" / "mart"

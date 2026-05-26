@@ -305,7 +305,7 @@ def run_year(
             layers_to_run = []
     
     if "clean" in layers_to_run and not _is_mart_only_cfg(cfg):
-        _execute_layer(
+        if not _execute_layer(
             "clean",
             run_clean,
             cfg.dataset,
@@ -316,7 +316,9 @@ def run_year(
             output_cfg=dump_cfg_section(cfg.output),
             sample_rows=sample_rows,
             source_id=source_id,
-        )
+        ):
+            # CLEAN fallito: skip mart per evitare output stale
+            layers_to_run = [l for l in layers_to_run if l != "mart"]
 
     if "mart" in layers_to_run and _has_single_year_mart(cfg):
         _execute_layer(

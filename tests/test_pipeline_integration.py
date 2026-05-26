@@ -4,6 +4,9 @@ import shutil
 from pathlib import Path
 
 import duckdb
+import pytest
+
+pytestmark = pytest.mark.policy
 
 from toolkit.clean.run import run_clean
 from toolkit.cli.inspect.profile_ops import run_profile as run_profile_fn

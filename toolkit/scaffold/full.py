@@ -149,23 +149,19 @@ def suggest_clean_sql(columns: list[dict[str, Any]] | list[str], profile: dict[s
     if not col_names:
         return "-- ATTENZIONE: profiling non ha rilevato colonne.\nSELECT 1 AS placeholder FROM raw_input\n"
 
-    # Build a synthetic profile dict compatible with generate_clean_sql
-    mapping = profile.get("mapping_suggestions") or {}
+    # Build a synthetic profile dict compatible with generate_clean_sql.
+    # Ensure ALL columns in col_names have a mapping entry — existing mapping
+    # is used where available, defaulting to VARCHAR for anything missing.
     synthetic_profile: dict[str, Any] = dict(profile)
-    if not synthetic_profile.get("mapping_suggestions"):
-        # If profile lacks mapping_suggestions, build minimal mapping
-        synthetic_profile["mapping_suggestions"] = {}
-        for name in col_names:
-            spec = mapping.get(name) or {}
-            raw_type = spec.get("type", "text") if isinstance(spec, dict) else "text"
-            duck_type = "string"
-            if raw_type in ("integer", "bigint", "int"):
-                duck_type = "integer"
-            elif raw_type in ("float", "double", "decimal"):
-                duck_type = "float"
-            elif raw_type in ("date",):
-                duck_type = "date"
-            synthetic_profile["mapping_suggestions"][name] = {"type": duck_type}
+    existing_mapping = synthetic_profile.get("mapping_suggestions") or {}
+    synthetic_profile["mapping_suggestions"] = dict(existing_mapping)
+
+    for name in col_names:
+        if name in existing_mapping:
+            continue  # keep existing type hint
+        # Default: VARCHAR. This matches generate_clean_sql behavior for
+        # untyped columns and avoids silently dropping columns from output.
+        synthetic_profile["mapping_suggestions"][name] = {"type": "string"}
 
     return generate_clean_sql(synthetic_profile, "candidate", 2024)
 

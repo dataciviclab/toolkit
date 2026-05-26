@@ -171,14 +171,14 @@ class TestColumnsSpec:
 
     @pytest.mark.pure_unit
     def test_no_mapping_fallback(self) -> None:
-        """Senza mapping: TRIM per tutte le colonne raw."""
+        """Senza mapping: CAST(... AS VARCHAR) + TRIM per safety su tipi misti."""
         profile: dict[str, Any] = {
             "mapping_suggestions": {},
             "columns_raw": ["Col1", "Col2"],
         }
         exprs, spec = _columns_spec(profile, 2024)
-        assert 'trim("Col1") AS col1' in exprs
-        assert 'trim("Col2") AS col2' in exprs
+        assert 'trim(CAST("Col1" AS VARCHAR)) AS col1' in exprs
+        assert 'trim(CAST("Col2" AS VARCHAR)) AS col2' in exprs
         assert spec == {"Col1": "VARCHAR", "Col2": "VARCHAR"}
 
     @pytest.mark.pure_unit

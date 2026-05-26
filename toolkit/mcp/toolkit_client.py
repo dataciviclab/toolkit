@@ -36,7 +36,6 @@ from toolkit.mcp.scout_ops import (
     mcp_html_extract_links,
     mcp_infer_topic,
     mcp_probe_url,
-    mcp_probe_url_headers,
     mcp_probe_url_routed,
     mcp_sparql_query,
 )

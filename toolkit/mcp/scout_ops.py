@@ -53,12 +53,12 @@ def mcp_probe_url_headers(url: str, timeout: int = 15) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def mcp_infer_topic(text: str) -> list[dict[str, Any]]:
+def mcp_infer_topic(text: str) -> dict[str, Any]:
     """Inferisce topic tematici da un testo (18 topic).
 
     Chiama ``toolkit.scout.infer.infer_topics()``.
     """
-    return infer_topics(text)
+    return {"topics": infer_topics(text)}
 
 
 # ---------------------------------------------------------------------------

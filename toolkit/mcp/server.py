@@ -207,7 +207,7 @@ def toolkit_probe_url_routed(url: str, timeout: int = 15) -> dict[str, Any]:
     "trasporti, ambiente, agricoltura, turismo, giustizia, demografia, energia, ecc.).",
     structured_output=True,
 )
-def toolkit_infer_topic(text: str) -> list[dict[str, Any]]:
+def toolkit_infer_topic(text: str) -> dict[str, Any]:
     return guard_timed(infer_topic_impl, "toolkit_infer_topic", text)
 
 

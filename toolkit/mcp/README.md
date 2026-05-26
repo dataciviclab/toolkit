@@ -4,6 +4,8 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 
 ## Tool esposti
 
+### Ispezione pipeline
+
 - `toolkit_inspect_paths(config_path, year=0)` — path contract + run metadata (run_file_count, years_seen, latest_run)
 - `toolkit_show_schema(config_path, layer="clean", year=0)`
 - `toolkit_run_summary(config_path, year=0)` — statistiche aggregate (totali, successi, durata media)
@@ -11,16 +13,26 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 - `toolkit_review_readiness(config_path, year=0)` — check di prontezza per review candidate
 - `toolkit_list_runs(config_path, year=0, since=None, until=None, status=None, limit=20, cross_year=False)`
 - `toolkit_schema_diff(config_path)` — confronto segnali schema raw cross-year (encoding, colonne, ecc.)
-- `toolkit_csv_preview(csv_path, limit=20)` — schema + preview CSV via profiler pipeline (`sniff_source_file` + `profile_with_read_cfg`); output allineato con `RawProfile` (delim, encoding, decimal, skip, robust_read_suggested)
+- `toolkit_csv_preview(csv_path, limit=20)` — schema + preview CSV via profiler pipeline
+
+### Scout fonti
+
+- `toolkit_probe_url(url, timeout=15)` — probe HTTP leggero (HEAD + Range): reachability, status code, content-type
+- `toolkit_probe_url_routed(url, timeout=15)` — probe arricchito con routing automatico (rileva CKAN, SDMX, HTML, file diretto)
+- `toolkit_infer_topic(text)` — inferisce topic tematici da un testo (18 topic: lavoro, economia, sanita, ...)
+- `toolkit_ckan_package_show(endpoint, package_id, timeout=30)` — fetch dataset CKAN via API `package_show`
+- `toolkit_html_extract_links(url, timeout=20)` — estrae link a file dati (CSV, JSON, XLSX, ZIP, XML) da pagina HTML
+- `toolkit_sparql_query(endpoint, query, timeout=60, max_rows=500)` — esegue query SPARQL SELECT su endpoint pubblico
 
 ## Boundary
 
-Questo MCP resta nel repo `toolkit` perche' espone solo introspezione tecnica del contract del motore:
+Questo MCP resta nel repo `toolkit` perche' espone solo introspezione tecnica del contract del motore e servizi di base per scouting fonti:
 
 - path contract risolto
 - schema `raw`, `clean`, `mart`
 - stato minimo dei run
 - readiness check per review candidate
+- probe URL, inferenza topic, fetch CKAN/SPARQL/HTML
 
 Non espone:
 

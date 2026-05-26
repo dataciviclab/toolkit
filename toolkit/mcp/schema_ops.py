@@ -150,7 +150,7 @@ def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
     from toolkit.cli.inspect.readiness_ops import run_state as _cli_run_state
 
     try:
-        return _cli_run_state(_safe_path(str(config_path)), year=year)
+        return _cli_run_state(str(_safe_path(str(config_path))), year=year)
     except FileNotFoundError as exc:
         raise ToolkitClientError(str(exc), code=ErrorCode.CONFIG_NOT_FOUND) from exc
 
@@ -351,7 +351,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
     from toolkit.cli.inspect.readiness_ops import summary as _cli_summary
 
     try:
-        return _cli_summary(_safe_path(str(config_path)), year=year)
+        return _cli_summary(str(_safe_path(str(config_path))), year=year)
     except FileNotFoundError as exc:
         raise ToolkitClientError(str(exc), code=ErrorCode.CONFIG_NOT_FOUND) from exc
 
@@ -365,7 +365,7 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
     from toolkit.cli.inspect.readiness_ops import review_readiness as _cli_review_readiness
 
     try:
-        return _cli_review_readiness(_safe_path(str(config_path)), year=year)
+        return _cli_review_readiness(str(_safe_path(str(config_path))), year=year)
     except FileNotFoundError as exc:
         raise ToolkitClientError(str(exc), code=ErrorCode.CONFIG_NOT_FOUND) from exc
 

@@ -36,7 +36,8 @@ def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
         FileNotFoundError: config o directory non trovata.
     """
     cfg = load_config(config_path, strict_config=False)
-    paths = _payload_for_year(cfg, year or (max(cfg.years) if cfg.years else None))
+    _target_year: int = year if year is not None else (max(cfg.years) if cfg.years else 0)
+    paths = _payload_for_year(cfg, _target_year)
 
     run_dir = Path(paths["paths"]["run_dir"])
     run_files = sorted(run_dir.glob("*.json")) if run_dir.exists() else []
@@ -88,7 +89,8 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
         FileNotFoundError: config non trovata.
     """
     cfg = load_config(config_path, strict_config=False)
-    paths = _payload_for_year(cfg, year or (max(cfg.years) if cfg.years else None))
+    _target_year: int = year if year is not None else (max(cfg.years) if cfg.years else 0)
+    paths = _payload_for_year(cfg, _target_year)
 
     raw_paths = paths["paths"]["raw"]
     clean_paths = paths["paths"]["clean"]

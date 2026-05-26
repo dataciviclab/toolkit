@@ -249,14 +249,14 @@ def run_raw(
         inp["origin"] for inp in inputs if inp.get("origin") and str(inp["origin"]).startswith("http")
     ))
 
-    # Calcola righe/colonne del primary output (riusa _csv_quick_shape da helpers condivisi)
+    # Calcola righe/colonne del primary output (riusa csv_quick_shape da toolit.core)
     output_rows = None
     col_count = None
     if primary_output_path.exists() and primary_output_path.suffix.lower() in {".csv", ".tsv", ".txt"}:
         try:
-            from toolkit.cli.inspect._helpers import _csv_quick_shape
+            from toolkit.core.csv_shape import csv_quick_shape
 
-            shape = _csv_quick_shape(str(primary_output_path))
+            shape = csv_quick_shape(str(primary_output_path))
             output_rows = shape.get("row_count_estimate")
             col_count = shape.get("column_count")
         except Exception:

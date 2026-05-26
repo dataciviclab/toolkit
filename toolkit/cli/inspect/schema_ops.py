@@ -57,7 +57,8 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
             "entries": entries,
         }
 
-    paths = _payload_for_year(cfg, year or max(cfg.years) if cfg.years else None)
+    _target_year: int = year if year is not None else (max(cfg.years) if cfg.years else 0)
+    paths = _payload_for_year(cfg, _target_year)
     if safe_layer == "clean":
         parquet_path_str = paths["paths"]["clean"].get("output")
         if not parquet_path_str:

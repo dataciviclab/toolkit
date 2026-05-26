@@ -318,7 +318,7 @@ def run_year(
             source_id=source_id,
         ):
             # CLEAN fallito: skip mart per evitare output stale
-            layers_to_run = [l for l in layers_to_run if l != "mart"]
+            layers_to_run = [layer for layer in layers_to_run if layer != "mart"]
 
     if "mart" in layers_to_run and _has_single_year_mart(cfg):
         _execute_layer(

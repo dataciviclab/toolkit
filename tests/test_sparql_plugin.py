@@ -9,6 +9,8 @@ from lab_connectors.http import HttpResult
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.sparql import SparqlSource, _sparql_json_to_csv
 
+pytestmark = pytest.mark.contract
+
 
 def _http_ok(status=200, text="", headers=None):
     """Build success HttpResult for sparql responses."""

@@ -180,6 +180,7 @@ def test_toolkit_sparql_query_forwards_params(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_toolkit_probe_url_error_has_error_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    from lab_connectors.mcp import ErrorCode as LabErrorCode
     from toolkit.mcp.errors import ToolkitClientError
 
     def failing_impl(url: str, timeout: int) -> dict:
@@ -190,7 +191,7 @@ def test_toolkit_probe_url_error_has_error_code(monkeypatch: pytest.MonkeyPatch)
     payload = mcp_server.toolkit_probe_url("https://example.gov.it", timeout=15)
     assert "error" in payload
     assert "message" in payload
-    assert payload["error"] == "unexpected_error"
+    assert payload["error"] == LabErrorCode.UNEXPECTED.value
 
 
 def test_toolkit_probe_url_returns_payload(monkeypatch: pytest.MonkeyPatch) -> None:

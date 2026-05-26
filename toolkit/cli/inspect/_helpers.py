@@ -416,3 +416,27 @@ def _validation_summary_for_layer(
                 result["row_count"] = row_counts[first_key]
 
     return result
+
+
+def _csv_quick_shape(csv_path: str | Path) -> dict[str, Any]:
+    """Quick row count and column count for a CSV file via DuckDB auto-detect.
+
+    Returns dict with ``row_count_estimate`` and ``column_count``.
+    Returns empty dict if the file can't be read (non-CSV, unreadable, etc.).
+
+    Non fa sniff esplicito (usa ``read_csv_auto``) — approssimativo ma veloce.
+    """
+    path = Path(csv_path)
+    if not path.exists():
+        return {}
+    try:
+        with duckdb.connect(database=":memory:") as conn:
+            conn.execute("PRAGMA disable_progress_bar")
+            rel = f"read_csv_auto('{_sql_literal(str(path))}', auto_detect=true)"
+            describe = conn.execute(f"DESCRIBE SELECT * FROM {rel}").fetchall()
+            col_count = len(describe)
+            count_row = conn.execute(f"SELECT COUNT(*) FROM {rel}").fetchone()
+            row_count = int(count_row[0]) if count_row else None
+            return {"row_count_estimate": row_count, "column_count": col_count}
+    except Exception:
+        return {}

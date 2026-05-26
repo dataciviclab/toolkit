@@ -6,7 +6,7 @@ from typing import Any
 import duckdb
 from lab_connectors.duckdb import safe_connect
 
-from toolkit.clean.run import _load_clean_sql
+from toolkit.clean.run import load_clean_sql
 from toolkit.core.config import ensure_dict
 from toolkit.core.paths import resolve_sql_path as _resolve_mart_sql_path
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
@@ -75,7 +75,7 @@ def _build_clean_preview(
     con: duckdb.DuckDBPyConnection,
 ) -> None:
     clean_cfg_ = ensure_dict(cfg.clean)
-    clean_sql_path, clean_sql, _ = _load_clean_sql(
+    clean_sql_path, clean_sql, _ = load_clean_sql(
         clean_cfg_,
         dataset=cfg.dataset,
         year=year,

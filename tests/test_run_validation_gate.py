@@ -324,7 +324,8 @@ def test_run_full_second_validation_block_uses_sample_mode(tmp_path: Path, monke
     monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: _ok_summary())
     monkeypatch.setattr(cmd_run, "run_clean_validation", _tracking_clean_validation)
     monkeypatch.setattr(cmd_run, "run_mart_validation", _tracking_mart_validation)
-    monkeypatch.setattr(cmd_run, "_review_readiness", lambda *args, **kwargs: {"readiness": "ready", "check_count": 0, "ok_count": 0, "fail_count": 0})
+    import toolkit.cli.inspect.readiness_ops as _readiness_ops
+    monkeypatch.setattr(_readiness_ops, "review_readiness", lambda *args, **kwargs: {"readiness": "ready", "check_count": 0, "ok_count": 0, "fail_count": 0})
 
     # Esegue run full COME se chiamato da CI con --sample-rows 1000
     # (tutti i parametri espliciti per bypassare i default Typer che

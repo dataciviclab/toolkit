@@ -248,4 +248,23 @@ def run_raw(
     source_urls = list(dict.fromkeys(
         inp["origin"] for inp in inputs if inp.get("origin") and str(inp["origin"]).startswith("http")
     ))
-    return {"output_bytes": output_bytes, "source_urls": source_urls}
+
+    # Calcola righe/colonne del primary output (riusa csv_quick_shape da toolit.core)
+    output_rows = None
+    col_count = None
+    if primary_output_path.exists() and primary_output_path.suffix.lower() in {".csv", ".tsv", ".txt"}:
+        try:
+            from toolkit.core.csv_shape import csv_quick_shape
+
+            shape = csv_quick_shape(str(primary_output_path))
+            output_rows = shape.get("row_count_estimate")
+            col_count = shape.get("column_count")
+        except Exception:
+            pass
+
+    return {
+        "output_bytes": output_bytes,
+        "source_urls": source_urls,
+        "output_rows": output_rows,
+        "col_count": col_count,
+    }

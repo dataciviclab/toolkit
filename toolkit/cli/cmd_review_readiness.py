@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from toolkit.mcp.schema_ops import review_readiness as _review_readiness
+from toolkit.cli.inspect.readiness_ops import review_readiness as _review_readiness
 from toolkit.core.config import load_config
 
 import typer

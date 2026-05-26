@@ -14,7 +14,7 @@ from toolkit.core.template import build_runtime_template_ctx, public_template_ct
 from toolkit.clean.sql_execute import _normalize_output_profile, _run_sql
 
 
-def _load_clean_sql(
+def load_clean_sql(
     clean_cfg: dict[str, Any],
     *,
     dataset: str,
@@ -187,7 +187,7 @@ def run_clean(
         read_cfg,
         logger,
     )
-    sql_path_obj, sql, template_ctx = _load_clean_sql(
+    sql_path_obj, sql, template_ctx = load_clean_sql(
         clean_cfg,
         dataset=dataset,
         year=year,

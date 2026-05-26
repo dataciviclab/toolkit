@@ -15,7 +15,6 @@ from toolkit.core.paths import layer_dataset_dir, layer_year_dir
 from toolkit.core.run_context import RunContext
 from toolkit.mart.run import run_mart, run_mart_multi_year
 from toolkit.mart.validate import run_mart_validation
-from toolkit.mcp.schema_ops import review_readiness as _review_readiness
 from toolkit.raw.run import run_raw
 from toolkit.raw.validate import run_raw_validation
 
@@ -697,6 +696,7 @@ def run_full(
                     results["status"] = "failed"
 
                 # Review readiness (capture, not print)
+                from toolkit.cli.inspect.readiness_ops import review_readiness as _review_readiness
                 readiness = _review_readiness(config, year or None)
                 results["steps"][str(year)]["readiness"] = readiness.get("readiness")
                 results["steps"][str(year)]["checks"] = readiness.get("check_count", 0)

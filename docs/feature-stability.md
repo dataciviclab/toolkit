@@ -11,13 +11,11 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 | output `raw/clean/mart/_runs` | stable | percorso canonico |
 | `inspect paths` | stable | helper per notebook e repo dataset |
 | `resume` | supported / advanced | debug operativo e recovery |
-| `profile raw` | supported / advanced | diagnostica su RAW sporchi o ambigui |
+| `inspect profile` | supported / advanced | diagnostica su RAW sporchi o ambigui |
 | `run raw\|clean\|mart` | supported / advanced | debug e re-run parziali |
-| `run scout` | stable | esplorazione URL esterni, probe e routing automatico |
+| `scout` | stable | esplorazione URL esterni, probe e routing automatico |
 | `scout --scaffold` | stable | probe + scaffold candidate dataset (dataset.yml, SQL, README) |
 | `scout --run` | supported / advanced | scout + scaffold + raw run in unico comando |
-| `init --url` | stable | alias per `scout --scaffold` |
-| `init --config` | stable | run raw + scaffold clean.sql |
 | `mart` tabelle con `years` | stable | multi-year (sostituisce ex `cross_year`) |
 | `inspect schema-diff` | supported / advanced | confronto rapido segnali schema RAW tra anni |
 | artifact policy | deprecated / ignored | accettato per backward compat ma senza effetto |
@@ -28,7 +26,7 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 Lettura equivalente a livello package:
 
 - core runtime: `toolkit.raw`, `toolkit.clean`, `toolkit.mart`, `toolkit.scout`, `toolkit.cli` (`run`, `validate`, `status`, `inspect`)
-- advanced tooling: `toolkit.profile`, `resume`, run parziali, `inspect schema-diff`
+- advanced tooling: `resume`, run parziali, `inspect profile`, `inspect schema-diff`
 - compatibility only: config legacy e alias storici
 
 Sorgenti builtin supportate dal runtime canonico: `local_file`, `http_file`, `http_post_file`, `ckan`, `sdmx`, `sparql`. Il runtime può conservare `.xlsx` e `.xls` in RAW e leggerli in CLEAN — il file originale resta l'artefatto sorgente.

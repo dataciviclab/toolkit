@@ -389,7 +389,7 @@ def _scaffold_html(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
         _scaffold_file(candidates[0], probe_result, run_raw=run_raw)
     else:
         _scaffold_file(candidates[0], probe_result, run_raw=run_raw)
-        typer.echo("  (using first link — run init again with a direct URL for a different one)")
+        typer.echo("  (using first link — run scout again with a direct URL for a different one)")
 
 
 def _scaffold_sdmx(url: str, probe_result: dict[str, Any], *, run_raw: bool = False) -> None:

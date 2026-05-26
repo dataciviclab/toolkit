@@ -8,6 +8,8 @@ import pytest
 from toolkit.mcp import server as mcp_server
 from toolkit.mcp.errors import ErrorCode, ToolkitClientError
 
+pytestmark = pytest.mark.contract
+
 
 def test_mcp_server_registers_expected_tools() -> None:
     tools = asyncio.run(mcp_server.mcp.list_tools())
@@ -26,6 +28,12 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_dataset_info",
         "toolkit_clean_preview",
         "toolkit_raw_preview",
+        "toolkit_probe_url",
+        "toolkit_probe_url_routed",
+        "toolkit_infer_topic",
+        "toolkit_ckan_package_show",
+        "toolkit_html_extract_links",
+        "toolkit_sparql_query",
     }
 
 
@@ -86,6 +94,115 @@ def test_toolkit_inspect_paths_passes_none_when_year_zero(monkeypatch: pytest.Mo
 
     assert payload == {"ok": True}
     assert calls == {"config_path": "dataset.yml", "year": None}
+
+
+# ---------------------------------------------------------------------------
+# Scout tool contract tests
+# ---------------------------------------------------------------------------
+
+
+def test_toolkit_probe_url_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict = {}
+
+    def fake_impl(url: str, timeout: int) -> dict:
+        calls.update(url=url, timeout=timeout)
+        return {"status_code": 200}
+
+    monkeypatch.setattr(mcp_server, "probe_url_impl", fake_impl)
+    result = mcp_server.toolkit_probe_url("https://example.gov.it", timeout=30)
+    assert result == {"status_code": 200}
+    assert calls == {"url": "https://example.gov.it", "timeout": 30}
+
+
+def test_toolkit_probe_url_routed_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict = {}
+
+    def fake_impl(url: str, timeout: int) -> dict:
+        calls.update(url=url, timeout=timeout)
+        return {"source_type": "ckan"}
+
+    monkeypatch.setattr(mcp_server, "probe_url_routed_impl", fake_impl)
+    result = mcp_server.toolkit_probe_url_routed("https://dati.gov.it", timeout=15)
+    assert result == {"source_type": "ckan"}
+    assert calls == {"url": "https://dati.gov.it", "timeout": 15}
+
+
+def test_toolkit_infer_topic_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict = {}
+
+    def fake_impl(text: str) -> dict:
+        calls["text"] = text
+        return {"topics": [{"topic": "lavoro", "score": 3}]}
+
+    monkeypatch.setattr(mcp_server, "infer_topic_impl", fake_impl)
+    result = mcp_server.toolkit_infer_topic("disoccupazione giovanile")
+    assert result == {"topics": [{"topic": "lavoro", "score": 3}]}
+    assert calls == {"text": "disoccupazione giovanile"}
+
+
+def test_toolkit_ckan_package_show_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict = {}
+
+    def fake_impl(endpoint: str, package_id: str, timeout: int) -> dict:
+        calls.update(endpoint=endpoint, package_id=package_id, timeout=timeout)
+        return {"title": "Test dataset", "resources": []}
+
+    monkeypatch.setattr(mcp_server, "ckan_package_show_impl", fake_impl)
+    result = mcp_server.toolkit_ckan_package_show("https://dati.gov.it", "test-dataset", timeout=30)
+    assert result == {"title": "Test dataset", "resources": []}
+    assert calls == {"endpoint": "https://dati.gov.it", "package_id": "test-dataset", "timeout": 30}
+
+
+def test_toolkit_html_extract_links_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict = {}
+
+    def fake_impl(url: str, timeout: int) -> dict:
+        calls.update(url=url, timeout=timeout)
+        return {"total": 2, "links": ["data.csv"]}
+
+    monkeypatch.setattr(mcp_server, "html_extract_links_impl", fake_impl)
+    result = mcp_server.toolkit_html_extract_links("https://example.gov.it/pagina", timeout=20)
+    assert result == {"total": 2, "links": ["data.csv"]}
+    assert calls == {"url": "https://example.gov.it/pagina", "timeout": 20}
+
+
+def test_toolkit_sparql_query_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict = {}
+
+    def fake_impl(endpoint: str, query: str, timeout: int, max_rows: int) -> dict:
+        calls.update(endpoint=endpoint, query=query, timeout=timeout, max_rows=max_rows)
+        return {"columns": ["s", "p", "o"], "total_rows": 10}
+
+    monkeypatch.setattr(mcp_server, "sparql_query_impl", fake_impl)
+    result = mcp_server.toolkit_sparql_query("https://example.org/sparql", "SELECT * WHERE {?s ?p ?o}", timeout=60, max_rows=500)
+    assert result == {"columns": ["s", "p", "o"], "total_rows": 10}
+    assert calls == {"endpoint": "https://example.org/sparql", "query": "SELECT * WHERE {?s ?p ?o}", "timeout": 60, "max_rows": 500}
+
+
+def test_toolkit_probe_url_error_has_error_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    from lab_connectors.mcp import ErrorCode as LabErrorCode
+    from toolkit.mcp.errors import ToolkitClientError
+
+    def failing_impl(url: str, timeout: int) -> dict:
+        raise ToolkitClientError("test probe error")
+
+    monkeypatch.setattr(mcp_server, "probe_url_impl", failing_impl)
+
+    payload = mcp_server.toolkit_probe_url("https://example.gov.it", timeout=15)
+    assert "error" in payload
+    assert "message" in payload
+    assert payload["error"] == LabErrorCode.UNEXPECTED.value
+
+
+def test_toolkit_probe_url_returns_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """guard_timed passes payload through unchanged for scout tools."""
+
+    def fake_impl(url: str, timeout: int) -> dict:
+        return {"status_code": 200, "content_type": "text/csv"}
+
+    monkeypatch.setattr(mcp_server, "probe_url_impl", fake_impl)
+    result = mcp_server.toolkit_probe_url("https://example.gov.it/data.csv", timeout=15)
+    assert result == {"status_code": 200, "content_type": "text/csv"}
 
 
 def test_toolkit_show_schema_passes_layer_and_year(monkeypatch: pytest.MonkeyPatch) -> None:

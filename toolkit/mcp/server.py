@@ -23,6 +23,12 @@ from .toolkit_client import (
     inspect_paths as inspect_paths_impl,
     list_candidates as list_candidates_impl,
     list_runs as list_runs_impl,
+    mcp_ckan_package_show as ckan_package_show_impl,
+    mcp_html_extract_links as html_extract_links_impl,
+    mcp_infer_topic as infer_topic_impl,
+    mcp_probe_url as probe_url_impl,
+    mcp_probe_url_routed as probe_url_routed_impl,
+    mcp_sparql_query as sparql_query_impl,
     raw_preview as raw_preview_impl,
     raw_profile as raw_profile_impl,
     review_readiness as review_readiness_impl,
@@ -171,6 +177,70 @@ def toolkit_list_runs(
 )
 def toolkit_csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     return guard_timed(csv_preview_impl, "toolkit_csv_preview", csv_path, limit)
+
+
+# ---------------------------------------------------------------------------
+# Scout tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description="Probe HTTP leggero: reachability, status code, content-type, content-disposition. "
+    "HEAD + GET Range fallback. Nessun body scaricato.",
+    structured_output=True,
+)
+def toolkit_probe_url(url: str, timeout: int = 15) -> dict[str, Any]:
+    return guard_timed(probe_url_impl, "toolkit_probe_url", url, timeout)
+
+
+@mcp.tool(
+    description="Probe HTTP arricchito con routing automatico: rileva CKAN, SDMX, HTML con link dati, "
+    "o file diretto. Per CKAN scopre risorse via API, per SDMX ricava flow e anni.",
+    structured_output=True,
+)
+def toolkit_probe_url_routed(url: str, timeout: int = 15) -> dict[str, Any]:
+    return guard_timed(probe_url_routed_impl, "toolkit_probe_url_routed", url, timeout)
+
+
+@mcp.tool(
+    description="Inferisce topic tematici da un testo (18 topic: lavoro, economia, sanita, istruzione, "
+    "trasporti, ambiente, agricoltura, turismo, giustizia, demografia, energia, ecc.).",
+    structured_output=True,
+)
+def toolkit_infer_topic(text: str) -> dict[str, Any]:
+    return guard_timed(infer_topic_impl, "toolkit_infer_topic", text)
+
+
+@mcp.tool(
+    description="Fetch di un dataset CKAN via API package_show. Restituisce metadati, "
+    "risorse, organization, tags, formato e DataStore availability.",
+    structured_output=True,
+)
+def toolkit_ckan_package_show(
+    endpoint: str, package_id: str, timeout: int = 30
+) -> dict[str, Any]:
+    return guard_timed(ckan_package_show_impl, "toolkit_ckan_package_show", endpoint, package_id, timeout)
+
+
+@mcp.tool(
+    description="Estrae link a file dati (CSV, JSON, XLSX, ZIP, XML) da una pagina HTML. "
+    "Scarica la pagina, analizza i link, e restituisce URL trovati raggruppati per formato.",
+    structured_output=True,
+)
+def toolkit_html_extract_links(url: str, timeout: int = 20) -> dict[str, Any]:
+    return guard_timed(html_extract_links_impl, "toolkit_html_extract_links", url, timeout)
+
+
+@mcp.tool(
+    description="Esegue una query SPARQL SELECT su un endpoint pubblico. "
+    "Restituisce risultati in formato tabellare (lista di righe con colonne). "
+    "Supporta qualsiasi endpoint HTTPS SPARQL.",
+    structured_output=True,
+)
+def toolkit_sparql_query(
+    endpoint: str, query: str, timeout: int = 60, max_rows: int = 500
+) -> dict[str, Any]:
+    return guard_timed(sparql_query_impl, "toolkit_sparql_query", endpoint, query, timeout, max_rows)
 
 
 if __name__ == "__main__":

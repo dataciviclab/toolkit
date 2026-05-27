@@ -316,6 +316,7 @@ def run_year(
             output_cfg=dump_cfg_section(cfg.output),
             sample_rows=sample_rows,
             source_id=source_id,
+            support_cfg=dump_cfg_section(cfg.support),
         ):
             # CLEAN fallito: skip mart per evitare output stale
             layers_to_run = [layer for layer in layers_to_run if layer != "mart"]

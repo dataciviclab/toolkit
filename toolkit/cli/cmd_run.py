@@ -304,6 +304,10 @@ def run_year(
             # per evitare output stale con dati di run precedenti
             layers_to_run = []
     
+    # Il resolver dei support deve sapere se il campionamento e' attivo
+    # (root override in {root}/smoke), non solo se --smoke e' stato usato
+    sampling_active = smoke or sample_rows is not None or sample_bytes is not None
+
     if "clean" in layers_to_run and not _is_mart_only_cfg(cfg):
         if not _execute_layer(
             "clean",
@@ -316,14 +320,13 @@ def run_year(
             output_cfg=dump_cfg_section(cfg.output),
             sample_rows=sample_rows,
             source_id=source_id,
+            support_cfg=dump_cfg_section(cfg.support),
+            smoke=sampling_active,
         ):
             # CLEAN fallito: skip mart per evitare output stale
             layers_to_run = [layer for layer in layers_to_run if layer != "mart"]
 
     if "mart" in layers_to_run and _has_single_year_mart(cfg):
-        # Il resolver dei support deve sapere se il campionamento e' attivo
-        # (root override in {root}/smoke), non solo se --smoke e' stato usato
-        sampling_active = smoke or sample_rows is not None or sample_bytes is not None
         _execute_layer(
             "mart",
             run_mart,

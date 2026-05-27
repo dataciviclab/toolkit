@@ -73,6 +73,8 @@ def _build_clean_preview(
     *,
     year: int,
     con: duckdb.DuckDBPyConnection,
+    support_cfg: list[dict[str, Any]] | None = None,
+    dry_run: bool = False,
 ) -> None:
     clean_cfg_ = ensure_dict(cfg.clean)
     clean_sql_path, clean_sql, _ = load_clean_sql(
@@ -81,10 +83,20 @@ def _build_clean_preview(
         year=year,
         root=cfg.root,
         base_dir=cfg.base_dir,
+        support_cfg=support_cfg,
     )
 
     clean_sql = _normalize_sql(clean_sql)
     columns = _placeholder_columns(clean_cfg_, clean_sql)
+
+    # Pre-calcola i path attesi del support per gestire IOError in dry-run
+    support_paths: list[str] = []
+    if dry_run and support_cfg:
+        try:
+            sp_payloads = resolve_support_payloads(support_cfg, require_exists=False, smoke=False)
+            support_paths = _all_support_expected_paths(sp_payloads)
+        except Exception:
+            pass
 
     # Fallback incrementale: se il clean.sql usa colonne raw non quotate e non
     # dichiarate in clean.read.columns, il binder di DuckDB ci dice il nome
@@ -96,6 +108,14 @@ def _build_clean_preview(
             con.execute(f"CREATE OR REPLACE TABLE __dry_run_clean_preview AS SELECT * FROM ({clean_sql}) AS q LIMIT 0")
             return
         except Exception as exc:
+            err_msg = str(exc)
+            # In dry-run, read_parquet su file support non ancora generato è OK
+            if dry_run and "No files found that match the pattern" in err_msg:
+                if support_paths and any(sp in err_msg for sp in support_paths):
+                    # Crea un placeholder minimo per non bloccare mart validation
+                    con.execute("CREATE OR REPLACE TABLE __dry_run_clean_preview AS SELECT NULL::VARCHAR AS __support_placeholder LIMIT 0")
+                    return
+
             missing = _extract_missing_binder_column(exc)
             if missing and missing not in columns:
                 columns.append(missing)
@@ -160,6 +180,8 @@ def validate_sql_dry_run(cfg, *, year: int, layers: list[str], dry_run: bool = F
 
     with safe_connect() as con:
         if cfg.clean.get("sql"):
-            _build_clean_preview(cfg, year=year, con=con)
+            _build_clean_preview(cfg, year=year, con=con,
+                                 support_cfg=ensure_dict(cfg.support),
+                                 dry_run=dry_run)
         if "mart" in layers:
             _validate_mart_sql(cfg, year=year, con=con, dry_run=dry_run)

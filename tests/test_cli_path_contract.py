@@ -394,6 +394,86 @@ support:
     assert not sup_clean_out.exists(), "support smoke must NOT write to support root/data/"
 
 
+def test_cli_run_full_sample_rows_isolates_support_output(tmp_path: Path) -> None:
+    """contract: 'run full --sample-rows' isola output di candidate E support in {root}/smoke/."""
+    project_dir = tmp_path / "project"
+    config_path = _copy_project_example(project_dir)
+    root_dir = project_dir / "_smoke_out"
+
+    # Crea un support dataset minimale
+    support_dir = tmp_path / "support_ds"
+    (support_dir / "data").mkdir(parents=True)
+    (support_dir / "sql").mkdir(parents=True)
+    (support_dir / "sql" / "clean.sql").write_text(
+        "SELECT 1 AS ok FROM raw_input\n", encoding="utf-8"
+    )
+    (support_dir / "data" / "dummy.csv").write_text("a;b\n1;2\n", encoding="utf-8")
+    (support_dir / "sql" / "mart.sql").write_text(
+        "SELECT * FROM clean_input\n", encoding="utf-8"
+    )
+    (support_dir / "dataset.yml").write_text(
+        """schema_version: 1
+root: out
+dataset:
+  name: support_ds
+  years: [2022]
+raw:
+  sources:
+    - name: csv
+      type: local_file
+      args:
+        path: data/dummy.csv
+        filename: support_ds_2022.csv
+clean:
+  sql: sql/clean.sql
+mart:
+  tables:
+    - name: support_mart
+      sql: sql/mart.sql
+""",
+        encoding="utf-8",
+    )
+
+    # Aggiunge il support al candidate dataset.yml
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8")
+        + f"""
+support:
+  - name: "sup"
+    config: "{support_dir / 'dataset.yml'}"
+    years: [2022]
+""",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["run", "full", "--config", str(config_path), "--sample-rows", "500", "--years", "2022"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+
+    # Candidate output in _smoke_out/smoke/data/
+    smoke_clean = root_dir / "smoke" / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet"
+    assert smoke_clean.exists(), f"candidate sampled clean not found: {smoke_clean}"
+    smoke_mart = root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    assert smoke_mart.exists(), f"candidate sampled mart not found: {smoke_mart}"
+
+    # Niente candidate in _smoke_out/data/
+    clean_out = root_dir / "data" / "clean" / "project_example" / "2022"
+    assert not clean_out.exists(), "candidate --sample-rows must NOT write to root/data/"
+
+    # Support output in support_ds/out/smoke/data/
+    sup_root = support_dir / "out"
+    sup_clean = sup_root / "smoke" / "data" / "clean" / "support_ds" / "2022" / "support_ds_2022_clean.parquet"
+    assert sup_clean.exists(), f"support sampled clean not found: {sup_clean}"
+
+    # Niente support in support_ds/out/data/
+    sup_clean_out = sup_root / "data" / "clean" / "support_ds" / "2022"
+    assert not sup_clean_out.exists(), "support --sample-rows must NOT write to support root/data/"
+
+
 # ---------------------------------------------------------------------------
 # toolkit.contracts path API
 # ---------------------------------------------------------------------------

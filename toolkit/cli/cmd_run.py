@@ -321,6 +321,9 @@ def run_year(
             layers_to_run = [layer for layer in layers_to_run if layer != "mart"]
 
     if "mart" in layers_to_run and _has_single_year_mart(cfg):
+        # Il resolver dei support deve sapere se il campionamento e' attivo
+        # (root override in {root}/smoke), non solo se --smoke e' stato usato
+        sampling_active = smoke or sample_rows is not None or sample_bytes is not None
         _execute_layer(
             "mart",
             run_mart,
@@ -333,7 +336,7 @@ def run_year(
             output_cfg=dump_cfg_section(cfg.output),
             support_cfg=dump_cfg_section(cfg.support),
             source_id=source_id,
-            smoke=smoke,
+            smoke=sampling_active,
         )
 
     context.complete_run(success_with_warnings=run_has_validation_warnings)
@@ -371,12 +374,15 @@ def _maybe_run_multi_year_mart(
     *,
     dry_run: bool = False,
     logger=None,
-    smoke: bool = False,
+    sampling_active: bool = False,
 ) -> None:
     """Run multi-year MART tables if any table has explicit ``years``.
 
     Da chiamare una volta per dataset (non per anno), dopo il processing
     dei singoli anni. Sostituisce l'ex comando ``run cross_year``.
+
+    ``sampling_active`` indica che il root e' stato spostato in ``{root}/smoke``
+    per via di ``--smoke``, ``--sample-rows`` o ``--sample-bytes``.
     """
     if not _has_multi_year_mart(cfg):
         return
@@ -407,7 +413,7 @@ def _maybe_run_multi_year_mart(
             output_cfg=dump_cfg_section(cfg.output),
             support_cfg=dump_cfg_section(cfg.support),
             source_id=cfg.source_id,
-            smoke=smoke,
+            smoke=sampling_active,
         )
     except Exception as exc:
         if fail_on_error:
@@ -464,9 +470,11 @@ def _make_step_cmd(step: str):
         sample_rows_final = 1000 if smoke else sample_rows
         sample_bytes_final = 1048576 if smoke else sample_bytes
 
-        # Smoke mode: isola output in {root}/smoke (come batch --smoke)
+        # Qualsiasi forma di campionamento (--smoke, --sample-rows, --sample-bytes)
+        # isola l'output in {root}/smoke per evitare contaminazione dei dati reali
+        sampling_active = sample_rows_final is not None or sample_bytes_final is not None
         root_override_final = root
-        if smoke and not root:
+        if sampling_active and not root:
             _cfg0, _ = load_cfg_and_logger(config, strict_config=strict_flag)
             root_override_final = str(_cfg0.root / "smoke")
 
@@ -483,7 +491,8 @@ def _make_step_cmd(step: str):
 
         # Multi-year mart: run once per dataset after per-year processing
         if _step in ("all", "mart"):
-            _maybe_run_multi_year_mart(cfg, selected_years, dry_run=dry_flag, logger=logger, smoke=smoke)
+            _sampling = sample_rows_final is not None or sample_bytes_final is not None
+            _maybe_run_multi_year_mart(cfg, selected_years, dry_run=dry_flag, logger=logger, sampling_active=_sampling)
 
     cmd.__name__ = f"run_{_step}_cmd"
     cmd.__doc__ = f"Esegue lo step {_step} della pipeline."
@@ -606,9 +615,10 @@ def run_full(
     sample_bytes_final = 1048576 if smoke else sample_bytes
     sample_mode = sample_rows_final is not None or sample_bytes_final is not None
 
-    # Smoke mode: isola output in {root}/smoke (come batch --smoke)
+    # Qualsiasi forma di campionamento isola l'output in {root}/smoke
+    sampling_active = sample_rows_final is not None or sample_bytes_final is not None
     root_override_final = root
-    if smoke and not root:
+    if sampling_active and not root:
         _cfg0, _ = load_cfg_and_logger(config, strict_config=strict_flag)
         root_override_final = str(_cfg0.root / "smoke")
 
@@ -642,8 +652,8 @@ def run_full(
                 continue
 
             try:
-                # Smoke mode: isola output del support in {root}/smoke (come il candidate)
-                if smoke:
+                # Campionamento attivo: isola output del support in {root}/smoke (come il candidate)
+                if sample_mode:
                     _sup0, _ = load_cfg_and_logger(str(entry.config), strict_config=strict_flag)
                     support_cfg, support_logger = load_cfg_and_logger(
                         str(entry.config), strict_config=strict_flag,
@@ -738,7 +748,7 @@ def run_full(
         # Multi-year mart: run once per dataset after per-year processing
         if not dry_flag and _has_multi_year_mart(cfg):
             try:
-                _maybe_run_multi_year_mart(cfg, selected_years, dry_run=False, logger=logger, smoke=smoke)
+                _maybe_run_multi_year_mart(cfg, selected_years, dry_run=False, logger=logger, sampling_active=sample_mode)
                 results["multi_year_mart"] = "ok"
             except Exception as exc:
                 results["multi_year_mart"] = f"failed: {exc}"

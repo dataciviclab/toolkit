@@ -333,6 +333,7 @@ def run_year(
             output_cfg=dump_cfg_section(cfg.output),
             support_cfg=dump_cfg_section(cfg.support),
             source_id=source_id,
+            smoke=smoke,
         )
 
     context.complete_run(success_with_warnings=run_has_validation_warnings)
@@ -370,6 +371,7 @@ def _maybe_run_multi_year_mart(
     *,
     dry_run: bool = False,
     logger=None,
+    smoke: bool = False,
 ) -> None:
     """Run multi-year MART tables if any table has explicit ``years``.
 
@@ -405,6 +407,7 @@ def _maybe_run_multi_year_mart(
             output_cfg=dump_cfg_section(cfg.output),
             support_cfg=dump_cfg_section(cfg.support),
             source_id=cfg.source_id,
+            smoke=smoke,
         )
     except Exception as exc:
         if fail_on_error:
@@ -480,7 +483,7 @@ def _make_step_cmd(step: str):
 
         # Multi-year mart: run once per dataset after per-year processing
         if _step in ("all", "mart"):
-            _maybe_run_multi_year_mart(cfg, selected_years, dry_run=dry_flag, logger=logger)
+            _maybe_run_multi_year_mart(cfg, selected_years, dry_run=dry_flag, logger=logger, smoke=smoke)
 
     cmd.__name__ = f"run_{_step}_cmd"
     cmd.__doc__ = f"Esegue lo step {_step} della pipeline."
@@ -639,9 +642,17 @@ def run_full(
                 continue
 
             try:
-                support_cfg, support_logger = load_cfg_and_logger(
-                    str(entry.config), strict_config=strict_flag
-                )
+                # Smoke mode: isola output del support in {root}/smoke (come il candidate)
+                if smoke:
+                    _sup0, _ = load_cfg_and_logger(str(entry.config), strict_config=strict_flag)
+                    support_cfg, support_logger = load_cfg_and_logger(
+                        str(entry.config), strict_config=strict_flag,
+                        root_override=str(_sup0.root / "smoke"),
+                    )
+                else:
+                    support_cfg, support_logger = load_cfg_and_logger(
+                        str(entry.config), strict_config=strict_flag
+                    )
             except Exception as exc:
                 logger.error("Support: cannot load config %s: %s", entry.config, exc)
                 results["status"] = "failed"
@@ -650,7 +661,9 @@ def run_full(
             for sy in entry.years:
                 logger.info("Support: running %s year=%s", entry.name, sy)
                 try:
-                    run_year(support_cfg, sy, step="all", logger=support_logger)
+                    run_year(support_cfg, sy, step="all", logger=support_logger,
+                             sample_rows=sample_rows_final, sample_bytes=sample_bytes_final,
+                             smoke=smoke)
                 except Exception as exc:
                     logger.error("Support run failed: %s year=%s — %s", entry.name, sy, exc)
                     results["status"] = "failed"
@@ -725,7 +738,7 @@ def run_full(
         # Multi-year mart: run once per dataset after per-year processing
         if not dry_flag and _has_multi_year_mart(cfg):
             try:
-                _maybe_run_multi_year_mart(cfg, selected_years, dry_run=False, logger=logger)
+                _maybe_run_multi_year_mart(cfg, selected_years, dry_run=False, logger=logger, smoke=smoke)
                 results["multi_year_mart"] = "ok"
             except Exception as exc:
                 results["multi_year_mart"] = f"failed: {exc}"

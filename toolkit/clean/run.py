@@ -22,6 +22,7 @@ def load_clean_sql(
     root: str | Path | None,
     base_dir: Path | None,
     support_cfg: list[dict[str, Any]] | None = None,
+    smoke: bool = False,
 ) -> tuple[Path, str, dict[str, Any]]:
     sql_ref = clean_cfg.get("sql")
     if not sql_ref:
@@ -36,7 +37,7 @@ def load_clean_sql(
     if support_cfg:
         from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
         try:
-            payloads = resolve_support_payloads(support_cfg, require_exists=False, smoke=False)
+            payloads = resolve_support_payloads(support_cfg, require_exists=False, smoke=smoke)
             support_ctx = flatten_support_template_ctx(payloads)
         except Exception:
             # Se il support non è disponibile (non ancora eseguito), il template
@@ -184,6 +185,7 @@ def run_clean(
     sample_rows: int | None = None,
     source_id: str | None = None,
     support_cfg: list[dict[str, Any]] | None = None,
+    smoke: bool = False,
 ):
     clean_cfg = ensure_dict(clean_cfg)
     output_cfg = ensure_dict(output_cfg)
@@ -209,6 +211,7 @@ def run_clean(
         root=root_dir,
         base_dir=base_dir,
         support_cfg=support_cfg,
+        smoke=smoke,
     )
     rendered_sql_path = _write_rendered_sql(
         out_dir,

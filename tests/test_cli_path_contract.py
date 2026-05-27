@@ -474,6 +474,121 @@ support:
     assert not sup_clean_out.exists(), "support --sample-rows must NOT write to support root/data/"
 
 
+def test_cli_run_full_support_in_clean_sql_with_sample_rows(tmp_path: Path) -> None:
+    """contract: {support.*.mart} risolto correttamente in clean.sql con --sample-rows.
+
+    Crea un support dataset minimo e un main dataset il cui clean.sql
+    legge {support.lookup.mart}. Esegue run full --sample-rows 10 e
+    verifica che il support venga risolto nel percorso smoke corretto.
+    """
+    # ── 1. Support dataset minimo ──
+    sup = tmp_path / "support_ds"
+    (sup / "data").mkdir(parents=True)
+    (sup / "sql").mkdir(parents=True)
+    (sup / "sql" / "clean.sql").write_text(
+        "SELECT 1 AS id, 'hello' AS msg FROM raw_input\n", encoding="utf-8"
+    )
+    (sup / "data" / "dummy.csv").write_text("a;b\n1;hello\n2;world\n", encoding="utf-8")
+    (sup / "sql" / "mart.sql").write_text(
+        "SELECT * FROM clean_input\n", encoding="utf-8"
+    )
+    (sup / "dataset.yml").write_text(
+        """schema_version: 1
+root: out
+dataset:
+  name: lookup_ds
+  years: [2022]
+raw:
+  sources:
+    - name: csv
+      type: local_file
+      args:
+        path: data/dummy.csv
+        filename: lookup_2022.csv
+clean:
+  sql: sql/clean.sql
+mart:
+  tables:
+    - name: lookup_mart
+      sql: sql/mart.sql
+""",
+        encoding="utf-8",
+    )
+
+    # ── 2. Main dataset con clean.sql che usa {support.lookup.mart} ──
+    # Il main ha anche una sua fonte raw (dummy) perché la pipeline richiede raw.sources,
+    # ma il clean.sql ignora raw_input e legge direttamente dal support via read_parquet.
+    main = tmp_path / "main_ds"
+    (main / "data").mkdir(parents=True)
+    (main / "sql").mkdir(parents=True)
+    (main / "sql" / "clean.sql").write_text(
+        "SELECT msg FROM read_parquet('{support.lookup.mart}')\n",
+        encoding="utf-8",
+    )
+    (main / "sql" / "mart.sql").write_text(
+        "SELECT msg, 'ok' AS status FROM clean_input\n", encoding="utf-8"
+    )
+    (main / "data" / "dummy.csv").write_text("x\n1\n", encoding="utf-8")
+    (main / "dataset.yml").write_text(
+        f"""schema_version: 1
+root: out
+dataset:
+  name: main_ds
+  years: [2022]
+raw:
+  sources:
+    - name: dummy
+      type: local_file
+      args:
+        path: data/dummy.csv
+        filename: main_2022.csv
+clean:
+  sql: sql/clean.sql
+mart:
+  tables:
+    - name: mart_main
+      sql: sql/mart.sql
+support:
+  - name: "lookup"
+    config: "{sup / 'dataset.yml'}"
+    years: [2022]
+""",
+        encoding="utf-8",
+    )
+
+    # ── 3. Esegui run full --sample-rows 10 ──
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "run", "full",
+            "--config", str(main / "dataset.yml"),
+            "--sample-rows", "10",
+            "--years", "2022",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+
+    # ── 4. Output del main in smoke/ ──
+    root = main / "out"
+    clean_parquet = root / "smoke" / "data" / "clean" / "main_ds" / "2022" / "main_ds_2022_clean.parquet"
+    assert clean_parquet.exists(), f"main clean not found: {clean_parquet}"
+    mart_parquet = root / "smoke" / "data" / "mart" / "main_ds" / "2022" / "mart_main.parquet"
+    assert mart_parquet.exists(), f"main mart not found: {mart_parquet}"
+    # Nessun output in root/data/
+    assert not (root / "data" / "clean" / "main_ds" / "2022").exists()
+
+    # ── 5. Output del support in smoke/ ──
+    sup_root = sup / "out"
+    sup_clean = sup_root / "smoke" / "data" / "clean" / "lookup_ds" / "2022" / "lookup_ds_2022_clean.parquet"
+    assert sup_clean.exists(), f"support clean not found: {sup_clean}"
+    sup_mart = sup_root / "smoke" / "data" / "mart" / "lookup_ds" / "2022" / "lookup_mart.parquet"
+    assert sup_mart.exists(), f"support mart not found: {sup_mart}"
+    # Nessun output del support in root/data/
+    assert not (sup_root / "data" / "clean" / "lookup_ds" / "2022").exists()
+
+
 # ---------------------------------------------------------------------------
 # toolkit.contracts path API
 # ---------------------------------------------------------------------------

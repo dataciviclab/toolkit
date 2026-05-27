@@ -211,6 +211,165 @@ def test_cli_root_flag_overrides_output(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# smoke flag — output isolation + run record marker
+# ---------------------------------------------------------------------------
+
+
+def test_cli_run_smoke_isolates_output(tmp_path: Path) -> None:
+    """contract: --smoke in 'run all' scrive in {root}/smoke/ non in {root}/data/."""
+    project_dir = tmp_path / "project-example"
+    config_path = _copy_project_example(project_dir)
+    root_dir = project_dir / "_smoke_out"
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        ["run", "all", "--config", str(config_path), "--smoke", "--strict-config"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+
+    # Smoke output DEVE essere in _smoke_out/smoke/data/
+    smoke_clean = root_dir / "smoke" / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet"
+    assert smoke_clean.exists(), f"smoke clean not found: {smoke_clean}"
+    smoke_mart = root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    assert smoke_mart.exists(), f"smoke mart not found: {smoke_mart}"
+
+    # NO output in _smoke_out/data/ (root normale non contaminata)
+    clean_out = root_dir / "data" / "clean" / "project_example" / "2022"
+    assert not clean_out.exists(), "smoke must NOT write to root/data/"
+
+
+def test_cli_run_full_smoke_isolates_output(tmp_path: Path) -> None:
+    """contract: --smoke in 'run full' scrive in {root}/smoke/ non in {root}/data/."""
+    project_dir = tmp_path / "project-example"
+    config_path = _copy_project_example(project_dir)
+    root_dir = project_dir / "_smoke_out"
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        ["run", "full", "--config", str(config_path), "--smoke", "--strict-config"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+
+    # Smoke output in _smoke_out/smoke/data/
+    smoke_clean = root_dir / "smoke" / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet"
+    assert smoke_clean.exists(), f"smoke clean not found: {smoke_clean}"
+    smoke_mart = root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    assert smoke_mart.exists(), f"smoke mart not found: {smoke_mart}"
+
+    # NO output in _smoke_out/data/
+    clean_out = root_dir / "data" / "clean" / "project_example" / "2022"
+    assert not clean_out.exists(), "run full --smoke must NOT write to root/data/"
+
+
+def test_cli_run_smoke_run_record_marked(tmp_path: Path) -> None:
+    """contract: run record da 'run all --smoke' contiene smoke: true."""
+    project_dir = tmp_path / "project-example"
+    config_path = _copy_project_example(project_dir)
+    root_dir = project_dir / "_smoke_out"
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        ["run", "all", "--config", str(config_path), "--smoke", "--strict-config"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+
+    # Trova il run record più recente in _smoke_out/smoke/data/_runs/project_example/2022/
+    runs_dir = root_dir / "smoke" / "data" / "_runs" / "project_example" / "2022"
+    assert runs_dir.exists(), f"runs dir not found: {runs_dir}"
+    records = sorted(runs_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    assert len(records) >= 1, "no run record found"
+
+    latest = json.loads(records[0].read_text(encoding="utf-8"))
+    assert latest.get("smoke") is True, f"expected smoke=True in run record, got: {latest.get('smoke')}"
+
+
+def test_cli_run_full_smoke_isolates_support_output(tmp_path: Path) -> None:
+    """contract: 'run full --smoke' isola output di candidate E support in {root}/smoke/."""
+    project_dir = tmp_path / "project"
+    config_path = _copy_project_example(project_dir)
+    root_dir = project_dir / "_smoke_out"
+
+    # Crea un support dataset minimale
+    support_dir = tmp_path / "support_ds"
+    (support_dir / "data").mkdir(parents=True)
+    (support_dir / "sql").mkdir(parents=True)
+    (support_dir / "sql" / "clean.sql").write_text(
+        "SELECT 1 AS ok FROM raw_input\n", encoding="utf-8"
+    )
+    (support_dir / "data" / "dummy.csv").write_text("a;b\n1;2\n", encoding="utf-8")
+    (support_dir / "sql" / "mart.sql").write_text(
+        "SELECT * FROM clean_input\n", encoding="utf-8"
+    )
+    (support_dir / "dataset.yml").write_text(
+        """schema_version: 1
+root: out
+dataset:
+  name: support_ds
+  years: [2022]
+raw:
+  sources:
+    - name: csv
+      type: local_file
+      args:
+        path: data/dummy.csv
+        filename: support_ds_2022.csv
+clean:
+  sql: sql/clean.sql
+mart:
+  tables:
+    - name: support_mart
+      sql: sql/mart.sql
+""",
+        encoding="utf-8",
+    )
+
+    # Aggiunge il support al candidate dataset.yml
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8")
+        + f"""
+support:
+  - name: "sup"
+    config: "{support_dir / 'dataset.yml'}"
+    years: [2022]
+""",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["run", "full", "--config", str(config_path), "--smoke", "--years", "2022"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+
+    # Candidate output in _smoke_out/smoke/data/
+    smoke_clean = root_dir / "smoke" / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet"
+    assert smoke_clean.exists(), f"candidate smoke clean not found: {smoke_clean}"
+    smoke_mart = root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    assert smoke_mart.exists(), f"candidate smoke mart not found: {smoke_mart}"
+
+    # Niente candidate in _smoke_out/data/
+    clean_out = root_dir / "data" / "clean" / "project_example" / "2022"
+    assert not clean_out.exists(), "candidate smoke must NOT write to root/data/"
+
+    # Support output in support_ds/out/smoke/data/
+    sup_root = support_dir / "out"
+    sup_clean = sup_root / "smoke" / "data" / "clean" / "support_ds" / "2022" / "support_ds_2022_clean.parquet"
+    assert sup_clean.exists(), f"support smoke clean not found: {sup_clean}"
+
+    # Niente support in support_ds/out/data/
+    sup_clean_out = sup_root / "data" / "clean" / "support_ds" / "2022"
+    assert not sup_clean_out.exists(), "support smoke must NOT write to support root/data/"
+
+
+# ---------------------------------------------------------------------------
 # toolkit.contracts path API
 # ---------------------------------------------------------------------------
 

@@ -62,11 +62,13 @@ class RunContext:
         *,
         root: Path | str,
         resumed_from: str | None = None,
+        smoke: bool = False,
     ) -> None:
         self.dataset = dataset
         self.year = year
         self.root = Path(root)
         self.resumed_from = resumed_from
+        self.smoke = smoke
         self.run_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:8]}"
         self.started_at = _now_iso()
         self.finished_at: str | None = None
@@ -109,6 +111,7 @@ class RunContext:
             "validations": self.validations,
             "source_urls": self.source_urls,
             "resumed_from": self.resumed_from,
+            "smoke": self.smoke,
             "error": self.error,
         }
 

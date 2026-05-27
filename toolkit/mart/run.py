@@ -35,6 +35,7 @@ def run_mart_multi_year(
     output_cfg: dict[str, Any] | None = None,
     support_cfg: list[dict[str, Any]] | None = None,
     source_id: str | None = None,
+    smoke: bool = False,
 ) -> dict[str, Any]:
     """Run multi-year MART tables (tables with explicit ``years`` in config).
 
@@ -60,7 +61,7 @@ def run_mart_multi_year(
     if not multi_year_tables:
         return {"output_rows": 0, "output_bytes": 0, "tables_count": 0, "col_count": None}
 
-    support_payloads = resolve_support_payloads(support_cfg, require_exists=True)
+    support_payloads = resolve_support_payloads(support_cfg, require_exists=True, smoke=smoke)
     base_ctx = build_runtime_template_ctx(
         dataset=dataset,
         year=dataset_years[0] if dataset_years else 0,
@@ -303,6 +304,7 @@ def run_mart(
     output_cfg: dict[str, Any] | None = None,
     support_cfg: list[dict[str, Any]] | None = None,
     source_id: str | None = None,
+    smoke: bool = False,
 ):
     mart_cfg = ensure_dict(mart_cfg)
     clean_cfg = ensure_dict(clean_cfg)
@@ -346,7 +348,7 @@ def run_mart(
                 "(add explicit tables or a hierarchy section)"
             )
 
-        support_payloads = resolve_support_payloads(support_cfg, require_exists=True)
+        support_payloads = resolve_support_payloads(support_cfg, require_exists=True, smoke=smoke)
         template_ctx = build_runtime_template_ctx(
             dataset=dataset,
             year=year,

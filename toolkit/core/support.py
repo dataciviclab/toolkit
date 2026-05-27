@@ -28,13 +28,19 @@ def resolve_support_payloads(
     support_entries: list[dict[str, Any]] | None,
     *,
     require_exists: bool,
+    smoke: bool = False,
 ) -> list[dict[str, Any]]:
     resolved: list[dict[str, Any]] = []
     for entry in support_entries or []:
         name = str(entry["name"])
         config_path = Path(entry["config"])
         years = [int(year) for year in entry.get("years") or []]
-        support_cfg = load_config(config_path)
+        # Smoke mode: output del support e' in {root}/smoke/data/... (root override eseguito in run_full)
+        if smoke:
+            _sup0 = load_config(config_path)
+            support_cfg = load_config(config_path, root_override=_sup0.root / "smoke")
+        else:
+            support_cfg = load_config(config_path)
 
         year_payloads: list[dict[str, Any]] = []
         all_outputs: list[str] = []

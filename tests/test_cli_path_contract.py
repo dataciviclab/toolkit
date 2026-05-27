@@ -240,6 +240,31 @@ def test_cli_run_smoke_isolates_output(tmp_path: Path) -> None:
     assert not clean_out.exists(), "smoke must NOT write to root/data/"
 
 
+def test_cli_run_sample_rows_isolates_output(tmp_path: Path) -> None:
+    """contract: --sample-rows (senza --smoke) isola output in {root}/smoke/."""
+    project_dir = tmp_path / "project-example"
+    config_path = _copy_project_example(project_dir)
+    root_dir = project_dir / "_smoke_out"
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        ["run", "all", "--config", str(config_path), "--sample-rows", "500", "--strict-config"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+
+    # Output in _smoke_out/smoke/data/ (come --smoke)
+    smoke_clean = root_dir / "smoke" / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet"
+    assert smoke_clean.exists(), f"sampled clean not found: {smoke_clean}"
+    smoke_mart = root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    assert smoke_mart.exists(), f"sampled mart not found: {smoke_mart}"
+
+    # NO output in _smoke_out/data/
+    clean_out = root_dir / "data" / "clean" / "project_example" / "2022"
+    assert not clean_out.exists(), "--sample-rows must NOT write to root/data/"
+
+
 def test_cli_run_full_smoke_isolates_output(tmp_path: Path) -> None:
     """contract: --smoke in 'run full' scrive in {root}/smoke/ non in {root}/data/."""
     project_dir = tmp_path / "project-example"

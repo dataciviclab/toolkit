@@ -464,9 +464,11 @@ def _make_step_cmd(step: str):
         sample_rows_final = 1000 if smoke else sample_rows
         sample_bytes_final = 1048576 if smoke else sample_bytes
 
-        # Smoke mode: isola output in {root}/smoke (come batch --smoke)
+        # Qualsiasi forma di campionamento (--smoke, --sample-rows, --sample-bytes)
+        # isola l'output in {root}/smoke per evitare contaminazione dei dati reali
+        sampling_active = sample_rows_final is not None or sample_bytes_final is not None
         root_override_final = root
-        if smoke and not root:
+        if sampling_active and not root:
             _cfg0, _ = load_cfg_and_logger(config, strict_config=strict_flag)
             root_override_final = str(_cfg0.root / "smoke")
 
@@ -606,9 +608,10 @@ def run_full(
     sample_bytes_final = 1048576 if smoke else sample_bytes
     sample_mode = sample_rows_final is not None or sample_bytes_final is not None
 
-    # Smoke mode: isola output in {root}/smoke (come batch --smoke)
+    # Qualsiasi forma di campionamento isola l'output in {root}/smoke
+    sampling_active = sample_rows_final is not None or sample_bytes_final is not None
     root_override_final = root
-    if smoke and not root:
+    if sampling_active and not root:
         _cfg0, _ = load_cfg_and_logger(config, strict_config=strict_flag)
         root_override_final = str(_cfg0.root / "smoke")
 
@@ -642,8 +645,8 @@ def run_full(
                 continue
 
             try:
-                # Smoke mode: isola output del support in {root}/smoke (come il candidate)
-                if smoke:
+                # Campionamento attivo: isola output del support in {root}/smoke (come il candidate)
+                if sample_mode:
                     _sup0, _ = load_cfg_and_logger(str(entry.config), strict_config=strict_flag)
                     support_cfg, support_logger = load_cfg_and_logger(
                         str(entry.config), strict_config=strict_flag,

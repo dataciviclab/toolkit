@@ -211,6 +211,85 @@ def test_cli_root_flag_overrides_output(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# smoke flag — output isolation + run record marker
+# ---------------------------------------------------------------------------
+
+
+def test_cli_run_smoke_isolates_output(tmp_path: Path) -> None:
+    """contract: --smoke in 'run all' scrive in {root}/smoke/ non in {root}/data/."""
+    project_dir = tmp_path / "project-example"
+    config_path = _copy_project_example(project_dir)
+    root_dir = project_dir / "_smoke_out"
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        ["run", "all", "--config", str(config_path), "--smoke", "--strict-config"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+
+    # Smoke output DEVE essere in _smoke_out/smoke/data/
+    smoke_clean = root_dir / "smoke" / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet"
+    assert smoke_clean.exists(), f"smoke clean not found: {smoke_clean}"
+    smoke_mart = root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    assert smoke_mart.exists(), f"smoke mart not found: {smoke_mart}"
+
+    # NO output in _smoke_out/data/ (root normale non contaminata)
+    clean_out = root_dir / "data" / "clean" / "project_example" / "2022"
+    assert not clean_out.exists(), "smoke must NOT write to root/data/"
+
+
+def test_cli_run_full_smoke_isolates_output(tmp_path: Path) -> None:
+    """contract: --smoke in 'run full' scrive in {root}/smoke/ non in {root}/data/."""
+    project_dir = tmp_path / "project-example"
+    config_path = _copy_project_example(project_dir)
+    root_dir = project_dir / "_smoke_out"
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        ["run", "full", "--config", str(config_path), "--smoke", "--strict-config"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+
+    # Smoke output in _smoke_out/smoke/data/
+    smoke_clean = root_dir / "smoke" / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet"
+    assert smoke_clean.exists(), f"smoke clean not found: {smoke_clean}"
+    smoke_mart = root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    assert smoke_mart.exists(), f"smoke mart not found: {smoke_mart}"
+
+    # NO output in _smoke_out/data/
+    clean_out = root_dir / "data" / "clean" / "project_example" / "2022"
+    assert not clean_out.exists(), "run full --smoke must NOT write to root/data/"
+
+
+def test_cli_run_smoke_run_record_marked(tmp_path: Path) -> None:
+    """contract: run record da 'run all --smoke' contiene smoke: true."""
+    project_dir = tmp_path / "project-example"
+    config_path = _copy_project_example(project_dir)
+    root_dir = project_dir / "_smoke_out"
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        ["run", "all", "--config", str(config_path), "--smoke", "--strict-config"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+
+    # Trova il run record più recente in _smoke_out/smoke/data/_runs/project_example/2022/
+    runs_dir = root_dir / "smoke" / "data" / "_runs" / "project_example" / "2022"
+    assert runs_dir.exists(), f"runs dir not found: {runs_dir}"
+    records = sorted(runs_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    assert len(records) >= 1, "no run record found"
+
+    latest = json.loads(records[0].read_text(encoding="utf-8"))
+    assert latest.get("smoke") is True, f"expected smoke=True in run record, got: {latest.get('smoke')}"
+
+
+# ---------------------------------------------------------------------------
 # toolkit.contracts path API
 # ---------------------------------------------------------------------------
 

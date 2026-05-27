@@ -199,6 +199,7 @@ def run_year(
     resumed_from: str | None = None,
     sample_rows: int | None = None,
     sample_bytes: int | None = None,
+    smoke: bool = False,
 ) -> RunContext:
     if logger is None:
         logger = get_logger()
@@ -207,7 +208,7 @@ def run_year(
     planned_layers = _validate_execution_plan(cfg, step)
     layers_to_run = _layers_from_start(planned_layers, start_from_layer)
 
-    context = RunContext(cfg.dataset, year, root=cfg.root, resumed_from=resumed_from)
+    context = RunContext(cfg.dataset, year, root=cfg.root, resumed_from=resumed_from, smoke=smoke)
     base_logger = bind_logger(
         logger,
         dataset=cfg.dataset,
@@ -455,18 +456,27 @@ def _make_step_cmd(step: str):
         strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
     ):
         strict_flag = strict_config if isinstance(strict_config, bool) else False
-        cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag, root_override=root)
-
         dry_flag = dry_run if isinstance(dry_run, bool) else False
-        years_arg = years if isinstance(years, str) else None
-        year_arg = year if isinstance(year, int) else None
-        selected_years = iter_selected_years(cfg, year_arg=year_arg, years_arg=years_arg)
+
         sample_rows_final = 1000 if smoke else sample_rows
         sample_bytes_final = 1048576 if smoke else sample_bytes
 
+        # Smoke mode: isola output in {root}/smoke (come batch --smoke)
+        root_override_final = root
+        if smoke and not root:
+            _cfg0, _ = load_cfg_and_logger(config, strict_config=strict_flag)
+            root_override_final = str(_cfg0.root / "smoke")
+
+        cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag, root_override=root_override_final)
+
+        years_arg = years if isinstance(years, str) else None
+        year_arg = year if isinstance(year, int) else None
+        selected_years = iter_selected_years(cfg, year_arg=year_arg, years_arg=years_arg)
+
         for year in selected_years:
             run_year(cfg, year, step=_step, dry_run=dry_flag, logger=logger,
-                     sample_rows=sample_rows_final, sample_bytes=sample_bytes_final)
+                     sample_rows=sample_rows_final, sample_bytes=sample_bytes_final,
+                     smoke=smoke)
 
         # Multi-year mart: run once per dataset after per-year processing
         if _step in ("all", "mart"):
@@ -587,13 +597,21 @@ def run_full(
     automaticamente prima del candidate (run all + validate per ogni anno).
     """
     strict_flag = strict_config if isinstance(strict_config, bool) else False
-    cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag, root_override=root)
-    years_arg = years if isinstance(years, str) else None
-    selected_years = iter_selected_years(cfg, year_arg=None, years_arg=years_arg)
     dry_flag = dry_run if isinstance(dry_run, bool) else False
+
     sample_rows_final = 1000 if smoke else sample_rows
     sample_bytes_final = 1048576 if smoke else sample_bytes
     sample_mode = sample_rows_final is not None or sample_bytes_final is not None
+
+    # Smoke mode: isola output in {root}/smoke (come batch --smoke)
+    root_override_final = root
+    if smoke and not root:
+        _cfg0, _ = load_cfg_and_logger(config, strict_config=strict_flag)
+        root_override_final = str(_cfg0.root / "smoke")
+
+    cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag, root_override=root_override_final)
+    years_arg = years if isinstance(years, str) else None
+    selected_years = iter_selected_years(cfg, year_arg=None, years_arg=years_arg)
 
     results: dict[str, Any] = {
         "config": config,
@@ -672,7 +690,8 @@ def run_full(
         for year in selected_years:
             logger.info("Run %s — year=%s", run_step, year)
             run_year(cfg, year, step=run_step, dry_run=dry_flag, logger=logger,
-                     sample_rows=sample_rows_final, sample_bytes=sample_bytes_final)
+                     sample_rows=sample_rows_final, sample_bytes=sample_bytes_final,
+                     smoke=smoke)
 
             if not dry_flag:
                 if is_mart_only:

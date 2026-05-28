@@ -627,3 +627,25 @@ def test_contracts_constants() -> None:
     from toolkit.contracts import MANIFEST_JSON, METADATA_JSON
     assert METADATA_JSON == "metadata.json"
     assert MANIFEST_JSON == "manifest.json"
+
+
+def test_contracts_clean_parquet_suffix() -> None:
+    """contract: CLEAN_PARQUET_SUFFIX costante pubblica."""
+    from toolkit.contracts import CLEAN_PARQUET_SUFFIX
+    assert CLEAN_PARQUET_SUFFIX == "_clean.parquet"
+
+
+def test_contracts_resolve_root() -> None:
+    """contract: resolve_root esportato e funzionante."""
+    from toolkit.contracts import resolve_root
+    from pathlib import Path
+    result = resolve_root("/some/absolute/path")
+    assert isinstance(result, Path)
+    assert result.is_absolute()
+
+
+def test_contracts_all_exports_match() -> None:
+    """contract: __all__ copre tutte le esportazioni pubbliche."""
+    import toolkit.contracts as c
+    for name in c.__all__:
+        assert hasattr(c, name), f"{name} dichiarato in __all__ ma non esportato"

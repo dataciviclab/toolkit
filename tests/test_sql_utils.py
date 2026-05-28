@@ -1,8 +1,14 @@
 """Tests for toolkit/core/sql_utils.py."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
+import pytest
+
 from toolkit.core.sql_utils import q_ident, quote_list, sql_path
+
+pytestmark = pytest.mark.pure_unit
 
 
 class TestQIdent:

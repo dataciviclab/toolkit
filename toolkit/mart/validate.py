@@ -132,7 +132,7 @@ def validate_mart(
 
             # max_null_pct — centralizzato in core.column_rules
             if rules.max_null_pct:
-                err_warn = check_max_null_pct(con, "t", rules.max_null_pct, cols, rc)
+                err_warn = check_max_null_pct(con, "t", rules.max_null_pct, cols, rc, prefix=prefix)
                 errors.extend(err_warn[0])
                 warnings.extend(err_warn[1])
 

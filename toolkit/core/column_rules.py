@@ -112,6 +112,7 @@ def check_max_null_pct(
     max_null_pct: dict[str, float],
     cols: list[str],
     row_count: int,
+    prefix: str = "",
 ) -> tuple[list[str], list[str]]:
     """Check max null percentage constraints. Returns (errors, warnings)."""
     errors: list[str] = []
@@ -126,5 +127,6 @@ def check_max_null_pct(
         nnull = int(con.execute(f"SELECT COUNT(*) FROM {table} WHERE {qc} IS NULL").fetchone()[0])
         pct = nnull / row_count
         if pct > thr:
-            errors.append(f"Column '{c}' null_pct too high: {pct:.3%} > {thr:.3%}")
+            err_msg = f"Column '{c}' null_pct too high: {pct:.3%} > {thr:.3%}"
+            errors.append(f"{prefix}{err_msg}" if prefix else err_msg)
     return errors, warnings

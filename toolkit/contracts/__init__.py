@@ -4,14 +4,27 @@ Consumer esterni (dataset-incubator, data-explorer) importano da qui
 invece di hardcodare i path. Le funzioni sono re-export da
 ``toolkit.core.paths`` — il modulo interno puo` cambiare, questo no.
 
-Esempio::
+Esempi::
 
-    from toolkit.contracts import layer_year_dir
+    from toolkit.contracts import clean_parquet_path, layer_year_dir
 
-    clean_path = layer_year_dir(
-        root="/path/to/out", layer="clean", dataset="mio_dataset", year=2024
-    )
-    # -> PosixPath('/path/to/out/data/clean/mio_dataset/2024')
+    # Directory CLEAN per un dataset/anno
+    layer_year_dir("/out", "clean", "mio_dataset", 2024)
+    # -> PosixPath('/out/data/clean/mio_dataset/2024')
+
+    # Path completo al parquet CLEAN
+    clean_parquet_path("/out", "mio_dataset", 2024)
+    # -> PosixPath('/out/data/clean/mio_dataset/2024/mio_dataset_2024_clean.parquet')
+
+    # Directory radice risolta (abs, expanduser)
+    resolve_root("~/projects/out")
+    # -> PosixPath('/home/user/projects/out')
+
+Costanti utili::
+
+    CLEAN_PARQUET_SUFFIX   # "_clean.parquet" — per filtrare/globbare
+    METADATA_JSON          # "metadata.json"
+    MANIFEST_JSON          # "manifest.json"
 """
 
 from __future__ import annotations
@@ -21,25 +34,45 @@ from pathlib import Path as _Path
 from toolkit.core.paths import (
     layer_dataset_dir,
     layer_year_dir,
+    resolve_root,
 )
-from toolkit.core.paths import resolve_root as _resolve_root
 
 __all__ = [
+    # Layer directories
     "layer_year_dir",
     "layer_dataset_dir",
-    "METADATA_JSON",
-    "MANIFEST_JSON",
+    # File paths
     "clean_parquet_path",
     "mart_table_path",
     "run_record_dir",
+    # Utilities
+    "resolve_root",
+    # Costanti file
+    "CLEAN_PARQUET_SUFFIX",
+    "METADATA_JSON",
+    "MANIFEST_JSON",
 ]
 
 # ---------------------------------------------------------------------------
-# Costanti di path — pattern di file canonici
+# Costanti — pattern di file canonici
 # ---------------------------------------------------------------------------
+
+CLEAN_PARQUET_SUFFIX = "_clean.parquet"
+"""Suffisso del parquet CLEAN. Usato per filtrare/globbare i file.
+
+Esempio::
+
+    file.endswith(CLEAN_PARQUET_SUFFIX)
+    # invece di: file.endswith(\"_clean.parquet\")
+"""
 
 METADATA_JSON = "metadata.json"
 MANIFEST_JSON = "manifest.json"
+
+
+# ---------------------------------------------------------------------------
+# Funzioni path — layer specifici
+# ---------------------------------------------------------------------------
 
 
 def clean_parquet_path(
@@ -55,7 +88,7 @@ def clean_parquet_path(
         # -> PosixPath('/out/data/clean/mio_dataset/2024/mio_dataset_2024_clean.parquet')
     """
     base = layer_year_dir(str(root), "clean", dataset, year)
-    return base / f"{dataset}_{year}_clean.parquet"
+    return base / f"{dataset}_{year}{CLEAN_PARQUET_SUFFIX}"
 
 
 def mart_table_path(
@@ -87,4 +120,4 @@ def run_record_dir(
         run_record_dir("/out", "mio_dataset", 2024)
         # -> PosixPath('/out/data/_runs/mio_dataset/2024')
     """
-    return _Path(str(_resolve_root(root))) / "data" / "_runs" / dataset / str(year)
+    return _Path(str(resolve_root(root))) / "data" / "_runs" / dataset / str(year)

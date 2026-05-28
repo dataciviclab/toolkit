@@ -126,6 +126,3 @@ def merge_layer_manifest(
     out = folder / metadata_path
     write_json_atomic(out, meta)
     return out
-
-
-

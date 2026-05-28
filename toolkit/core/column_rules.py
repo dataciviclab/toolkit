@@ -1,6 +1,7 @@
 """Column-level validation rules for clean/mart parquet files.
 
-Not part of the public API — internal utility module.
+Canonical location for reusable validation rules.
+Consumed by ``clean.validate`` and ``mart.validate``.
 """
 
 from __future__ import annotations
@@ -12,29 +13,46 @@ import duckdb
 from toolkit.core.sql_utils import q_ident
 
 
-def _check_not_null(con: duckdb.DuckDBPyConnection, table: str, columns: list[str], cols: list[str]) -> tuple[list[str], list[str]]:
+def _prefixed(prefix: str, msg: str) -> str:
+    """Prepend prefix if non-empty."""
+    return f"{prefix}{msg}" if prefix else msg
+
+
+def check_not_null(
+    con: duckdb.DuckDBPyConnection,
+    table: str,
+    columns: list[str],
+    cols: list[str],
+    prefix: str = "",
+) -> tuple[list[str], list[str]]:
     """Check not-null constraints. Returns (errors, warnings)."""
     errors: list[str] = []
     warnings: list[str] = []
     for c in columns:
         if c not in cols:
-            warnings.append(f"Not-null rule column missing in data: '{c}'")
+            warnings.append(_prefixed(prefix, f"Not-null rule column missing in data: '{c}'"))
             continue
         qc = q_ident(c)
         nnull = int(con.execute(f"SELECT COUNT(*) FROM {table} WHERE {qc} IS NULL").fetchone()[0])
         if nnull > 0:
-            errors.append(f"Column '{c}' has NULLs: {nnull}")
+            errors.append(_prefixed(prefix, f"Column '{c}' has NULLs: {nnull}"))
     return errors, warnings
 
 
-def _check_primary_key(con: duckdb.DuckDBPyConnection, table: str, pk: list[str], cols: list[str], prefix: str = "") -> tuple[list[str], list[str]]:
+def check_primary_key(
+    con: duckdb.DuckDBPyConnection,
+    table: str,
+    pk: list[str],
+    cols: list[str],
+    prefix: str = "",
+) -> tuple[list[str], list[str]]:
     """Check primary key uniqueness. Returns (errors, warnings)."""
     errors: list[str] = []
     warnings: list[str] = []
     if not pk:
         return errors, warnings
     if not all(c in cols for c in pk):
-        warnings.append(f"Primary key columns not all present: {pk}")
+        warnings.append(_prefixed(prefix, f"Primary key columns not all present: {pk}"))
     else:
         key_expr = ", ".join(q_ident(c) for c in pk)
         dup_groups = int(
@@ -50,18 +68,23 @@ def _check_primary_key(con: duckdb.DuckDBPyConnection, table: str, pk: list[str]
             ).fetchone()[0]
         )
         if dup_groups > 0:
-            err_msg = f"Primary key duplicates found for {pk}: groups={dup_groups}"
-            errors.append(f"{prefix}{err_msg}" if prefix else err_msg)
+            errors.append(_prefixed(prefix, f"Primary key duplicates found for {pk}: groups={dup_groups}"))
     return errors, warnings
 
 
-def _check_ranges(con: duckdb.DuckDBPyConnection, table: str, ranges: dict[str, Any], cols: list[str], prefix: str = "") -> tuple[list[str], list[str]]:
+def check_ranges(
+    con: duckdb.DuckDBPyConnection,
+    table: str,
+    ranges: dict[str, Any],
+    cols: list[str],
+    prefix: str = "",
+) -> tuple[list[str], list[str]]:
     """Check min/max range constraints. Returns (errors, warnings)."""
     errors: list[str] = []
     warnings: list[str] = []
     for c, rule in ranges.items():
         if c not in cols:
-            warnings.append(f"Range rule column missing in data: '{c}'")
+            warnings.append(_prefixed(prefix, f"Range rule column missing in data: '{c}'"))
             continue
 
         qc = q_ident(c)
@@ -72,21 +95,30 @@ def _check_ranges(con: duckdb.DuckDBPyConnection, table: str, ranges: dict[str, 
             violations.append(f"{qc} > {rule.max}")
 
         if not violations:
-            warnings.append(f"Range rule for '{c}' has no min/max, skipping")
+            warnings.append(_prefixed(prefix, f"Range rule for '{c}' has no min/max, skipping"))
             continue
 
         where = f"{qc} IS NOT NULL AND (" + " OR ".join(violations) + ")"
         bad = int(con.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}").fetchone()[0])
         if bad > 0:
-            err_msg = (
-                f"Range check failed for '{c}': bad_rows={bad} "
-                f"rules={{'min': {rule.min}, 'max': {rule.max}}}"
+            errors.append(
+                _prefixed(
+                    prefix,
+                    f"Range check failed for '{c}': bad_rows={bad} "
+                    f"rules={{'min': {rule.min}, 'max': {rule.max}}}",
+                )
             )
-            errors.append(f"{prefix}{err_msg}" if prefix else err_msg)
     return errors, warnings
 
 
-def _check_max_null_pct(con: duckdb.DuckDBPyConnection, table: str, max_null_pct: dict[str, float], cols: list[str], row_count: int) -> tuple[list[str], list[str]]:
+def check_max_null_pct(
+    con: duckdb.DuckDBPyConnection,
+    table: str,
+    max_null_pct: dict[str, float],
+    cols: list[str],
+    row_count: int,
+    prefix: str = "",
+) -> tuple[list[str], list[str]]:
     """Check max null percentage constraints. Returns (errors, warnings)."""
     errors: list[str] = []
     warnings: list[str] = []
@@ -94,11 +126,11 @@ def _check_max_null_pct(con: duckdb.DuckDBPyConnection, table: str, max_null_pct
         return errors, warnings
     for c, thr in max_null_pct.items():
         if c not in cols:
-            warnings.append(f"Null-pct rule column missing in data: '{c}'")
+            warnings.append(_prefixed(prefix, f"Null-pct rule column missing in data: '{c}'"))
             continue
         qc = q_ident(c)
         nnull = int(con.execute(f"SELECT COUNT(*) FROM {table} WHERE {qc} IS NULL").fetchone()[0])
         pct = nnull / row_count
         if pct > thr:
-            errors.append(f"Column '{c}' null_pct too high: {pct:.3%} > {thr:.3%}")
+            errors.append(_prefixed(prefix, f"Column '{c}' null_pct too high: {pct:.3%} > {thr:.3%}"))
     return errors, warnings

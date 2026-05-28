@@ -6,10 +6,15 @@ from typing import Any
 
 from lab_connectors.duckdb import safe_connect
 
+from toolkit.core.column_rules import (
+    check_max_null_pct,
+    check_not_null,
+    check_primary_key,
+    check_ranges,
+)
 from toolkit.core.config_models import MartTableRuleConfig, MartValidationSpec
 from toolkit.core.metadata import merge_layer_manifest
 from toolkit.core.paths import layer_year_dir, to_root_relative
-from toolkit.core.sql_utils import q_ident
 from toolkit.core.validation import (
     ValidationResult,
     build_validation_summary,
@@ -109,62 +114,27 @@ def validate_mart(
             required_result = required_columns_check(cols, req_cols)
             errors.extend([f"[{name}] {error}" for error in required_result.errors])
 
-            # not null
-            for c in rules.not_null:
-                if c not in cols:
-                    warnings.append(f"[{name}] Not-null rule column missing: '{c}'")
-                    continue
-                qc = q_ident(c)
-                nnull = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {qc} IS NULL").fetchone()[0])
-                if nnull > 0:
-                    errors.append(f"[{name}] Column '{c}' has NULLs: {nnull}")
+            # not null — centralizzato in core.column_rules
+            prefix = f"[{name}] "
+            err_warn = check_not_null(con, "t", rules.not_null, cols, prefix=prefix)
+            errors.extend(err_warn[0])
+            warnings.extend(err_warn[1])
 
-            # primary key duplicates
-            pk = rules.primary_key
-            if pk:
-                if not all(c in cols for c in pk):
-                    warnings.append(f"[{name}] Primary key columns not all present: {pk}")
-                else:
-                    key_expr = ", ".join(q_ident(c) for c in pk)
-                    dup_groups = int(
-                        con.execute(
-                            f"""
-                            SELECT COUNT(*) FROM (
-                              SELECT {key_expr}, COUNT(*) AS n
-                              FROM t
-                              GROUP BY {key_expr}
-                              HAVING COUNT(*) > 1
-                            ) d
-                            """
-                        ).fetchone()[0]
-                    )
-                    if dup_groups > 0:
-                        errors.append(f"[{name}] PK duplicates for {pk}: groups={dup_groups}")
+            # primary key duplicates — centralizzato in core.column_rules
+            err_warn = check_primary_key(con, "t", rules.primary_key, cols, prefix=prefix)
+            errors.extend(err_warn[0])
+            warnings.extend(err_warn[1])
 
-            # ranges (violation = below min OR above max)
-            for c, rule in rules.ranges.items():
-                if c not in cols:
-                    warnings.append(f"[{name}] Range rule column missing: '{c}'")
-                    continue
+            # ranges — centralizzato in core.column_rules
+            err_warn = check_ranges(con, "t", rules.ranges, cols, prefix=prefix)
+            errors.extend(err_warn[0])
+            warnings.extend(err_warn[1])
 
-                qc = q_ident(c)
-                violations: list[str] = []
-                if rule.min is not None:
-                    violations.append(f"{qc} < {rule.min}")
-                if rule.max is not None:
-                    violations.append(f"{qc} > {rule.max}")
-
-                if not violations:
-                    warnings.append(f"[{name}] Range rule for '{c}' has no min/max, skipping")
-                    continue
-
-                where = f"{qc} IS NOT NULL AND (" + " OR ".join(violations) + ")"
-                bad = int(con.execute(f"SELECT COUNT(*) FROM t WHERE {where}").fetchone()[0])
-                if bad > 0:
-                    errors.append(
-                        f"[{name}] Range check failed for '{c}': bad_rows={bad} "
-                        f"rules={{'min': {rule.min}, 'max': {rule.max}}}"
-                    )
+            # max_null_pct — centralizzato in core.column_rules
+            if rules.max_null_pct:
+                err_warn = check_max_null_pct(con, "t", rules.max_null_pct, cols, rc, prefix=prefix)
+                errors.extend(err_warn[0])
+                warnings.extend(err_warn[1])
 
             per_table[name] = {
                 "columns": cols,
@@ -176,6 +146,7 @@ def validate_mart(
                         column: {"min": range_rule.min, "max": range_rule.max}
                         for column, range_rule in rules.ranges.items()
                     },
+                    "max_null_pct": rules.max_null_pct,
                     "min_rows": rules.min_rows,
                 },
             }
@@ -200,6 +171,7 @@ def validate_mart(
                         column: {"min": range_rule.min, "max": range_rule.max}
                         for column, range_rule in rule.ranges.items()
                     },
+                    "max_null_pct": rule.max_null_pct,
                     "min_rows": rule.min_rows,
                 }
                 for table, rule in table_rules.items()

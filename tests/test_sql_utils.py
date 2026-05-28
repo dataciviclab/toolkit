@@ -1,6 +1,14 @@
 """Tests for toolkit/core/sql_utils.py."""
 
-from toolkit.core.sql_utils import q_ident
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from toolkit.core.sql_utils import q_ident, quote_list, sql_path
+
+pytestmark = pytest.mark.pure_unit
 
 
 class TestQIdent:
@@ -37,3 +45,37 @@ class TestQIdent:
         result = q_ident("anything")
         assert result.startswith('"')
         assert result.endswith('"')
+
+
+class TestSqlPath:
+    def test_absolute_path_to_sql_literal(self) -> None:
+        p = Path("/tmp/test/file.csv")
+        result = sql_path(p)
+        expected = p.resolve().as_posix()
+        assert result == expected
+
+    def test_quotes_single_quote_in_path(self) -> None:
+        p = Path("/tmp/test/it's.csv")
+        result = sql_path(p)
+        assert "'" not in result.replace("''", "")
+        assert "''" in result
+
+
+class TestQuoteList:
+    def test_single_path(self) -> None:
+        p = Path("/tmp/a.csv")
+        result = quote_list([p])
+        expected = f"'{p.resolve().as_posix()}'"
+        assert result == expected
+
+    def test_multiple_paths(self) -> None:
+        p1 = Path("/tmp/a.csv")
+        p2 = Path("/tmp/b.csv")
+        result = quote_list([p1, p2])
+        assert result.startswith("'")
+        assert result.endswith("'")
+        assert p1.resolve().as_posix() in result
+        assert p2.resolve().as_posix() in result
+
+    def test_empty_list(self) -> None:
+        assert quote_list([]) == ""

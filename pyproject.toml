@@ -76,7 +76,7 @@ disallow_untyped_defs = false
 module = [
   "toolkit.mart.validate",
   "toolkit.clean.validate",
-  "toolkit.clean._column_rules",
+  "toolkit.core.column_rules",
   "toolkit.core.layer_profile",
 ]
 disable_error_code = [

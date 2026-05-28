@@ -11,10 +11,8 @@ from toolkit.clean.read_excel import _execute_excel_read
 from toolkit.clean.read_sql_utils import (
     _parse_column_value,
     csv_trim_projection,
-    q_ident,
-    quote_list,
-    sql_path,
 )
+from toolkit.core.sql_utils import q_ident, quote_list, sql_path
 from toolkit.core.csv_read import (
     csv_read_option_strings,
     normalize_read_cfg,

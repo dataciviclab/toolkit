@@ -1,22 +1,13 @@
+"""SQL utility functions specific to the clean layer.
+
+Layer-specific SQL helpers (not shared across layers).
+For shared utilities like ``q_ident``, ``sql_path``, ``quote_list``
+see ``toolkit.core.sql_utils``.
+"""
+
 from __future__ import annotations
 
-from pathlib import Path
-
-
-def q_ident(name: str) -> str:
-    """Quote a SQL identifier, escaping embedded double quotes."""
-    return '"' + name.replace('"', '""') + '"'
-
-
-def sql_path(p: Path) -> str:
-    """Quote a file-system path for use in a DuckDB SQL string literal."""
-    s = p.resolve().as_posix()
-    return s.replace("'", "''")
-
-
-def quote_list(paths: list[Path]) -> str:
-    """Return a SQL comma-separated list of quoted path literals."""
-    return ", ".join([f"'{sql_path(p)}'" for p in paths])
+from toolkit.core.sql_utils import q_ident
 
 
 def _parse_column_value(raw_name: str, value: str) -> tuple[str, str]:

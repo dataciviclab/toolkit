@@ -48,6 +48,7 @@ class MartTableRuleConfig(BaseModel):
     not_null: list[str] = Field(default_factory=list)
     primary_key: list[str] = Field(default_factory=list)
     ranges: dict[str, RangeRuleConfig] = Field(default_factory=dict)
+    max_null_pct: dict[str, float] = Field(default_factory=dict)
     min_rows: int | None = None
 
     @field_validator("required_columns", "not_null", "primary_key", mode="before")

@@ -104,7 +104,6 @@ def _raw_output_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
     return {
         "dir": str(raw_dir),
         "metadata": str(raw_dir / "metadata.json"),
-        "manifest": str(raw_dir / "manifest.json"),
         "validation": str(raw_dir / "raw_validation.json"),
     }
 
@@ -119,7 +118,6 @@ def _clean_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
         "dir": str(clean_dir),
         "output": str(_clean_output_path(root, dataset, year)),
         "metadata": str(clean_dir / "metadata.json"),
-        "manifest": str(clean_dir / "manifest.json"),
         "validation": str(clean_dir / "_validate" / "clean_validation.json"),
     }
 
@@ -146,7 +144,6 @@ def _mart_paths(
         "dir": str(mart_dir),
         "outputs": [str(path) for path in _mart_output_paths(root, mart_dir, tables)],
         "metadata": str(mart_dir / "metadata.json"),
-        "manifest": str(mart_dir / "manifest.json"),
         "validation": str(mart_dir / "_validate" / "mart_validation.json"),
     }
 

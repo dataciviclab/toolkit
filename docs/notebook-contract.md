@@ -11,14 +11,13 @@ Contratto stabile:
 
 File utili:
 
-- RAW: `manifest.json`, `metadata.json`, `raw_validation.json`
-- CLEAN: `<dataset>_<year>_clean.parquet`, `manifest.json`, `metadata.json`
-- MART: `<table>.parquet`, `manifest.json`, `metadata.json`
+- RAW: `metadata.json`, `raw_validation.json`
+- CLEAN: `<dataset>_<year>_clean.parquet`, `metadata.json`
+- MART: `<table>.parquet`, `metadata.json`
 
 Ruoli dei file:
 
-- `metadata.json`: payload ricco del layer. Contiene input, output, `config_hash` e campi specifici del layer.
-- `manifest.json`: summary stabile del layer. Punta a metadata e validation e riassume `ok/errors_count/warnings_count`.
+- `metadata.json`: payload ricco del layer. Contiene input, output, `config_hash`, summary di validazione e campi specifici del layer.
 - run record in `data/_runs/...`: stato del run (`run_id`, layer, validations, status), utile per `status` e `resume`.
 - `inspect paths --json`: helper read-only per notebook e script locali; restituisce i path assoluti utili del runtime, incluso `latest_run`.
 
@@ -49,9 +48,9 @@ Input minimo:
 Output garantito in `--json`:
 
 - `dataset`, `year`, `config_path`, `root`
-- `paths.raw` con `dir`, `manifest`, `metadata`, `validation`
-- `paths.clean` con `dir`, `output`, `manifest`, `metadata`, `validation`
-- `paths.mart` con `dir`, `outputs`, `manifest`, `metadata`, `validation`
+- `paths.raw` con `dir`, `metadata`, `validation`
+- `paths.clean` con `dir`, `output`, `metadata`, `validation`
+- `paths.mart` con `dir`, `outputs`, `metadata`, `validation`
 - `paths.run_dir`
 - `raw_hints` con:
   - `primary_output_file`

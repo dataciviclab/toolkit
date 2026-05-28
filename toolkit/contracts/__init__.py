@@ -24,7 +24,6 @@ Costanti utili::
 
     CLEAN_PARQUET_SUFFIX   # "_clean.parquet" — per filtrare/globbare
     METADATA_JSON          # "metadata.json"
-    MANIFEST_JSON          # "manifest.json"
 """
 
 from __future__ import annotations
@@ -50,7 +49,6 @@ __all__ = [
     # Costanti file
     "CLEAN_PARQUET_SUFFIX",
     "METADATA_JSON",
-    "MANIFEST_JSON",
 ]
 
 # ---------------------------------------------------------------------------
@@ -67,7 +65,6 @@ Esempio::
 """
 
 METADATA_JSON = "metadata.json"
-MANIFEST_JSON = "manifest.json"
 
 
 # ---------------------------------------------------------------------------

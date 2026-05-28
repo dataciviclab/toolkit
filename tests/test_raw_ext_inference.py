@@ -1,8 +1,12 @@
 from pathlib import Path
 
-from toolkit.core.manifest import read_raw_manifest
+import pytest
+
+from toolkit.core.metadata import read_layer_metadata
 from toolkit.raw._fetch_utils import _infer_ext
 from toolkit.raw.run import run_raw
+
+pytestmark = pytest.mark.contract
 
 
 class _NoopLogger:
@@ -131,12 +135,12 @@ def test_manifest_created(monkeypatch, tmp_path: Path):
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-123")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    manifest = read_raw_manifest(out_dir)
+    manifest = read_layer_metadata(out_dir)
     assert manifest is not None
     assert manifest["dataset"] == "demo"
     assert manifest["year"] == 2024
     assert manifest["run_id"] == "run-123"
-    assert isinstance(manifest["created_at"], str)
+    assert isinstance(manifest.get("timestamp_utc"), str)
     assert manifest["sources"] == [{"name": "primary_source", "output_file": "manifest.csv"}]
     assert manifest["primary_output_file"] == "manifest.csv"
 
@@ -163,7 +167,7 @@ def test_manifest_points_to_latest_in_versioned(monkeypatch, tmp_path: Path):
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-2")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    manifest = read_raw_manifest(out_dir)
+    manifest = read_layer_metadata(out_dir)
     assert manifest is not None
     assert manifest["run_id"] == "run-2"
     assert manifest["primary_output_file"] == "file_1.csv"
@@ -194,7 +198,7 @@ def test_manifest_overwrite_policy(monkeypatch, tmp_path: Path):
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-2")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    manifest = read_raw_manifest(out_dir)
+    manifest = read_layer_metadata(out_dir)
     assert manifest is not None
     assert manifest["run_id"] == "run-2"
     assert manifest["primary_output_file"] == "file.csv"
@@ -227,7 +231,7 @@ def test_multisource_primary_selection(monkeypatch, tmp_path: Path):
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-123")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    manifest = read_raw_manifest(out_dir)
+    manifest = read_layer_metadata(out_dir)
     assert manifest is not None
     assert manifest["sources"] == [
         {"name": "alpha", "output_file": "a.csv"},
@@ -270,7 +274,7 @@ def test_multisource_year_filter_skips_non_matching(monkeypatch, tmp_path: Path)
     run_raw("demo", 2022, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-2022")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2022"
-    manifest = read_raw_manifest(out_dir)
+    manifest = read_layer_metadata(out_dir)
     assert manifest is not None
     # Only the source with year=2022 should be fetched
     assert manifest["sources"] == [{"name": "source_2022", "output_file": "source_2022.csv"}]
@@ -306,7 +310,7 @@ def test_multisource_year_filter_all_matching(monkeypatch, tmp_path: Path):
     run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-all")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
-    manifest = read_raw_manifest(out_dir)
+    manifest = read_layer_metadata(out_dir)
     assert manifest is not None
     assert manifest["sources"] == [
         {"name": "alpha", "output_file": "a.csv"},

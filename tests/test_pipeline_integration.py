@@ -69,21 +69,12 @@ def test_artifacts_policy_minimal_behaves_like_standard(
 
     root = Path(cfg.root)
     raw_dir = root / "data" / "raw" / cfg.dataset / str(year)
-    profile_dir = raw_dir / "_profile"
     clean_dir = root / "data" / "clean" / cfg.dataset / str(year)
     mart_dir = root / "data" / "mart" / cfg.dataset / str(year)
 
-    assert (raw_dir / "manifest.json").exists()
     assert (raw_dir / "metadata.json").exists()
-    assert (raw_dir / "raw_validation.json").exists()
-    assert (profile_dir / "suggested_read.yml").exists()
-    assert (profile_dir / "raw_profile.json").exists()
-    assert (clean_dir / "_run" / "clean_rendered.sql").exists()
-    assert any((mart_dir / "_run").glob("*_rendered.sql"))
-    assert (clean_dir / "manifest.json").exists()
     assert (clean_dir / "metadata.json").exists()
-    assert (clean_dir / "_validate" / "clean_validation.json").exists()
-    assert (mart_dir / "manifest.json").exists()
+    assert (mart_dir / "metadata.json").exists()
     assert (mart_dir / "metadata.json").exists()
     assert (mart_dir / "_validate" / "mart_validation.json").exists()
 

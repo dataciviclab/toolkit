@@ -8,7 +8,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from toolkit.core.io import write_json_atomic, read_json_or_none as _read_json
+from toolkit.core.io import write_json_atomic
 from toolkit.version import __version__
 
 
@@ -76,44 +76,18 @@ def _read_metadata(folder: Path, filename: str = "metadata.json") -> dict[str, A
 
 
 def read_layer_metadata(layer_dir: Path) -> dict[str, Any]:
+    """Read ``metadata.json`` from a layer directory.
+
+    ``metadata.json`` is the single source of truth — it contains runtime
+    metadata from the pipeline run and validation fields written by
+    ``merge_layer_manifest()``.
     """
-    Read layer metadata as the canonical source, with fallback to manifest.json
-    for fields that may not yet be migrated.
+    return _read_metadata(layer_dir) or {}
 
-    Migration path:
-    - metadata.json is the source of truth for: outputs, validation, summary,
-      primary_output_file (raw), sources (raw), and all standard metadata fields
-    - manifest.json is kept as a compat alias on write and as a fallback for
-      read when metadata.json does not yet contain the field
-    """
-    meta = _read_metadata(layer_dir) or {}
 
-    manifest = None
-    if not meta.get("primary_output_file"):
-        manifest = _read_json(layer_dir / "manifest.json") if manifest is None else manifest
-        pof = manifest.get("primary_output_file") if manifest else None
-        if isinstance(pof, str):
-            meta["primary_output_file"] = pof
-
-    if not meta.get("outputs"):
-        manifest = _read_json(layer_dir / "manifest.json") if manifest is None else manifest
-        outputs = manifest.get("outputs") if manifest else None
-        if isinstance(outputs, list):
-            meta["outputs"] = outputs
-
-    if not meta.get("summary"):
-        manifest = _read_json(layer_dir / "manifest.json") if manifest is None else manifest
-        summary = manifest.get("summary") if manifest else None
-        if isinstance(summary, dict):
-            meta["summary"] = summary
-
-    if not meta.get("validation"):
-        manifest = _read_json(layer_dir / "manifest.json") if manifest is None else manifest
-        validation = manifest.get("validation") if manifest else None
-        if isinstance(validation, str):
-            meta["validation"] = validation
-
-    return meta
+# ---------------------------------------------------------------------------
+# merge_layer_manifest — merge validation fields into metadata.json
+# ---------------------------------------------------------------------------
 
 
 
@@ -151,34 +125,4 @@ def merge_layer_manifest(
         meta["sources"] = sources
     out = folder / metadata_path
     write_json_atomic(out, meta)
-    return out
-
-
-def write_layer_manifest(
-    folder: Path,
-    *,
-    metadata_path: str = "metadata.json",
-    validation_path: str | None = None,
-    outputs: list[dict[str, Any]] | None = None,
-    ok: bool | None = None,
-    errors_count: int | None = None,
-    warnings_count: int | None = None,
-    filename: str = "manifest.json",
-) -> Path:
-    # Single write: compute payload once, write only manifest.json.
-    # metadata.json is NOT updated here — it stays as the run-time source of truth
-    # written by the run step. manifest.json is the validation-time alias that
-    # always reflects the latest validation outcome.
-    payload = {
-        "metadata": metadata_path,
-        "validation": validation_path,
-        "summary": {
-            "ok": ok,
-            "errors_count": errors_count,
-            "warnings_count": warnings_count,
-        },
-        "outputs": outputs,
-    }
-    out = folder / filename
-    write_json_atomic(out, payload)
     return out

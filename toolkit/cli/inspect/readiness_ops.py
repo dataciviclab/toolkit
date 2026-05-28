@@ -151,7 +151,6 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
             "raw": {
                 "dir": str(raw_dir),
                 "dir_exists": raw_dir.exists(),
-                "manifest_exists": _exists(raw_paths.get("manifest")),
                 "metadata_exists": _exists(raw_paths.get("metadata")),
                 "primary_output_file": primary_output_file,
                 "primary_output_exists": _exists(primary_output_path),
@@ -171,7 +170,6 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "dir_exists": clean_dir.exists(),
                 "output": clean_paths.get("output"),
                 "output_exists": _exists(clean_paths.get("output")),
-                "manifest_exists": _exists(clean_paths.get("manifest")),
                 "metadata_exists": _exists(clean_paths.get("metadata")),
                 "validation": _validation_summary_for_layer(clean_dir, "_validate/clean_validation.json"),
                 "run_status": layer_run_statuses.get("clean"),
@@ -183,7 +181,6 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "output_count": len(mart_outputs),
                 "output_exists_count": len(mart_outputs) - len(missing_mart_outputs),
                 "missing_outputs": missing_mart_outputs,
-                "manifest_exists": _exists(mart_paths.get("manifest")),
                 "metadata_exists": _exists(mart_paths.get("metadata")),
                 "validation": _validation_summary_for_layer(mart_dir, "_validate/mart_validation.json"),
                 "run_status": layer_run_statuses.get("mart"),

@@ -44,17 +44,17 @@ class TestCollector(ast.NodeVisitor):
         for stmt in ast.iter_child_nodes(node):
             if isinstance(stmt, ast.Assign):
                 for target in stmt.targets:
-                    if isinstance(target, ast.Name) and target.id == "pytestmark":
+                    if not (isinstance(target, ast.Name) and target.id == "pytestmark"):
+                        continue
+                    if isinstance(stmt.value, ast.List):
+                        for elt in stmt.value.elts:
+                            m = self._get_marker_name(elt)
+                            if m:
+                                self._module_markers.add(m)
+                    else:
                         marker = self._get_marker_name(stmt.value)
                         if marker:
                             self._module_markers.add(marker)
-                    # Also handle list: pytestmark = [pytest.mark.contract, pytest.mark.smoke]
-                    elif isinstance(target, ast.Name) and target.id == "pytestmark":
-                        if isinstance(stmt.value, ast.List):
-                            for elt in stmt.value.elts:
-                                m = self._get_marker_name(elt)
-                                if m:
-                                    self._module_markers.add(m)
 
         for stmt in ast.iter_child_nodes(node):
             if isinstance(stmt, ast.FunctionDef) and stmt.name.startswith("test_"):

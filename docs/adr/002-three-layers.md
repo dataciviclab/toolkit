@@ -30,8 +30,7 @@ RAW  →  CLEAN  →  MART
 
 Ogni layer ha:
 - Una directory dedicata: `data/{layer}/{dataset}/{year}/`
-- `metadata.json` con input, output, hash, config_hash
-- `manifest.json` con riepilogo stabile
+- `metadata.json` con input, output, hash, config_hash e summary di validazione
 - `_validate/{layer}_validation.json` (CLEAN e MART)
 - `_profile/` per RAW con profiling automatico
 - Run record in `data/_runs/{dataset}/{year}/` per tracciabilità
@@ -48,7 +47,7 @@ Ogni layer ha:
 **Negative:**
 - Tre directory invece di una — più file system I/O
 - Contratto di path complesso (`root/data/{layer}/{dataset}/{year}/...`)
-- CLEAN deve sapere cosa ha prodotto RAW (bridge via manifest.json)
+- CLEAN deve sapere cosa ha prodotto RAW (bridge via metadata.json)
 - Overhead per dataset piccoli (pochi KB)
 
 **Tradeoff accettato:** la complessità in più è giustificata dalla tracciabilità

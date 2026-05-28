@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
-
 from toolkit.cli.app import app
+
+pytestmark = pytest.mark.contract
 
 
 def _write_dataset_config(base_dir: Path) -> Path:
@@ -54,13 +56,10 @@ def _write_raw_year(
     raw_dir = root / "data" / "raw" / "schema_diff_example" / str(year)
     raw_dir.mkdir(parents=True, exist_ok=True)
     (raw_dir / file_name).write_text(header_line + "\n1,2,3\n", encoding="utf-8")
-    (raw_dir / "manifest.json").write_text(
-        json.dumps({"primary_output_file": file_name}),
-        encoding="utf-8",
-    )
     (raw_dir / "metadata.json").write_text(
         json.dumps(
             {
+                "primary_output_file": file_name,
                 "profile_hints": {
                     "file_used": file_name,
                     "encoding_suggested": "utf-8",

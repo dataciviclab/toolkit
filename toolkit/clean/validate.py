@@ -18,7 +18,7 @@ from toolkit.clean._column_rules import (
 from toolkit.clean._helpers import _input_files_from_clean_metadata, _profile_raw_input
 from toolkit.core.config_models import CleanValidationSpec, RangeRuleConfig, TransitionConfig
 from toolkit.core.layer_profile import compare_layer_profiles
-from toolkit.core.metadata import write_layer_manifest
+from toolkit.core.metadata import merge_layer_manifest
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.validation import (
     ValidationResult,
@@ -437,7 +437,7 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
 
     report = write_validation_json(Path(out_dir) / "_validate" / "clean_validation.json", result)
     metadata = json.loads((out_dir / "metadata.json").read_text(encoding="utf-8"))
-    write_layer_manifest(
+    merge_layer_manifest(
         out_dir,
         metadata_path="metadata.json",
         validation_path="_validate/clean_validation.json",

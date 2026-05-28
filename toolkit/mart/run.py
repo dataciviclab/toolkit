@@ -9,7 +9,7 @@ from lab_connectors.duckdb import safe_connect
 from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict
 from toolkit.core.layer_profile import compare_layer_profiles, profile_relation, profile_parquet_files
-from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
+from toolkit.core.metadata import config_hash_for_year, file_record, merge_layer_manifest, write_metadata
 from toolkit.core.multi_year_source import bind_multi_year_view, collect_multi_year_files
 from toolkit.core.paths import layer_dataset_dir, layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
@@ -141,14 +141,10 @@ def run_mart_multi_year(
     if source_id:
         metadata_payload["source_id"] = source_id
     metadata_path = write_metadata(multi_year_dir, metadata_payload)
-    write_layer_manifest(
+    merge_layer_manifest(
         multi_year_dir,
         metadata_path=metadata_path.name,
-        validation_path=None,
         outputs=outputs,
-        ok=None,
-        errors_count=None,
-        warnings_count=None,
     )
     total_bytes = sum(p.stat().st_size for p in written if p.exists())
     col_count = sum(
@@ -456,14 +452,11 @@ def run_mart(
         mart_dir,
         metadata_payload,
     )
-    write_layer_manifest(
+    merge_layer_manifest(
         mart_dir,
         metadata_path=metadata_path.name,
         validation_path="_validate/mart_validation.json",
         outputs=outputs,
-        ok=None,
-        errors_count=None,
-        warnings_count=None,
     )
     total_bytes = sum(p.stat().st_size for p in written if p.exists())
     col_count = sum(len(tp.get("columns", [])) for tp in table_profiles.values()) if table_profiles else None

@@ -111,25 +111,17 @@ def test_status_reports_raw_hints_when_raw_artifacts_exist(
     )
     make_standard_sql(project_dir)
 
-    (raw_dir / "manifest.json").write_text(
-        json.dumps({"primary_output_file": "demo.csv"}, indent=2),
-        encoding="utf-8",
-    )
-    (raw_dir / "metadata.json").write_text(
-        json.dumps(
-            {
-                "profile_hints": {
-                    "encoding_suggested": "utf-8",
-                    "delim_suggested": ";",
-                    "decimal_suggested": None,
-                    "skip_suggested": 1,
-                    "warnings": ["header_preamble_detected"],
-                }
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+    raw_meta = {
+        "primary_output_file": "demo.csv",
+        "profile_hints": {
+            "encoding_suggested": "utf-8",
+            "delim_suggested": ";",
+            "decimal_suggested": None,
+            "skip_suggested": 1,
+            "warnings": ["header_preamble_detected"],
+        },
+    }
+    (raw_dir / "metadata.json").write_text(json.dumps(raw_meta, indent=2), encoding="utf-8")
     (raw_dir / "_profile" / "suggested_read.yml").write_text(
         'clean:\n  read:\n    delim: ";"\n', encoding="utf-8"
     )
@@ -207,7 +199,7 @@ mart:
     (clean_dir / "demo_ds_2022_clean.parquet").write_text("placeholder", encoding="utf-8")
     (multi_dir / "multi_ok.parquet").write_text("placeholder", encoding="utf-8")
 
-    (clean_dir / "manifest.json").write_text(
+    (clean_dir / "metadata.json").write_text(
         json.dumps(
             {
                 "validation": "_validate/clean_validation.json",
@@ -234,7 +226,7 @@ mart:
         encoding="utf-8",
     )
 
-    (mart_dir / "manifest.json").write_text(
+    (mart_dir / "metadata.json").write_text(
         json.dumps(
             {
                 "validation": "_validate/mart_validation.json",

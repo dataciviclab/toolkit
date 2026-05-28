@@ -13,7 +13,6 @@ from typing import Any, TypedDict
 class RawPaths(TypedDict):
     dir: str
     metadata: str
-    manifest: str
     validation: str
 
 
@@ -21,7 +20,6 @@ class CleanPaths(TypedDict):
     dir: str
     output: str
     metadata: str
-    manifest: str
     validation: str
 
 
@@ -29,7 +27,6 @@ class MartPaths(TypedDict):
     dir: str
     outputs: list[str]
     metadata: str
-    manifest: str
     validation: str
 
 

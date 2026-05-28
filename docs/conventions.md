@@ -1,8 +1,8 @@
 # Toolkit Conventions
 
-## 1. Paths & Manifests
+## 1. Paths & Metadata
 - **Risoluzione Path**: I path in `dataset.yml` sono relativi alla directory del file YAML.
-- **RAW Manifest**: Ogni run scrive `raw/<dataset>/<year>/manifest.json` con `primary_output_file` (usato da CLEAN).
+- **RAW Metadata**: Ogni run scrive `raw/<dataset>/<year>/metadata.json` con `primary_output_file` (usato da CLEAN).
 - **Audit**: `metadata.json` e `validation.json` accompagnano ogni layer con versioni di schema e audit trail.
 
 ## 2. Artifacts Policy
@@ -13,7 +13,7 @@ Il campo è accettato per backward compatibilità ma ignorato.
 
 ## 3. CLEAN Input & Reader Logic
 Il layer CLEAN segue questa precedenza di configurazione:
-1. **Manifest-first**: Se `manifest.json` è valido, usa `primary_output_file`.
+1. **Metadata-first**: Se `metadata.json` è valido, usa `primary_output_file`.
 2. **Reader Config**: `defaults -> suggested (formatted _profile) -> config_overrides`.
 3. **Read Mode**: `strict`, `fallback` (default), `robust` (forza tipi non-breaking).
 

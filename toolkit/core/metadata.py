@@ -88,7 +88,6 @@ def read_layer_metadata(layer_dir: Path) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # merge_layer_manifest — merge validation fields into metadata.json
 # ---------------------------------------------------------------------------
-    return _read_metadata(layer_dir) or {}
 
 
 

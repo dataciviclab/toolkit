@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from toolkit.core.artifacts import resolve_artifact_policy, should_write
+from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict, parse_bool
 from toolkit.core.manifest import write_raw_manifest
 from toolkit.core.metadata import config_hash_for_year, sha256_bytes, write_metadata
@@ -150,17 +150,16 @@ def run_raw(
     primary_output_path = out_dir / primary_output_file
     profile_hints = None
     profile_ctx = {"clean": clean_cfg or {}, "output": output_cfg or {}}
-    policy = resolve_artifact_policy(output_cfg)
     if primary_output_path.exists() and primary_output_path.suffix.lower() in {".csv", ".tsv", ".txt", ".xlsx", ".xls"}:
         try:
             profile_hints = sniff_source_file(primary_output_path)
-            if should_write("profile", "suggested_read", policy, profile_ctx):
+            if should_write("profile", "suggested_read", profile_ctx):
                 conservative_hints = dict(profile_hints)
                 conservative_hints["decimal_suggested"] = None
                 suggested_path = write_suggested_read_yml(out_dir / "_profile", conservative_hints)
                 logger.info("RAW suggested_read -> %s", suggested_path)
 
-            if should_write("profile", "raw_profile", policy, profile_ctx):
+            if should_write("profile", "raw_profile", profile_ctx):
                 raw_profile = profile_raw(
                     out_dir,
                     dataset,

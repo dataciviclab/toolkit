@@ -41,11 +41,6 @@ def layer_dataset_dir(root: str | os.PathLike[str] | None, layer: str, dataset: 
     return dataset_dir(root, layer, dataset)
 
 
-def run_dir(root: str | os.PathLike[str], layer: str, dataset: str, year: int | str, run_id: str) -> Path:
-    # Esempio: data/clean/ispra/2022/_runs/20260223T221500Z_x9a2f
-    return layer_year_dir(root, layer, dataset, year) / "_runs" / run_id
-
-
 def serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | None:
     """Serialize a Path relative to rel_root for storage in metadata JSON.
 

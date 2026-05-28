@@ -16,7 +16,7 @@ import duckdb
 import typer
 
 from toolkit.cli.common import dump_cfg_section, iter_selected_years, load_cfg_and_logger
-from toolkit.core.artifacts import resolve_artifact_policy, should_write
+from toolkit.core.artifacts import should_write
 from toolkit.core.csv_read import csv_read_option_strings, robust_preset, sql_str
 from toolkit.core.paths import layer_year_dir
 from toolkit.core.config import ToolkitConfig
@@ -114,20 +114,18 @@ def run_profile(cfg: ToolkitConfig, years: list[int], logger: Logger) -> None:
 
     Chiamabile sia da inspect/profile che da cmd_profile (deprecato).
     """
-    output_cfg: dict[str, Any] | None = dump_cfg_section(cfg.output)
     clean_cfg: dict[str, Any] = dump_cfg_section(cfg.clean) or {}
 
     for y in years:
         raw_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, y)
         out_dir = raw_dir / "_profile"
         out_dir.mkdir(parents=True, exist_ok=True)
-        policy = resolve_artifact_policy(output_cfg)
 
         prof = profile_raw(raw_dir, cfg.dataset, y, read_cfg=clean_cfg.get("read"))
         paths = write_raw_profile(out_dir, prof)
         written_paths = list(paths.values())
 
-        if should_write("profile", "suggested_read", policy, cfg):
+        if should_write("profile", "suggested_read", cfg):
             written_paths.append(write_suggested_read_yml(out_dir, prof.__dict__))
 
         if written_paths:

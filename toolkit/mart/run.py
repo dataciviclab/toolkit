@@ -6,7 +6,7 @@ from typing import Any
 
 from lab_connectors.duckdb import safe_connect
 
-from toolkit.core.artifacts import resolve_artifact_policy, should_write
+from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict
 from toolkit.core.layer_profile import compare_layer_profiles, profile_relation, profile_parquet_files
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
@@ -48,7 +48,6 @@ def run_mart_multi_year(
     mart_cfg = ensure_dict(mart_cfg)
     output_cfg = ensure_dict(output_cfg)
     support_cfg = ensure_dict(support_cfg)
-    policy = resolve_artifact_policy(output_cfg)
     root_dir = resolve_root(root)
     multi_year_dir = layer_dataset_dir(root, "mart", dataset)
     multi_year_dir.mkdir(parents=True, exist_ok=True)
@@ -74,7 +73,7 @@ def run_mart_multi_year(
     base_ctx["years_csv"] = years_csv
 
     run_dir: Path | None = None
-    if should_write("mart", "rendered_sql", policy, {"output": output_cfg or {}}):
+    if should_write("mart", "rendered_sql", {"output": output_cfg or {}}):
         run_dir = multi_year_dir / "_run"
         run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -310,7 +309,6 @@ def run_mart(
     clean_cfg = ensure_dict(clean_cfg)
     output_cfg = ensure_dict(output_cfg)
     support_cfg = ensure_dict(support_cfg)
-    policy = resolve_artifact_policy(output_cfg)
     root_dir = resolve_root(root)
     clean_dir = layer_year_dir(root, "clean", dataset, year)
     mart_dir = layer_year_dir(root, "mart", dataset, year)
@@ -358,7 +356,7 @@ def run_mart(
         )
 
         run_dir: Path | None = None
-        if should_write("mart", "rendered_sql", policy, {"output": output_cfg or {}}):
+        if should_write("mart", "rendered_sql", {"output": output_cfg or {}}):
             run_dir = mart_dir / "_run"
             run_dir.mkdir(parents=True, exist_ok=True)
 

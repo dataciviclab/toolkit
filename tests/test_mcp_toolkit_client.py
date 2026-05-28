@@ -17,6 +17,8 @@ from toolkit.mcp.toolkit_client import (
     summary,
 )
 
+pytestmark = pytest.mark.contract
+
 
 def _write_real_parquet(path: Path) -> None:
     """Write a minimal real parquet file via DuckDB."""
@@ -304,7 +306,7 @@ def test_inspect_paths_cli_mcp_contract_alignment(tmp_path: Path, monkeypatch) -
     from typer.testing import CliRunner
 
     from toolkit.cli.app import app
-    from toolkit.mcp.contracts import (
+    from toolkit.mcp.types import (
         CleanPaths,
         InspectPathsResult,
         LayerPaths,
@@ -378,7 +380,7 @@ def test_schema_diff_cli_contract_alignment(tmp_path: Path, monkeypatch) -> None
     from typer.testing import CliRunner
 
     from toolkit.cli.app import app
-    from toolkit.mcp.contracts import (
+    from toolkit.mcp.types import (
         RawSchemaEntry,
         SchemaComparison,
         SchemaDiffResult,
@@ -409,7 +411,7 @@ def test_schema_diff_cli_contract_alignment(tmp_path: Path, monkeypatch) -> None
 @pytest.mark.policy
 def test_review_readiness_mcp_contract_shape(tmp_path: Path, monkeypatch) -> None:
     """review_readiness() output matches ReviewReadinessResult TypedDict."""
-    from toolkit.mcp.contracts import ReadinessCheck, ReviewReadinessResult
+    from toolkit.mcp.types import ReadinessCheck, ReviewReadinessResult
     from toolkit.mcp.toolkit_client import review_readiness
 
     src = Path("project-example")

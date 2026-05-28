@@ -6,7 +6,7 @@ from typing import Any
 from toolkit.clean.duckdb_read import SUPPORTED_INPUT_EXTS
 from toolkit.clean.read_config import resolve_clean_read_cfg
 from toolkit.clean.input_selection import select_raw_input
-from toolkit.core.artifacts import resolve_artifact_policy, should_write
+from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict
 from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
@@ -59,10 +59,9 @@ def _write_rendered_sql(
     out_dir: Path,
     sql: str,
     *,
-    policy: str,
     output_cfg: dict[str, Any] | None,
 ) -> Path | None:
-    if not should_write("clean", "rendered_sql", policy, {"output": output_cfg or {}}):
+    if not should_write("clean", "rendered_sql", {"output": output_cfg or {}}):
         return None
 
     run_dir = out_dir / "_run"
@@ -149,7 +148,6 @@ def _clean_metadata_payload(
     read_params_used: dict[str, Any],
     input_files: list[Path],
     outputs: list[dict[str, Any]],
-    policy: str,
 ) -> dict[str, Any]:
     metadata_payload: dict[str, Any] = {
         "layer": "clean",
@@ -189,7 +187,6 @@ def run_clean(
 ):
     clean_cfg = ensure_dict(clean_cfg)
     output_cfg = ensure_dict(output_cfg)
-    policy = resolve_artifact_policy(output_cfg)
     root_dir = resolve_root(root)
     raw_dir = layer_year_dir(root, "raw", dataset, year)
     out_dir = layer_year_dir(root, "clean", dataset, year)
@@ -216,7 +213,6 @@ def run_clean(
     rendered_sql_path = _write_rendered_sql(
         out_dir,
         sql,
-        policy=policy,
         output_cfg=output_cfg,
     )
     input_files = _select_clean_inputs(
@@ -262,7 +258,6 @@ def run_clean(
         read_params_used=read_params_used,
         input_files=input_files,
         outputs=outputs,
-        policy=policy,
     )
     metadata_payload["output_profile"] = output_profile
     metadata_path = write_metadata(

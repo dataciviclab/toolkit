@@ -9,11 +9,11 @@ from typing import Any
 
 from lab_connectors.duckdb import safe_connect
 
-from toolkit.clean._column_rules import (
-    _check_max_null_pct,
-    _check_not_null,
-    _check_primary_key,
-    _check_ranges,
+from toolkit.core.column_rules import (
+    check_max_null_pct,
+    check_not_null,
+    check_primary_key,
+    check_ranges,
 )
 from toolkit.clean._helpers import _input_files_from_clean_metadata, _profile_raw_input
 from toolkit.core.config_models import CleanValidationSpec, RangeRuleConfig, TransitionConfig
@@ -120,20 +120,20 @@ def validate_clean(
         if min_rows is not None and row_count < min_rows:
             errors.append(f"CLEAN row_count too small: {row_count} < {min_rows}")
 
-        err_warn = _check_not_null(con, "t", not_null, cols)
+        err_warn = check_not_null(con, "t", not_null, cols)
         errors.extend(err_warn[0])
         warnings.extend(err_warn[1])
 
         if row_count > 0:
-            err_warn = _check_max_null_pct(con, "t", max_null_pct, cols, row_count)
+            err_warn = check_max_null_pct(con, "t", max_null_pct, cols, row_count)
             errors.extend(err_warn[0])
             warnings.extend(err_warn[1])
 
-        err_warn = _check_primary_key(con, "t", primary_key, cols)
+        err_warn = check_primary_key(con, "t", primary_key, cols)
         errors.extend(err_warn[0])
         warnings.extend(err_warn[1])
 
-        err_warn = _check_ranges(con, "t", ranges, cols)
+        err_warn = check_ranges(con, "t", ranges, cols)
         errors.extend(err_warn[0])
         warnings.extend(err_warn[1])
 

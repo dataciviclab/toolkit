@@ -12,8 +12,9 @@ from typing import Any
 
 from lab_connectors.duckdb import safe_connect
 
-from toolkit.clean.duckdb_read import read_raw_to_relation, sql_path
+from toolkit.clean.duckdb_read import read_raw_to_relation
 from toolkit.core.layer_profile import profile_relation
+from toolkit.core.sql_utils import sql_path
 
 
 def _normalize_output_profile(output_profile: dict[str, Any] | int) -> dict[str, Any]:

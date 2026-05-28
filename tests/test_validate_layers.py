@@ -145,6 +145,25 @@ def test_validate_mart_report_uses_root_relative_dir(tmp_path: Path):
 
 
 @pytest.mark.policy
+def test_validate_mart_max_null_pct_rule(tmp_path: Path):
+    d = tmp_path / "mart"
+    d.mkdir(parents=True, exist_ok=True)
+
+    # Two rows: one has NULL (50% nulls > 10% threshold)
+    _write_parquet(
+        d / "foo.parquet",
+        "CREATE TABLE t AS SELECT * FROM (VALUES (1), (NULL)) v(valore)",
+    )
+
+    bad = validate_mart(d, table_rules={"foo": {"max_null_pct": {"valore": 0.1}}})
+    assert bad.ok is False
+    assert any("null_pct too high" in e for e in bad.errors)
+
+    ok = validate_mart(d, table_rules={"foo": {"max_null_pct": {"valore": 0.6}}})
+    assert ok.ok is True
+
+
+@pytest.mark.policy
 def test_check_transitions_warns_on_row_drop_over_threshold_and_removed_columns() -> None:
     transition_profiles = [
         {

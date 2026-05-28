@@ -2,21 +2,7 @@
 
 import pytest
 
-from toolkit.core.artifacts import (
-    profile_required,
-    resolve_artifact_policy,
-    should_write,
-)
-
-
-# resolve_artifact_policy — always returns "standard"
-
-@pytest.mark.policy
-def test_resolve_artifact_policy_returns_standard() -> None:
-    assert resolve_artifact_policy(None) == "standard"
-    assert resolve_artifact_policy({}) == "standard"
-    assert resolve_artifact_policy({"artifacts": "minimal"}) == "standard"
-    assert resolve_artifact_policy({"artifacts": "unknown"}) == "standard"
+from toolkit.core.artifacts import profile_required, should_write
 
 
 # profile_required
@@ -52,7 +38,7 @@ def test_profile_required_object_attribute_access() -> None:
     ("profile", "suggested_read", {"clean": {"read": {"source": "duckdb"}}}, False),
 ])
 def test_should_write(layer, artifact, cfg, expected) -> None:
-    assert should_write(layer, artifact, "standard", cfg) is expected
+    assert should_write(layer, artifact, cfg) is expected
 
 
 @pytest.mark.policy
@@ -65,4 +51,4 @@ def test_should_write(layer, artifact, cfg, expected) -> None:
 ])
 def test_should_write_always_true(layer, artifact) -> None:
     """All artifacts always returned True — no policy gating."""
-    assert should_write(layer, artifact, "standard", {}) is True
+    assert should_write(layer, artifact, {}) is True

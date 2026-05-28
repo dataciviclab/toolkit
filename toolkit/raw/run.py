@@ -5,8 +5,7 @@ from pathlib import Path
 
 from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict, parse_bool
-from toolkit.core.manifest import write_raw_manifest
-from toolkit.core.metadata import config_hash_for_year, sha256_bytes, write_metadata
+from toolkit.core.metadata import config_hash_for_year, merge_layer_manifest, sha256_bytes, write_metadata
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.registry import register_builtin_plugins
 from toolkit.core.validation import write_validation_json
@@ -199,35 +198,26 @@ def run_raw(
     }
     if source_id:
         metadata_payload["source_id"] = source_id
-    metadata_path = write_metadata(out_dir, metadata_payload)
+    write_metadata(out_dir, metadata_payload)
 
     # --- QA RAW ---
     result = validate_raw_output(out_dir, files_written)
     vpath = write_validation_json(out_dir / "raw_validation.json", result)
-    write_raw_manifest(
+    merge_layer_manifest(
         out_dir,
-        {
-            "dataset": dataset,
-            "year": year,
-            "run_id": run_id,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "sources": [
-                {"name": entry["name"], "output_file": entry["output_file"]}
-                for entry in manifest_sources
-            ],
-            "primary_output_file": primary_output_file,
-            "metadata": metadata_path.name,
-            "validation": vpath.name,
-            "summary": {
-                "ok": result.ok,
-                "errors_count": len(result.errors),
-                "warnings_count": len(result.warnings),
-            },
-            "outputs": [
-                {"file": f["file"], "sha256": f["sha256"], "bytes": f["bytes"]}
-                for f in files_written
-            ],
-        },
+        validation_path=vpath.name,
+        outputs=[
+            {"file": f["file"], "sha256": f["sha256"], "bytes": f["bytes"]}
+            for f in files_written
+        ],
+        ok=result.ok,
+        errors_count=len(result.errors),
+        warnings_count=len(result.warnings),
+        primary_output_file=primary_output_file,
+        sources=[
+            {"name": entry["name"], "output_file": entry["output_file"]}
+            for entry in manifest_sources
+        ],
     )
 
     if result.warnings:

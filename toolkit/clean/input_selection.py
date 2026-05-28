@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from toolkit.core.manifest import read_raw_manifest
+from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import from_root_relative, layer_year_dir, resolve_root
 from toolkit.core.run_context import get_run_dir, list_runs
 
@@ -126,13 +126,13 @@ def list_raw_candidates(
 
 
 def _manifest_primary_input(raw_year_dir: Path) -> tuple[Path | None, str | None]:
-    manifest = read_raw_manifest(raw_year_dir)
-    if not manifest:
-        return None, "CLEAN RAW manifest missing, using legacy selection."
+    meta = read_layer_metadata(raw_year_dir)
+    if not meta:
+        return None, "CLEAN RAW metadata missing, using legacy selection."
 
-    primary_output_file = manifest.get("primary_output_file")
+    primary_output_file = meta.get("primary_output_file")
     if not isinstance(primary_output_file, str) or not primary_output_file.strip():
-        return None, "CLEAN RAW manifest missing primary_output_file; using legacy selection."
+        return None, "CLEAN RAW metadata missing primary_output_file; using legacy selection."
 
     manifest_path = from_root_relative(primary_output_file, raw_year_dir)
     if _is_usable_input_file(manifest_path):
@@ -140,7 +140,7 @@ def _manifest_primary_input(raw_year_dir: Path) -> tuple[Path | None, str | None
 
     return (
         None,
-        "CLEAN RAW manifest primary_output_file is missing or invalid: "
+        "CLEAN RAW metadata primary_output_file is missing or invalid: "
         f"{primary_output_file}; using legacy selection.",
     )
 

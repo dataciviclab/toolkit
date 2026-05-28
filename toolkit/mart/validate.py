@@ -7,7 +7,7 @@ from typing import Any
 from lab_connectors.duckdb import safe_connect
 
 from toolkit.core.config_models import MartTableRuleConfig, MartValidationSpec
-from toolkit.core.metadata import write_layer_manifest
+from toolkit.core.metadata import merge_layer_manifest
 from toolkit.core.paths import layer_year_dir, to_root_relative
 from toolkit.core.sql_utils import q_ident
 from toolkit.core.validation import (
@@ -261,7 +261,7 @@ def run_mart_validation(cfg, year: int, logger, *, sample_mode: bool = False) ->
         )
 
     report = write_validation_json(Path(mart_dir) / "_validate" / "mart_validation.json", result)
-    write_layer_manifest(
+    merge_layer_manifest(
         mart_dir,
         metadata_path="metadata.json",
         validation_path="_validate/mart_validation.json",

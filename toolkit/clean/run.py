@@ -8,7 +8,7 @@ from toolkit.clean.read_config import resolve_clean_read_cfg
 from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict
-from toolkit.core.metadata import config_hash_for_year, file_record, write_layer_manifest, write_metadata
+from toolkit.core.metadata import config_hash_for_year, file_record, merge_layer_manifest, write_metadata
 from toolkit.core.paths import layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 from toolkit.clean.sql_execute import _normalize_output_profile, _run_sql
@@ -264,14 +264,11 @@ def run_clean(
         out_dir,
         metadata_payload,
     )
-    write_layer_manifest(
+    merge_layer_manifest(
         out_dir,
         metadata_path=metadata_path.name,
         validation_path="_validate/clean_validation.json",
         outputs=outputs,
-        ok=None,
-        errors_count=None,
-        warnings_count=None,
     )
     logger.info(f"CLEAN -> {output_path}")
     output_rows = int(output_profile.get("row_count") or 0)

@@ -41,7 +41,6 @@ def paths(
         typer.echo(f"root: {item['root']}")
         typer.echo(f"raw_dir: {item['paths']['raw']['dir']}")
         typer.echo(f"raw_metadata: {item['paths']['raw']['metadata']}")
-        typer.echo(f"raw_manifest: {item['paths']['raw']['manifest']}")
         typer.echo(f"raw_validation: {item['paths']['raw']['validation']}")
         typer.echo("raw_hints:")
         typer.echo(f"  - primary_output_file: {item['raw_hints']['primary_output_file']}")
@@ -81,14 +80,12 @@ def paths(
                     )
         typer.echo(f"clean_dir: {item['paths']['clean']['dir']}")
         typer.echo(f"clean_output: {item['paths']['clean']['output']}")
-        typer.echo(f"clean_manifest: {item['paths']['clean']['manifest']}")
         typer.echo(f"clean_metadata: {item['paths']['clean']['metadata']}")
         typer.echo(f"clean_validation: {item['paths']['clean']['validation']}")
         typer.echo(f"mart_dir: {item['paths']['mart']['dir']}")
         typer.echo("mart_outputs:")
         for output in item["paths"]["mart"]["outputs"]:
             typer.echo(f"  - {output}")
-        typer.echo(f"mart_manifest: {item['paths']['mart']['manifest']}")
         typer.echo(f"mart_metadata: {item['paths']['mart']['metadata']}")
         typer.echo(f"mart_validation: {item['paths']['mart']['validation']}")
         if item["paths"]["support"]:

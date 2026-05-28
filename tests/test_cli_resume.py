@@ -3,9 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from toolkit.cli import cmd_run
 from toolkit.cli.app import app
 from tests.helpers import make_dataset_yml, make_standard_sql
+
+pytestmark = pytest.mark.contract
 
 
 def _mock_all_runs(monkeypatch) -> dict:
@@ -76,23 +80,18 @@ def _write_layer_artifacts(root: Path, dataset: str, year: int, layer: str) -> N
     layer_dir = root / "data" / layer / dataset / str(year)
     layer_dir.mkdir(parents=True, exist_ok=True)
 
-    (layer_dir / "metadata.json").write_text("{}", encoding="utf-8")
     if layer == "raw":
         payload = b"col\n1\n"
         (layer_dir / "raw.csv").write_bytes(payload)
-        (layer_dir / "manifest.json").write_text(
-            json.dumps(
-                {
-                    "primary_output_file": "raw.csv",
-                    "outputs": [{"file": "raw.csv", "bytes": len(payload), "sha256": "x"}],
-                }
-            ),
-            encoding="utf-8",
-        )
+        meta = {
+            "primary_output_file": "raw.csv",
+            "outputs": [{"file": "raw.csv", "bytes": len(payload), "sha256": "x"}],
+        }
+        (layer_dir / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
     elif layer == "clean":
         parquet = layer_dir / f"{dataset}_{year}_clean.parquet"
         parquet.write_bytes(b"PAR1")
-        (layer_dir / "manifest.json").write_text(
+        (layer_dir / "metadata.json").write_text(
             json.dumps(
                 {
                     "outputs": [{"file": parquet.name, "bytes": 4, "sha256": "x"}],
@@ -103,7 +102,7 @@ def _write_layer_artifacts(root: Path, dataset: str, year: int, layer: str) -> N
     elif layer == "mart":
         parquet = layer_dir / "mart_example.parquet"
         parquet.write_bytes(b"PAR1")
-        (layer_dir / "manifest.json").write_text(
+        (layer_dir / "metadata.json").write_text(
             json.dumps(
                 {
                     "outputs": [{"file": parquet.name, "bytes": 4, "sha256": "x"}],

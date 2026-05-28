@@ -48,10 +48,10 @@ def test_mcp_toolkit_client_works_from_repo_layout(tmp_path: Path, monkeypatch) 
     assert state_payload["dataset"] == "project_example"
     assert Path(state_payload["run_dir"]).parts[-2:] == ("project_example", "2022")
 
-    # Arrange raw manifest without creating the primary output file.
+    # Arrange raw metadata with a missing primary output file.
     raw_dir = dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022"
     raw_dir.mkdir(parents=True, exist_ok=True)
-    (raw_dir / "manifest.json").write_text(
+    (raw_dir / "metadata.json").write_text(
         json.dumps({"primary_output_file": "missing.csv"}), encoding="utf-8"
     )
 
@@ -513,7 +513,7 @@ def test_raw_preview_with_real_csv(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
     raw_dir = dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022"
     raw_dir.mkdir(parents=True, exist_ok=True)
-    (raw_dir / "manifest.json").write_text(
+    (raw_dir / "metadata.json").write_text(
         json.dumps({"primary_output_file": "ispra_dettaglio_comunale_2022.csv"}), encoding="utf-8"
     )
     (raw_dir / "ispra_dettaglio_comunale_2022.csv").write_bytes(b"a;b\n1;2\n3;4\n")

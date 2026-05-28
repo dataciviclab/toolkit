@@ -9,7 +9,7 @@ import pytest
 
 from toolkit.clean.input_selection import _metadata_candidates, list_raw_candidates, select_inputs
 from toolkit.clean.run import run_clean
-from toolkit.core.manifest import write_raw_manifest
+from toolkit.core.io import write_json_atomic
 
 pytestmark = pytest.mark.contract
 
@@ -166,14 +166,9 @@ def test_run_clean_uses_manifest_primary(tmp_path: Path, monkeypatch):
     selected_file.write_text("a\n1\n", encoding="utf-8")
     other_file = raw_dir / "other.csv"
     other_file.write_text("a\n2\n", encoding="utf-8")
-    write_raw_manifest(
-        raw_dir,
+    write_json_atomic(
+        raw_dir / "metadata.json",
         {
-            "dataset": "demo",
-            "year": 2024,
-            "run_id": "run-1",
-            "created_at": "2026-02-28T00:00:00+00:00",
-            "sources": [{"name": "source_1", "output_file": "preferred.csv"}],
             "primary_output_file": "preferred.csv",
         },
     )
@@ -195,14 +190,9 @@ def test_run_clean_mode_all_ignores_manifest_primary(tmp_path: Path, monkeypatch
     first_file.write_text("a\n1\n", encoding="utf-8")
     second_file = raw_dir / "b.csv"
     second_file.write_text("a\n2\n", encoding="utf-8")
-    write_raw_manifest(
-        raw_dir,
+    write_json_atomic(
+        raw_dir / "metadata.json",
         {
-            "dataset": "demo",
-            "year": 2024,
-            "run_id": "run-1",
-            "created_at": "2026-02-28T00:00:00+00:00",
-            "sources": [{"name": "source_1", "output_file": "a.csv"}],
             "primary_output_file": "a.csv",
         },
     )
@@ -224,14 +214,9 @@ def test_run_clean_explicit_include_ignores_manifest_primary(tmp_path: Path, mon
     preferred_file.write_text("a\n1\n", encoding="utf-8")
     target_file = raw_dir / "uscite.csv"
     target_file.write_text("a\n2\n", encoding="utf-8")
-    write_raw_manifest(
-        raw_dir,
+    write_json_atomic(
+        raw_dir / "metadata.json",
         {
-            "dataset": "demo",
-            "year": 2024,
-            "run_id": "run-1",
-            "created_at": "2026-02-28T00:00:00+00:00",
-            "sources": [{"name": "source_1", "output_file": "preferred.csv"}],
             "primary_output_file": "preferred.csv",
         },
     )
@@ -430,7 +415,7 @@ def test_clean_manifest_missing_warns_and_selects_with_default_mode(tmp_path: Pa
         )
 
     assert seen["input_files"] == [large_file]
-    assert "CLEAN RAW manifest missing, using legacy selection" in caplog.text
+    assert "CLEAN RAW metadata missing, using legacy selection" in caplog.text
 
 
 def test_clean_manifest_points_missing_file_falls_back_and_warns(tmp_path: Path, monkeypatch, caplog) -> None:
@@ -439,14 +424,9 @@ def test_clean_manifest_points_missing_file_falls_back_and_warns(tmp_path: Path,
     large_file = _write_csv(raw_dir / "large.csv", "a\n" + ("1\n" * 20))
     os.utime(small_file, (100, 100))
     os.utime(large_file, (200, 200))
-    write_raw_manifest(
-        raw_dir,
+    write_json_atomic(
+        raw_dir / "metadata.json",
         {
-            "dataset": "demo",
-            "year": 2024,
-            "run_id": "run-1",
-            "created_at": "2026-02-28T00:00:00+00:00",
-            "sources": [{"name": "source_1", "output_file": "missing.csv"}],
             "primary_output_file": "missing.csv",
         },
     )

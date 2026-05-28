@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 import json
 
-from toolkit.core.manifest import read_raw_manifest, write_raw_manifest
+from toolkit.core.metadata import merge_layer_manifest
 from toolkit.core.paths import layer_year_dir
 from toolkit.core.validation import ValidationResult, build_validation_summary, write_validation_json
 
@@ -124,26 +124,13 @@ def run_raw_validation(root: str | None, dataset: str, year: int, logger) -> dic
         sections=result.sections,
     )
     report = write_validation_json(out_dir / "raw_validation.json", result)
-    existing_manifest = read_raw_manifest(out_dir) or {
-        "dataset": dataset,
-        "year": year,
-        "run_id": str(metadata.get("run_id") or "unknown"),
-        "created_at": str(metadata.get("timestamp_utc") or ""),
-        "sources": [],
-        "primary_output_file": "",
-    }
-    existing_manifest.update(
-        {
-            "metadata": "metadata.json",
-            "validation": report.name,
-            "summary": {
-                "ok": result.ok,
-                "errors_count": len(result.errors),
-                "warnings_count": len(result.warnings),
-            },
-            "outputs": metadata.get("outputs", []),
-        }
+    merge_layer_manifest(
+        out_dir,
+        validation_path=report.name,
+        outputs=metadata.get("outputs", []),
+        ok=result.ok,
+        errors_count=len(result.errors),
+        warnings_count=len(result.warnings),
     )
-    write_raw_manifest(out_dir, existing_manifest)
     logger.info(f"VALIDATE RAW -> {report} (ok={result.ok})")
     return build_validation_summary(result)

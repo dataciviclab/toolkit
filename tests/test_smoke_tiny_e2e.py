@@ -46,14 +46,11 @@ def _assert_common_outputs(root: Path, dataset: str, year: int, mart_tables: lis
     clean_parquet = clean_dir / f"{dataset}_{year}_clean.parquet"
 
     assert (raw_dir / "metadata.json").exists()
-    assert (raw_dir / "manifest.json").exists()
     assert (raw_dir / "raw_validation.json").exists()
     assert clean_parquet.exists()
     assert (clean_dir / "metadata.json").exists()
-    assert (clean_dir / "manifest.json").exists()
     assert (clean_dir / "_validate" / "clean_validation.json").exists()
     assert (mart_dir / "metadata.json").exists()
-    assert (mart_dir / "manifest.json").exists()
     assert (mart_dir / "_validate" / "mart_validation.json").exists()
 
     for table in mart_tables:
@@ -64,10 +61,10 @@ def _assert_common_outputs(root: Path, dataset: str, year: int, mart_tables: lis
     assert clean_validation["ok"] is True
     assert mart_validation["ok"] is True
 
-    clean_manifest = json.loads((clean_dir / "manifest.json").read_text(encoding="utf-8"))
-    mart_manifest = json.loads((mart_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert clean_manifest["summary"]["ok"] is True
-    assert mart_manifest["summary"]["ok"] is True
+    clean_meta = json.loads((clean_dir / "metadata.json").read_text(encoding="utf-8"))
+    mart_meta = json.loads((mart_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert clean_meta["summary"]["ok"] is True
+    assert mart_meta["summary"]["ok"] is True
 
     con = duckdb.connect(":memory:")
     assert int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{clean_parquet.as_posix()}')").fetchone()[0]) > 0
@@ -343,8 +340,8 @@ def test_smoke_e2e_local_zip_extractor(tmp_path: Path) -> None:
     _assert_common_outputs(Path(cfg.root), cfg.dataset, year, ["mart_scores"])
 
     raw_dir = Path(cfg.root) / "data" / "raw" / cfg.dataset / str(year)
-    raw_manifest = json.loads((raw_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert raw_manifest["primary_output_file"] == "zip_payload.csv"
+    raw_meta = json.loads((raw_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert raw_meta["primary_output_file"] == "zip_payload.csv"
 
 
 def test_smoke_e2e_local_file_path_year_template(tmp_path: Path) -> None:
@@ -423,8 +420,8 @@ def test_smoke_e2e_local_file_path_year_template(tmp_path: Path) -> None:
     _assert_common_outputs(Path(cfg.root), cfg.dataset, year, ["mart_totali"])
 
     raw_dir = Path(cfg.root) / "data" / "raw" / cfg.dataset / str(year)
-    raw_manifest = json.loads((raw_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert raw_manifest["primary_output_file"] == "tiny_it_2024.csv"
+    raw_meta = json.loads((raw_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert raw_meta["primary_output_file"] == "tiny_it_2024.csv"
 
 
 def test_smoke_e2e_multi_year_mart(tmp_path: Path) -> None:

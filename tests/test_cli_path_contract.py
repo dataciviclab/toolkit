@@ -623,10 +623,9 @@ def test_contracts_run_record_dir() -> None:
 
 
 def test_contracts_constants() -> None:
-    """contract: costanti METADATA_JSON e MANIFEST_JSON esistono."""
-    from toolkit.contracts import MANIFEST_JSON, METADATA_JSON
+    """contract: costante METADATA_JSON esiste."""
+    from toolkit.contracts import METADATA_JSON
     assert METADATA_JSON == "metadata.json"
-    assert MANIFEST_JSON == "manifest.json"
 
 
 def test_contracts_clean_parquet_suffix() -> None:

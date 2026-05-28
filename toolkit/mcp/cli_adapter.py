@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from toolkit.cli.inspect._helpers import _payload_for_year
-from toolkit.mcp.contracts import InspectPathsResult
+from toolkit.mcp.types import InspectPathsResult
 from lab_connectors.mcp.errors import ErrorCode
 
 from toolkit.mcp.errors import ToolkitClientError

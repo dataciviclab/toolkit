@@ -114,7 +114,6 @@ def run_profile(cfg: ToolkitConfig, years: list[int], logger: Logger) -> None:
 
     Chiamabile sia da inspect/profile che da cmd_profile (deprecato).
     """
-    output_cfg: dict[str, Any] | None = dump_cfg_section(cfg.output)
     clean_cfg: dict[str, Any] = dump_cfg_section(cfg.clean) or {}
 
     for y in years:

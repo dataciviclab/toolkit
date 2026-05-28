@@ -17,6 +17,8 @@ from toolkit.mcp.toolkit_client import (
     summary,
 )
 
+pytestmark = pytest.mark.contract
+
 
 def _write_real_parquet(path: Path) -> None:
     """Write a minimal real parquet file via DuckDB."""

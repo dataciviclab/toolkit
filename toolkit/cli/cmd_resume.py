@@ -105,12 +105,12 @@ def _resolve_resume_start(
 
 
 def resume(
-    dataset: str = typer.Option(..., "--dataset", help="Dataset name"),
-    year: int = typer.Option(..., "--year", help="Dataset year"),
+    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    year: int | None = typer.Option(None, "--year", "-y", help="Dataset year (default: first)"),
+    dataset: str | None = typer.Option(None, "--dataset", help="Dataset name (auto-da-config)"),
     run_id: str | None = typer.Option(None, "--run-id", help="Specific run id"),
     latest: bool = typer.Option(False, "--latest", help="Resume latest run"),
     from_layer: str | None = typer.Option(None, "--from-layer", help="Force restart from raw | clean | mart"),
-    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
 ):
     """
     Riprende un run dal primo layer non SUCCESS.
@@ -121,12 +121,15 @@ def resume(
         raise typer.BadParameter("--from-layer must be one of: raw, clean, mart")
 
     cfg = load_config(config)
-    if cfg.dataset != dataset:
-        raise typer.BadParameter(f"Config dataset mismatch: expected {dataset}, found {cfg.dataset}")
-    if year not in cfg.years:
-        raise typer.BadParameter(f"Year {year} is not configured in {config}")
+    ds_name = dataset or cfg.dataset
+    yr = year if year is not None else (cfg.years[0] if cfg.years else None)
+    if yr is None:
+        raise typer.BadParameter(f"No years configured in {config}")
 
-    run_dir = get_run_dir(cfg.root, dataset, year)
+    if dataset is not None and cfg.dataset != dataset:
+        raise typer.BadParameter(f"Config dataset mismatch: expected {dataset}, found {cfg.dataset}")
+
+    run_dir = get_run_dir(cfg.root, ds_name, yr)
     try:
         record = read_run_record(run_dir, run_id) if run_id else latest_run(run_dir)
     except FileNotFoundError as exc:
@@ -134,7 +137,7 @@ def resume(
 
     start_from_layer, notes = _resolve_resume_start(
         cfg,
-        year,
+        yr,
         record,
         requested_from_layer=from_layer,
     )
@@ -151,7 +154,7 @@ def resume(
     logger = get_logger()
     new_context = run_year(
         cfg,
-        year,
+        yr,
         step="all",
         start_from_layer=start_from_layer,
         logger=logger,

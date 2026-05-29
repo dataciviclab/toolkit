@@ -14,11 +14,11 @@ from toolkit.cli.inspect._helpers import (
     _check_run_record_coherence,
     _exists,
     _payload_for_year,
-    _read_parquet_row_count,
     _read_validation_content,
     _validation_summary_for_layer,
 )
 from toolkit.core.config import load_config
+from toolkit.core.parquet import parquet_row_count
 from toolkit.core.paths import (
     RAW_VALIDATION,
     CLEAN_VALIDATION,
@@ -258,9 +258,14 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
 
     # --- Clean layer ---
     clean = s.get("layers", {}).get("clean", {})
-    clean_path_str = clean.get("output")
-    clean_path = Path(clean_path_str) if clean_path_str else None
-    clean_rows = _read_parquet_row_count(clean_path) if clean_path else None
+    clean_val = clean.get("validation") or {}
+    clean_rows = clean_val.get("row_count")
+    # Fallback: se validation non disponibile, leggi dal parquet diretto
+    if clean_rows is None:
+        clean_path_str = clean.get("output")
+        clean_path = Path(clean_path_str) if clean_path_str else None
+        if clean_path and clean_path.exists():
+            clean_rows = parquet_row_count(clean_path)
     clean_ok = clean.get("output_exists") and (clean_rows is not None)
     checks.append({
         "check": "clean_output_readable",
@@ -272,11 +277,15 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
 
     # --- Mart layer ---
     mart = s.get("layers", {}).get("mart", {})
+    mart_val = mart.get("validation") or {}
     mart_outputs = mart.get("outputs", [])
     mart_checks: list[dict[str, Any]] = []
     for output_name in mart_outputs:
         o_path = Path(output_name)
-        rows = _read_parquet_row_count(o_path)
+        rows = mart_val.get("row_count") if o_path.exists() else None
+        # Fallback: leggi dal parquet se validation non disponibile
+        if rows is None and o_path.exists():
+            rows = parquet_row_count(o_path)
         mart_checks.append({
             "name": o_path.name,
             "exists": o_path.exists(),

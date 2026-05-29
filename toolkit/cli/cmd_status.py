@@ -136,32 +136,44 @@ def _print_layer_profiles(dataset: str, year: int, layers: dict[str, Any]) -> No
 
 
 def status(
-    dataset: str = typer.Option(..., "--dataset", help="Dataset name"),
-    year: int = typer.Option(..., "--year", help="Dataset year"),
+    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    year: int | None = typer.Option(None, "--year", "-y", help="Dataset year (default: first)"),
+    dataset: str | None = typer.Option(None, "--dataset", help="Dataset name (auto-da-config)"),
     run_id: str | None = typer.Option(None, "--run-id", help="Specific run id"),
     latest: bool = typer.Option(False, "--latest", help="Show latest run"),
-    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
 ):
     """
-    Mostra lo stato dell'ultimo run o di uno specifico run_id.
+    Mostra lo stato dei layer raw/clean/mart per un dataset.
     """
     if run_id and latest:
         raise typer.BadParameter("Use either --run-id or --latest, not both")
 
     cfg = load_config(config)
+    ds_name = dataset or cfg.dataset
+    yr = year if year is not None else (cfg.years[0] if cfg.years else None)
 
-    # Usa summary() per i dati centralizzati
-    s = _summary(config, year or None)
+    s = _summary(config, yr)
     record = (s.get("run") or {}).get("latest_run_record") or {}
 
     # Se run_id specifico, carica quel record invece del latest
     if run_id:
-        run_dir = get_run_dir(cfg.root, dataset, year)
+        run_dir = get_run_dir(cfg.root, ds_name, yr)
         specific = read_run_record(run_dir, run_id)
         if specific:
             record = specific
 
     layers = s.get("layers", {})
+
+    if as_json:
+        typer.echo(json.dumps({
+            "dataset": ds_name,
+            "year": yr,
+            "layers": layers,
+            "record": record,
+            "warnings": s.get("warnings", []),
+        }, indent=2, ensure_ascii=False))
+        return
 
     # Layer run status: da summary di default, dal record specifico se --run-id
     if run_id:
@@ -181,13 +193,13 @@ def status(
             for name in ("raw", "clean", "mart")
         }
 
-    typer.echo(f"dataset: {record.get('dataset', dataset)}")
-    typer.echo(f"year: {record.get('year', year)}")
+    typer.echo(f"dataset: {record.get('dataset', ds_name)}")
+    typer.echo(f"year: {record.get('year', yr)}")
     typer.echo(f"run_id: {record.get('run_id')}")
     typer.echo(f"started_at: {record.get('started_at')}")
     typer.echo(f"status: {record.get('status')}")
 
-    # Raw hints da summary + inspect_paths per suggested_read_path
+    # Raw hints
     raw_layer = layers.get("raw") or {}
     raw_hints = {
         "primary_output_file": raw_layer.get("primary_output_file"),
@@ -199,7 +211,6 @@ def status(
         "skip": raw_layer.get("skip_suggested"),
         "warnings": raw_layer.get("raw_warnings", []),
     }
-    # suggested_read_path non è in summary — lo ricostruiamo
     raw_dir = (layers.get("raw") or {}).get("dir")
     if raw_dir and raw_hints.get("suggested_read_exists"):
         raw_hints["suggested_read_path"] = str(Path(raw_dir) / RAW_PROFILE_DIR / RAW_SUGGESTED_READ)
@@ -220,10 +231,10 @@ def status(
 
     _print_validation_summaries(layers)
 
-    # multi-year mart (ex cross_year)
+    # multi-year mart
     multi_year_tables = [t for t in cfg.mart.tables if t.years]
     if multi_year_tables:
-        my_dir = layer_dataset_dir(cfg.root, "mart", dataset)
+        my_dir = layer_dataset_dir(cfg.root, "mart", ds_name)
         my_meta = my_dir / METADATA
         if my_meta.exists():
             content = json.loads(my_meta.read_text(encoding="utf-8"))
@@ -235,7 +246,7 @@ def status(
                 for t in my_tables:
                     typer.echo(f"    - {t.get('name', '?')} years={t.get('years', [])}")
 
-    _print_layer_profiles(dataset, year, layers)
+    _print_layer_profiles(ds_name, yr, layers)
 
     if record.get("status") == "FAILED" and record.get("error"):
         typer.echo("")

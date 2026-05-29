@@ -9,8 +9,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-import duckdb
-
 from toolkit.cli.common import load_layer_profile_summaries
 from toolkit.core.config import ensure_dict
 from toolkit.core.metadata import read_layer_metadata
@@ -219,6 +217,9 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
 # DuckDB helpers — schema, row count, preview da parquet e CSV
 # Condivise da cli/inspect e mcp (MCP wrappa con ToolkitClientError).
 # ---------------------------------------------------------------------------
+# Le implementazioni reali sono in toolkit.core.parquet.
+# Questi wrapper servono solo per chiudere errori con
+# FileNotFoundError/RuntimeError invece di return silenziosi.
 
 
 def _sql_literal(value: str) -> str:
@@ -227,87 +228,33 @@ def _sql_literal(value: str) -> str:
 
 
 def _schema_from_parquet(parquet_path: Path) -> dict[str, Any]:
-    """Return schema (columns + count) of a parquet file via DuckDB.
+    from toolkit.core.parquet import parquet_schema
 
-    Raises:
-        FileNotFoundError: if the file doesn't exist.
-        RuntimeError: if DuckDB can't read the file.
-    """
     if not parquet_path.exists():
         raise FileNotFoundError(f"Parquet non trovato: {parquet_path}")
-    relation = f"read_parquet('{_sql_literal(str(parquet_path))}')"
-    try:
-        with duckdb.connect(database=":memory:") as conn:
-            conn.execute("PRAGMA disable_progress_bar")
-            describe_rows = conn.execute(f"DESCRIBE SELECT * FROM {relation}").fetchall()
-    except Exception as exc:
-        raise RuntimeError(f"Lettura schema parquet fallita per {parquet_path}: {exc}") from exc
-
-    columns = [{"name": row[0], "type": row[1]} for row in describe_rows]
-    return {"path": str(parquet_path), "column_count": len(columns), "columns": columns}
+    cols = parquet_schema(parquet_path)
+    if not cols:
+        raise RuntimeError(f"Lettura schema parquet fallita per {parquet_path}")
+    return {"path": str(parquet_path), "column_count": len(cols), "columns": cols}
 
 
 def _read_parquet_row_count(parquet_path: Path | None) -> int | None:
-    """Return row count of a parquet file, or None if unreadable."""
-    if parquet_path is None or not parquet_path.exists():
+    from toolkit.core.parquet import parquet_row_count
+
+    if parquet_path is None:
         return None
-    try:
-        with duckdb.connect(database=":memory:") as conn:
-            conn.execute("PRAGMA disable_progress_bar")
-            result = conn.execute(
-                f"SELECT COUNT(*) FROM read_parquet('{_sql_literal(str(parquet_path))}')"
-            ).fetchone()
-            return int(result[0]) if result else None
-    except Exception:
-        return None
+    return parquet_row_count(parquet_path)
 
 
 def _read_parquet_preview(parquet_path: Path, limit: int = 10) -> dict[str, Any]:
-    """Return schema + row preview of a parquet file via DuckDB.
+    from toolkit.core.parquet import parquet_preview
 
-    Returns:
-        dict with keys: path, column_count, columns (list of {name, type}),
-        row_count, preview (list of dicts), truncated (bool).
-
-    Raises:
-        FileNotFoundError: if the file doesn't exist.
-        RuntimeError: if DuckDB can't read the file.
-    """
     if not parquet_path.exists():
         raise FileNotFoundError(f"Parquet non trovato: {parquet_path}")
-
-    rel = f"read_parquet('{_sql_literal(str(parquet_path))}')"
-    try:
-        with duckdb.connect(database=":memory:") as conn:
-            conn.execute("PRAGMA disable_progress_bar")
-
-            # schema
-            describe = conn.execute(f"DESCRIBE SELECT * FROM {rel}").fetchall()
-            columns = [{"name": row[0], "type": row[1]} for row in describe]
-
-            # row count
-            count_row = conn.execute(f"SELECT COUNT(*) FROM {rel}").fetchone()
-            row_count = int(count_row[0]) if count_row else None
-
-            # preview
-            preview_rows = conn.execute(
-                f"SELECT * FROM {rel} LIMIT {int(limit)}"
-            ).fetchall()
-            col_names = [c["name"] for c in columns]
-            preview = [dict(zip(col_names, row)) for row in preview_rows]
-
-            truncated = bool(row_count and row_count > limit)
-
-            return {
-                "path": str(parquet_path),
-                "column_count": len(columns),
-                "columns": columns,
-                "row_count": row_count,
-                "preview": preview,
-                "truncated": truncated,
-            }
-    except Exception as exc:
-        raise RuntimeError(f"Lettura parquet fallita per {parquet_path}: {exc}") from exc
+    result = parquet_preview(parquet_path, limit=limit)
+    if not result["columns"]:
+        raise RuntimeError(f"Lettura schema parquet fallita per {parquet_path}")
+    return result
 
 
 def _exists(path: str | None) -> bool:

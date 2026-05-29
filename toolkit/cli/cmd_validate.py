@@ -49,11 +49,13 @@ def validate(
                 "warnings_count": summary.get("warnings_count", 0),
             })
 
+    any_failed = any(not r["passed"] for r in results)
+
     if as_json:
         typer.echo(json.dumps(results, indent=2, ensure_ascii=False))
+        if any_failed:
+            raise typer.Exit(code=1)
         return
-
-    any_failed = any(not r["passed"] for r in results)
     for r in results:
         icon = "✅" if r["passed"] else "🔴"
         typer.echo(f"{icon} {r['year']}/{r['layer']}  errors={r['errors_count']} warnings={r['warnings_count']}")

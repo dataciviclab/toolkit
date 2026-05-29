@@ -8,6 +8,8 @@ import pytest
 from toolkit.core.config import load_config
 from toolkit.core.config_models import load_config_model
 
+pytestmark = pytest.mark.policy
+
 
 # ---------------------------------------------------------------------------
 # Helpers

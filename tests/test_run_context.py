@@ -3,9 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import time
 
-from toolkit.core.run_context import RunContext, get_run_dir, read_run_record, write_run_record
+from toolkit.core.run_context import RunContext
+from toolkit.core.run_records import get_run_dir, read_run_record, write_run_record
+
+pytestmark = pytest.mark.contract
 
 
 def _read_context(path: Path) -> dict[str, object]:

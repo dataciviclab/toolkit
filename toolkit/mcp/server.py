@@ -57,12 +57,6 @@ def toolkit_inspect_paths(config_path: str, year: int = 0) -> dict[str, Any]:
 
 
 @mcp.tool(
-    name="toolkit_show_schema",
-    description="[DEPRECATED] usa toolkit_inspect_schema",
-    structured_output=True,
-)
-@mcp.tool(
-    name="toolkit_inspect_schema",
     description="Mostra lo schema di raw, clean o mart.",
     structured_output=True,
 )
@@ -71,12 +65,6 @@ def toolkit_inspect_schema(config_path: str, layer: str = "clean", year: int = 0
 
 
 @mcp.tool(
-    name="toolkit_raw_profile",
-    description="[DEPRECATED] usa toolkit_inspect_profile",
-    structured_output=True,
-)
-@mcp.tool(
-    name="toolkit_inspect_profile",
     description="Mostra il profilo raw: encoding, delimiter, colonne, missingness e mapping suggestions.",
     structured_output=True,
 )

@@ -839,32 +839,6 @@ def run_full(
         raise typer.Exit(code=1)
 
 
-def _deprecated_cross_year_cmd(
-    ctx: typer.Context,
-    config: str = typer.Option(..., "--config", "-c"),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-) -> None:
-    """⚠️ RIMOSSO: sostituito da mart.tables[].years.
-
-    Il layer cross_year non esiste piu'. Definisci la tabella multi-anno
-    direttamente in mart.tables[] con il campo 'years', poi esegui:
-        toolkit run mart --config <yml>
-    """
-    typer.echo(
-        "ERRORE: 'toolkit run cross_year' non esiste piu'.\n"
-        "Il layer cross_year e' stato assorbito in MART.\n\n"
-        "Per tabelle multi-anno, aggiungi in dataset.yml:\n"
-        "  mart:\n"
-        "    tables:\n"
-        "      - name: mia_tabella\n"
-        "        sql: sql/multi_anno.sql\n"
-        "        years: [2022, 2023]\n\n"
-        "Poi esegui: toolkit run mart --config <yml>",
-        err=True,
-    )
-    raise typer.Exit(code=1)
-
-
 def register(app: typer.Typer) -> None:
     run_sub = typer.Typer(no_args_is_help=True, add_completion=False)
     run_sub.command("probe")(run_probe_cmd)
@@ -873,6 +847,4 @@ def register(app: typer.Typer) -> None:
     run_sub.command("mart")(run_mart_cmd)
     run_sub.command("all")(run_all_cmd)
     run_sub.command("full")(run_full)
-    run_sub.command("cross_year")(_deprecated_cross_year_cmd)
-    run_sub.command("cross-year")(_deprecated_cross_year_cmd)  # alias hyphen
     app.add_typer(run_sub, name="run", help="Esegue la pipeline RAW → CLEAN → MART per un dataset.")

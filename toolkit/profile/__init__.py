@@ -2,8 +2,8 @@
 
 from toolkit.profile.raw import (
     RawProfile,
-    build_profile_hints,
     build_suggested_read_cfg,
+    profile_excel,
     profile_raw,
     profile_with_read_cfg,
     sniff_source_file,
@@ -13,8 +13,8 @@ from toolkit.profile.raw import (
 
 __all__ = [
     "RawProfile",
-    "build_profile_hints",
     "build_suggested_read_cfg",
+    "profile_excel",
     "profile_raw",
     "profile_with_read_cfg",
     "sniff_source_file",

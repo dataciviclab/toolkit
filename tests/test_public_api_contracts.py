@@ -1,3 +1,5 @@
+import pytest
+
 import toolkit.clean as clean_pkg
 import toolkit.plugins as plugins_pkg
 import toolkit.profile as profile_pkg
@@ -6,8 +8,8 @@ from toolkit.clean import run_clean, run_clean_validation, validate_clean
 from toolkit.plugins import CkanSource, HttpFileSource, LocalFileSource, SdmxSource, SparqlSource
 from toolkit.profile import (
     RawProfile,
-    build_profile_hints,
     build_suggested_read_cfg,
+    profile_excel,
     profile_raw,
     profile_with_read_cfg,
     sniff_source_file,
@@ -15,6 +17,8 @@ from toolkit.profile import (
     write_suggested_read_yml,
 )
 from toolkit.raw import run_raw, run_raw_validation, validate_raw_output
+
+pytestmark = pytest.mark.contract
 
 
 def test_clean_exports() -> None:
@@ -49,8 +53,8 @@ def test_plugins_exports() -> None:
 def test_profile_exports() -> None:
     assert profile_pkg.__all__ == [
         "RawProfile",
-        "build_profile_hints",
         "build_suggested_read_cfg",
+        "profile_excel",
         "profile_raw",
         "profile_with_read_cfg",
         "sniff_source_file",
@@ -60,8 +64,8 @@ def test_profile_exports() -> None:
     assert RawProfile.__name__ == "RawProfile"
     assert callable(profile_raw)
     assert callable(profile_with_read_cfg)
+    assert callable(profile_excel)
     assert callable(sniff_source_file)
-    assert callable(build_profile_hints)
     assert callable(build_suggested_read_cfg)
     assert callable(write_raw_profile)
     assert callable(write_suggested_read_yml)

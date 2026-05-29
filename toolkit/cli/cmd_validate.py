@@ -34,6 +34,11 @@ def validate(
     year_arg = year if isinstance(year, int) else None
     selected_years = iter_selected_years(cfg, year_arg=year_arg, years_arg=years_arg)
 
+    # Silenzia logger per output JSON pulito
+    if as_json:
+        import logging as _logging
+        _logging.getLogger("toolkit").setLevel(_logging.CRITICAL + 1)
+
     layers = ["raw", "clean", "mart"] if step == "all" else [step]
     results: list[dict[str, object]] = []
 

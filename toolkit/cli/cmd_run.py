@@ -452,6 +452,40 @@ def run(
         _maybe_run_multi_year_mart(cfg, selected_years, dry_run=dry_flag, logger=logger)
 
 
+_STEP_DOCSTRINGS: dict[str, str] = {
+    "probe": (
+        "Verifica la raggiungibilità delle fonti remote definite in raw.sources.\n\n"
+        "Supporta HTTP, CKAN. Salta fonti locali (local_file), SDMX e SPARQL "
+        "(non timeoutano). Non blocca mai la pipeline: l'errore reale sarà "
+        "rilevato da raw."
+    ),
+    "raw": (
+        "Scarica i file raw dalle fonti e produce il profiling.\n\n"
+        "Esegue probe + download dei file raw secondo la configurazione "
+        "raw.sources. Produce il profilo raw (encoding, delimiter, colonne, "
+        "missingness, mapping_suggestions) per guidare la scrittura di clean.sql."
+    ),
+    "clean": (
+        "Applica le trasformazioni SQL (clean.sql) ai dati raw.\n\n"
+        "Legge il parquet raw, esegue clean.sql e produce il layer CLEAN. "
+        "Il risultato è un dataset strutturato in formato Parquet, "
+        "pronto per le trasformazioni MART."
+    ),
+    "mart": (
+        "Genera le tabelle MART (dataset pubblico) dai dati clean.\n\n"
+        "Applica le query SQL definite in mart.tables[] ai dati clean "
+        "e produce tabelle denormalizzate in formato Parquet. "
+        "Per tabelle multi-anno (con years esplicito), esegue anche "
+        "l'aggregazione cross-year automaticamente."
+    ),
+    "all": (
+        "Esegue l'intera pipeline: probe → raw → clean → mart.\n\n"
+        "Equivalente a eseguire i quattro step in sequenza. "
+        "Se il dataset è mart-only (compose), usa solo lo step mart."
+    ),
+}
+
+
 def _make_step_cmd(step: str):
     """Factory: returns a Typer command wrapping run_year for the given step."""
     _step = step
@@ -498,7 +532,7 @@ def _make_step_cmd(step: str):
             _maybe_run_multi_year_mart(cfg, selected_years, dry_run=dry_flag, logger=logger, sampling_active=_sampling)
 
     cmd.__name__ = f"run_{_step}_cmd"
-    cmd.__doc__ = f"Esegue lo step {_step} della pipeline."
+    cmd.__doc__ = _STEP_DOCSTRINGS.get(_step, f"Esegue lo step {_step} della pipeline.")
     return cmd
 
 

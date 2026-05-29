@@ -175,7 +175,7 @@ Espone 9 tool read-only per ispezione rapida:
 | Tool | Cosa fa |
 |---|---|
 | `toolkit_inspect_paths` | Path contract risolto + metadati run |
-| `toolkit_show_schema` | Schema di raw / clean / mart |
+| `toolkit_inspect_schema` | Schema di raw / clean / mart |
 | `toolkit_run_summary` | Statistiche aggregate dei run |
 | `toolkit_summary` | Dashboard diagnostico per dataset |
 | `toolkit_review_readiness` | Check di prontezza per review |

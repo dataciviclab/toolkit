@@ -7,7 +7,7 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 ### Ispezione pipeline
 
 - `toolkit_inspect_paths(config_path, year=0)` — path contract + run metadata (run_file_count, years_seen, latest_run)
-- `toolkit_show_schema(config_path, layer="clean", year=0)`
+- `toolkit_inspect_schema(config_path, layer="clean", year=0)`
 - `toolkit_run_summary(config_path, year=0)` — statistiche aggregate (totali, successi, durata media)
 - `toolkit_summary(config_path, year=0)` — dashboard diagnostico (layer + run + warnings)
 - `toolkit_review_readiness(config_path, year=0)` — check di prontezza per review candidate
@@ -59,7 +59,7 @@ Sostituire il path del `command` con il Python reale del clone locale che usera'
 ## Note tecniche
 
 - `toolkit_inspect_paths` usa `toolkit inspect paths --json`; arricchito con run_file_count e years_seen dalla CLI
-- `toolkit_show_schema`
+- `toolkit_inspect_schema`
   - `raw`: usa `toolkit inspect schema-diff --json`
   - `clean` / `mart`: legge schema reale dei parquet risolti via `inspect paths`
 - `toolkit_schema_diff` confronta segnali schema raw (encoding, delim, colonne) tra tutti gli anni configurati per il dataset; riutilizza la stessa logica di `toolkit inspect schema-diff` ma esposto come tool MCP

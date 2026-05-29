@@ -1,25 +1,15 @@
 from pathlib import Path
+from tests.helpers import write_parquet
 
 import pytest
-import duckdb
 
 from toolkit.clean.validate import validate_clean
-
-
-def _write_parquet(path: Path, sql_create_table_t: str) -> None:
-    """
-    sql_create_table_t must create a table named 't'
-    """
-    con = duckdb.connect(":memory:")
-    con.execute(sql_create_table_t)
-    con.execute(f"COPY t TO '{path.as_posix()}' (FORMAT 'parquet')")
-    con.close()
 
 
 @pytest.mark.policy
 def test_validate_clean_pk_duplicates_fails(tmp_path: Path):
     p = tmp_path / "clean.parquet"
-    _write_parquet(
+    write_parquet(
         p,
         """
         CREATE TABLE t AS
@@ -42,7 +32,7 @@ def test_validate_clean_pk_duplicates_fails(tmp_path: Path):
 @pytest.mark.policy
 def test_validate_clean_range_fails(tmp_path: Path):
     p = tmp_path / "clean.parquet"
-    _write_parquet(
+    write_parquet(
         p,
         """
         CREATE TABLE t AS
@@ -65,7 +55,7 @@ def test_validate_clean_range_fails(tmp_path: Path):
 @pytest.mark.policy
 def test_validate_clean_null_pct_fails(tmp_path: Path):
     p = tmp_path / "clean.parquet"
-    _write_parquet(
+    write_parquet(
         p,
         """
         CREATE TABLE t AS

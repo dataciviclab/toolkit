@@ -5,6 +5,7 @@ import re
 
 import duckdb
 import pytest
+from tests.helpers import NoopLogger
 
 from toolkit.clean.run import run_clean
 from toolkit.cli.cmd_validate import validate as validate_cmd
@@ -13,17 +14,6 @@ from toolkit.mart.run import run_mart
 from toolkit.raw.run import run_raw
 
 pytestmark = pytest.mark.smoke
-
-
-class _NoopLogger:
-    def info(self, *_args, **_kwargs):
-        return None
-
-    def warning(self, *_args, **_kwargs):
-        return None
-
-    def error(self, *_args, **_kwargs):
-        return None
 
 
 def _assert_file_can_be_replaced(path: Path) -> None:
@@ -48,7 +38,7 @@ def test_project_example_golden_path(tmp_path: Path, monkeypatch):
     monkeypatch.chdir(dst)
     cfg = load_config(dst / "dataset.yml")
     year = cfg.years[0]
-    logger = _NoopLogger()
+    logger = NoopLogger()
 
     run_raw(
         cfg.dataset,
@@ -203,7 +193,7 @@ def test_project_example_outputs_can_be_replaced_after_run(tmp_path: Path, monke
     monkeypatch.chdir(dst)
     cfg = load_config(dst / "dataset.yml")
     year = cfg.years[0]
-    logger = _NoopLogger()
+    logger = NoopLogger()
 
     run_raw(
         cfg.dataset,

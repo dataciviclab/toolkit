@@ -2,7 +2,7 @@
 
 Functions here are importable by any test file::
 
-    from tests.helpers import make_config, make_dataset_yml, make_standard_sql, write_text
+    from tests.helpers import NoopLogger, make_config, make_dataset_yml, make_standard_sql, write_text, write_parquet
 
 Fixtures belong in ``conftest.py``; pure helpers that take arguments
 and return values belong here.
@@ -12,6 +12,29 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 from typing import Any
+
+
+class NoopLogger:
+    """Logger finto che non stampa nulla. Usato nei test che richiedono un logger ma non ne verificano l'output."""
+    def debug(self, *_a, **_kw): return None
+    def info(self, *_a, **_kw): return None
+    def warning(self, *_a, **_kw): return None
+    def error(self, *_a, **_kw): return None
+
+
+def write_parquet(path: Path, sql: str, *, table: str = "t") -> None:
+    """Crea un parquet da una query SQL DuckDB in memoria.
+    
+    Args:
+        path: Output path per il parquet.
+        sql: CREATE TABLE + INSERT (es. ``CREATE TABLE t AS SELECT 1 AS x``).
+        table: Nome della tabella temporanea (default ``t``).
+    """
+    import duckdb
+    con = duckdb.connect(":memory:")
+    con.execute(sql)
+    con.execute(f"COPY {table} TO '{path.as_posix()}' (FORMAT 'parquet')")
+    con.close()
 
 
 def write_text(path: Path, content: str) -> None:

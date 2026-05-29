@@ -5,19 +5,9 @@ import pytest
 from toolkit.core.metadata import read_layer_metadata
 from toolkit.raw._fetch_utils import _infer_ext
 from toolkit.raw.run import run_raw
+from tests.helpers import NoopLogger
 
 pytestmark = pytest.mark.contract
-
-
-class _NoopLogger:
-    def info(self, *_args, **_kwargs):
-        return None
-
-    def warning(self, *_args, **_kwargs):
-        return None
-
-    def error(self, *_args, **_kwargs):
-        return None
 
 
 def test_infer_ext_http_csv_php_and_zip_php():
@@ -56,7 +46,7 @@ def test_run_raw_ckan_filename_inferred_from_resolved_url(monkeypatch, tmp_path:
         ]
     }
 
-    run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger())
+    run_raw("demo", 2024, str(tmp_path), raw_cfg, NoopLogger())
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     assert (out_dir / "bdap_resource.csv").exists()
@@ -81,7 +71,7 @@ def test_run_raw_filename_override_has_priority(monkeypatch, tmp_path: Path):
         ]
     }
 
-    run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger())
+    run_raw("demo", 2024, str(tmp_path), raw_cfg, NoopLogger())
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     assert (out_dir / "forced_name.data").exists()
@@ -109,7 +99,7 @@ def test_run_raw_avoids_overwrite_with_incremental_suffix(monkeypatch, tmp_path:
         ]
     }
 
-    run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger())
+    run_raw("demo", 2024, str(tmp_path), raw_cfg, NoopLogger())
 
     assert existing.read_bytes() == b"old-content\n"
     assert (out_dir / "file_1.csv").exists()
@@ -132,7 +122,7 @@ def test_manifest_created(monkeypatch, tmp_path: Path):
         ]
     }
 
-    run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-123")
+    run_raw("demo", 2024, str(tmp_path), raw_cfg, NoopLogger(), run_id="run-123")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     manifest = read_layer_metadata(out_dir)
@@ -163,8 +153,8 @@ def test_manifest_points_to_latest_in_versioned(monkeypatch, tmp_path: Path):
         ]
     }
 
-    run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-1")
-    run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-2")
+    run_raw("demo", 2024, str(tmp_path), raw_cfg, NoopLogger(), run_id="run-1")
+    run_raw("demo", 2024, str(tmp_path), raw_cfg, NoopLogger(), run_id="run-2")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     manifest = read_layer_metadata(out_dir)
@@ -194,8 +184,8 @@ def test_manifest_overwrite_policy(monkeypatch, tmp_path: Path):
         ],
     }
 
-    run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-1")
-    run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-2")
+    run_raw("demo", 2024, str(tmp_path), raw_cfg, NoopLogger(), run_id="run-1")
+    run_raw("demo", 2024, str(tmp_path), raw_cfg, NoopLogger(), run_id="run-2")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     manifest = read_layer_metadata(out_dir)
@@ -228,7 +218,7 @@ def test_multisource_primary_selection(monkeypatch, tmp_path: Path):
         ]
     }
 
-    run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-123")
+    run_raw("demo", 2024, str(tmp_path), raw_cfg, NoopLogger(), run_id="run-123")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     manifest = read_layer_metadata(out_dir)
@@ -271,7 +261,7 @@ def test_multisource_year_filter_skips_non_matching(monkeypatch, tmp_path: Path)
         ]
     }
 
-    run_raw("demo", 2022, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-2022")
+    run_raw("demo", 2022, str(tmp_path), raw_cfg, NoopLogger(), run_id="run-2022")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2022"
     manifest = read_layer_metadata(out_dir)
@@ -307,7 +297,7 @@ def test_multisource_year_filter_all_matching(monkeypatch, tmp_path: Path):
         ]
     }
 
-    run_raw("demo", 2024, str(tmp_path), raw_cfg, _NoopLogger(), run_id="run-all")
+    run_raw("demo", 2024, str(tmp_path), raw_cfg, NoopLogger(), run_id="run-all")
 
     out_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     manifest = read_layer_metadata(out_dir)

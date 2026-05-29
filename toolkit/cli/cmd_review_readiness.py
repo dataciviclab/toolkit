@@ -85,6 +85,89 @@ def review_readiness(
         elif detail:
             typer.echo(f"      {detail}")
 
+    # --- Validation details with messages ---
+    layers = result.get("layers") or {}
+    has_val = False
+    for lname, label in [("raw", "raw"), ("clean", "clean"), ("mart", "mart")]:
+        ln = layers.get(lname) or {}
+        v = ln.get("validation") or {}
+        msgs = ln.get("validation_msgs") or {}
+        if v.get("ok") is None and not msgs.get("warnings") and not msgs.get("errors"):
+            continue
+        if not has_val:
+            typer.echo("")
+            typer.echo("validation:")
+            has_val = True
+        count_parts = []
+        if v.get("errors_count"):
+            count_parts.append(f"{v['errors_count']} errori")
+        if v.get("warnings_count"):
+            count_parts.append(f"{v['warnings_count']} warning")
+        counts = f" ({', '.join(count_parts)})" if count_parts else ""
+        status = "✅" if v.get("ok") else ("🔴" if v.get("ok") is False else "·")
+        typer.echo(f"  {label}: {status}{counts}")
+        for w in msgs.get("warnings", [])[:2]:
+            typer.echo(f"    ⚠ {w[:120]}")
+        for e in msgs.get("errors", [])[:2]:
+            typer.echo(f"    🔴 {e[:120]}")
+
+    # --- Raw profile warnings ---
+    raw_warnings = (layers.get("raw") or {}).get("profile_warnings") or []
+    if raw_warnings:
+        typer.echo("raw profile warnings:")
+        for w in raw_warnings[:5]:
+            typer.echo(f"  ⚠ {w}")
+        if len(raw_warnings) > 5:
+            typer.echo(f"  ... e {len(raw_warnings) - 5} altro(i)")
+
+    # --- Rich layer info ---
+    typer.echo("")
+
+    # Raw layer
+    raw_layer = layers.get("raw") or {}
+    raw_val = raw_layer.get("validation") or {}
+    raw_profile = raw_layer.get("profile") or {}
+    raw_warnings = raw_layer.get("profile_warnings") or []
+    raw_status = "✅" if raw_val.get("ok") else ("🔴" if raw_val.get("ok") is False else "·")
+    raw_cols = raw_val.get("col_count")
+    raw_info_parts = []
+    if raw_cols is not None:
+        raw_info_parts.append(f"{raw_cols} colonne")
+    if raw_profile.get("encoding"):
+        raw_info_parts.append(f"encoding={raw_profile['encoding']}")
+    if raw_profile.get("delim"):
+        raw_info_parts.append(f"delim={raw_profile['delim']}")
+    if raw_warnings:
+        raw_info_parts.append(f"{len(raw_warnings)} warning")
+    typer.echo(f"  raw:   {raw_status}  {'  '.join(raw_info_parts)}" if raw_info_parts else f"  raw:   {raw_status}")
+
+    # Clean layer
+    clean_layer = layers.get("clean") or {}
+    clean_val = clean_layer.get("validation") or {}
+    clean_status = "✅" if clean_val.get("ok") else ("🔴" if clean_val.get("ok") is False else "·")
+    clean_rows = clean_val.get("row_count") or clean_layer.get("row_count")
+    clean_cols = clean_val.get("col_count")
+    trans = clean_layer.get("transition") or {}
+    clean_info = []
+    if clean_rows is not None:
+        clean_info.append(f"{clean_rows} righe")
+    if clean_cols is not None:
+        clean_info.append(f"{clean_cols} colonne")
+    if trans.get("row_drop_pct") is not None:
+        clean_info.append(f"raw→clean: {trans['row_drop_pct']}% righe")
+    if trans.get("col_drop") is not None and trans["col_drop"] != 0:
+        clean_info.append(f"-{trans['col_drop']} colonne")
+    typer.echo(f"  clean: {clean_status}  {'  '.join(clean_info)}" if clean_info else f"  clean: {clean_status}")
+
+    # Mart layer
+    mart_layer = layers.get("mart") or {}
+    mart_val = mart_layer.get("validation") or {}
+    mart_status = "✅" if mart_val.get("ok") else ("🔴" if mart_val.get("ok") is False else "·")
+    mart_tables = mart_layer.get("tables") or []
+    mart_ready = sum(1 for t in mart_tables if t.get("readable"))
+    mart_total = len(mart_tables)
+    typer.echo(f"  mart:  {mart_status}  {mart_ready}/{mart_total} tabelle" if mart_tables else f"  mart:  {mart_status}  (nessuna tabella)")
+
     typer.echo("")
     if readiness == "ready":
         typer.echo("✅ Pronto per review — tutti i check passano.")

@@ -15,6 +15,7 @@ from toolkit.cli.inspect._helpers import (
     _exists,
     _payload_for_year,
     _read_parquet_row_count,
+    _read_validation_content,
     _validation_summary_for_layer,
 )
 from toolkit.core.config import load_config
@@ -162,7 +163,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "decimal_suggested": (paths.get("raw_hints") or {}).get("decimal"),
                 "skip_suggested": (paths.get("raw_hints") or {}).get("skip"),
                 "raw_warnings": (paths.get("raw_hints") or {}).get("warnings", []),
-                "validation": _validation_summary_for_layer(raw_dir, "_validate/raw_validation.json"),
+                "validation": _validation_summary_for_layer(raw_dir, "raw_validation.json"),
                 "run_status": layer_run_statuses.get("raw"),
             },
             "clean": {
@@ -309,6 +310,49 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
     ok_count = sum(1 for c in checks if c["ok"])
     fail_count = sum(1 for c in checks if not c["ok"])
 
+    # --- Extract validation messages from validation JSON ---
+    def _validation_msgs(layer_dir: Path, filename: str, max_items: int = 3) -> dict:
+        """Read first N warning/error messages from a validation JSON."""
+        fpath = str(layer_dir / filename) if layer_dir.exists() else None
+        content = _read_validation_content(fpath)
+        msgs: dict[str, list[str]] = {"errors": [], "warnings": []}
+        if content:
+            msgs["errors"] = content.get("errors", [])[:max_items]
+            msgs["warnings"] = content.get("warnings", [])[:max_items]
+        return msgs
+
+    # --- Validation messages from disk ---
+    raw_dir_path = Path(raw.get("dir", ""))
+    clean_dir_path = Path(clean.get("dir", ""))
+    mart_dir_path = Path(mart.get("dir", ""))
+    raw_msgs = _validation_msgs(raw_dir_path, "raw_validation.json")
+    clean_msgs = _validation_msgs(clean_dir_path, "_validate/clean_validation.json")
+    mart_msgs = _validation_msgs(mart_dir_path, "_validate/mart_validation.json")
+
+    # --- Extract rich layer info from summary (already computed) ---
+    raw_val = raw.get("validation") or {}
+    clean_val = clean.get("validation") or {}
+    mart_val = mart.get("validation") or {}
+    raw_profile_warnings = raw.get("raw_warnings") or []
+    raw_profile_hints = {
+        "encoding": raw.get("encoding_suggested"),
+        "delim": raw.get("delim_suggested"),
+        "decimal": raw.get("decimal_suggested"),
+        "skip": raw.get("skip_suggested"),
+    }
+
+    # Transition stats from clean validation
+    raw_row_count = clean_val.get("raw_row_count")
+    clean_row_count = clean_val.get("clean_row_count")
+    col_drop = None
+    row_drop_pct = None
+    if raw_row_count is not None and clean_row_count is not None and raw_row_count > 0:
+        row_drop_pct = round((raw_row_count - clean_row_count) / raw_row_count * 100, 1)
+    raw_col_count = raw_val.get("col_count")
+    clean_col_count = clean_val.get("col_count")
+    if raw_col_count is not None and clean_col_count is not None:
+        col_drop = raw_col_count - clean_col_count
+
     if fail_count == 0:
         readiness = "ready"
     elif ok_count >= len(checks) - 1:
@@ -325,4 +369,30 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
         "ok_count": ok_count,
         "fail_count": fail_count,
         "checks": checks,
+        "layers": {
+            "raw": {
+                "validation": raw_val,
+                "validation_msgs": raw_msgs,
+                "profile": raw_profile_hints,
+                "profile_warnings": raw_profile_warnings,
+                "primary_output": raw.get("primary_output_file"),
+            },
+            "clean": {
+                "validation": clean_val,
+                "validation_msgs": clean_msgs,
+                "output": clean.get("output"),
+                "row_count": clean_rows,
+                "transition": {
+                    "raw_row_count": raw_row_count,
+                    "clean_row_count": clean_row_count,
+                    "row_drop_pct": row_drop_pct,
+                    "col_drop": col_drop,
+                },
+            },
+            "mart": {
+                "validation": mart_val,
+                "validation_msgs": mart_msgs,
+                "tables": mart_checks,
+            },
+        },
     }

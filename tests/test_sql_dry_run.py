@@ -20,32 +20,44 @@ from toolkit.cli.sql_dry_run import (
 # --- Helpers ---
 
 
-def _make_cfg(
-    tmp_path: Path,
-    *,
-    clean_sql: str | None = None,
-    clean_read: dict | None = None,
-    mart_tables: list[dict] | None = None,
-) -> object:
-    """Write SQL files to disk and build a ToolkitConfig via make_config()."""
-    from tests.helpers import make_config
+class _FakeConfig:
+    """Minimal config-like object matching the shape returned by load_config."""
 
-    if clean_sql:
-        sql_dir = tmp_path / "sql"
-        sql_dir.mkdir(parents=True, exist_ok=True)
-        (sql_dir / "clean.sql").write_text(clean_sql, encoding="utf-8")
+    def __init__(
+        self,
+        tmp_path: Path,
+        *,
+        dataset: str = "demo_ds",
+        years: list[int] | None = None,
+        clean_sql: str | None = None,
+        clean_read: dict | None = None,
+        mart_tables: list[dict] | None = None,
+        support: list[dict] | None = None,
+    ):
+        self.base_dir = tmp_path
+        self.dataset = dataset
+        self.years = years or [2022]
+        self.root = tmp_path / "out"
+        self.root.mkdir(parents=True, exist_ok=True)
 
-    clean: dict = {"sql": "sql/clean.sql" if clean_sql else None}
-    if clean_read:
-        clean["read"] = clean_read
+        # Create clean.sql if requested
+        self._clean_sql_path: Path | None = None
+        if clean_sql:
+            sql_dir = tmp_path / "sql"
+            sql_dir.mkdir(parents=True, exist_ok=True)
+            self._clean_sql_path = sql_dir / "clean.sql"
+            self._clean_sql_path.write_text(clean_sql, encoding="utf-8")
 
-    return make_config(
-        base_dir=tmp_path,
-        dataset="demo_ds",
-        years=[2022],
-        clean=clean if clean.get("sql") else None,
-        mart={"tables": mart_tables or []} if mart_tables else None,
-    )
+        clean_read_cfg = clean_read or {}
+        self.clean = {
+            "sql": str(self._clean_sql_path) if self._clean_sql_path else None,
+            "read": clean_read_cfg,
+        }
+        if not clean_sql:
+            self.clean["sql"] = None
+
+        self.mart = {"tables": mart_tables or []}
+        self.support = support or []
 
 
 # --- Unit tests for utility functions ---
@@ -163,7 +175,7 @@ class TestCreatePlaceholderRawInput:
 class TestBuildCleanPreview:
     @pytest.mark.policy
     def test_simple_sql_passes_immediately(self, tmp_path: Path):
-        cfg = _make_cfg(tmp_path, clean_sql="select 1 as value")
+        cfg = _FakeConfig(tmp_path, clean_sql="select 1 as value")
         con = duckdb.connect(":memory:")
         try:
             _build_clean_preview(cfg, year=2022, con=con)
@@ -175,7 +187,7 @@ class TestBuildCleanPreview:
     @pytest.mark.policy
     def test_sql_with_unquoted_column_infers_incrementally(self, tmp_path: Path):
         """Clean SQL uses unquoted column name not in read.columns."""
-        cfg = _make_cfg(tmp_path, clean_sql="select x from raw_input")
+        cfg = _FakeConfig(tmp_path, clean_sql="select x from raw_input")
         con = duckdb.connect(":memory:")
         try:
             _build_clean_preview(cfg, year=2022, con=con)
@@ -185,7 +197,7 @@ class TestBuildCleanPreview:
 
     @pytest.mark.policy
     def test_sql_with_read_columns(self, tmp_path: Path):
-        cfg = _make_cfg(
+        cfg = _FakeConfig(
             tmp_path,
             clean_sql='select "amount" from raw_input',
             clean_read={"columns": {"amount": "DOUBLE"}},
@@ -204,7 +216,7 @@ class TestBuildCleanPreview:
             'TRY_CAST("name" AS VARCHAR) AS name '
             "from raw_input"
         )
-        cfg = _make_cfg(
+        cfg = _FakeConfig(
             tmp_path,
             clean_sql=sql,
             clean_read={"columns": {"id": "VARCHAR", "name": "VARCHAR"}},
@@ -219,7 +231,7 @@ class TestBuildCleanPreview:
     @pytest.mark.policy
     def test_non_binder_error_raises_clean_dry_run_failure(self, tmp_path: Path):
         """Non-binder SQL errors should surface as CLEAN SQL dry-run failures."""
-        cfg = _make_cfg(tmp_path, clean_sql="select from raw_input")
+        cfg = _FakeConfig(tmp_path, clean_sql="select from raw_input")
         con = duckdb.connect(":memory:")
         try:
             with pytest.raises(ValueError, match="CLEAN SQL dry-run failed"):
@@ -230,7 +242,7 @@ class TestBuildCleanPreview:
     @pytest.mark.policy
     def test_missing_column_error_includes_path(self, tmp_path: Path):
         """SQL syntax error should include file path in the message."""
-        cfg = _make_cfg(tmp_path, clean_sql="select from raw_input")
+        cfg = _FakeConfig(tmp_path, clean_sql="select from raw_input")
         con = duckdb.connect(":memory:")
         try:
             with pytest.raises(ValueError) as exc_info:
@@ -252,7 +264,7 @@ class TestValidateMartSql:
         mart_sql_dir.mkdir(parents=True, exist_ok=True)
         (mart_sql_dir / "mart_out.sql").write_text("select * from clean_input", encoding="utf-8")
 
-        cfg = _make_cfg(
+        cfg = _FakeConfig(
             tmp_path,
             clean_sql="select 1 as value",
             mart_tables=[{"name": "mart_out", "sql": "sql/mart/mart_out.sql"}],
@@ -273,7 +285,7 @@ class TestValidateMartSql:
             "select nonexistent_col from clean_input", encoding="utf-8"
         )
 
-        cfg = _make_cfg(
+        cfg = _FakeConfig(
             tmp_path,
             clean_sql="select 1 as value",
             mart_tables=[{"name": "mart_out", "sql": "sql/mart/mart_out.sql"}],
@@ -295,7 +307,7 @@ class TestValidateMartSql:
             "select * from clean_input where anno = {year}", encoding="utf-8"
         )
 
-        cfg = _make_cfg(
+        cfg = _FakeConfig(
             tmp_path,
             clean_sql="select 1 as anno",
             mart_tables=[{"name": "mart_out", "sql": "sql/mart/mart_out.sql"}],
@@ -316,7 +328,7 @@ class TestValidateMartSql:
             "select * from clean_input where col = {unknown_placeholder}", encoding="utf-8"
         )
 
-        cfg = _make_cfg(
+        cfg = _FakeConfig(
             tmp_path,
             clean_sql="select 1 as value",
             mart_tables=[{"name": "mart_out", "sql": "sql/mart/mart_out.sql"}],
@@ -341,7 +353,7 @@ class TestValidateSqlDryRun:
         mart_sql_dir.mkdir(parents=True, exist_ok=True)
         (mart_sql_dir / "out.sql").write_text("select * from clean_input", encoding="utf-8")
 
-        cfg = _make_cfg(
+        cfg = _FakeConfig(
             tmp_path,
             clean_sql="select 1 as value",
             mart_tables=[{"name": "out", "sql": "sql/mart/out.sql"}],
@@ -356,7 +368,7 @@ class TestValidateSqlDryRun:
         mart_sql_dir.mkdir(parents=True, exist_ok=True)
         (mart_sql_dir / "out.sql").write_text("select 1 as value", encoding="utf-8")
 
-        cfg = _make_cfg(
+        cfg = _FakeConfig(
             tmp_path,
             clean_sql=None,
             mart_tables=[{"name": "out", "sql": "sql/mart/out.sql"}],
@@ -366,13 +378,13 @@ class TestValidateSqlDryRun:
     @pytest.mark.policy
     def test_no_matching_layers_returns_early(self, tmp_path: Path):
         """If layers don't include clean or mart, function returns without doing anything."""
-        cfg = _make_cfg(tmp_path)
+        cfg = _FakeConfig(tmp_path)
         # Should not raise even though no SQL files exist
         validate_sql_dry_run(cfg, year=2022, layers=["cross_year"])
 
     @pytest.mark.policy
     def test_fails_on_clean_sql_error(self, tmp_path: Path):
-        cfg = _make_cfg(tmp_path, clean_sql="select from raw_input")
+        cfg = _FakeConfig(tmp_path, clean_sql="select from raw_input")
         with pytest.raises(ValueError, match="CLEAN SQL dry-run failed"):
             validate_sql_dry_run(cfg, year=2022, layers=["clean"])
 
@@ -382,7 +394,7 @@ class TestValidateSqlDryRun:
         mart_sql_dir.mkdir(parents=True, exist_ok=True)
         (mart_sql_dir / "out.sql").write_text("select bad_col from clean_input", encoding="utf-8")
 
-        cfg = _make_cfg(
+        cfg = _FakeConfig(
             tmp_path,
             clean_sql="select 1 as value",
             mart_tables=[{"name": "out", "sql": "sql/mart/out.sql"}],

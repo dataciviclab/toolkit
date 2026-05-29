@@ -255,12 +255,19 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     out_dir = layer_year_dir(cfg.root, "clean", cfg.dataset, year)
     parquet = out_dir / f"{cfg.dataset}_{year}_clean.parquet"
 
+    clean_cfg = cfg.clean
+    if isinstance(clean_cfg, dict):
+        clean_req = clean_cfg.get("required_columns") or []
+        clean_val = clean_cfg.get("validate") or {}
+    else:
+        clean_req = clean_cfg.required_columns
+        clean_val = clean_cfg.validate.model_dump(
+            mode="python", by_alias=True, exclude_none=True, exclude_unset=True
+        )
     spec = CleanValidationSpec.model_validate(
         {
-            "required_columns": cfg.clean.required_columns,
-            "validate": cfg.clean.validate.model_dump(
-                mode="python", by_alias=True, exclude_none=True, exclude_unset=True
-            ),
+            "required_columns": clean_req,
+            "validate": clean_val,
         }
     )
 

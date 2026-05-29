@@ -2,7 +2,7 @@
 
 Functions here are importable by any test file::
 
-    from tests.helpers import make_config, make_dataset_yml, make_standard_sql, write_text
+    from tests.helpers import make_dataset_yml, make_standard_sql, write_text
 
 Fixtures belong in ``conftest.py``; pure helpers that take arguments
 and return values belong here.
@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import textwrap
 from pathlib import Path
-from typing import Any
 
 
 def write_text(path: Path, content: str) -> None:
@@ -21,58 +20,6 @@ def write_text(path: Path, content: str) -> None:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(textwrap.dedent(content).strip() + "\n", encoding="utf-8")
-
-
-def make_config(
-    *,
-    base_dir: Path | None = None,
-    root: Path | None = None,
-    dataset: str = "test",
-    years: list[int] | None = None,
-    source_id: str | None = None,
-    raw: dict[str, Any] | None = None,
-    clean: dict[str, Any] | None = None,
-    mart: dict[str, Any] | None = None,
-    support: list[dict[str, Any]] | None = None,
-) -> Any:
-    """Create a ToolkitConfig in-memory without writing any file.
-
-    Defaults to a minimal valid config (raw: {}, clean: {}, mart without
-    tables). Override any section by passing a dict with the same shape
-    as the YAML section.
-
-    Returns a ``ToolkitConfig`` with real Pydantic models — no dict mocks.
-    All attribute access (``cfg.clean.sql``, ``cfg.mart.tables``) works.
-    """
-    from toolkit.core.config_models import ToolkitConfigModel, DatasetBlock, RawConfig, CleanConfig, MartConfig
-
-    _root = root or Path("/tmp/toolkit-test-root")
-    _base = base_dir or _root
-    _years = years or [2024]
-
-    model = ToolkitConfigModel(
-        base_dir=_base,
-        root=_root,
-        root_source="test",
-        dataset=DatasetBlock(name=dataset, years=_years, source_id=source_id),
-        raw=RawConfig.model_validate(raw or {}),
-        clean=CleanConfig.model_validate(clean or {}),
-        mart=MartConfig.model_validate(mart or {}),
-        support=support or [],
-    )
-
-    from toolkit.core.config import ToolkitConfig
-    return ToolkitConfig(
-        base_dir=model.base_dir,
-        schema_version=model.schema_version,
-        root=model.root,
-        root_source=model.root_source,
-        dataset=model.dataset.name,
-        source_id=model.dataset.source_id,
-        years=list(model.dataset.years),
-        time_coverage=model.dataset.time_coverage,
-        _model=model,
-    )
 
 
 def make_standard_sql(base_dir: Path, /) -> dict[str, Path]:

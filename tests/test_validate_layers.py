@@ -239,11 +239,8 @@ def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Pa
         encoding="utf-8",
     )
 
-    from tests.helpers import make_config
-
-    cfg = make_config(
+    cfg = SimpleNamespace(
         root=root,
-        base_dir=root,
         dataset="demo",
         mart={
             "tables": [{"name": "mart_demo", "sql": "sql/mart_demo.sql"}],
@@ -330,9 +327,11 @@ def test_run_clean_validation_uses_columns_raw_from_raw_profile(tmp_path: Path):
         encoding="utf-8",
     )
 
-    from tests.helpers import make_config
-
-    cfg = make_config(root=root, base_dir=root, dataset=dataset)
+    cfg = SimpleNamespace(
+        root=root,
+        dataset=dataset,
+        clean={},
+    )
 
     summary = run_clean_validation(cfg, year, logger=SimpleNamespace(info=lambda *args, **kwargs: None))
 
@@ -378,9 +377,11 @@ def test_run_clean_validation_raw_probe_source_legacy_autodetect(tmp_path: Path)
         encoding="utf-8",
     )
 
-    from tests.helpers import make_config
-
-    cfg = make_config(root=root, base_dir=root, dataset=dataset)
+    cfg = SimpleNamespace(
+        root=root,
+        dataset=dataset,
+        clean={},
+    )
     logger = SimpleNamespace(info=lambda *args, **kwargs: None)
 
     result = run_clean_validation(cfg, year, logger=logger)
@@ -427,9 +428,11 @@ def test_run_clean_validation_raw_probe_source_unavailable_when_no_raw_file(
         encoding="utf-8",
     )
 
-    from tests.helpers import make_config
-
-    cfg = make_config(root=root, base_dir=root, dataset=dataset)
+    cfg = SimpleNamespace(
+        root=root,
+        dataset=dataset,
+        clean={},
+    )
     logger = SimpleNamespace(info=lambda *args, **kwargs: None)
 
     result = run_clean_validation(cfg, year, logger=logger)

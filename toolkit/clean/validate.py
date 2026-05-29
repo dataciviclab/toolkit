@@ -19,7 +19,7 @@ from toolkit.clean._helpers import _input_files_from_clean_metadata, _profile_ra
 from toolkit.core.config_models import CleanValidationSpec, RangeRuleConfig, TransitionConfig
 from toolkit.core.layer_profile import compare_layer_profiles
 from toolkit.core.metadata import merge_layer_manifest
-from toolkit.core.paths import CLEAN_VALIDATION, layer_year_dir, to_root_relative
+from toolkit.core.paths import CLEAN_VALIDATION, METADATA, RAW_PROFILE, layer_year_dir, to_root_relative
 from toolkit.core.validation import (
     ValidationResult,
     build_validation_summary,
@@ -174,7 +174,7 @@ def validate_promotion(
     errors: list[str] = []
     warnings: list[str] = []
 
-    clean_metadata_path = clean_path / "metadata.json"
+    clean_metadata_path = clean_path / METADATA
     if not raw_path.exists():
         errors.append(f"Missing RAW dir: {raw_path}")
     if not clean_metadata_path.exists():
@@ -209,7 +209,7 @@ def validate_promotion(
     read_mode = str(clean_metadata.get("read_source_used") or "fallback")
 
     profile_dir = raw_path / "_profile"
-    saved_profile_path = profile_dir / "raw_profile.json"
+    saved_profile_path = profile_dir / RAW_PROFILE
 
     if saved_profile_path.exists():
         try:
@@ -299,7 +299,7 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     # scaffold check: legge raw_profile.json come source of truth per raw_col_count,
     # bypassando _profile_raw_input che potrebbe rileggere il CSV con parametri header errati
     _profile_dir = raw_dir / "_profile"
-    profile_path = _profile_dir / "raw_profile.json"
+    profile_path = _profile_dir / RAW_PROFILE
     profile_parse_error: bool = False
     trusted_raw_cols: list[str] = []
     if profile_path.exists():
@@ -436,10 +436,10 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     )
 
     report = write_validation_json(Path(out_dir) / CLEAN_VALIDATION, result)
-    metadata = json.loads((out_dir / "metadata.json").read_text(encoding="utf-8"))
+    metadata = json.loads((out_dir / METADATA).read_text(encoding="utf-8"))
     merge_layer_manifest(
         out_dir,
-        metadata_path="metadata.json",
+        metadata_path=METADATA,
         validation_path="_validate/clean_validation.json",
         outputs=metadata.get("outputs", []),
         ok=result.ok,

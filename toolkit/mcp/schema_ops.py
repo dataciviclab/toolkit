@@ -20,6 +20,7 @@ from lab_connectors.mcp.errors import ErrorCode
 
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import _load_cfg, _safe_path
+from toolkit.core.paths import RAW_PROFILE, RAW_PROFILE_DIR, RAW_SUGGESTED_READ
 from toolkit.core.run_records import get_run_dir_dataset, list_runs as _list_runs_records
 
 
@@ -69,8 +70,8 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
     paths = _inspect_paths(str(config), year)
     raw_dir = Path(paths["paths"]["raw"]["dir"])
     profile_path = raw_dir / "_profile"
-    raw_profile_json = profile_path / "raw_profile.json"
-    suggested_read_yml = profile_path / "suggested_read.yml"
+    raw_profile_json = profile_path / RAW_PROFILE
+    suggested_read_yml = profile_path / RAW_SUGGESTED_READ
 
     if raw_profile_json.exists():
         try:

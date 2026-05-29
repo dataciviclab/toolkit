@@ -9,7 +9,7 @@ from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict
 from toolkit.core.metadata import config_hash_for_year, file_record, merge_layer_manifest, write_metadata
-from toolkit.core.paths import layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
+from toolkit.core.paths import CLEAN_VALIDATION, layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 from toolkit.clean.sql_execute import _normalize_output_profile, _run_sql
 
@@ -267,7 +267,7 @@ def run_clean(
     merge_layer_manifest(
         out_dir,
         metadata_path=metadata_path.name,
-        validation_path="_validate/clean_validation.json",
+        validation_path=CLEAN_VALIDATION,
         outputs=outputs,
     )
     logger.info(f"CLEAN -> {output_path}")

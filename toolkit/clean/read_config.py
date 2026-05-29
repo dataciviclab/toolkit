@@ -21,6 +21,7 @@ from toolkit.core.csv_read import (
     filter_suggested_format_keys,
     merge_read_cfg,
 )
+from toolkit.core.paths import RAW_PROFILE_DIR, RAW_SUGGESTED_READ
 
 
 def _read_source_mode(clean_cfg: dict[str, Any], logger=None) -> tuple[str, dict[str, Any]]:
@@ -54,7 +55,7 @@ def _split_read_cfg(explicit_cfg: dict[str, Any]) -> tuple[dict[str, Any], dict[
 
 
 def load_suggested_read(raw_year_dir: Path) -> dict[str, Any] | None:
-    suggested_path = raw_year_dir / "_profile" / "suggested_read.yml"
+    suggested_path = raw_year_dir / RAW_PROFILE_DIR / RAW_SUGGESTED_READ
     if not suggested_path.exists():
         return None
 

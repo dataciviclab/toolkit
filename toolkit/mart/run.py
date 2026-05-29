@@ -11,7 +11,7 @@ from toolkit.core.config import ensure_dict
 from toolkit.core.layer_profile import compare_layer_profiles, profile_relation, profile_parquet_files
 from toolkit.core.metadata import config_hash_for_year, file_record, merge_layer_manifest, write_metadata
 from toolkit.core.multi_year_source import bind_multi_year_view, collect_multi_year_files
-from toolkit.core.paths import layer_dataset_dir, layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
+from toolkit.core.paths import MART_VALIDATION, layer_dataset_dir, layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 
@@ -455,7 +455,7 @@ def run_mart(
     merge_layer_manifest(
         mart_dir,
         metadata_path=metadata_path.name,
-        validation_path="_validate/mart_validation.json",
+        validation_path=MART_VALIDATION,
         outputs=outputs,
     )
     total_bytes = sum(p.stat().st_size for p in written if p.exists())

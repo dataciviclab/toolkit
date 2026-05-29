@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from toolkit.core.metadata import read_layer_metadata
-from toolkit.core.paths import from_root_relative, layer_year_dir, resolve_root
+from toolkit.core.paths import METADATA, from_root_relative, layer_year_dir, resolve_root
 from toolkit.core.run_context import get_run_dir, list_runs
 
 
@@ -44,7 +44,7 @@ def _match_patterns(paths: list[Path], patterns: list[str]) -> list[Path]:
 
 
 def _metadata_candidates(raw_dir: Path) -> list[Path]:
-    metadata_path = raw_dir / "metadata.json"
+    metadata_path = raw_dir / METADATA
     if not metadata_path.exists():
         return []
 

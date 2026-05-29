@@ -31,6 +31,7 @@ from __future__ import annotations
 from pathlib import Path as _Path
 
 from toolkit.core.paths import (
+    METADATA,
     layer_dataset_dir,
     layer_year_dir,
     resolve_root,
@@ -64,7 +65,7 @@ Esempio::
     # invece di: file.endswith(\"_clean.parquet\")
 """
 
-METADATA_JSON = "metadata.json"
+METADATA_JSON = METADATA
 
 
 # ---------------------------------------------------------------------------

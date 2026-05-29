@@ -8,7 +8,7 @@ import typer
 import yaml
 
 from toolkit.cli.common import iter_years, load_cfg_and_logger
-from toolkit.core.paths import layer_year_dir
+from toolkit.core.paths import RAW_PROFILE, RAW_SUGGESTED_READ, layer_year_dir
 from toolkit.scaffold.clean import format_clean_read_proposal, generate_clean_sql
 
 
@@ -46,8 +46,8 @@ def scaffold_clean(
     selected_year = years[0]
 
     raw_profile_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, selected_year) / "_profile"
-    profile_path = raw_profile_dir / "raw_profile.json"
-    suggested_read_yml = raw_profile_dir / "suggested_read.yml"
+    profile_path = raw_profile_dir / RAW_PROFILE
+    suggested_read_yml = raw_profile_dir / RAW_SUGGESTED_READ
 
     profile: dict[str, Any]
 

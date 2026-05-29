@@ -5,7 +5,7 @@ from typing import Any
 import json
 
 from toolkit.core.metadata import merge_layer_manifest
-from toolkit.core.paths import RAW_VALIDATION, layer_year_dir
+from toolkit.core.paths import METADATA, RAW_VALIDATION, layer_year_dir
 from toolkit.core.validation import ValidationResult, build_validation_summary, write_validation_json
 
 TEXT_EXT = {".csv", ".txt", ".tsv", ".json", ".xml", ".html"}
@@ -101,7 +101,7 @@ def validate_raw_output(out_dir: Path, files_written: list[dict]) -> ValidationR
 
 def run_raw_validation(root: str | None, dataset: str, year: int, logger) -> dict[str, Any]:
     out_dir = layer_year_dir(root, "raw", dataset, year)
-    metadata = json.loads((out_dir / "metadata.json").read_text(encoding="utf-8"))
+    metadata = json.loads((out_dir / METADATA).read_text(encoding="utf-8"))
     files = metadata.get("files") or metadata.get("outputs") or []
 
     result = validate_raw_output(out_dir, files)

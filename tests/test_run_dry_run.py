@@ -446,17 +446,6 @@ def test_run_all_fails_with_bootstrap_hint_when_clean_sql_missing(
 # ── Probe step contract tests ────────────────────────────────────────────────
 
 
-def _make_probe_cfg(tmp_path: Path) -> tuple:
-    """Helper: create a minimal config and return (cfg, year)."""
-    from tests.helpers import make_dataset_yml, make_standard_sql
-    make_standard_sql(tmp_path)
-    config_path = make_dataset_yml(
-        tmp_path / "dataset.yml",
-        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
-    )
-    return load_config(config_path), 2022
-
-
 class _FakeRawConfig:
     """Minimal RawConfig-like object for probe test."""
     def __init__(self, sources: list):

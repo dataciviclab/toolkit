@@ -20,7 +20,7 @@ from lab_connectors.mcp.errors import ErrorCode
 
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import _load_cfg, _safe_path
-from toolkit.core.paths import RAW_PROFILE, RAW_PROFILE_DIR, RAW_SUGGESTED_READ
+from toolkit.core.paths import RAW_PROFILE, RAW_SUGGESTED_READ
 from toolkit.core.run_records import get_run_dir_dataset, list_runs as _list_runs_records
 
 

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from toolkit.profile.raw import sniff_source_file
+
+pytestmark = pytest.mark.contract
 
 
 def test_sniff_source_file_for_standard_csv(tmp_path: Path) -> None:

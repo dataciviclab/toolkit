@@ -1,3 +1,5 @@
+import pytest
+
 import toolkit.clean as clean_pkg
 import toolkit.plugins as plugins_pkg
 import toolkit.profile as profile_pkg
@@ -15,6 +17,8 @@ from toolkit.profile import (
     write_suggested_read_yml,
 )
 from toolkit.raw import run_raw, run_raw_validation, validate_raw_output
+
+pytestmark = pytest.mark.contract
 
 
 def test_clean_exports() -> None:

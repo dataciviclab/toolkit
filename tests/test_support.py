@@ -12,8 +12,6 @@ from toolkit.core.support import (
     _support_expected_mart_outputs,
 )
 
-pytestmark = pytest.mark.policy
-
 
 # --- Helpers ---
 

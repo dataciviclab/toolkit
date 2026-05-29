@@ -2,6 +2,8 @@ import pytest
 import duckdb
 from pathlib import Path
 
+from tests.helpers import NoopLogger
+
 from toolkit.clean.read_csv_normalized import (
     _execute_normalized_csv_read,
     _load_normalized_csv_frame,
@@ -9,12 +11,7 @@ from toolkit.clean.read_csv_normalized import (
 from toolkit.clean.run import run_clean
 
 
-class _NoopLogger:
-    def info(self, *_args, **_kwargs):
-        return None
 
-    def warning(self, *_args, **_kwargs):
-        return None
 
 
 @pytest.mark.policy
@@ -49,7 +46,7 @@ def test_run_clean_csv_columns_reads_trailing_delimiter_csv(tmp_path: Path):
                 },
             },
         },
-        _NoopLogger(),
+        NoopLogger(),
     )
 
     out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
@@ -231,7 +228,7 @@ def test_run_clean_compact_columns_format_renames_and_types(tmp_path: Path):
                 },
             },
         },
-        _NoopLogger(),
+        NoopLogger(),
     )
 
     out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
@@ -273,7 +270,7 @@ def test_run_clean_compact_columns_format_with_int_type(tmp_path: Path):
                 },
             },
         },
-        _NoopLogger(),
+        NoopLogger(),
     )
 
     out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
@@ -320,7 +317,7 @@ def test_run_clean_compact_columns_format_no_trim_whitespace(tmp_path: Path):
                 },
             },
         },
-        _NoopLogger(),
+        NoopLogger(),
     )
 
     out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"

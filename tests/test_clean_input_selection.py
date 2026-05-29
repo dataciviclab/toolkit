@@ -7,6 +7,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
+from tests.helpers import NoopLogger
+
 from toolkit.clean.input_selection import _metadata_candidates, list_raw_candidates, select_inputs
 from toolkit.clean.run import run_clean
 from toolkit.core.io import write_json_atomic
@@ -14,12 +16,7 @@ from toolkit.core.io import write_json_atomic
 pytestmark = pytest.mark.contract
 
 
-class _NoopLogger:
-    def info(self, *_args, **_kwargs):
-        return None
 
-    def warning(self, *_args, **_kwargs):
-        return None
 
 
 def _write_csv(path: Path, content: str) -> Path:
@@ -52,7 +49,7 @@ def _run_clean_capture_inputs(
         return ("strict", {"delim": ";", "decimal": ",", "encoding": "utf-8"}, 42)
 
     monkeypatch.setattr("toolkit.clean.run._run_sql", _fake_run_sql)
-    run_clean("demo", 2024, str(tmp_path), clean_cfg, logger or _NoopLogger())
+    run_clean("demo", 2024, str(tmp_path), clean_cfg, logger or NoopLogger())
     return seen
 
 
@@ -248,7 +245,7 @@ def test_run_clean_rejects_php_only_inputs_with_clear_error(tmp_path: Path):
             2024,
             str(tmp_path),
             {"sql": str(sql_path), "read": {}},
-            _NoopLogger(),
+            NoopLogger(),
         )
 
 
@@ -273,7 +270,7 @@ def test_run_clean_dirty_csv_needs_auto_detect_false(tmp_path: Path):
                 "encoding": "utf-8",
             },
         },
-        _NoopLogger(),
+        NoopLogger(),
     )
 
     out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
@@ -306,7 +303,7 @@ def test_run_clean_dirty_csv_strict_mode_fails(tmp_path: Path):
                 "read_mode": "strict",
                 "read": {"header": True, "delim": ";", "encoding": "utf-8"},
             },
-            _NoopLogger(),
+            NoopLogger(),
         )
 
 
@@ -329,7 +326,7 @@ def test_run_clean_csv_error_message_includes_columns_hint(tmp_path: Path):
                 "read_mode": "strict",
                 "read": {"header": True, "delim": ";", "encoding": "utf-8"},
             },
-            _NoopLogger(),
+            NoopLogger(),
         )
 
 
@@ -356,7 +353,7 @@ def test_run_clean_accepts_decimal_read_option(tmp_path: Path):
                 "auto_detect": False,
             },
         },
-        _NoopLogger(),
+        NoopLogger(),
     )
 
     out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"

@@ -1,9 +1,9 @@
 import json
+from tests.helpers import write_parquet
 from pathlib import Path
 import re
 from types import SimpleNamespace
 
-import duckdb
 import pytest
 
 from toolkit.raw.validate import validate_raw_output
@@ -12,13 +12,6 @@ from toolkit.core.config_models import TransitionConfig
 from toolkit.core.validation import check_transitions
 from toolkit.mart.validate import run_mart_validation, validate_mart
 from toolkit.core.validation import write_validation_json
-
-
-def _write_parquet(path: Path, sql: str):
-    con = duckdb.connect(":memory:")
-    con.execute(sql)
-    con.execute(f"COPY t TO '{path}' (FORMAT 'parquet')")
-    con.close()
 
 
 def _assert_portable_json_report(path: Path, *, root: Path, field: str, expected: str):
@@ -51,7 +44,7 @@ def test_validate_raw_detects_html_in_csv(tmp_path: Path):
 @pytest.mark.policy
 def test_validate_clean_ok_and_missing_required(tmp_path: Path):
     p = tmp_path / "clean.parquet"
-    _write_parquet(p, "CREATE TABLE t AS SELECT 1 AS a, 'x' AS b")
+    write_parquet(p, "CREATE TABLE t AS SELECT 1 AS a, 'x' AS b")
 
     ok = validate_clean(p, required=["a", "b"])
     assert ok.ok is True
@@ -67,7 +60,7 @@ def test_validate_clean_report_uses_root_relative_path(tmp_path: Path):
     root = tmp_path / "root"
     parquet = root / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
     parquet.parent.mkdir(parents=True, exist_ok=True)
-    _write_parquet(parquet, "CREATE TABLE t AS SELECT 1 AS a, 'x' AS b")
+    write_parquet(parquet, "CREATE TABLE t AS SELECT 1 AS a, 'x' AS b")
 
     result = validate_clean(parquet, required=["a", "b"], root=root)
     report = write_validation_json(parquet.parent / "_validate" / "clean_validation.json", result)
@@ -85,7 +78,7 @@ def test_validate_mart_required_tables(tmp_path: Path):
     d = tmp_path / "mart"
     d.mkdir(parents=True, exist_ok=True)
 
-    _write_parquet(d / "foo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
+    write_parquet(d / "foo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
 
     res = validate_mart(d, required_tables=["foo", "bar"])
     assert res.ok is False
@@ -97,7 +90,7 @@ def test_validate_mart_min_rows_rule(tmp_path: Path):
     d = tmp_path / "mart"
     d.mkdir(parents=True, exist_ok=True)
 
-    _write_parquet(d / "foo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
+    write_parquet(d / "foo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
 
     bad = validate_mart(d, table_rules={"foo": {"min_rows": 2}})
     assert bad.ok is False
@@ -112,7 +105,7 @@ def test_validate_mart_warns_on_orphan_table_rules_against_declared_tables(tmp_p
     d = tmp_path / "mart"
     d.mkdir(parents=True, exist_ok=True)
 
-    _write_parquet(d / "foo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
+    write_parquet(d / "foo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
 
     result = validate_mart(
         d,
@@ -131,7 +124,7 @@ def test_validate_mart_report_uses_root_relative_dir(tmp_path: Path):
     root = tmp_path / "root"
     mart_dir = root / "data" / "mart" / "demo" / "2024"
     mart_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(mart_dir / "foo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
+    write_parquet(mart_dir / "foo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
 
     result = validate_mart(mart_dir, required_tables=["foo"], root=root)
     report = write_validation_json(mart_dir / "_validate" / "mart_validation.json", result)
@@ -150,7 +143,7 @@ def test_validate_mart_max_null_pct_rule(tmp_path: Path):
     d.mkdir(parents=True, exist_ok=True)
 
     # Two rows: one has NULL (50% nulls > 10% threshold)
-    _write_parquet(
+    write_parquet(
         d / "foo.parquet",
         "CREATE TABLE t AS SELECT * FROM (VALUES (1), (NULL)) v(valore)",
     )
@@ -220,7 +213,7 @@ def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Pa
     root = tmp_path / "root"
     mart_dir = root / "data" / "mart" / "demo" / "2024"
     mart_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(mart_dir / "mart_demo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
+    write_parquet(mart_dir / "mart_demo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
 
     (mart_dir / "metadata.json").write_text(
         json.dumps(
@@ -310,7 +303,7 @@ def test_run_clean_validation_uses_columns_raw_from_raw_profile(tmp_path: Path):
 
     clean_dir = root / "data" / "clean" / dataset / str(year)
     clean_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet", "CREATE TABLE t AS SELECT 1 AS col_alpha, 2 AS col_beta")
+    write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet", "CREATE TABLE t AS SELECT 1 AS col_alpha, 2 AS col_beta")
 
     (clean_dir / "metadata.json").write_text(
         json.dumps(
@@ -358,7 +351,7 @@ def test_run_clean_validation_raw_probe_source_legacy_autodetect(tmp_path: Path)
 
     clean_dir = root / "data" / "clean" / dataset / str(year)
     clean_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet", "CREATE TABLE t AS SELECT 1 AS col1, 2 AS col2")
+    write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet", "CREATE TABLE t AS SELECT 1 AS col1, 2 AS col2")
 
     (clean_dir / "metadata.json").write_text(
         json.dumps(
@@ -410,7 +403,7 @@ def test_run_clean_validation_raw_probe_source_unavailable_when_no_raw_file(
 
     clean_dir = root / "data" / "clean" / dataset / str(year)
     clean_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet", "CREATE TABLE t AS SELECT 1 AS col1")
+    write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet", "CREATE TABLE t AS SELECT 1 AS col1")
 
     (clean_dir / "metadata.json").write_text(
         json.dumps(

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import duckdb
 import pytest
+from tests.helpers import NoopLogger
 
 from toolkit.clean.run import run_clean
 from toolkit.cli.inspect.profile_ops import run_profile as run_profile_fn
@@ -15,17 +16,6 @@ from toolkit.mart.validate import run_mart_validation
 from toolkit.raw.run import run_raw
 
 pytestmark = pytest.mark.policy
-
-
-class _NoopLogger:
-    def info(self, *_args, **_kwargs):
-        return None
-
-    def warning(self, *_args, **_kwargs):
-        return None
-
-    def error(self, *_args, **_kwargs):
-        return None
 
 
 def _append_output_cfg(config_path: Path, *, artifacts: str) -> None:
@@ -53,7 +43,7 @@ def test_artifacts_policy_minimal_behaves_like_standard(
     monkeypatch.chdir(project_example)
     cfg = load_config(config_path)
     year = cfg.years[0]
-    logger = _NoopLogger()
+    logger = NoopLogger()
 
     run_raw(
         cfg.dataset, year, cfg.root, cfg.raw, logger,
@@ -89,7 +79,7 @@ def test_artifacts_policy_standard_keeps_expected_artifacts(
     monkeypatch.chdir(project_example)
     cfg = load_config(config_path)
     year = cfg.years[0]
-    logger = _NoopLogger()
+    logger = NoopLogger()
 
     run_raw(
         cfg.dataset, year, cfg.root, cfg.raw, logger,
@@ -159,7 +149,7 @@ def test_run_mart_supports_root_posix_placeholder(tmp_path: Path) -> None:
     (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
 
     cfg = load_config(config_path)
-    logger = _NoopLogger()
+    logger = NoopLogger()
     result = run_mart(
         cfg.dataset,
         year,
@@ -245,7 +235,7 @@ def test_run_mart_supports_support_placeholder(tmp_path: Path) -> None:
     (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
 
     cfg = load_config(config_path)
-    logger = _NoopLogger()
+    logger = NoopLogger()
     result = run_mart(
         cfg.dataset,
         year,

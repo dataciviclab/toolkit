@@ -1,7 +1,7 @@
 """Toolkit MCP server.
 
 Espone 13 tool read-only per ispezione della pipeline toolkit:
-- ispezione standard: inspect_paths, show_schema, raw_profile, summary
+- ispezione standard: inspect_paths, inspect_schema, inspect_profile, summary
 - diagnostica: review_readiness, schema_diff, run_summary
 - run history: list_runs
 - discovery: list_candidates, dataset_info
@@ -56,17 +56,32 @@ def toolkit_inspect_paths(config_path: str, year: int = 0) -> dict[str, Any]:
     return guard_timed(inspect_paths_impl, "toolkit_inspect_paths", config_path, year or None)
 
 
-@mcp.tool(description="Mostra lo schema di raw, clean o mart.", structured_output=True)
-def toolkit_show_schema(config_path: str, layer: str = "clean", year: int = 0) -> dict[str, Any]:
-    return guard_timed(show_schema_impl, "toolkit_show_schema", config_path, layer, year or None)
+@mcp.tool(
+    name="toolkit_show_schema",
+    description="[DEPRECATED] usa toolkit_inspect_schema",
+    structured_output=True,
+)
+@mcp.tool(
+    name="toolkit_inspect_schema",
+    description="Mostra lo schema di raw, clean o mart.",
+    structured_output=True,
+)
+def toolkit_inspect_schema(config_path: str, layer: str = "clean", year: int = 0) -> dict[str, Any]:
+    return guard_timed(show_schema_impl, "toolkit_inspect_schema", config_path, layer, year or None)
 
 
 @mcp.tool(
+    name="toolkit_raw_profile",
+    description="[DEPRECATED] usa toolkit_inspect_profile",
+    structured_output=True,
+)
+@mcp.tool(
+    name="toolkit_inspect_profile",
     description="Mostra il profilo raw: encoding, delimiter, colonne, missingness e mapping suggestions.",
     structured_output=True,
 )
-def toolkit_raw_profile(config_path: str, year: int = 0) -> dict[str, Any]:
-    return guard_timed(raw_profile_impl, "toolkit_raw_profile", config_path, year or None)
+def toolkit_inspect_profile(config_path: str, year: int = 0) -> dict[str, Any]:
+    return guard_timed(raw_profile_impl, "toolkit_inspect_profile", config_path, year or None)
 
 
 @mcp.tool(

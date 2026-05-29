@@ -507,7 +507,7 @@ def raw_preview(
         return {
             "path": str(raw_file),
             "format": "xlsx",
-            "note": "File binario XLSX. Usa toolkit_show_schema(layer='raw') per lo schema delle colonne.",
+            "note": "File binario XLSX. Usa toolkit_inspect_schema(layer='raw') per lo schema delle colonne.",
             "dataset": paths.get("dataset"),
             "year": paths.get("year"),
         }
@@ -516,7 +516,7 @@ def raw_preview(
             "path": str(raw_file),
             "format": suffix.lstrip("."),
             "note": f"Formato '{suffix}' non supportato per preview raw. "
-                    "Usa toolkit_show_schema(layer='raw') per lo schema.",
+                    "Usa toolkit_inspect_schema(layer='raw') per lo schema.",
             "dataset": paths.get("dataset"),
             "year": paths.get("year"),
         }

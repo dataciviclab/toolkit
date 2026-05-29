@@ -14,10 +14,16 @@ pytestmark = pytest.mark.contract
 def test_mcp_server_registers_expected_tools() -> None:
     tools = asyncio.run(mcp_server.mcp.list_tools())
     tool_names = {tool.name for tool in tools}
+    # Both new (canonical) and old (deprecated alias) names must be present
     assert tool_names == {
         "toolkit_inspect_paths",
+        # New canonical names
+        "toolkit_inspect_schema",
+        "toolkit_inspect_profile",
+        # Old names kept as backward-compatible aliases
         "toolkit_show_schema",
         "toolkit_raw_profile",
+        # Rest
         "toolkit_run_summary",
         "toolkit_summary",
         "toolkit_review_readiness",
@@ -35,6 +41,11 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_html_extract_links",
         "toolkit_sparql_query",
     }
+
+    # Verify old aliases are documented as deprecated
+    tool_map = {t.name: t for t in tools}
+    assert "[DEPRECATED]" in (tool_map["toolkit_show_schema"].description or "")
+    assert "[DEPRECATED]" in (tool_map["toolkit_raw_profile"].description or "")
 
 
 def test_tool_returns_payload_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -205,7 +216,7 @@ def test_toolkit_probe_url_returns_payload(monkeypatch: pytest.MonkeyPatch) -> N
     assert result == {"status_code": 200, "content_type": "text/csv"}
 
 
-def test_toolkit_show_schema_passes_layer_and_year(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_toolkit_inspect_schema_passes_layer_and_year(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: dict[str, object] = {}
 
     def fake_impl(config_path: str, layer: str, year: int | None) -> dict[str, object]:
@@ -216,13 +227,13 @@ def test_toolkit_show_schema_passes_layer_and_year(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(mcp_server, "show_schema_impl", fake_impl)
 
-    payload = mcp_server.toolkit_show_schema("dataset.yml", "mart", 2024)
+    payload = mcp_server.toolkit_inspect_schema("dataset.yml", "mart", 2024)
 
     assert payload == {"layer": "mart", "year": 2024}
     assert calls == {"config_path": "dataset.yml", "layer": "mart", "year": 2024}
 
 
-def test_toolkit_raw_profile_passes_config_and_year(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_toolkit_inspect_profile_passes_config_and_year(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: dict[str, object] = {}
 
     def fake_impl(config_path: str, year: int | None) -> dict[str, object]:
@@ -232,7 +243,7 @@ def test_toolkit_raw_profile_passes_config_and_year(monkeypatch: pytest.MonkeyPa
 
     monkeypatch.setattr(mcp_server, "raw_profile_impl", fake_impl)
 
-    payload = mcp_server.toolkit_raw_profile("dataset.yml", 2024)
+    payload = mcp_server.toolkit_inspect_profile("dataset.yml", 2024)
 
     assert payload == {"profile_exists": True}
     assert calls == {"config_path": "dataset.yml", "year": 2024}

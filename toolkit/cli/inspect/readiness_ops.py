@@ -19,6 +19,11 @@ from toolkit.cli.inspect._helpers import (
     _validation_summary_for_layer,
 )
 from toolkit.core.config import load_config
+from toolkit.core.paths import (
+    RAW_VALIDATION,
+    CLEAN_VALIDATION,
+    MART_VALIDATION,
+)
 
 
 
@@ -163,7 +168,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "decimal_suggested": (paths.get("raw_hints") or {}).get("decimal"),
                 "skip_suggested": (paths.get("raw_hints") or {}).get("skip"),
                 "raw_warnings": (paths.get("raw_hints") or {}).get("warnings", []),
-                "validation": _validation_summary_for_layer(raw_dir, "raw_validation.json"),
+                "validation": _validation_summary_for_layer(raw_dir, RAW_VALIDATION),
                 "run_status": layer_run_statuses.get("raw"),
             },
             "clean": {
@@ -172,7 +177,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "output": clean_paths.get("output"),
                 "output_exists": _exists(clean_paths.get("output")),
                 "metadata_exists": _exists(clean_paths.get("metadata")),
-                "validation": _validation_summary_for_layer(clean_dir, "_validate/clean_validation.json"),
+                "validation": _validation_summary_for_layer(clean_dir, CLEAN_VALIDATION),
                 "run_status": layer_run_statuses.get("clean"),
             },
             "mart": {
@@ -183,7 +188,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "output_exists_count": len(mart_outputs) - len(missing_mart_outputs),
                 "missing_outputs": missing_mart_outputs,
                 "metadata_exists": _exists(mart_paths.get("metadata")),
-                "validation": _validation_summary_for_layer(mart_dir, "_validate/mart_validation.json"),
+                "validation": _validation_summary_for_layer(mart_dir, MART_VALIDATION),
                 "run_status": layer_run_statuses.get("mart"),
             },
         },
@@ -325,9 +330,9 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
     raw_dir_path = Path(raw.get("dir", ""))
     clean_dir_path = Path(clean.get("dir", ""))
     mart_dir_path = Path(mart.get("dir", ""))
-    raw_msgs = _validation_msgs(raw_dir_path, "raw_validation.json")
-    clean_msgs = _validation_msgs(clean_dir_path, "_validate/clean_validation.json")
-    mart_msgs = _validation_msgs(mart_dir_path, "_validate/mart_validation.json")
+    raw_msgs = _validation_msgs(raw_dir_path, RAW_VALIDATION)
+    clean_msgs = _validation_msgs(clean_dir_path, CLEAN_VALIDATION)
+    mart_msgs = _validation_msgs(mart_dir_path, MART_VALIDATION)
 
     # --- Extract rich layer info from summary (already computed) ---
     raw_val = raw.get("validation") or {}

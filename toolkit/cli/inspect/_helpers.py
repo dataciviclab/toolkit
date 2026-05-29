@@ -13,7 +13,14 @@ import duckdb
 
 from toolkit.cli.common import load_layer_profile_summaries
 from toolkit.core.metadata import read_layer_metadata
-from toolkit.core.paths import layer_year_dir
+from toolkit.core.paths import (
+    RAW_VALIDATION,
+    CLEAN_VALIDATION,
+    MART_VALIDATION,
+    RAW_PROFILE,
+    RAW_SUGGESTED_READ,
+    layer_year_dir,
+)
 from toolkit.core.run_context import get_run_dir, latest_run
 from toolkit.core.support import resolve_support_payloads
 from toolkit.profile.raw import sniff_source_file
@@ -49,7 +56,7 @@ def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
     # Read actual columns from raw_profile.json if available.
     columns_preview = list(profile_hints.get("columns_preview") or [])
     if not columns_preview and profile_hints.get("is_binary_file"):
-        raw_profile_path = raw_dir / "_profile" / "raw_profile.json"
+        raw_profile_path = raw_dir / RAW_PROFILE
         if raw_profile_path.exists():
             try:
                 raw_profile_data = json.loads(raw_profile_path.read_text(encoding="utf-8"))
@@ -104,7 +111,7 @@ def _raw_output_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
     return {
         "dir": str(raw_dir),
         "metadata": str(raw_dir / "metadata.json"),
-        "validation": str(raw_dir / "raw_validation.json"),
+        "validation": str(raw_dir / RAW_VALIDATION),
     }
 
 
@@ -118,7 +125,7 @@ def _clean_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
         "dir": str(clean_dir),
         "output": str(_clean_output_path(root, dataset, year)),
         "metadata": str(clean_dir / "metadata.json"),
-        "validation": str(clean_dir / "_validate" / "clean_validation.json"),
+        "validation": str(clean_dir / CLEAN_VALIDATION),
     }
 
 
@@ -144,7 +151,7 @@ def _mart_paths(
         "dir": str(mart_dir),
         "outputs": [str(path) for path in _mart_output_paths(root, mart_dir, tables)],
         "metadata": str(mart_dir / "metadata.json"),
-        "validation": str(mart_dir / "_validate" / "mart_validation.json"),
+        "validation": str(mart_dir / MART_VALIDATION),
     }
 
 
@@ -154,7 +161,7 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
     mart_tables = cfg.mart.get("tables") or []
     raw_dir = layer_year_dir(root, "raw", cfg.dataset, year)
     raw_meta = read_layer_metadata(raw_dir)
-    suggested_read_path = raw_dir / "_profile" / "suggested_read.yml"
+    suggested_read_path = raw_dir / RAW_SUGGESTED_READ
     profile_hints = raw_meta.get("profile_hints") or {}
 
     run_files = sorted(run_dir.glob("*.json")) if run_dir.exists() else []

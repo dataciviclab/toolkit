@@ -6,7 +6,7 @@ from pathlib import Path
 from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict, parse_bool
 from toolkit.core.metadata import config_hash_for_year, merge_layer_manifest, sha256_bytes, write_metadata
-from toolkit.core.paths import layer_year_dir, to_root_relative
+from toolkit.core.paths import RAW_VALIDATION, RAW_PROFILE, layer_year_dir, to_root_relative
 from toolkit.core.registry import register_builtin_plugins
 from toolkit.core.validation import write_validation_json
 from toolkit.profile.raw import sniff_source_file, profile_raw, write_raw_profile, write_suggested_read_yml
@@ -168,7 +168,7 @@ def run_raw(
                 )
                 profile_dir = out_dir / "_profile"
                 write_raw_profile(profile_dir, raw_profile)
-                logger.info("RAW profile -> %s", profile_dir / "raw_profile.json")
+                logger.info("RAW profile -> %s", profile_dir / RAW_PROFILE)
 
                 scaffold_clean_if_missing(
                     raw_profile.__dict__,
@@ -202,7 +202,7 @@ def run_raw(
 
     # --- QA RAW ---
     result = validate_raw_output(out_dir, files_written)
-    vpath = write_validation_json(out_dir / "raw_validation.json", result)
+    vpath = write_validation_json(out_dir / RAW_VALIDATION, result)
     merge_layer_manifest(
         out_dir,
         validation_path=vpath.name,

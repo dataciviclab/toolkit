@@ -55,6 +55,25 @@ def serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | N
     return to_root_relative(path, rel_root)
 
 
+# ---------------------------------------------------------------------------
+# Artifact filenames (relative to layer year directory)
+# Single source of truth — every writer/reader must use these constants.
+# ---------------------------------------------------------------------------
+
+# Validation
+RAW_VALIDATION = "raw_validation.json"
+CLEAN_VALIDATION = "_validate/clean_validation.json"
+MART_VALIDATION = "_validate/mart_validation.json"
+
+# Profile (raw only)
+RAW_PROFILE_DIR = "_profile"
+RAW_PROFILE = f"{RAW_PROFILE_DIR}/raw_profile.json"
+RAW_SUGGESTED_READ = f"{RAW_PROFILE_DIR}/suggested_read.yml"
+
+# Metadata
+METADATA = "metadata.json"
+
+
 def resolve_sql_path(sql_ref: str | Path, *, base_dir: Path | None) -> Path:
     """Resolve a SQL file reference to an absolute Path.
 

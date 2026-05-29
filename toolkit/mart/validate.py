@@ -14,7 +14,7 @@ from toolkit.core.column_rules import (
 )
 from toolkit.core.config_models import MartTableRuleConfig, MartValidationSpec
 from toolkit.core.metadata import merge_layer_manifest
-from toolkit.core.paths import layer_year_dir, to_root_relative
+from toolkit.core.paths import MART_VALIDATION, layer_year_dir, to_root_relative
 from toolkit.core.validation import (
     ValidationResult,
     build_validation_summary,
@@ -232,7 +232,7 @@ def run_mart_validation(cfg, year: int, logger, *, sample_mode: bool = False) ->
             sections={"transition": transition_report},
         )
 
-    report = write_validation_json(Path(mart_dir) / "_validate" / "mart_validation.json", result)
+    report = write_validation_json(Path(mart_dir) / MART_VALIDATION, result)
     merge_layer_manifest(
         mart_dir,
         metadata_path="metadata.json",

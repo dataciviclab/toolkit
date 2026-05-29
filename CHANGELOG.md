@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.17.0] - 2026-05-29
+
+### Changed
+
+- **Centralizzati tutti i path artifact in `core/paths.py`**: validation, profile e metadata nei layer raw/clean/mart ora referenziano costanti invece di stringhe letterali (PR #298).
+- **review-readiness arricchito**: ora include `validation_msgs` (primi 3 errori/warning reali per layer), profilo raw e statistiche di transizione. Integrato in `run full` e MCP `toolkit_review_readiness` (PR #296).
+- **Regole validazione centralizzate**: `core/column_rules.py` come posizione canonica per `check_not_null`, `check_primary_key`, `check_ranges`, `check_max_null_pct`. Utility SQL (`q_ident`, `sql_path`, `quote_list`) in `core/sql_utils.py` (PR #295).
+
+### Fixed
+
+- **`list_candidates` MCP usava root hardcoded**: ora legge il campo `root` dal dataset.yml, risolvendo `has_clean=False` per la maggior parte dei candidati (PR #297).
+
 ## [Unreleased]
 
 ### Added

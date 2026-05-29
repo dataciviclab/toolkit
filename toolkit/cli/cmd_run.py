@@ -579,8 +579,7 @@ def run_init(
 
         # Track scaffold state BEFORE run_raw, so we can tell if it was
         # scaffolded by this run vs. pre-existing.
-        clean_cfg = cfg.clean or {}
-        clean_sql_rel = clean_cfg.get("sql", "sql/clean.sql")
+        clean_sql_rel = str(cfg.clean.sql) if cfg.clean.sql else "sql/clean.sql"
         clean_sql_path = Path(cfg.base_dir) / clean_sql_rel
         scaffold_existed_before = clean_sql_path.exists()
 

@@ -1,7 +1,8 @@
 """Config loading and typed access.
 
-ToolkitConfig exposes both typed attribute access (cfg.raw.sources) and
-dict-style backward compat (cfg.raw.get("sources")) for gradual migration.
+ToolkitConfig exposes typed attribute access to the underlying Pydantic
+config models (cfg.raw.sources, cfg.clean.sql, etc.) and provides
+ensure_dict() for the runner layer that still expects plain dicts.
 """
 
 from __future__ import annotations
@@ -10,75 +11,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
-
 from toolkit.core.config_models import (
+    CleanConfig,
+    ConfigPolicy,
+    GlobalValidationConfig,
+    MartConfig,
+    OutputConfig,
+    RawConfig,
+    SupportDatasetConfig,
     TimeCoverage,
     ToolkitConfigModel,
     ensure_str_list as _ensure_str_list,
     load_config_model,
     parse_bool as _parse_bool,
 )
-
-
-class _CompatModel:
-    """Wraps a Pydantic model to support both attribute and dict-style access.
-
-    During migration, consumers can use either:
-      cfg.raw.sources        (typed, preferred)
-      cfg.raw.get("sources") (backward compat)
-      cfg.raw["sources"]     (backward compat)
-    """
-
-    def __init__(self, model: BaseModel) -> None:
-        self._model = model
-
-    def __getattr__(self, name: str) -> Any:
-        # Attribute access: cfg.raw.sources
-        # Only called for attributes NOT on _CompatModel itself
-        return getattr(self._model, name)
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """Dict-style access: cfg.clean.get("sql")
-
-        Returns nested Pydantic models as plain dicts to maintain
-        full dict-style compatibility for existing consumers.
-        """
-        value = getattr(self._model, key, default)
-        if isinstance(value, BaseModel):
-            return value.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True)
-        if isinstance(value, list):
-            return [
-                item.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True)
-                if isinstance(item, BaseModel) else item
-                for item in value
-            ]
-        return value
-
-    def __eq__(self, other: object) -> bool:
-        """Compare against dict or model for backward compat."""
-        if isinstance(other, dict):
-            return self._model.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True) == other
-        if isinstance(other, BaseModel):
-            return self._model == other
-        return NotImplemented
-
-    def __getitem__(self, key: str) -> Any:
-        """Dict-style item access: cfg.clean["sql"]"""
-        value = getattr(self._model, key)
-        if isinstance(value, BaseModel):
-            return _CompatModel(value)
-        return value
-
-    def __contains__(self, key: str) -> bool:
-        return hasattr(self._model, key)
-
-    def model_dump(self, **kwargs) -> dict[str, Any]:
-        return self._model.model_dump(**kwargs)
-
-
-def _wrap_model(obj: BaseModel) -> _CompatModel:
-    return _CompatModel(obj)
 
 
 @dataclass(frozen=True)
@@ -95,35 +41,35 @@ class ToolkitConfig:
     # Internal: the typed model (used by typed properties below)
     _model: ToolkitConfigModel = field(repr=False, compare=False)
 
-    # --- Typed accessors (return _CompatModel for gradual migration) ---
+    # --- Typed accessors ---
 
     @property
-    def raw(self) -> _CompatModel:
-        return _wrap_model(self._model.raw)
+    def raw(self) -> RawConfig:
+        return self._model.raw
 
     @property
-    def clean(self) -> _CompatModel:
-        return _wrap_model(self._model.clean)
+    def clean(self) -> CleanConfig:
+        return self._model.clean
 
     @property
-    def mart(self) -> _CompatModel:
-        return _wrap_model(self._model.mart)
+    def mart(self) -> MartConfig:
+        return self._model.mart
 
     @property
-    def config(self) -> _CompatModel:
-        return _wrap_model(self._model.config)
+    def config(self) -> ConfigPolicy:
+        return self._model.config
 
     @property
-    def validation(self) -> _CompatModel:
-        return _wrap_model(self._model.validation)
+    def validation(self) -> GlobalValidationConfig:
+        return self._model.validation
 
     @property
-    def output(self) -> _CompatModel:
-        return _wrap_model(self._model.output)
+    def output(self) -> OutputConfig:
+        return self._model.output
 
     @property
-    def support(self) -> list[_CompatModel]:
-        return [_wrap_model(item) for item in self._model.support]
+    def support(self) -> list[SupportDatasetConfig]:
+        return list(self._model.support)
 
     def resolve(self, rel_path: str | Path) -> Path:
         p = Path(rel_path)
@@ -139,7 +85,7 @@ def ensure_str_list(value: Any, field_name: str) -> list[str]:
 
 
 def ensure_dict(cfg: Any) -> Any:
-    """Convert _CompatModel or Pydantic model to dict, preserving aliases.
+    """Convert Pydantic model to dict, preserving aliases.
 
     Uses by_alias=True so that fields like validate_config are serialized
     as "validate" (matching the YAML alias). Excludes unset fields to

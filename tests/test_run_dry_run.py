@@ -457,10 +457,16 @@ def _make_probe_cfg(tmp_path: Path) -> tuple:
     return load_config(config_path), 2022
 
 
+class _FakeRawConfig:
+    """Minimal RawConfig-like object for probe test."""
+    def __init__(self, sources: list):
+        self.sources = sources
+
+
 class _FakeCfg:
     """Minimal config mock for probe tests (ToolkitConfig e' frozen)."""
     def __init__(self, raw_sources: list):
-        self.raw = {"sources": raw_sources} or {}
+        self.raw = _FakeRawConfig(raw_sources)
         self.base_dir = None
 
 

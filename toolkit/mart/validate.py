@@ -184,16 +184,19 @@ def validate_mart(
 def run_mart_validation(cfg, year: int, logger, *, sample_mode: bool = False) -> dict[str, Any]:
     mart_dir = layer_year_dir(cfg.root, "mart", cfg.dataset, year)
 
-    mart_cfg: dict[str, Any] = cfg.mart or {}
-    declared_tables = [
-        table.get("name")
-        for table in mart_cfg.get("tables", [])
-        if isinstance(table, dict) and table.get("name")
-    ]
+    mart_cfg = cfg.mart
+    if isinstance(mart_cfg, dict):
+        declared_tables = [t.get("name") for t in mart_cfg.get("tables", []) if isinstance(t, dict) and t.get("name")]
+        validate_dict = mart_cfg.get("validate") or {}
+    else:
+        declared_tables = [t.name for t in mart_cfg.tables if t.name]
+        validate_dict = mart_cfg.validate.model_dump(
+            mode="python", by_alias=True, exclude_none=True, exclude_unset=True
+        )
     spec = MartValidationSpec.model_validate(
         {
-            "required_tables": mart_cfg.get("required_tables"),
-            "validate": mart_cfg.get("validate") or {},
+            "required_tables": cfg.mart.required_tables if not isinstance(cfg.mart, dict) else mart_cfg.get("required_tables"),
+            "validate": validate_dict,
         }
     )
 

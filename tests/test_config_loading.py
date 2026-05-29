@@ -81,7 +81,8 @@ def test_load_config_parses_mart_transition_config(tmp_path: Path):
     _yml(yml, years=[2024], mart={"validate": {"transition": {"max_row_drop_pct": 12.5, "warn_removed_columns": "false"}}})
 
     cfg = load_config(yml)
-    assert cfg.mart["validate"]["transition"] == {
+    assert cfg.mart.validate.transition is not None
+    assert cfg.mart.validate.transition.model_dump(exclude_none=True, exclude_unset=True) == {
         "max_row_drop_pct": 12.5,
         "warn_removed_columns": False,
     }
@@ -93,7 +94,8 @@ def test_load_config_parses_clean_promotion_config(tmp_path: Path):
     _yml(yml, years=[2024], clean={"validate": {"promotion": {"max_row_drop_pct": 8.5, "warn_removed_columns": "false"}}})
 
     cfg = load_config(yml)
-    assert cfg.clean["validate"]["promotion"] == {
+    assert cfg.clean.validate.promotion is not None
+    assert cfg.clean.validate.promotion.model_dump(exclude_none=True, exclude_unset=True) == {
         "max_row_drop_pct": 8.5,
         "warn_removed_columns": False,
     }
@@ -233,13 +235,11 @@ def test_load_config_resolves_support_config_paths_from_dataset_dir(tmp_path: Pa
 
     cfg = load_config(yml)
 
-    assert cfg.support == [
-        {
-            "name": "scuole",
-            "config": (support_dir / "dataset.yml").resolve(),
-            "years": [2024],
-        }
-    ]
+    assert len(cfg.support) == 1
+    s = cfg.support[0]
+    assert s.name == "scuole"
+    assert s.config == (support_dir / "dataset.yml").resolve()
+    assert s.years == [2024]
 
 
 @pytest.mark.policy

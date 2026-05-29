@@ -81,9 +81,7 @@ def scaffold_clean(
             raise typer.BadParameter(f"Impossibile leggere il profilo RAW: {exc}")
 
     # Default output: use configured clean.sql path, or fall back to sql/clean.sql
-    # cfg.clean is a dict from load_config (via _compat_clean -> model_dump)
-    clean_cfg = cfg.clean or {}
-    configured_sql = clean_cfg.get("sql") or "sql/clean.sql"
+    configured_sql = str(cfg.clean.sql) if cfg.clean.sql else "sql/clean.sql"
     default_output = Path(cfg.base_dir) / configured_sql
     target_path = Path(output) if output else default_output
 

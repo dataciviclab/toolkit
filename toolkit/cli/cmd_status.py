@@ -225,8 +225,7 @@ def status(
     _print_validation_summaries(layers)
 
     # multi-year mart (ex cross_year)
-    mart_cfg = getattr(cfg, "mart", None) or {}
-    multi_year_tables = [t for t in (mart_cfg.get("tables") or []) if isinstance(t, dict) and t.get("years")]
+    multi_year_tables = [t for t in cfg.mart.tables if t.years]
     if multi_year_tables:
         my_dir = layer_dataset_dir(cfg.root, "mart", dataset)
         my_meta = my_dir / METADATA

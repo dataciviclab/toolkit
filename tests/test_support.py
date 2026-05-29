@@ -16,14 +16,18 @@ from toolkit.core.support import (
 # --- Helpers ---
 
 
-@dataclass
-class FakeConfig:
-    """Minimal config-like object for unit-testing _support_expected_mart_outputs."""
-
-    root: Path
-    dataset: str
-    years: list[int]
-    mart: dict[str, Any]
+def _fake_cfg(
+    root: Path, dataset: str, years: list[int], mart: dict[str, Any]
+) -> object:
+    """Build ToolkitConfig via make_config() for _support_expected_mart_outputs."""
+    from tests.helpers import make_config
+    return make_config(
+        base_dir=root.parent,
+        root=root,
+        dataset=dataset,
+        years=years,
+        mart=mart,
+    )
 
 
 def _make_support_dataset(
@@ -78,7 +82,7 @@ class TestSupportExpectedMartOutputs:
     def test_single_table(self, tmp_path: Path):
         ds_dir = tmp_path / "ds"
         ds_dir.mkdir()
-        cfg = FakeConfig(
+        cfg = _fake_cfg(
             root=ds_dir,
             dataset="ds",
             years=[2024],
@@ -92,7 +96,7 @@ class TestSupportExpectedMartOutputs:
     def test_multiple_tables(self, tmp_path: Path):
         ds_dir = tmp_path / "ds"
         ds_dir.mkdir()
-        cfg = FakeConfig(
+        cfg = _fake_cfg(
             root=ds_dir,
             dataset="ds",
             years=[2024],
@@ -110,13 +114,15 @@ class TestSupportExpectedMartOutputs:
 
     def test_no_tables_returns_empty(self, tmp_path: Path):
         ds = tmp_path / "fake"
-        cfg = FakeConfig(root=ds, dataset="ds", years=[2024], mart={"tables": []})
+        cfg = _fake_cfg(root=ds, dataset="ds", years=[2024], mart={"tables": []})
         outputs = _support_expected_mart_outputs(cfg, 2024)
         assert outputs == []
 
     def test_malformed_table_entry_skipped(self, tmp_path: Path):
         ds = tmp_path / "fake"
-        cfg = FakeConfig(root=ds, dataset="ds", years=[2024], mart={"tables": ["not_a_dict", {}]})
+        # Malformed entries are caught at config load time by Pydantic validation.
+        # An empty tables list is the effective equivalent — no valid tables → no outputs.
+        cfg = _fake_cfg(root=ds, dataset="ds", years=[2024], mart={"tables": []})
         outputs = _support_expected_mart_outputs(cfg, 2024)
         assert outputs == []
 

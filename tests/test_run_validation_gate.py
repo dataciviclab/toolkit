@@ -339,7 +339,6 @@ def test_run_full_second_validation_block_uses_sample_mode(tmp_path: Path, monke
         root=None,
         json_output=False,
         dry_run=False,
-        strict_config=False,
     )
 
     assert sample_mode_passed["clean"] is True, "run_full deve passare sample_mode=True alla validazione clean"

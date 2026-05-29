@@ -141,9 +141,6 @@ def status(
     run_id: str | None = typer.Option(None, "--run-id", help="Specific run id"),
     latest: bool = typer.Option(False, "--latest", help="Show latest run"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
-    strict_config: bool = typer.Option(
-        False, "--strict-config", help="Treat deprecated config forms as errors"
-    ),
 ):
     """
     Mostra lo stato dell'ultimo run o di uno specifico run_id.
@@ -151,8 +148,7 @@ def status(
     if run_id and latest:
         raise typer.BadParameter("Use either --run-id or --latest, not both")
 
-    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
-    cfg = load_config(config, strict_config=strict_config_flag)
+    cfg = load_config(config)
 
     # Usa summary() per i dati centralizzati
     s = _summary(config, year or None)

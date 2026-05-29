@@ -53,7 +53,7 @@ def test_cli_dry_run_resolves_sql_from_config_dir_not_cwd(tmp_path: Path, monkey
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--dry-run", "--strict-config"],
+        ["run", "all", "--config", str(config_path), "--dry-run",],
     )
 
     assert result.exit_code == 0
@@ -68,18 +68,18 @@ def test_cli_commands_use_dataset_yml_dir_as_path_base(tmp_path: Path, monkeypat
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
 
-    run_result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--strict-config"])
+    run_result = runner.invoke(app, ["run", "all", "--config", str(config_path),])
     assert run_result.exit_code == 0, run_result.output
 
     validate_result = runner.invoke(
         app,
-        ["validate", "all", "--config", str(config_path), "--strict-config"],
+        ["validate", "all", "--config", str(config_path),],
     )
     assert validate_result.exit_code == 0, validate_result.output
 
     profile_result = runner.invoke(
         app,
-        ["inspect", "profile", "--config", str(config_path), "--strict-config"],
+        ["inspect", "profile", "--config", str(config_path),],
     )
     assert profile_result.exit_code == 0, profile_result.output
 
@@ -94,7 +94,6 @@ def test_cli_commands_use_dataset_yml_dir_as_path_base(tmp_path: Path, monkeypat
             "--latest",
             "--config",
             str(config_path),
-            "--strict-config",
         ],
     )
     assert status_result.exit_code == 0, status_result.output
@@ -133,7 +132,6 @@ def test_cli_resume_from_other_cwd_falls_back_and_reuses_relative_paths(tmp_path
             failed_run_id,
             "--config",
             str(config_path),
-            "--strict-config",
         ],
     )
 
@@ -203,7 +201,7 @@ def test_cli_root_flag_overrides_output(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--root", str(custom_root), "--strict-config"],
+        ["run", "all", "--config", str(config_path), "--root", str(custom_root),],
     )
     assert result.exit_code == 0, result.output
     assert (custom_root / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet").exists()
@@ -224,7 +222,7 @@ def test_cli_run_smoke_isolates_output(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--smoke", "--strict-config"],
+        ["run", "all", "--config", str(config_path), "--smoke",],
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
@@ -249,7 +247,7 @@ def test_cli_run_sample_rows_isolates_output(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--sample-rows", "500", "--strict-config"],
+        ["run", "all", "--config", str(config_path), "--sample-rows", "500",],
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
@@ -274,7 +272,7 @@ def test_cli_run_full_smoke_isolates_output(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["run", "full", "--config", str(config_path), "--smoke", "--strict-config"],
+        ["run", "full", "--config", str(config_path), "--smoke",],
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
@@ -299,7 +297,7 @@ def test_cli_run_smoke_run_record_marked(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--smoke", "--strict-config"],
+        ["run", "all", "--config", str(config_path), "--smoke",],
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output

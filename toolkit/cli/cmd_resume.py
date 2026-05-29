@@ -111,7 +111,6 @@ def resume(
     latest: bool = typer.Option(False, "--latest", help="Resume latest run"),
     from_layer: str | None = typer.Option(None, "--from-layer", help="Force restart from raw | clean | mart"),
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
-    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
     """
     Riprende un run dal primo layer non SUCCESS.
@@ -121,8 +120,7 @@ def resume(
     if from_layer is not None and from_layer not in _LAYER_ORDER:
         raise typer.BadParameter("--from-layer must be one of: raw, clean, mart")
 
-    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
-    cfg = load_config(config, strict_config=strict_config_flag)
+    cfg = load_config(config)
     if cfg.dataset != dataset:
         raise typer.BadParameter(f"Config dataset mismatch: expected {dataset}, found {cfg.dataset}")
     if year not in cfg.years:

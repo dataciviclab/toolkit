@@ -15,15 +15,11 @@ from ._helpers import _compare_schema_entries, _raw_schema_payload
 def schema_diff(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
-    strict_config: bool = typer.Option(
-        False, "--strict-config", help="Treat deprecated config forms as errors"
-    ),
 ):
     """
     Confronta i principali segnali di schema RAW tra gli anni configurati.
     """
-    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
-    cfg = load_config(config, strict_config=strict_config_flag)
+    cfg = load_config(config)
     entries = [_raw_schema_payload(cfg, selected_year) for selected_year in iter_years(cfg, None)]
     comparisons = _compare_schema_entries(entries)
     payload = {

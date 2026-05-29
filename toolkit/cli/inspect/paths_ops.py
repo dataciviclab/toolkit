@@ -16,15 +16,11 @@ def paths(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     year: int | None = typer.Option(None, "--year", help="Dataset year"),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output for notebooks/scripts"),
-    strict_config: bool = typer.Option(
-        False, "--strict-config", help="Treat deprecated config forms as errors"
-    ),
 ):
     """
     Mostra i path stabili di output e l'ultimo run record per dataset/year.
     """
-    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
-    cfg = load_config(config, strict_config=strict_config_flag)
+    cfg = load_config(config)
     years = iter_years(cfg, year)
     payload = [_payload_for_year(cfg, selected_year) for selected_year in years]
 

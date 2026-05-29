@@ -424,13 +424,11 @@ def run(
     config: str,
     years: str | None = None,
     dry_run: bool = False,
-    strict_config: bool = False,
     sample_rows: int | None = None,
     sample_bytes: int | None = None,
 ):
     """Backward-compatible Python entrypoint used by tests and internal callers."""
-    strict_flag = strict_config if isinstance(strict_config, bool) else False
-    cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag)
+    cfg, logger = load_cfg_and_logger(config)
     dry_flag = dry_run if isinstance(dry_run, bool) else False
     years_arg = years if isinstance(years, str) else None
     selected_years = iter_selected_years(cfg, years_arg=years_arg)
@@ -491,9 +489,7 @@ def _make_step_cmd(step: str):
         sample_bytes: int | None = typer.Option(None, "--sample-bytes", help="Scarica solo N bytes in RAW (HTTP Range header + troncamento locale)"),
         root: str | None = typer.Option(None, "--root", help="Override root output directory (es. DCL_ROOT)"),
         dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
-        strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
     ):
-        strict_flag = strict_config if isinstance(strict_config, bool) else False
         dry_flag = dry_run if isinstance(dry_run, bool) else False
 
         sample_rows_final = 1000 if smoke else sample_rows
@@ -504,10 +500,10 @@ def _make_step_cmd(step: str):
         sampling_active = sample_rows_final is not None or sample_bytes_final is not None
         root_override_final = root
         if sampling_active and not root:
-            _cfg0, _ = load_cfg_and_logger(config, strict_config=strict_flag)
+            _cfg0, _ = load_cfg_and_logger(config)
             root_override_final = str(_cfg0.root / "smoke")
 
-        cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag, root_override=root_override_final)
+        cfg, logger = load_cfg_and_logger(config, root_override=root_override_final)
 
         years_arg = years if isinstance(years, str) else None
         year_arg = year if isinstance(year, int) else None
@@ -540,7 +536,6 @@ def run_init(
     year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without executing"),
-    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
     # Parametri interni (non CLI) — passati da cmd_init.py
     sample_bytes: int | None = None,
     root_override: str | None = None,
@@ -551,8 +546,7 @@ def run_init(
     Non esegue clean ne mart. Output: raw scaricato, profilo disponibile,
     sql/clean.sql scaffoldato oppure skip esplicito se gia esistente.
     """
-    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
-    cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag, root_override=root_override)
+    cfg, logger = load_cfg_and_logger(config, root_override=root_override)
     dry_run_flag = dry_run if isinstance(dry_run, bool) else False
     years_arg = years if isinstance(years, str) else None
     year_arg = year if isinstance(year, int) else None
@@ -630,14 +624,12 @@ def run_full(
     root: str | None = typer.Option(None, "--root", help="Override root output directory (es. DCL_ROOT)"),
     json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
-    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
     """Esegue run all + validate all + review-readiness in un unico comando.
 
     Se il dataset.yml dichiara support: [], i support vengono eseguiti
     automaticamente prima del candidate (run all + validate per ogni anno).
     """
-    strict_flag = strict_config if isinstance(strict_config, bool) else False
     dry_flag = dry_run if isinstance(dry_run, bool) else False
 
     sample_rows_final = 1000 if smoke else sample_rows
@@ -648,10 +640,10 @@ def run_full(
     sampling_active = sample_rows_final is not None or sample_bytes_final is not None
     root_override_final = root
     if sampling_active and not root:
-        _cfg0, _ = load_cfg_and_logger(config, strict_config=strict_flag)
+        _cfg0, _ = load_cfg_and_logger(config)
         root_override_final = str(_cfg0.root / "smoke")
 
-    cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag, root_override=root_override_final)
+    cfg, logger = load_cfg_and_logger(config, root_override=root_override_final)
     years_arg = years if isinstance(years, str) else None
     selected_years = iter_selected_years(cfg, year_arg=None, years_arg=years_arg)
 
@@ -683,14 +675,14 @@ def run_full(
             try:
                 # Campionamento attivo: isola output del support in {root}/smoke (come il candidate)
                 if sample_mode:
-                    _sup0, _ = load_cfg_and_logger(str(entry.config), strict_config=strict_flag)
+                    _sup0, _ = load_cfg_and_logger(str(entry.config))
                     support_cfg, support_logger = load_cfg_and_logger(
-                        str(entry.config), strict_config=strict_flag,
+                        str(entry.config),
                         root_override=str(_sup0.root / "smoke"),
                     )
                 else:
                     support_cfg, support_logger = load_cfg_and_logger(
-                        str(entry.config), strict_config=strict_flag
+                        str(entry.config)
                     )
             except Exception as exc:
                 logger.error("Support: cannot load config %s: %s", entry.config, exc)

@@ -740,13 +740,14 @@ def run_full(
                 if not all_passed and fail_on_error_flag:
                     results["status"] = "failed"
 
-                # Review readiness (capture, not print)
+                # Review readiness (capture full result including layers)
                 from toolkit.cli.inspect.readiness_ops import review_readiness as _review_readiness
                 readiness = _review_readiness(config, year or None)
                 results["steps"][str(year)]["readiness"] = readiness.get("readiness")
                 results["steps"][str(year)]["checks"] = readiness.get("check_count", 0)
                 results["steps"][str(year)]["checks_ok"] = readiness.get("ok_count", 0)
                 results["steps"][str(year)]["checks_fail"] = readiness.get("fail_count", 0)
+                results["steps"][str(year)]["layers"] = readiness.get("layers", {})
 
         # Multi-year mart: run once per dataset after per-year processing
         if not dry_flag and _has_multi_year_mart(cfg):
@@ -766,7 +767,39 @@ def run_full(
         typer.echo(f"years: {selected_years}")
         typer.echo(f"status: {status}")
         for y, s in results["steps"].items():
-            typer.echo(f"  {y}: run={s['run']} validate={s['validate']} readiness={s.get('readiness','?')} checks={s.get('checks_ok',0)}/{s.get('checks',0)}")
+            typer.echo(f"  {y}: run={s['run']} validate={s['validate']}")
+            lyrs = s.get("layers", {})
+            for lname in ("raw", "clean", "mart"):
+                ln = lyrs.get(lname) or {}
+                lv = ln.get("validation") or {}
+                ok = lv.get("ok")
+                icon = "✅" if ok else ("🔴" if ok is False else "·")
+                parts = []
+                if lname == "raw":
+                    pf = ln.get("profile") or {}
+                    if pf.get("encoding"):
+                        parts.append(f"encoding={pf['encoding']}")
+                    if pf.get("delim"):
+                        parts.append(f"delim={pf['delim']}")
+                    pw = ln.get("profile_warnings") or []
+                    if pw:
+                        parts.append(f"{len(pw)} warning")
+                elif lname == "clean":
+                    rc = lv.get("row_count") or ln.get("row_count")
+                    cc = lv.get("col_count")
+                    if rc is not None:
+                        parts.append(f"{rc} righe")
+                    if cc is not None:
+                        parts.append(f"{cc} colonne")
+                    tr = ln.get("transition") or {}
+                    if tr.get("row_drop_pct") is not None:
+                        parts.append(f"raw->clean: {tr['row_drop_pct']}% righe")
+                elif lname == "mart":
+                    tbl = ln.get("tables") or []
+                    ready = sum(1 for t in tbl if t.get("readable"))
+                    parts.append(f"{ready}/{len(tbl)} tabelle")
+                typer.echo(f"       {lname}: {icon}  {'  '.join(parts)}" if parts else f"       {lname}: {icon}")
+            typer.echo(f"       readiness: {s.get('readiness', '?')}  ({s.get('checks_ok', 0)}/{s.get('checks', 0)})")
 
     if results["status"] != "passed":
         raise typer.Exit(code=1)

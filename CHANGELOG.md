@@ -14,20 +14,14 @@ All notable changes to this project will be documented in this file.
 
 - **`list_candidates` MCP usava root hardcoded**: ora legge il campo `root` dal dataset.yml, risolvendo `has_clean=False` per la maggior parte dei candidati (PR #297).
 
-## [Unreleased]
-
-### Added
-
-- `run cross_year` now writes dedicated metadata, manifest and validation artifacts for multi-year outputs.
-- `run` and `validate` now support `--years` for scoped multi-year execution.
-- MART validation now reports `table_rules` entries that do not match declared tables.
-- Nuovo source type `http_post_file` per download via HTTP POST con form-encoded body (PR #242).
+## [1.18.0] - 2026-05-29
 
 ### Changed
 
-- `pyarrow` is no longer a direct dependency. All Parquet I/O is handled natively by DuckDB. Users who need `pyarrow` directly can install the `parquet` optional extra (`pip install dataciviclab-toolkit[parquet]`).
-- Documentation now classifies `run cross_year` and `inspect schema-diff` as supported advanced tooling in the feature stability matrix.
-- Changelog/docs references to config warning codes now reflect the current implemented range through `DCL013`.
+- **Backward-compat cleanup**: rimossi 9 artefatti backward-compat (shim `mcp/contracts.py`, alias `build_profile_hints`, re-export `run_context`, stub CLI `cross_year` e `inspect url`, MCP aliases `toolkit_show_schema`/`toolkit_raw_profile`, `block_url_direct`, scaffold re-export da `scout`). Netto -140 righe (PR #300).
+- **MCP tool names allineati a CLI**: `toolkit_show_schema` → `toolkit_inspect_schema`, `toolkit_raw_profile` → `toolkit_inspect_profile`. Help comandi `run` arricchito con docstring specifici per step (PR #299).
+
+## [Unreleased]
 - **HTTP centralizzato su `lab_connectors.http`**: `http_file`, `ckan`, `sdmx` e `inspect url` ora usano `HttpClient` invece di `requests.get` diretto, con retry, SSL fallback e timeout uniformi (PR #232, #233, #234, #235).
 - `lab-connectors` aggiunto come dipendenza core (git URL in `pyproject.toml`).
 

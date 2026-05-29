@@ -701,6 +701,82 @@ def test_list_candidates_returns_sorted_list(tmp_path: Path, monkeypatch: pytest
     assert "c-dataset" in slugs
 
 
+def test_list_candidates_resolves_custom_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """list_candidates deve risolvere root:../../custom_out da dataset.yml
+    e trovare clean/mart/runs sotto custom_out/ anziche' WORKSPACE_ROOT/out/."""
+    from toolkit.mcp import discovery as _discmod
+    monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
+
+    import duckdb
+    import json
+
+    name = "test-root-candidate"
+    cand_dir = tmp_path / "dataset-incubator" / "candidates" / name
+    cand_dir.mkdir(parents=True, exist_ok=True)
+
+    # dataset.yml con root custom (relativo al dataset.yml)
+    (cand_dir / "dataset.yml").write_text(
+        f"root: \"../../custom_out\"\n"
+        f"schema_version: 1\n"
+        f"dataset:\n"
+        f"  name: {name}\n"
+        f"  years: [2024]\n",
+        encoding="utf-8",
+    )
+
+    # Crea output in dataset-incubator/custom_out/data/clean/{name}/
+    # (root:../../custom_out è relativo a dataset-incubator/candidates/{name}/)
+    custom_root = tmp_path / "dataset-incubator" / "custom_out"
+    clean_dir = custom_root / "data" / "clean" / name / "2024"
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    clean_parquet = clean_dir / f"{name}_2024_clean.parquet"
+    with duckdb.connect(":memory:") as con:
+        con.execute("CREATE TABLE t AS SELECT 1 AS x")
+        con.execute(f"COPY t TO '{clean_parquet}' (FORMAT PARQUET)")
+
+    # Crea output mart
+    mart_dir = custom_root / "data" / "mart" / name / "2024"
+    mart_dir.mkdir(parents=True, exist_ok=True)
+    mart_parquet = mart_dir / f"mart_{name}.parquet"
+    with duckdb.connect(":memory:") as con:
+        con.execute("CREATE TABLE t AS SELECT 1 AS x")
+        con.execute(f"COPY t TO '{mart_parquet}' (FORMAT PARQUET)")
+
+    # Crea run record sotto custom_root/data/_runs/
+    runs_dir = custom_root / "data" / "_runs" / name / "2024"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    (runs_dir / "run_success.json").write_text(
+        json.dumps({
+            "dataset": name,
+            "year": 2024,
+            "status": "SUCCESS",
+            "layers": {"clean": {"status": "SUCCESS"}, "mart": {"status": "SUCCESS"}},
+        }),
+        encoding="utf-8",
+    )
+
+    from toolkit.mcp.discovery import list_candidates
+
+    result = list_candidates(stage="candidates")
+    items = [c for c in result if c["slug"] == name]
+    assert len(items) == 1, f"Candidate {name} non trovato: {result}"
+    item = items[0]
+
+    assert item["dataset_name"] == name
+    assert item["has_clean"] is True, (
+        f"has_clean=False, clean_dir={clean_dir} esiste? {clean_dir.exists()}"
+    )
+    assert item["has_mart"] is True, f"has_mart=False, mart_dir={mart_dir} esiste? {mart_dir.exists()}"
+    assert item["last_run_status"] == "SUCCESS"
+
+    # Verifica che il fallback WORKSPACE_ROOT/out/ NON abbia i dati
+    wrong_clean = tmp_path / "out" / "data" / "clean" / name
+    assert not wrong_clean.exists(), (
+        f"Il dato non dovrebbe essere in {wrong_clean} ma in {custom_root}/data/clean/"
+    )
+
+
+
 def test_safe_path_absolute_not_found_raises_clean_error(tmp_path: Path) -> None:
     """_safe_path con path assoluto inesistente deve alzare ToolkitClientError,
     non RecursionError (regressione recursion loop)."""

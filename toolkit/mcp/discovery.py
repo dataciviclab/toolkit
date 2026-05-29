@@ -24,7 +24,7 @@ from lab_connectors.mcp.errors import ErrorCode
 def _read_minimal_config(dataset_yml: Path) -> dict[str, Any]:
     """Legge solo i campi essenziali da dataset.yml senza validazione piena.
 
-    Restituisce un dict con: name, years (e raw data per reference).
+    Restituisce un dict con: name, years, root (stringa raw dal YAML).
     """
     try:
         data = yaml.safe_load(dataset_yml.read_text(encoding="utf-8"))
@@ -43,18 +43,23 @@ def _read_minimal_config(dataset_yml: Path) -> dict[str, Any]:
     if isinstance(years, int):
         years = [years]
 
+    root_raw = data.get("root")
     return {
         "name": str(name) if name else None,
         "years": [int(y) for y in years] if isinstance(years, list) else [],
+        "root": str(root_raw) if isinstance(root_raw, str) else None,
     }
 
 
-def _find_latest_run_status(slug: str) -> str | None:
+def _find_latest_run_status(slug: str, runs_root: Path | None = None) -> str | None:
     """Cerca l'ultimo run record per un dataset slug e restituisce lo status.
 
-    Scansiona ``{WORKSPACE}/out/data/_runs/{slug}/``.
+    Scansiona ``{runs_root or WORKSPACE/out}/data/_runs/{slug}/``.
     """
-    runs_base = WORKSPACE_ROOT / "out" / "data" / "_runs" / slug
+    if runs_root is not None:
+        runs_base = runs_root / "data" / "_runs" / slug
+    else:
+        runs_base = WORKSPACE_ROOT / "out" / "data" / "_runs" / slug
     if not runs_base.exists():
         return None
 
@@ -149,16 +154,25 @@ def list_candidates(
             name = minimal.get("name") or slug
             years = minimal.get("years", [])
 
+            # Risolvi root output: usa quello dal dataset.yml se presente,
+            # altrimenti fallback a WORKSPACE_ROOT/out
+            root_raw = minimal.get("root")
+            if root_raw:
+                # root è relativo al file dataset.yml
+                resolved_root = (dataset_yml.parent / root_raw).resolve()
+            else:
+                resolved_root = WORKSPACE_ROOT / "out"
+            out_root = resolved_root / "data"
+
             # Presenza layer: per sub-candidates, il dataset name è
             # quello dal dataset.yml (potrebbe differire dallo slug)
             dataset_name_for_path = name if name != slug else parent_dir.name
-            out_root = WORKSPACE_ROOT / "out" / "data"
             clean_dir = out_root / "clean" / dataset_name_for_path
             mart_dir = out_root / "mart" / dataset_name_for_path
             has_clean = clean_dir.exists() and any(clean_dir.iterdir())
             has_mart = mart_dir.exists() and any(mart_dir.iterdir())
 
-            last_run_status = _find_latest_run_status(dataset_name_for_path)
+            last_run_status = _find_latest_run_status(dataset_name_for_path, runs_root=resolved_root)
 
             results.append({
                 "slug": slug,

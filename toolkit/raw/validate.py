@@ -5,7 +5,7 @@ from typing import Any
 import json
 
 from toolkit.core.metadata import merge_layer_manifest
-from toolkit.core.paths import layer_year_dir
+from toolkit.core.paths import RAW_VALIDATION, layer_year_dir
 from toolkit.core.validation import ValidationResult, build_validation_summary, write_validation_json
 
 TEXT_EXT = {".csv", ".txt", ".tsv", ".json", ".xml", ".html"}
@@ -123,7 +123,7 @@ def run_raw_validation(root: str | None, dataset: str, year: int, logger) -> dic
         summary=enriched_summary,
         sections=result.sections,
     )
-    report = write_validation_json(out_dir / "raw_validation.json", result)
+    report = write_validation_json(out_dir / RAW_VALIDATION, result)
     merge_layer_manifest(
         out_dir,
         validation_path=report.name,

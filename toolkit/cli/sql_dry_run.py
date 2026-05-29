@@ -179,11 +179,9 @@ def validate_sql_dry_run(cfg, *, year: int, layers: list[str], dry_run: bool = F
         return
 
     with safe_connect() as con:
-        clean_sql = cfg.clean.sql if hasattr(cfg.clean, "sql") else cfg.clean.get("sql")
-        if clean_sql:
-            support = ensure_dict(cfg.support) if hasattr(cfg.support, "__iter__") else cfg.support
+        if cfg.clean.sql:
             _build_clean_preview(cfg, year=year, con=con,
-                                 support_cfg=support,
+                                 support_cfg=ensure_dict(cfg.support),
                                  dry_run=dry_run)
         if "mart" in layers:
             _validate_mart_sql(cfg, year=year, con=con, dry_run=dry_run)

@@ -151,7 +151,10 @@ def status(
 
     cfg = load_config(config)
     ds_name = dataset or cfg.dataset
-    yr = year if year is not None else (cfg.years[0] if cfg.years else None)
+    yr: int | None = year if year is not None else (cfg.years[0] if cfg.years else None)
+    if yr is None:
+        typer.echo(f"error: no years configured in {config}", err=True)
+        raise typer.Exit(code=1)
 
     s = _summary(config, yr)
     record = (s.get("run") or {}).get("latest_run_record") or {}

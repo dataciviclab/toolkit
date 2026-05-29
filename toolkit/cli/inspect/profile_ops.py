@@ -139,9 +139,6 @@ def profile(
     csv_path: str | None = typer.Option(None, "--csv-path", help="CSV file to preview (instead of --config)"),
     year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
-    strict_config: bool = typer.Option(
-        False, "--strict-config", help="Treat deprecated config forms as errors"
-    ),
     json_output: bool = typer.Option(False, "--json", help="Emit JSON output"),
 ):
     """
@@ -179,9 +176,8 @@ def profile(
     if not config:
         raise typer.BadParameter("Serve --config o --csv-path")
 
-    strict_flag = strict_config if isinstance(strict_config, bool) else False
     year_val = year if isinstance(year, int) else None
     years_val = years if isinstance(years, str) else None
-    cfg, logger = load_cfg_and_logger(config, strict_config=strict_flag)
+    cfg, logger = load_cfg_and_logger(config)
     selected_years = iter_selected_years(cfg, year_arg=year_val, years_arg=years_val)
     run_profile(cfg, selected_years, logger)

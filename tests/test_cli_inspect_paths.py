@@ -16,13 +16,13 @@ def test_inspect_paths_reports_dataset_repo_layout_from_other_cwd(
     config_path = project_example / "dataset.yml"
 
     run_result = runner.invoke(
-        app, ["run", "all", "--config", str(config_path), "--strict-config"]
+        app, ["run", "all", "--config", str(config_path),]
     )
     assert run_result.exit_code == 0, run_result.output
 
     result = runner.invoke(
         app,
-        ["inspect", "paths", "--config", str(config_path), "--year", "2022", "--strict-config"],
+        ["inspect", "paths", "--config", str(config_path), "--year", "2022",],
     )
 
     assert result.exit_code == 0, result.output
@@ -65,7 +65,6 @@ def test_inspect_paths_json_is_notebook_friendly(
             "--year",
             "2022",
             "--json",
-            "--strict-config",
         ],
     )
 
@@ -139,7 +138,6 @@ def test_inspect_paths_json_reports_resolved_support_outputs(
             "--year",
             "2022",
             "--json",
-            "--strict-config",
         ],
     )
 
@@ -243,7 +241,6 @@ def test_inspect_paths_json_exposes_layer_profiles(tmp_path: Path, runner) -> No
             "--year",
             "2022",
             "--json",
-            "--strict-config",
         ],
     )
 

@@ -27,15 +27,11 @@ def scaffold_clean(
         "--print-read-config",
         help="Print clean.read YAML proposal and exit (does not write clean.sql)",
     ),
-    strict_config: bool = typer.Option(
-        False, "--strict-config", help="Treat deprecated config forms as errors"
-    ),
 ):
     """
     Genera una bozza iniziale di clean.sql a partire dal profilo RAW esistente.
     """
-    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
-    cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag)
+    cfg, logger = load_cfg_and_logger(config)
 
     years = iter_years(cfg, year)
     if len(years) > 1 and year is None:

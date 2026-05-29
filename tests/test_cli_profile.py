@@ -16,7 +16,7 @@ def _run_raw(project_example: Path, runner) -> Path:
     config_path = project_example / "dataset.yml"
     run_result = runner.invoke(
         app,
-        ["run", "raw", "--config", str(config_path), "--strict-config"],
+        ["run", "raw", "--config", str(config_path),],
     )
     assert run_result.exit_code == 0, run_result.output
     return config_path
@@ -36,7 +36,7 @@ def test_cli_profile_raw_happy_path(
 
     profile_result = runner.invoke(
         app,
-        ["inspect", "profile", "--config", str(config_path), "--strict-config"],
+        ["inspect", "profile", "--config", str(config_path),],
     )
     assert profile_result.exit_code == 0, profile_result.output
     assert "PROFILE RAW ->" in profile_result.output
@@ -50,7 +50,7 @@ def test_inspect_profile_happy_path(
 
     profile_result = runner.invoke(
         app,
-        ["inspect", "profile", "--config", str(config_path), "--strict-config"],
+        ["inspect", "profile", "--config", str(config_path),],
     )
     assert profile_result.exit_code == 0, profile_result.output
     assert "PROFILE RAW ->" in profile_result.output

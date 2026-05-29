@@ -129,9 +129,6 @@ def batch(
     json_output: bool = typer.Option(
         False, "--json", help="Output in formato JSON (machine-readable)"
     ),
-    strict_config: bool = typer.Option(
-        False, "--strict-config", help="Treat deprecated config forms as errors"
-    ),
 ):
     """
     Esegue più config in sequenza e stampa un report aggregato finale.
@@ -148,7 +145,6 @@ def batch(
 
     configs_file = Path(configs)
     config_paths = _read_config_list(configs_file)
-    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
 
     rows: list[dict[str, str]] = []
     failures: list[dict[str, str]] = []
@@ -162,18 +158,17 @@ def batch(
                 # Carica prima senza override per scoprire cfg.root originale,
                 # poi ricarica con root_override a {root}/smoke
                 _cfg0, _logger0 = load_cfg_and_logger(
-                    str(config_path), strict_config=strict_config_flag
+                    str(config_path)
                 )
                 if json_output:
                     _silence_logger()
                 cfg, logger = load_cfg_and_logger(
                     str(config_path),
-                    strict_config=strict_config_flag,
                     root_override=str(_cfg0.root / "smoke"),
                 )
             else:
                 cfg, logger = load_cfg_and_logger(
-                    str(config_path), strict_config=strict_config_flag
+                    str(config_path)
                 )
 
             # Quando --json è attivo, silenzia il logger dopo ogni

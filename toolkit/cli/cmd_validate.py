@@ -18,7 +18,6 @@ def validate(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
-    strict_config: bool = typer.Option(False, "--strict-config", help="Treat deprecated config forms as errors"),
 ):
     """
     Quality gate per RAW, CLEAN (include cross-layer raw→clean) e MART.
@@ -26,8 +25,7 @@ def validate(
       clean.validate.*
       mart.validate.table_rules.*
     """
-    strict_config_flag = strict_config if isinstance(strict_config, bool) else False
-    cfg, logger = load_cfg_and_logger(config, strict_config=strict_config_flag)
+    cfg, logger = load_cfg_and_logger(config)
     years_arg = years if isinstance(years, str) else None
     year_arg = year if isinstance(year, int) else None
     selected_years = iter_selected_years(cfg, year_arg=year_arg, years_arg=years_arg)

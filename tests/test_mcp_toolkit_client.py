@@ -120,6 +120,106 @@ def test_review_readiness_ready_when_all_layers_present(tmp_path: Path, monkeypa
     assert payload["ok_count"] == len(payload["checks"])
 
 
+def test_review_readiness_enriched_layers_shape(tmp_path: Path, monkeypatch) -> None:
+    """review_readiness()['layers'] deve contenere validation, validation_msgs, profile, transition."""
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
+    config_path = dst / "dataset.yml"
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+    import duckdb
+
+    # Crea raw output + raw_validation.json (raw NON usa _validate/)
+    raw_dir = dst / "_smoke_out" / "data" / "raw" / "project_example" / "2022"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "data.csv").write_bytes(b"a;b\n1;2\n")
+    (raw_dir / "raw_validation.json").write_text(
+        '{"ok":true,"errors":[],"warnings":["test warning raw"],"summary":{}}',
+        encoding="utf-8",
+    )
+
+    # Crea clean output + clean validation con messaggi
+    clean_dir = dst / "_smoke_out" / "data" / "clean" / "project_example" / "2022"
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    clean_parquet = clean_dir / "project_example_2022_clean.parquet"
+    with duckdb.connect(":memory:") as conn:
+        conn.execute("CREATE TABLE t AS SELECT 1 AS x")
+        conn.execute(f"COPY t TO '{clean_parquet}' (FORMAT PARQUET)")
+    clean_val_dir = clean_dir / "_validate"
+    clean_val_dir.mkdir(parents=True, exist_ok=True)
+    (clean_val_dir / "clean_validation.json").write_text(
+        json.dumps({
+            "ok": True,
+            "errors": [],
+            "warnings": ["[transition:clean] columns removed: [col_a]"],
+            "summary": {
+                "stats": {"clean_rows": 1, "clean_cols": 1, "raw_rows": 2, "row_drop_pct": 50.0},
+            },
+            "sections": {
+                "transition": {
+                    "raw_row_count": 2,
+                    "clean_row_count": 1,
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    # Crea mart output + mart validation con messaggi
+    mart_dir = dst / "_smoke_out" / "data" / "mart" / "project_example" / "2022"
+    mart_dir.mkdir(parents=True, exist_ok=True)
+    mart_p = mart_dir / "mart_t.parquet"
+    with duckdb.connect(":memory:") as conn:
+        conn.execute("CREATE TABLE t AS SELECT 1 AS x")
+        conn.execute(f"COPY t TO '{mart_p}' (FORMAT PARQUET)")
+    mart_val_dir = mart_dir / "_validate"
+    mart_val_dir.mkdir(parents=True, exist_ok=True)
+    (mart_val_dir / "mart_validation.json").write_text(
+        json.dumps({
+            "ok": False,
+            "errors": ["[mart_t] row_count too small"],
+            "warnings": [],
+            "summary": {"row_counts": {"mart_t": 1}},
+        }),
+        encoding="utf-8",
+    )
+
+    payload = review_readiness(str(config_path), 2022)
+    layers = payload.get("layers", {})
+
+    # --- Asserts sulla struttura layers ---
+    assert "raw" in layers
+    assert "clean" in layers
+    assert "mart" in layers
+
+    # Raw: deve leggere raw_validation.json (non _validate/)
+    raw_msgs = layers["raw"].get("validation_msgs", {})
+    assert "test warning raw" in raw_msgs.get("warnings", []), (
+        f"Raw validation messages non trovate: {raw_msgs}"
+    )
+
+    # Clean: validation_msgs deve contenere il warning di transizione
+    clean_msgs = layers["clean"].get("validation_msgs", {})
+    assert len(clean_msgs.get("warnings", [])) == 1
+    assert "columns removed" in clean_msgs["warnings"][0]
+
+    # Clean: transition stats
+    trans = layers["clean"].get("transition", {})
+    assert trans.get("row_drop_pct") == 50.0
+
+    # Mart: validation_msgs deve contenere l'errore
+    mart_msgs = layers["mart"].get("validation_msgs", {})
+    assert len(mart_msgs.get("errors", [])) == 1
+    assert "row_count too small" in mart_msgs["errors"][0]
+
+    # Mart: ok=False si riflette nel validation
+    assert layers["mart"].get("validation", {}).get("ok") is False
+
+    # Raw profile hints (encoding/delim da suggested_read se presente)
+    raw_profile = layers["raw"].get("profile", {})
+    assert isinstance(raw_profile, dict)
+
+
 def test_review_readiness_needs_review_with_single_failure(tmp_path: Path, monkeypatch) -> None:
     src = Path("project-example")
     dst = tmp_path / "project-example"

@@ -520,7 +520,6 @@ def _run_bootstrap(config_path: str) -> None:
         year=None,
         years=None,
         dry_run=False,
-        strict_config=False,
     )
     typer.echo("")
     typer.echo("[scout] Raw run completed.")

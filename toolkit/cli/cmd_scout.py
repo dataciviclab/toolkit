@@ -201,9 +201,9 @@ def _scaffold_file(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
     # XLSX → profiling via openpyxl (stesso reader del runtime clean)
     binary_fmt = sniff_hints.get("is_binary_file")
     if binary_fmt in ("xlsx", "xls"):
-        from toolkit.profile.raw import _profile_excel
+        from toolkit.profile.raw import profile_excel
 
-        profile = _profile_excel(sample_path, None)
+        profile = profile_excel(sample_path, None)
         profile["is_binary_file"] = binary_fmt
     else:
         read_cfg: dict[str, Any] = {}

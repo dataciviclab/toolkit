@@ -6,7 +6,7 @@ from toolkit.profile.raw import write_suggested_read_yml
 from toolkit.profile._column_profile import _build_mapping_suggestions
 from toolkit.core.csv_read import csv_read_option_strings
 from toolkit.profile.raw import (
-    _profile_excel,
+    profile_excel,
     build_suggested_read_cfg,
     profile_raw,
     profile_with_read_cfg,
@@ -400,7 +400,7 @@ def test_profile_excel_parity_header_false_columns(tmp_path: Path):
         "columns": {"col0": "VARCHAR", "col1": "VARCHAR"},
     }
 
-    result = _profile_excel(xlsx_path, read_cfg)
+    result = profile_excel(xlsx_path, read_cfg)
 
     # columns_raw must reflect what the clean runtime will actually read after applying columns map
     assert result["columns_raw"] == ["col0", "col1"]

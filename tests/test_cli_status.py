@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from toolkit.core.run_context import get_run_dir
+from toolkit.core.run_records import get_run_dir
 
 from toolkit.cli.app import app
 from tests.helpers import make_dataset_yml, make_standard_sql

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import METADATA, from_root_relative, layer_year_dir, resolve_root
-from toolkit.core.run_context import get_run_dir, list_runs
+from toolkit.core.run_records import get_run_dir, list_runs
 
 
 def is_supported_input_file(path: Path) -> bool:

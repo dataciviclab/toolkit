@@ -14,16 +14,10 @@ pytestmark = pytest.mark.contract
 def test_mcp_server_registers_expected_tools() -> None:
     tools = asyncio.run(mcp_server.mcp.list_tools())
     tool_names = {tool.name for tool in tools}
-    # Both new (canonical) and old (deprecated alias) names must be present
     assert tool_names == {
         "toolkit_inspect_paths",
-        # New canonical names
         "toolkit_inspect_schema",
         "toolkit_inspect_profile",
-        # Old names kept as backward-compatible aliases
-        "toolkit_show_schema",
-        "toolkit_raw_profile",
-        # Rest
         "toolkit_run_summary",
         "toolkit_summary",
         "toolkit_review_readiness",
@@ -41,11 +35,6 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_html_extract_links",
         "toolkit_sparql_query",
     }
-
-    # Verify old aliases are documented as deprecated
-    tool_map = {t.name: t for t in tools}
-    assert "[DEPRECATED]" in (tool_map["toolkit_show_schema"].description or "")
-    assert "[DEPRECATED]" in (tool_map["toolkit_raw_profile"].description or "")
 
 
 def test_tool_returns_payload_on_success(monkeypatch: pytest.MonkeyPatch) -> None:

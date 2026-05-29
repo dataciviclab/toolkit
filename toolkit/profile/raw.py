@@ -126,8 +126,6 @@ def sniff_source_file(filepath: Path) -> Dict[str, Any]:
     }
 
 
-# Backward-compatible alias — new code should use sniff_source_file directly.
-build_profile_hints = sniff_source_file
 
 
 def build_suggested_read_cfg(
@@ -289,7 +287,7 @@ def _sample_profile_rows(
     return sample_rows, missingness_top
 
 
-def _profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[str, Any]:
     """Profile an Excel file using the same pandas reader as ``clean.read_excel``.
 
     Reuses ``_load_excel_frame`` from ``clean.read_excel`` to stay in sync
@@ -534,7 +532,7 @@ def profile_raw(
     # Phase 1b: Excel files — profile via pandas (same reader as clean runtime)
     binary_fmt = sniff_hints.get("is_binary_file")
     if binary_fmt in ("xlsx", "xls"):
-        runtime_result = _profile_excel(file0, read_cfg)
+        runtime_result = profile_excel(file0, read_cfg)
         return RawProfile(
             dataset=dataset,
             year=year,

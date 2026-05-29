@@ -46,12 +46,3 @@ from toolkit.scout.probe import (  # noqa: F401
     probe_url,
     probe_url_routed,
 )
-
-# Backward compat — scaffold ora in toolkit.scaffold
-from toolkit.scaffold.full import (  # noqa: F401
-    generate_full_scaffold,
-    suggest_clean_sql,
-    suggest_mart_sql,
-    suggest_validation,
-)
-from toolkit.scaffold.sources import infer_ext, infer_filename, slugify  # noqa: F401

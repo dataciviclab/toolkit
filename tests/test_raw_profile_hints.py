@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from toolkit.profile.raw import build_profile_hints
+from toolkit.profile.raw import sniff_source_file
 
 
-def test_build_profile_hints_for_standard_csv(tmp_path: Path) -> None:
+def test_sniff_source_file_for_standard_csv(tmp_path: Path) -> None:
     csv_path = tmp_path / "sample.csv"
     csv_path.write_text("id,name,value\n1,Alice,10\n2,Bob,20\n", encoding="utf-8")
 
-    hints = build_profile_hints(csv_path)
+    hints = sniff_source_file(csv_path)
 
     assert hints["file_used"] == "sample.csv"
     assert hints["encoding_suggested"] == "utf-8"
@@ -21,14 +21,14 @@ def test_build_profile_hints_for_standard_csv(tmp_path: Path) -> None:
     assert hints["warnings"] == []
 
 
-def test_build_profile_hints_detects_preamble_line(tmp_path: Path) -> None:
+def test_sniff_source_file_detects_preamble_line(tmp_path: Path) -> None:
     csv_path = tmp_path / "preamble.csv"
     csv_path.write_text(
         "Applied filters: year is 2024\nid;name;value\n1;Alice;10\n",
         encoding="utf-8",
     )
 
-    hints = build_profile_hints(csv_path)
+    hints = sniff_source_file(csv_path)
 
     assert hints["delim_suggested"] == ";"
     assert hints["skip_suggested"] == 1

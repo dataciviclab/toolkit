@@ -228,7 +228,6 @@ def list_runs(
         "config_path": str(config_path),
         "requested_year": year,
         "all_years": cross_year,
-        "cross_year": cross_year,  # backward compat
         "filters": {
             "since": since,
             "until": until,

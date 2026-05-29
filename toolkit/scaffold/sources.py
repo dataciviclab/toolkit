@@ -128,8 +128,3 @@ def block_sdmx(sdmx_info: dict[str, Any] | None, url: str) -> list[str]:
             "      primary: true",
         ]
     return block_http_file(url, "sdmx")
-
-
-def block_url_direct(url: str, slug: str, fname: str | None = None) -> list[str]:
-    """Legacy: genera sempre http_file. Mantenuto per retrocompat."""
-    return block_http_file(url, slug, fname)

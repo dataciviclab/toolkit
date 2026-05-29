@@ -20,11 +20,6 @@ from toolkit.core.paths import to_root_relative
 from toolkit.version import __version__ as _toolkit_version
 
 
-# --- Backward-compat re-exports (consumers import from run_context) ---
-# ruff: noqa: F401
-from toolkit.core.run_records import latest_run, list_runs, read_run_record
-
-
 # --- Module-level constants ---
 _LAYER_NAMES = ("raw", "clean", "mart")
 

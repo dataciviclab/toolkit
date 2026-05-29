@@ -102,7 +102,8 @@ mart: {}
     with caplog.at_level(logging.WARNING, logger="toolkit.core.config"):
         cfg = load_config(yml)
 
-    assert cfg.clean["read"] == {
+    assert cfg.clean.read is not None
+    assert cfg.clean.read.model_dump(mode="python", exclude_none=True, exclude_unset=True) == {
         "source": "auto",
         "columns": {"amount": "DOUBLE"},
         "delim": ";",

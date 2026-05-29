@@ -8,20 +8,14 @@ from toolkit.core.paths import layer_year_dir
 
 
 def _support_expected_mart_outputs(cfg, year: int) -> list[Path]:
-    tables = cfg.mart.get("tables") or []
+    mart_cfg = cfg.mart
+    if isinstance(mart_cfg, dict):
+        tables = mart_cfg.get("tables") or []
+        table_names = [t["name"] for t in tables if isinstance(t, dict) and t.get("name")]
+    else:
+        table_names = [t.name for t in mart_cfg.tables if t.name]
     mart_dir = layer_year_dir(cfg.root, "mart", cfg.dataset, year)
-    outputs: list[Path] = []
-    for table in tables:
-        if isinstance(table, dict):
-            name = table.get("name")
-        elif hasattr(table, "name"):
-            name = table.name
-        else:
-            continue
-        if not name:
-            continue
-        outputs.append(mart_dir / f"{name}.parquet")
-    return outputs
+    return [mart_dir / f"{name}.parquet" for name in table_names]
 
 
 def resolve_support_payloads(

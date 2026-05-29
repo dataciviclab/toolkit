@@ -11,12 +11,7 @@ from toolkit.core.paths import METADATA, layer_year_dir
 
 
 def dump_cfg_section(cfg_section: Any) -> Any:
-    """Convert _CompatModel section to dict for functions expecting dict.
-
-    _CompatModel si comporta sia come dict che come oggetto.
-    mypy non riconosce l'interfaccia ibrida, quindi va esplicitamente
-    convertito a dict prima di passarlo a funzioni tipizzate che
-    accettano ``dict[str, Any]``.
+    """Convert Pydantic model section to dict for functions expecting dict.
 
     Ordine: model_dump → Mapping (reso com'e') → altra iterabile (lista) → valore nudo.
     Un dict non deve passare per il caso lista, altrimenti ``dump_cfg_section({"a": 1})``

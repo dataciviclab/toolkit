@@ -5,17 +5,31 @@ from typing import Any
 
 def profile_required(cfg: Any) -> bool:
     """True quando il read source è ``"auto"`` e serve profiling raw."""
-    clean_cfg = getattr(cfg, "clean", None) if not isinstance(cfg, dict) else cfg.get("clean")
-    clean_cfg = clean_cfg or {}
-    read_cfg = clean_cfg.get("read")
-
-    if isinstance(read_cfg, dict):
-        source = read_cfg.get("source", "auto")
-    elif isinstance(read_cfg, str):
-        source = read_cfg
+    if not cfg:
+        return True  # default: assume profile needed
+    if isinstance(cfg, dict):
+        clean_cfg = cfg.get("clean") or {}
+        read_cfg = clean_cfg.get("read")
+        if isinstance(read_cfg, dict):
+            source = read_cfg.get("source", "auto")
+        elif isinstance(read_cfg, str):
+            source = read_cfg
+        else:
+            source = clean_cfg.get("read_source", "auto")
     else:
-        source = clean_cfg.get("read_source", "auto")
-
+        # ToolkitConfig object or duck-typed object with .clean
+        clean_attr = cfg.clean
+        if isinstance(clean_attr, dict):
+            read_cfg = clean_attr.get("read")
+            if isinstance(read_cfg, dict):
+                source = read_cfg.get("source", "auto")
+            elif isinstance(read_cfg, str):
+                source = read_cfg
+            else:
+                source = clean_attr.get("read_source", "auto")
+        else:
+            read_cfg = clean_attr.read
+            source = read_cfg.source if read_cfg else clean_attr.read_source
     return str(source or "auto").strip().lower() == "auto"
 
 

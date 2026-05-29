@@ -54,7 +54,7 @@ def _resolve_sql_path(cfg, rel_path: str | None) -> Path:
 
 
 def _is_mart_only_cfg(cfg) -> bool:
-    return not bool(cfg.clean.get("sql"))
+    return not bool(cfg.clean.sql)
 
 
 def _validate_execution_plan(cfg, step: str) -> list[str]:
@@ -72,7 +72,7 @@ def _validate_execution_plan(cfg, step: str) -> list[str]:
                 "run clean is not supported for mart-only / compose-only configs; "
                 "use: toolkit run mart --config ...",
             )
-        clean_sql = _resolve_sql_path(cfg, cfg.clean.get("sql"))
+        clean_sql = _resolve_sql_path(cfg, cfg.clean.sql)
         if not clean_sql.exists():
             raise ValueError(
                 f"CLEAN SQL file not found: {clean_sql}\n"
@@ -82,11 +82,11 @@ def _validate_execution_plan(cfg, step: str) -> list[str]:
             )
 
     if "mart" in layers:
-        tables = cfg.mart.get("tables") or []
+        tables = cfg.mart.tables or []
         if not isinstance(tables, list) or not tables:
             raise ValueError("mart.tables missing or empty in dataset.yml")
         for table in tables:
-            sql_path = _resolve_sql_path(cfg, table.get("sql") if hasattr(table, "get") else getattr(table, "sql", None))
+            sql_path = _resolve_sql_path(cfg, table.sql if hasattr(table, "sql") else None)
             if not sql_path.exists():
                 raise FileNotFoundError(f"MART SQL file not found: {sql_path}")
 
@@ -150,7 +150,7 @@ def _run_probe(cfg, year: int, logger) -> None:
     Non blocca mai — il vero errore arrivera' da raw.
     Salta local_file, sdmx, sparql (non timeoutano).
     """
-    sources = (cfg.raw or {}).get("sources") or []
+    sources = cfg.raw.sources
     if not sources:
         logger.info("PROBE | nessuna fonte remota da verificare")
         return
@@ -158,9 +158,9 @@ def _run_probe(cfg, year: int, logger) -> None:
     from toolkit.scout.http import probe_url_headers
 
     for src in sources:
-        stype = src.get("type", "http_file")
-        args = src.get("args", {})
-        name = src.get("name") or stype
+        stype = getattr(src, "type", None) or src.get("type", "http_file") if isinstance(src, dict) else src.type
+        args = getattr(src, "args", None) or src.get("args", {}) if isinstance(src, dict) else src.args
+        name = getattr(src, "name", None) or src.get("name", stype) if isinstance(src, dict) else (src.name or stype)
         url = (args.get("url") or "").replace("{year}", str(year))
 
         try:
@@ -204,7 +204,7 @@ def run_year(
     if logger is None:
         logger = get_logger()
 
-    fail_on_error = bool((cfg.validation or {}).get("fail_on_error", True))
+    fail_on_error = bool(cfg.validation.fail_on_error)
     planned_layers = _validate_execution_plan(cfg, step)
     layers_to_run = _layers_from_start(planned_layers, start_from_layer)
 
@@ -348,11 +348,7 @@ def run_year(
 
 def _has_multi_year_mart(cfg) -> bool:
     """Check if any mart table has an explicit ``years`` field (multi-year)."""
-    tables = (cfg.mart or {}).get("tables") or []
-    return any(
-        isinstance(t, dict) and t.get("years")
-        for t in tables
-    )
+    return any(t.years for t in cfg.mart.tables)
 
 
 def _has_single_year_mart(cfg) -> bool:
@@ -362,12 +358,8 @@ def _has_single_year_mart(cfg) -> bool:
     Quando tutte le tabelle sono multi-year (hanno ``years``) e non c'è
     hierarchy, il per-year ``run mart`` non ha nulla da elaborare.
     """
-    tables = (cfg.mart or {}).get("tables") or []
-    has_single_year = any(
-        isinstance(t, dict) and not t.get("years")
-        for t in tables
-    )
-    has_hierarchy = bool((cfg.mart or {}).get("hierarchy"))
+    has_single_year = any(not t.years for t in cfg.mart.tables)
+    has_hierarchy = cfg.mart.hierarchy is not None
     return has_single_year or has_hierarchy
 
 
@@ -392,7 +384,7 @@ def _maybe_run_multi_year_mart(
     if logger is None:
         logger = get_logger()
 
-    fail_on_error = bool((cfg.validation or {}).get("fail_on_error", True))
+    fail_on_error = bool(cfg.validation.fail_on_error)
 
     if dry_run:
         typer.echo("  multi-year mart tables detected")
@@ -575,7 +567,7 @@ def run_init(
             raise typer.BadParameter(str(exc))
 
         # Also validate raw.sources specifically (not covered by _validate_execution_plan)
-        raw_sources = cfg.raw.get("sources") if cfg.raw else None
+        raw_sources = cfg.raw.sources
         if not raw_sources:
             raise typer.BadParameter("raw.sources missing or empty in dataset.yml")
 
@@ -745,7 +737,7 @@ def run_full(
         is_mart_only = _is_mart_only_cfg(cfg)
         run_step = "mart" if is_mart_only else "all"
 
-        fail_on_error_flag = bool((cfg.validation or {}).get("fail_on_error", True))
+        fail_on_error_flag = bool(cfg.validation.fail_on_error)
 
         for year in selected_years:
             logger.info("Run %s — year=%s", run_step, year)

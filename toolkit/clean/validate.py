@@ -255,11 +255,19 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     out_dir = layer_year_dir(cfg.root, "clean", cfg.dataset, year)
     parquet = out_dir / f"{cfg.dataset}_{year}_clean.parquet"
 
-    clean_cfg: dict[str, Any] = getattr(cfg, "clean", {}) or {}
+    clean_cfg = cfg.clean
+    if isinstance(clean_cfg, dict):
+        clean_req = clean_cfg.get("required_columns") or []
+        clean_val = clean_cfg.get("validate") or {}
+    else:
+        clean_req = clean_cfg.required_columns
+        clean_val = clean_cfg.validate.model_dump(
+            mode="python", by_alias=True, exclude_none=True, exclude_unset=True
+        )
     spec = CleanValidationSpec.model_validate(
         {
-            "required_columns": clean_cfg.get("required_columns"),
-            "validate": clean_cfg.get("validate") or {},
+            "required_columns": clean_req,
+            "validate": clean_val,
         }
     )
 
@@ -368,16 +376,16 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
                     raw_probe_source = raw_probe_source or "runtime_profile"
 
                     # Infer expected columns from config
-                    _read_cfg = clean_cfg.get("read") or {}
+                    _read = cfg.clean.read
                     _expected_cols: list[str] = []
-                    if _read_cfg.get("normalize_rows_to_columns"):
-                        _col_defs = _read_cfg.get("columns") or {}
-                        if isinstance(_col_defs, dict) and not _col_defs:
+                    if _read and _read.normalize_rows_to_columns:
+                        _cols = _read.columns or {}
+                        if isinstance(_cols, dict) and not _cols:
                             _expected_cols = clean_cols
-                        elif isinstance(_col_defs, dict):
-                            _expected_cols = list(_col_defs.keys())
-                        elif isinstance(_col_defs, list):
-                            _expected_cols = _col_defs
+                        elif isinstance(_cols, dict):
+                            _expected_cols = list(_cols.keys())
+                        elif isinstance(_cols, list):
+                            _expected_cols = _cols
                     if _expected_cols:
                         _actual_set = set(_actual_raw_col_names)
                         raw_missing_columns = sorted(

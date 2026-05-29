@@ -538,35 +538,24 @@ def dataset_info(config_path: str) -> dict[str, Any]:
 
     # Estrai URL fonti da raw.sources
     source_urls: list[str] = []
-    raw_dict = cfg.raw.get("sources") if hasattr(cfg, "raw") else []
-    if isinstance(raw_dict, list):
-        for src in raw_dict:
-            if isinstance(src, dict):
-                args = src.get("args") or {}
-                url = args.get("url") or args.get("data_url") or args.get("endpoint")
-                if url:
-                    source_urls.append(str(url))
+    for src in cfg.raw.sources:
+        url = (
+            src.args.get("url")
+            or src.args.get("data_url")
+            or src.args.get("endpoint")
+        )
+        if url:
+            source_urls.append(str(url))
 
     # Mart tables names
     mart_tables: list[str] = []
-    if hasattr(cfg, "mart"):
-        mart_dict = cfg.mart.get("tables") if hasattr(cfg.mart, "get") else []
-        if isinstance(mart_dict, list):
-            for t in mart_dict:
-                if isinstance(t, dict):
-                    name = t.get("name")
-                    if name:
-                        mart_tables.append(str(name))
+    for t in cfg.mart.tables:
+        mart_tables.append(t.name)
 
     # Support datasets
     support_list: list[dict[str, str]] = []
-    if hasattr(cfg, "support"):
-        raw_support = cfg.support if isinstance(cfg.support, list) else []
-        for sd in raw_support:
-            if hasattr(sd, "get"):
-                sname = sd.get("name")
-                if sname:
-                    support_list.append({"name": str(sname), "config": str(sd.get("config", ""))})
+    for sd in cfg.support:
+        support_list.append({"name": str(sd.name), "config": str(sd.config or "")})
 
     # Presenza layer su disco
     out_root = cfg.root / "data" if hasattr(cfg, "root") else None
@@ -584,7 +573,7 @@ def dataset_info(config_path: str) -> dict[str, Any]:
         "years": list(cfg.years) if hasattr(cfg, "years") else [],
         "time_coverage": time_cov,
         "source_urls": source_urls,
-        "raw_sources_count": len(raw_dict) if isinstance(raw_dict, list) else 0,
+        "raw_sources_count": len(cfg.raw.sources),
         "has_clean": has_clean,
         "has_mart": has_mart,
         "mart_tables": mart_tables,

@@ -12,6 +12,7 @@ from typing import Any
 import duckdb
 
 from toolkit.cli.common import load_layer_profile_summaries
+from toolkit.core.config import ensure_dict
 from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import (
     METADATA,
@@ -160,7 +161,7 @@ def _mart_paths(
 def _payload_for_year(cfg, year: int) -> dict[str, Any]:
     root = Path(cfg.root)
     run_dir = get_run_dir(root, cfg.dataset, year)
-    mart_tables = cfg.mart.get("tables") or []
+    mart_tables = cfg.mart.tables
     raw_dir = layer_year_dir(root, "raw", cfg.dataset, year)
     raw_meta = read_layer_metadata(raw_dir)
     suggested_read_path = raw_dir / RAW_PROFILE_DIR / RAW_SUGGESTED_READ
@@ -194,7 +195,7 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
             "raw": _raw_output_paths(root, cfg.dataset, year),
             "clean": _clean_paths(root, cfg.dataset, year),
             "mart": _mart_paths(root, cfg.dataset, year, mart_tables),
-            "support": resolve_support_payloads(cfg.support, require_exists=False),
+            "support": resolve_support_payloads(ensure_dict(cfg.support), require_exists=False),
             "run_dir": str(run_dir),
         },
         "run_file_count": len(run_files),

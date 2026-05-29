@@ -8,7 +8,7 @@ import typer
 
 from toolkit.cli.common import format_profile_preview, load_layer_profile_summaries
 from toolkit.core.config import load_config
-from toolkit.core.paths import layer_dataset_dir
+from toolkit.core.paths import METADATA, RAW_PROFILE_DIR, RAW_SUGGESTED_READ, layer_dataset_dir
 from toolkit.core.run_context import get_run_dir, read_run_record
 from toolkit.cli.inspect.readiness_ops import summary as _summary
 
@@ -206,7 +206,7 @@ def status(
     # suggested_read_path non è in summary — lo ricostruiamo
     raw_dir = (layers.get("raw") or {}).get("dir")
     if raw_dir and raw_hints.get("suggested_read_exists"):
-        raw_hints["suggested_read_path"] = str(Path(raw_dir) / "_profile" / "suggested_read.yml")
+        raw_hints["suggested_read_path"] = str(Path(raw_dir) / RAW_PROFILE_DIR / RAW_SUGGESTED_READ)
     _print_raw_hints(raw_hints)
 
     # Layer table
@@ -229,7 +229,7 @@ def status(
     multi_year_tables = [t for t in (mart_cfg.get("tables") or []) if isinstance(t, dict) and t.get("years")]
     if multi_year_tables:
         my_dir = layer_dataset_dir(cfg.root, "mart", dataset)
-        my_meta = my_dir / "metadata.json"
+        my_meta = my_dir / METADATA
         if my_meta.exists():
             content = json.loads(my_meta.read_text(encoding="utf-8"))
             my_layer = content.get("layer", "")

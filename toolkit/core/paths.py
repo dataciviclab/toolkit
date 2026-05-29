@@ -67,8 +67,8 @@ MART_VALIDATION = "_validate/mart_validation.json"
 
 # Profile (raw only)
 RAW_PROFILE_DIR = "_profile"
-RAW_PROFILE = f"{RAW_PROFILE_DIR}/raw_profile.json"
-RAW_SUGGESTED_READ = f"{RAW_PROFILE_DIR}/suggested_read.yml"
+RAW_PROFILE = "raw_profile.json"          # sotto _profile/
+RAW_SUGGESTED_READ = "suggested_read.yml" # sotto _profile/
 
 # Metadata
 METADATA = "metadata.json"

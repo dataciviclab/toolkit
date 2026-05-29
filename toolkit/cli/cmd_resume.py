@@ -8,7 +8,7 @@ from toolkit.cli.cmd_run import run_year
 from toolkit.core.config import load_config
 from toolkit.core.logging import get_logger
 from toolkit.core.metadata import read_layer_metadata
-from toolkit.core.paths import layer_year_dir
+from toolkit.core.paths import METADATA, layer_year_dir
 from toolkit.core.run_context import get_run_dir, latest_run, read_run_record
 
 
@@ -33,7 +33,7 @@ def _resume_layer(record: dict[str, object]) -> str | None:
 
 def _layer_artifacts_ok(root: Path, dataset: str, year: int, layer: str) -> tuple[bool, str]:
     layer_dir = layer_year_dir(root, layer, dataset, year)
-    metadata_path = layer_dir / "metadata.json"
+    metadata_path = layer_dir / METADATA
 
     if not _artifact_exists(metadata_path):
         return False, f"missing {layer}/metadata.json"

@@ -11,7 +11,7 @@ from toolkit.cli.sql_dry_run import validate_sql_dry_run
 from toolkit.clean.run import run_clean
 from toolkit.clean.validate import run_clean_validation
 from toolkit.core.logging import bind_logger, get_logger
-from toolkit.core.paths import layer_dataset_dir, layer_year_dir
+from toolkit.core.paths import RAW_PROFILE, layer_dataset_dir, layer_year_dir
 from toolkit.core.run_context import RunContext
 from toolkit.mart.run import run_mart, run_mart_multi_year
 from toolkit.mart.validate import run_mart_validation
@@ -570,7 +570,7 @@ def run_init(
         typer.echo(f"[init] Bootstrap completato per {cfg.dataset}/{year}")
         typer.echo("  - raw scaricato")
         profile_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year) / "_profile"
-        profile_exists = (profile_dir / "raw_profile.json").exists()
+        profile_exists = (profile_dir / RAW_PROFILE).exists()
 
         scaffolded_now = not scaffold_existed_before and clean_sql_path.exists()
         if scaffold_existed_before:

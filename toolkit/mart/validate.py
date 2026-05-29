@@ -14,7 +14,7 @@ from toolkit.core.column_rules import (
 )
 from toolkit.core.config_models import MartTableRuleConfig, MartValidationSpec
 from toolkit.core.metadata import merge_layer_manifest
-from toolkit.core.paths import MART_VALIDATION, layer_year_dir, to_root_relative
+from toolkit.core.paths import MART_VALIDATION, METADATA, layer_year_dir, to_root_relative
 from toolkit.core.validation import (
     ValidationResult,
     build_validation_summary,
@@ -210,7 +210,7 @@ def run_mart_validation(cfg, year: int, logger, *, sample_mode: bool = False) ->
         declared_tables=declared_tables,
     )
 
-    metadata = json.loads((mart_dir / "metadata.json").read_text(encoding="utf-8"))
+    metadata = json.loads((mart_dir / METADATA).read_text(encoding="utf-8"))
     transition_report = check_transitions(
         metadata.get("transition_profiles") or [],
         spec.validate.transition,
@@ -235,7 +235,7 @@ def run_mart_validation(cfg, year: int, logger, *, sample_mode: bool = False) ->
     report = write_validation_json(Path(mart_dir) / MART_VALIDATION, result)
     merge_layer_manifest(
         mart_dir,
-        metadata_path="metadata.json",
+        metadata_path=METADATA,
         validation_path="_validate/mart_validation.json",
         outputs=metadata.get("outputs", []),
         ok=result.ok,

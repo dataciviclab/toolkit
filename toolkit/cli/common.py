@@ -7,7 +7,7 @@ from toolkit.core.io import read_json_or_none as _read_json
 
 from toolkit.core.config import load_config
 from toolkit.core.logging import get_logger
-from toolkit.core.paths import layer_year_dir
+from toolkit.core.paths import METADATA, layer_year_dir
 
 
 def dump_cfg_section(cfg_section: Any) -> Any:
@@ -139,9 +139,9 @@ def _transition_summary(item: dict | None) -> dict | None:
 
 def load_layer_profile_summaries(root: Path, dataset: str, year: int) -> dict[str, object] | None:
     clean_metadata = (
-        _read_json(layer_year_dir(root, "clean", dataset, year) / "metadata.json") or {}
+        _read_json(layer_year_dir(root, "clean", dataset, year) / METADATA) or {}
     )
-    mart_metadata = _read_json(layer_year_dir(root, "mart", dataset, year) / "metadata.json") or {}
+    mart_metadata = _read_json(layer_year_dir(root, "mart", dataset, year) / METADATA) or {}
 
     clean_output = _profile_summary(clean_metadata.get("output_profile"))
     mart_clean_input = _profile_summary(mart_metadata.get("clean_input_profile"))

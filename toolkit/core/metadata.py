@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from toolkit.core.io import write_json_atomic
+from toolkit.core.paths import METADATA
 from toolkit.version import __version__
 
 
@@ -50,7 +51,7 @@ def config_hash_for_year(base_dir: Path | None, year: int) -> str | None:
 def write_metadata(
     folder: Path,
     data: dict[str, Any],
-    filename: str = "metadata.json",
+    filename: str = METADATA,
 ) -> Path:
     meta = {
         "metadata_schema_version": 1,
@@ -65,7 +66,7 @@ def write_metadata(
     return out
 
 
-def _read_metadata(folder: Path, filename: str = "metadata.json") -> dict[str, Any] | None:
+def _read_metadata(folder: Path, filename: str = METADATA) -> dict[str, Any] | None:
     path = folder / filename
     if not path.exists():
         return None
@@ -96,7 +97,7 @@ def read_layer_metadata(layer_dir: Path) -> dict[str, Any]:
 def merge_layer_manifest(
     folder: Path,
     *,
-    metadata_path: str = "metadata.json",
+    metadata_path: str = METADATA,
     validation_path: str | None = None,
     outputs: list[dict[str, Any]] | None = None,
     ok: bool | None = None,

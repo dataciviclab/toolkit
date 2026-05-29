@@ -133,3 +133,20 @@ una issue in `dataset-incubator`.
 - [`dataset-incubator`](https://github.com/dataciviclab/dataset-incubator) — downstream: qui vivono i dataset reali
 - [`lab-connectors`](https://github.com/dataciviclab/lab-connectors) — dipendenza condivisa
 - [`.github`](https://github.com/dataciviclab/.github) — policy condivise
+
+## Regole del codice: path artifact
+
+Ogni path di file prodotto da un layer (validation, profile, metadata)
+deve essere referenziato tramite la costante in `toolkit/core/paths.py`.
+Non usare stringhe letterali.
+
+Se aggiungi un nuovo artifact, aggiungi la costante in `core/paths.py`
+e importala dove serve.
+
+Costanti definite:
+- `RAW_VALIDATION`, `CLEAN_VALIDATION`, `MART_VALIDATION`
+- `RAW_PROFILE`, `RAW_PROFILE_DIR`, `RAW_SUGGESTED_READ`
+- `METADATA`
+
+Path di directory: usa `layer_year_dir()`, `dataset_dir()`, `resolve_root()`
+da `core/paths.py` invece di costruirli a mano.

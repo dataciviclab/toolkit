@@ -20,6 +20,7 @@ from toolkit.core.csv_read import (
     robust_preset,
     sql_str,
 )
+from toolkit.core.paths import RAW_PROFILE, RAW_SUGGESTED_READ
 from toolkit.core.io import write_json_atomic
 from toolkit.profile._sniff_encoding import is_binary_file as _is_binary_file, sniff_encoding
 from toolkit.profile._sniff_delimiter import sniff_decimal, sniff_delim, suggest_skip
@@ -195,7 +196,7 @@ def write_suggested_read_yml(out_dir: Path, profile: "RawProfile | Dict[str, Any
             rendered = str(value)
         lines.append(f"    {key}: {rendered}")
 
-    p = out_dir / "suggested_read.yml"
+    p = out_dir / RAW_SUGGESTED_READ
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return p
 
@@ -610,7 +611,7 @@ def write_raw_profile(
 ) -> Dict[str, Path]:
     _safe_mkdir(out_dir)
 
-    p_raw_json = out_dir / "raw_profile.json"
+    p_raw_json = out_dir / RAW_PROFILE
     payload = asdict(profile)
     written: Dict[str, Path] = {}
 

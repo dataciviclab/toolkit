@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import typer
 
 from toolkit.cli.common import iter_selected_years, load_cfg_and_logger
@@ -7,10 +9,11 @@ from toolkit.clean.validate import run_clean_validation
 from toolkit.mart.validate import run_mart_validation
 from toolkit.raw.validate import run_raw_validation
 
-
-def _raise_on_failed_summary(summary: dict[str, object]) -> None:
-    if not bool(summary.get("passed")):
-        raise typer.Exit(code=1)
+_VALIDATORS = {
+    "raw": lambda cfg, yr, lg: run_raw_validation(cfg.root, cfg.dataset, yr, lg),
+    "clean": run_clean_validation,
+    "mart": run_mart_validation,
+}
 
 
 def validate(
@@ -18,6 +21,7 @@ def validate(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
+    as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
 ):
     """
     Quality gate per RAW, CLEAN (include cross-layer raw→clean) e MART.
@@ -30,23 +34,34 @@ def validate(
     year_arg = year if isinstance(year, int) else None
     selected_years = iter_selected_years(cfg, year_arg=year_arg, years_arg=years_arg)
 
-    for year in selected_years:
-        if step == "all":
-            _raise_on_failed_summary(run_raw_validation(cfg.root, cfg.dataset, year, logger))
-            _raise_on_failed_summary(run_clean_validation(cfg, year, logger))
-            _raise_on_failed_summary(run_mart_validation(cfg, year, logger))
+    layers = ["raw", "clean", "mart"] if step == "all" else [step]
+    results: list[dict[str, object]] = []
 
-        elif step == "raw":
-            _raise_on_failed_summary(run_raw_validation(cfg.root, cfg.dataset, year, logger))
+    for yr in selected_years:
+        for layer in layers:
+            fn = _VALIDATORS[layer]
+            summary = fn(cfg, yr, logger)
+            results.append({
+                "year": yr,
+                "layer": layer,
+                "passed": summary.get("passed"),
+                "errors_count": summary.get("errors_count", 0),
+                "warnings_count": summary.get("warnings_count", 0),
+            })
 
-        elif step == "clean":
-            _raise_on_failed_summary(run_clean_validation(cfg, year, logger))
+    any_failed = any(not r["passed"] for r in results)
 
-        elif step == "mart":
-            _raise_on_failed_summary(run_mart_validation(cfg, year, logger))
+    if as_json:
+        typer.echo(json.dumps(results, indent=2, ensure_ascii=False))
+        if any_failed:
+            raise typer.Exit(code=1)
+        return
+    for r in results:
+        icon = "✅" if r["passed"] else "🔴"
+        typer.echo(f"{icon} {r['year']}/{r['layer']}  errors={r['errors_count']} warnings={r['warnings_count']}")
 
-        else:
-            raise typer.BadParameter("step must be one of: raw, clean, mart, all")
+    if any_failed:
+        raise typer.Exit(code=1)
 
 
 def register(app: typer.Typer) -> None:

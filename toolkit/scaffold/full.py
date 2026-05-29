@@ -181,7 +181,7 @@ def suggest_mart_sql(columns: list[dict[str, Any]] | list[str], profile: dict[st
     else:
         col_names = list(columns) if columns else []
     if not col_names:
-        return "-- Default mart: SELECT * FROM clean.\nSELECT * FROM clean\n"
+        return "-- Default mart: SELECT * FROM clean_input.\nSELECT * FROM clean_input\n"
     has_year = _has_year_column(col_names)
     has_region = _has_region_column(col_names)
     has_numeric = _has_numeric_column(col_names, profile)
@@ -230,7 +230,7 @@ def suggest_mart_sql(columns: list[dict[str, Any]] | list[str], profile: dict[st
                     f"SELECT\n"
                     f"  {group_expr},\n"
                     f'  SUM("{numeric_col}") AS totale_{numeric_col}\n'
-                    f"FROM clean\n"
+                    f"FROM clean_input\n"
                     f"GROUP BY {group_expr}\n"
                     f"ORDER BY {group_expr}\n"
                 )
@@ -243,7 +243,7 @@ def suggest_mart_sql(columns: list[dict[str, Any]] | list[str], profile: dict[st
             f'SELECT\n'
             f'  "{year_col}" AS year,\n'
             f'  COUNT(*) AS record_count\n'
-            f'FROM clean\n'
+            f'FROM clean_input\n'
             f'GROUP BY "{year_col}"\n'
             f'ORDER BY "{year_col}"\n'
         )
@@ -256,11 +256,11 @@ def suggest_mart_sql(columns: list[dict[str, Any]] | list[str], profile: dict[st
             f'SELECT\n'
             f'  "{region_col}" AS {region_col},\n'
             f'  COUNT(*) AS record_count\n'
-            f'FROM clean\n'
+            f'FROM clean_input\n'
             f'GROUP BY "{region_col}"\n'
             f'ORDER BY "{region_col}"\n'
         )
-    return "-- Default mart: SELECT * FROM clean.\n-- Personalizza per aggregazioni.\nSELECT * FROM clean\n"
+    return "-- Default mart: SELECT * FROM clean_input.\n-- Personalizza per aggregazioni.\nSELECT * FROM clean_input\n"
 
 
 # ---------------------------------------------------------------------------
@@ -363,7 +363,7 @@ def generate_full_scaffold(
         norm_cols = profile.get("columns_norm") or profile.get("columns_raw") or profile.get("columns") or []
         mart_sql = suggest_mart_sql(norm_cols, profile)
     else:
-        mart_sql = "-- Default mart: SELECT * FROM clean.\nSELECT * FROM clean\n"
+        mart_sql = "-- Default mart: SELECT * FROM clean_input.\nSELECT * FROM clean_input\n"
         clean_sql = "-- ATTENZIONE: profiling non ha rilevato colonne.\nSELECT 1 AS placeholder FROM raw_input\n"
 
     if profile:

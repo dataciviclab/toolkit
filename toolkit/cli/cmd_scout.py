@@ -364,8 +364,8 @@ def _scaffold_minimal_ckan(url: str, probe_result: dict[str, Any], resources: li
         encoding="utf-8",
     )
     (out_dir / "sql/mart.sql").write_text(
-        "-- Default mart: SELECT * FROM clean.\n"
-        "SELECT * FROM clean\n",
+        "-- Default mart: SELECT * FROM clean_input.\n"
+        "SELECT * FROM clean_input\n",
         encoding="utf-8",
     )
     (out_dir / "README.md").write_text(
@@ -454,8 +454,8 @@ def _scaffold_sdmx(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
     if not mart_sql_path.exists():
         mart_sql_path.parent.mkdir(parents=True, exist_ok=True)
         mart_sql_path.write_text(
-            "-- Default mart: SELECT * FROM clean.\n"
-            "SELECT * FROM clean\n",
+            "-- Default mart: SELECT * FROM clean_input.\n"
+            "SELECT * FROM clean_input\n",
             encoding="utf-8",
         )
 

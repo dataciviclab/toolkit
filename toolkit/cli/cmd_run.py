@@ -831,4 +831,5 @@ def register(app: typer.Typer) -> None:
     run_sub.command("mart")(run_mart_cmd)
     run_sub.command("all")(run_all_cmd)
     run_sub.command("full")(run_full)
+    run_sub.command("init")(run_init)
     app.add_typer(run_sub, name="run", help="Esegue la pipeline RAW → CLEAN → MART per un dataset.")

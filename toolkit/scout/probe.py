@@ -28,6 +28,7 @@ from toolkit.scout.http import (
     is_file_like,
     is_html_content,
     is_sdmx_url,
+    is_sparql_endpoint,
     probe_url_headers,
     resolve_preview_kind,
 )
@@ -91,7 +92,7 @@ def probe_url(
 
 
 # ---------------------------------------------------------------------------
-# Routed probe (arricchito: rileva CKAN, SDMX, HTML, file)
+# Routed probe (arricchito: rileva CKAN, SDMX, SPARQL, HTML, file)
 # ---------------------------------------------------------------------------
 
 
@@ -104,9 +105,10 @@ def probe_url_routed(
     """Probe arricchito con routing automatico del tipo fonte.
 
     Rispetto a probe_url():
-    - Rileva CKAN, SDMX, HTML con link, o file diretto
+    - Rileva CKAN, SDMX, SPARQL, HTML con link, o file diretto
     - Per CKAN: scopre risorse via API
     - Per SDMX: ricava flow e anni
+    - Per SPARQL: esegue una probe query leggera
     - Per HTML: estrae link candidati a dati
 
     Returns dict con source_type, e chiavi specifiche per tipo.
@@ -125,7 +127,12 @@ def probe_url_routed(
         "resolved_format": resolve_preview_kind(url, content_type, content_disposition),
     }
 
-    if is_html_content(content_type):
+    # SPARQL prima di HTML perche' gli endpoint SPARQL spesso
+    # tornano text/html (pagina UI / errore), ma la presenza di
+    # "/sparql" nell'URL e' un segnale piu' forte del Content-Type.
+    if is_sparql_endpoint(final_url, content_type):
+        return _route_sparql(final_url, result, timeout=timeout)
+    elif is_html_content(content_type):
         return _route_html(url, final_url, result, timeout=timeout, user_agent=user_agent)
     elif is_sdmx_url(final_url):
         return _route_sdmx(final_url, result, timeout=timeout)
@@ -134,13 +141,30 @@ def probe_url_routed(
         result["ckan_resources"] = None
         result["candidate_links"] = []
         result["sdmx_info"] = None
+        result["sparql_info"] = None
         return result
     else:
         result["source_type"] = "opaque"
         result["ckan_resources"] = None
         result["candidate_links"] = []
         result["sdmx_info"] = None
+        result["sparql_info"] = None
         return result
+
+
+def _base_result(
+    result: dict[str, Any],
+    source_type: str,
+    *,
+    candidate_links: list[str] | None = None,
+) -> dict[str, Any]:
+    """Aggiunge le chiavi comuni a tutti i source_type."""
+    result["source_type"] = source_type
+    result.setdefault("ckan_resources", None)
+    result["candidate_links"] = candidate_links if candidate_links is not None else result.get("candidate_links", [])
+    result.setdefault("sdmx_info", None)
+    result.setdefault("sparql_info", None)
+    return result
 
 
 def _route_html(
@@ -152,11 +176,7 @@ def _route_html(
         html_text = body["html_text"]
         html_bytes = html_text.encode("utf-8", errors="replace")
     except RuntimeError:
-        result["source_type"] = "html"
-        result["ckan_resources"] = None
-        result["candidate_links"] = []
-        result["sdmx_info"] = None
-        return result
+        return _base_result(result, "html", candidate_links=[])
 
     candidate_links = extract_candidate_links(final_url, html_text)
     is_ckan = detect_ckan_in_html(html_bytes)
@@ -176,6 +196,7 @@ def _route_html(
                     result["ckan_resources"] = resources
                     result["candidate_links"] = candidate_links
                     result["sdmx_info"] = None
+                    result["sparql_info"] = None
                     result["ckan_dataset_title"] = pkg.get("title") or pkg.get("name") or ""
                     result["ckan_notes"] = (pkg.get("notes") or "")[:500]
                     result["ckan_tags"] = [
@@ -190,15 +211,12 @@ def _route_html(
         result["ckan_resources"] = None
         result["candidate_links"] = candidate_links
         result["sdmx_info"] = None
+        result["sparql_info"] = None
         result["ckan_portal"] = True
         return result
 
     # HTML semplice con link candidati (non CKAN)
-    result["source_type"] = "html"
-    result["ckan_resources"] = None
-    result["candidate_links"] = candidate_links
-    result["sdmx_info"] = None
-    return result
+    return _base_result(result, "html", candidate_links=candidate_links)
 
 
 def _route_sdmx(
@@ -227,4 +245,77 @@ def _route_sdmx(
 
     result["ckan_resources"] = None
     result["candidate_links"] = []
+    result["sparql_info"] = None
+    return result
+
+
+def _route_sparql(
+    final_url: str, result: dict[str, Any], *, timeout: int
+) -> dict[str, Any]:
+    """Route per URL SPARQL: probe + discovery dataset DCAT.
+
+    1. **ASK probe**: ``ASK WHERE {{ ?s ?p ?o }}`` in formato CSV.
+    2. **DCAT discovery**: se risponde, esegue una query DCAT per elencare
+       i dataset disponibili (titolo, URI, descrizione).
+
+    Se fallisce (timeout, errore, endpoint bloccato), scala a opaco.
+    """
+    from toolkit.plugins.sparql import SparqlSource
+
+    probe_query = "ASK WHERE { ?s ?p ?o }"
+    try:
+        source = SparqlSource(timeout=min(timeout, 10))
+        source.fetch(final_url, probe_query, accept_format="csv")
+    except Exception as exc:
+        exc_msg = str(exc)[:200]
+        if "timeout" in exc_msg.lower() or "refused" in exc_msg.lower() or "connect" in exc_msg.lower():
+            result["source_type"] = "opaque"
+        else:
+            result["source_type"] = "sparql"
+        result["sparql_info"] = {
+            "endpoint": final_url,
+            "responded": "timeout" if "timeout" in exc_msg.lower() else False,
+            "error": exc_msg,
+        }
+        result["ckan_resources"] = None
+        result["candidate_links"] = []
+        result["sdmx_info"] = None
+        return result
+
+    # ── DCAT discovery ─────────────────────────────────────────────────
+    dcat_query = """PREFIX dcat: <http://www.w3.org/ns/dcat#>
+PREFIX dct: <http://purl.org/dc/terms/>
+SELECT DISTINCT ?dataset ?title ?description
+WHERE {
+  ?dataset a dcat:Dataset .
+  OPTIONAL { ?dataset dct:title ?title . }
+  OPTIONAL { ?dataset dct:description ?description . }
+}
+ORDER BY ?dataset
+LIMIT 100"""
+    datasets: list[dict[str, str]] = []
+    try:
+        dcat_csv, _ = source.fetch(final_url, dcat_query, accept_format="csv")
+        import csv
+        import io
+        reader = csv.DictReader(io.StringIO(dcat_csv.decode("utf-8", errors="replace")))
+        for row in reader:
+            datasets.append({
+                "uri": row.get("dataset", ""),
+                "title": row.get("title", "") or row.get("dataset", "").rsplit("/", 1)[-1],
+                "description": (row.get("description") or "")[:200],
+            })
+    except Exception:
+        pass  # DCAT non disponibile — non blocca, info parziale
+
+    result["source_type"] = "sparql"
+    result["sparql_info"] = {
+        "endpoint": final_url,
+        "responded": True,
+        "datasets": datasets,
+        "dataset_count": len(datasets),
+    }
+    result["ckan_resources"] = None
+    result["candidate_links"] = []
+    result["sdmx_info"] = None
     return result

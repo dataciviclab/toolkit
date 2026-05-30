@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import pytest
+
 from lab_connectors.http import HttpClient, HttpResult
 
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.ckan import CkanSource
+
+pytestmark = pytest.mark.adapter
 
 
 class _FakeResponse:

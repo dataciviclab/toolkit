@@ -6,6 +6,8 @@ import pytest
 
 from toolkit.cli.cmd_batch import _format_duration, _format_years, _read_config_list
 
+pytestmark = pytest.mark.pure_unit
+
 
 class TestReadConfigList:
     def test_file_not_found(self) -> None:

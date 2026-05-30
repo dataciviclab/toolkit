@@ -1,6 +1,10 @@
 from pathlib import Path
 
+import pytest
+
 from toolkit.core.metadata import config_hash_for_year
+
+pytestmark = pytest.mark.contract
 
 
 def test_config_hash_for_year_is_stable_across_working_directories(tmp_path: Path, monkeypatch) -> None:

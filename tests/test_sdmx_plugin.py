@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import pytest
 import requests
 
 from lab_connectors.http import HttpClient, HttpResult
 
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.sdmx import SdmxSource
+
+pytestmark = pytest.mark.adapter
 
 
 class _FakeResponse:

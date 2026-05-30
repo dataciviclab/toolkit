@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from toolkit.cli import cmd_inspect, common
+
+pytestmark = pytest.mark.pure_unit
 
 
 def test_cmd_status_read_json_returns_none_on_invalid_json(tmp_path: Path) -> None:

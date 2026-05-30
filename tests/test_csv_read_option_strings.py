@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from toolkit.core.csv_read import csv_read_option_strings
+
+pytestmark = pytest.mark.pure_unit
 
 
 class TestCsvReadOptionStrings:

@@ -23,7 +23,11 @@ from toolkit.core.registry import registry
 def _format_args(args: dict, year: int) -> dict:
     formatted = {}
     for k, v in (args or {}).items():
-        formatted[k] = v.format(year=year) if isinstance(v, str) and "{year}" in v else v
+        if isinstance(v, str) and "{year}" in v:
+            # replace instead of str.format to avoid conflicts with SPARQL {} braces
+            formatted[k] = v.replace("{year}", str(year))
+        else:
+            formatted[k] = v
     # Handle url_suffix_by_year: append per-year suffix to the formatted URL
     if "url" in formatted and "url_suffix_by_year" in (args or {}):
         suffix_map = args["url_suffix_by_year"]

@@ -128,3 +128,20 @@ def block_sdmx(sdmx_info: dict[str, Any] | None, url: str) -> list[str]:
             "      primary: true",
         ]
     return block_http_file(url, "sdmx")
+
+
+def block_sparql(endpoint: str, query_hint: str = "") -> list[str]:
+    """Blocchi raw.sources per endpoint SPARQL.
+
+    Genera un source ``sparql`` con endpoint e query.
+    Se non viene fornita una query, usa una SELECT base.
+    """
+    q = query_hint or "SELECT * WHERE { ?s ?p ?o } LIMIT 1000"
+    return [
+        '    - name: "sparql"',
+        '      type: "sparql"',
+        "      args:",
+        f'        endpoint: "{endpoint}"',
+        f'        query: "{q}"',
+        "      primary: true",
+    ]

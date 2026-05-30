@@ -152,6 +152,23 @@ def is_sdmx_url(url: str) -> bool:
     return any(pattern in lowered for pattern in ("/dataflow/", "/sdmx/", "sdmx", "?flow="))
 
 
+def is_sparql_endpoint(url: str, content_type: str | None = None) -> bool:
+    """Rileva se URL punta a un endpoint SPARQL.
+
+    Controlla:
+    - Path URL contenente ``/sparql`` (pattern piu' comune)
+    - Content-Type contenente ``sparql-results`` o ``sparql``
+    """
+    lowered = url.lower()
+    if "/sparql" in lowered:
+        return True
+    if content_type:
+        ct = content_type.lower()
+        if "sparql-results" in ct or "sparql" in ct:
+            return True
+    return False
+
+
 def _filename_from_content_disposition(value: str | None) -> str | None:
     """Estrae filename da Content-Disposition (RFC 5987 / quoted / token)."""
     if not value:

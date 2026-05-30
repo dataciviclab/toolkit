@@ -129,10 +129,14 @@ def _fetch_sdmx(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, 
 @_register_fetch("sparql")
 def _fetch_sparql(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
     src = registry.create(stype, **(client or {}))
+    pages = int(formatted_args.get("pages", 1))
+    step = int(formatted_args.get("step", 10000))
     return src.fetch(
         str(formatted_args["endpoint"]),
         str(formatted_args["query"]),
         str(formatted_args.get("accept_format", "csv")),
+        pages=pages,
+        step=step,
     )
 
 

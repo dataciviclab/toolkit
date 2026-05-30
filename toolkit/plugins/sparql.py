@@ -31,13 +31,21 @@ class SparqlSource:
         endpoint: str,
         query: str,
         accept_format: str = "csv",
+        pages: int = 1,
+        step: int = 10000,
     ) -> tuple[bytes, str]:
         """Execute a SPARQL query and return CSV data.
+
+        Quando l'endpoint SPARQL ha un limite di righe per risposta (WAF),
+        usa ``pages`` e ``step`` per fare piu' query con OFFSET incrementale
+        e concatenare i risultati in un unico CSV.
 
         Args:
             endpoint: SPARQL endpoint URL.
             query: SPARQL SELECT query string.
             accept_format: 'csv' for direct CSV, 'sparql-results+json' for JSON conversion.
+            pages: Numero di pagine da fetchare (default 1 = nessuna paginazione).
+            step: Righe per pagina (default 10000).
 
         Returns:
             (csv_bytes, endpoint) tuple.
@@ -54,6 +62,70 @@ class SparqlSource:
                 f"Unsupported accept_format '{accept_format}'. "
                 "Supported values: 'csv', 'sparql-results+json'."
             )
+
+        # Se e' richiesta paginazione, assicura che la query abbia LIMIT
+        if pages > 1:
+            if "limit" not in query.lower():
+                # Inietta LIMIT {step} prima di eventuali OFFSET o clausole finali
+                query = f"{query.rstrip().rstrip(';')} LIMIT {step}"
+
+        # Esegue una singola pagina con OFFSET opzionale
+        def _do_fetch(offset: int = 0) -> bytes:
+            q = query
+            if offset > 0:
+                q = f"{q.rstrip().rstrip(';')} OFFSET {offset}"
+            headers: dict[str, str] = {
+                "Accept": "application/sparql-results+json" if accept_format == "sparql-results+json" else "text/csv",
+                "Content-Type": "application/x-www-form-urlencoded",
+            }
+            params: dict[str, Any] = {"query": q}
+            result = self._client.post(endpoint, data=params, headers=headers, retries=2)
+            if result.is_error:
+                raise DownloadError(f"SPARQL request failed for {endpoint}: {result.err}") from result.err
+            r = result.response
+            if r.status_code != 200:
+                raise DownloadError(f"SPARQL endpoint returned HTTP {r.status_code} for {endpoint}: {r.text[:200]}")
+            content_type = r.headers.get("Content-Type", "")
+            if "text/csv" in content_type:
+                return r.content
+            if "sparql-results+json" in content_type:
+                return _sparql_json_to_csv(r.text)
+            if "text/plain" in content_type:
+                stripped = r.text.strip()
+                if stripped.startswith("{"):
+                    try:
+                        return _sparql_json_to_csv(r.text)
+                    except (DownloadError, json.JSONDecodeError):
+                        pass
+                else:
+                    return r.content
+            raise DownloadError(
+                f"Unsupported Content-Type '{content_type}' for SPARQL fetch. "
+                "Expected 'text/csv' or 'application/sparql-results+json'."
+            )
+
+        # Prima pagina
+        all_bytes = _do_fetch(offset=0)
+
+        # Paginazione: pagine successive, concatena CSV (saltando l'header)
+        for page in range(1, pages):
+            try:
+                page_bytes = _do_fetch(offset=page * step)
+                # Se la pagina e' vuota (solo header, nessun dato), fermati
+                data_start = page_bytes.find(b"\n")
+                if data_start < 0 or len(page_bytes) <= data_start + 1:
+                    break
+                # Concatena solo i dati (salta l'header)
+                header_end = all_bytes.find(b"\n")
+                if header_end >= 0:
+                    all_bytes = all_bytes + page_bytes[data_start + 1:]
+                else:
+                    all_bytes = all_bytes + page_bytes
+            except DownloadError:
+                # Endpoint non ha piu' pagine (es. OFFSET oltre la fine) → esci
+                break
+
+        return all_bytes, endpoint
 
         headers: dict[str, str] = {
             "Accept": "application/sparql-results+json" if accept_format == "sparql-results+json" else "text/csv",

@@ -63,8 +63,13 @@ class SparqlSource:
                 "Supported values: 'csv', 'sparql-results+json'."
             )
 
-        # Se e' richiesta paginazione, appende OFFSET alla query
-        # (dopo LIMIT, che deve essere presente nella query)
+        # Se e' richiesta paginazione, assicura che la query abbia LIMIT
+        if pages > 1:
+            if "limit" not in query.lower():
+                # Inietta LIMIT {step} prima di eventuali OFFSET o clausole finali
+                query = f"{query.rstrip().rstrip(';')} LIMIT {step}"
+
+        # Esegue una singola pagina con OFFSET opzionale
         def _do_fetch(offset: int = 0) -> bytes:
             q = query
             if offset > 0:
@@ -106,17 +111,18 @@ class SparqlSource:
         for page in range(1, pages):
             try:
                 page_bytes = _do_fetch(offset=page * step)
-                # Trova la prima riga (header) e concatena solo i dati
+                # Se la pagina e' vuota (solo header, nessun dato), fermati
+                data_start = page_bytes.find(b"\n")
+                if data_start < 0 or len(page_bytes) <= data_start + 1:
+                    break
+                # Concatena solo i dati (salta l'header)
                 header_end = all_bytes.find(b"\n")
                 if header_end >= 0:
-                    # Mantieni l'header della prima pagina, aggiungi solo i dati
-                    data_start = page_bytes.find(b"\n")
-                    if data_start >= 0 and len(page_bytes) > data_start + 1:
-                        all_bytes = all_bytes + page_bytes[data_start + 1:]
+                    all_bytes = all_bytes + page_bytes[data_start + 1:]
                 else:
                     all_bytes = all_bytes + page_bytes
             except DownloadError:
-                # Endpoint non ha piu' pagine → esci
+                # Endpoint non ha piu' pagine (es. OFFSET oltre la fine) → esci
                 break
 
         return all_bytes, endpoint

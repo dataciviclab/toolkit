@@ -319,3 +319,113 @@ def test_sparql_probe_missing_query_raises():
     source = SparqlSource()
     with pytest.raises(DownloadError, match="requires a query"):
         source.probe("https://example.test/sparql", "")
+
+
+# ── Pagination (pages/step) ────────────────────────────────────────────────────
+
+
+class TestSparqlPagination:
+    """Multipage fetch with OFFSET: concatenazione CSV, LIMIT guard, early stop."""
+
+    CSV_P1 = "name,value\nfoo,1\nbar,2\n"
+    CSV_P2 = "name,value\nbaz,3\nqux,4\n"
+    CSV_P3 = "name,value\nquux,5\n"
+
+    def test_pages_1_default_no_pagination(self):
+        """Con pages=1 (default) si fa una sola POST."""
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.return_value = _http_ok(
+                text=self.CSV_P1, headers={"Content-Type": "text/csv"},
+            )
+            source = SparqlSource()
+            payload, _ = source.fetch(
+                "https://example.test/sparql", "SELECT * WHERE { ?s ?p ?o } LIMIT 10",
+            )
+            assert mock_cls.return_value.post.call_count == 1
+            assert payload == self.CSV_P1.encode()
+
+    def test_pages_3_concatenates_without_header_duplication(self):
+        """3 pagine devono concatenare i dati saltando l'header delle pagine successive."""
+        call = [0]
+
+        def side_effect(*a, **kw):
+            call[0] += 1
+            if call[0] == 1:
+                return _http_ok(text=self.CSV_P1, headers={"Content-Type": "text/csv"})
+            if call[0] == 2:
+                return _http_ok(text=self.CSV_P2, headers={"Content-Type": "text/csv"})
+            return _http_ok(text=self.CSV_P3, headers={"Content-Type": "text/csv"})
+
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.side_effect = side_effect
+            source = SparqlSource()
+            payload, _ = source.fetch(
+                "https://example.test/sparql", "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
+                pages=3, step=10,
+            )
+            assert mock_cls.return_value.post.call_count == 3
+            # Header deve apparire una sola volta
+            text = payload.decode()
+            assert text.count("name,value") == 1
+            # Tutti i dati devono essere presenti
+            assert "foo" in text and "bar" in text and "baz" in text and "qux" in text and "quux" in text
+
+    def test_pages_without_limit_injects_step(self):
+        """Se la query non ha LIMIT e pages>1, deve iniettare LIMIT step."""
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.return_value = _http_ok(
+                text=self.CSV_P1, headers={"Content-Type": "text/csv"},
+            )
+            source = SparqlSource()
+            source.fetch(
+                "https://example.test/sparql", "SELECT * WHERE { ?s ?p ?o }",
+                pages=2, step=100,
+            )
+            # La seconda chiamata deve avere LIMIT 100 + OFFSET 100
+            second_call = mock_cls.return_value.post.call_args_list[1]
+            query_body = second_call.kwargs.get("data", {}).get("query", "")
+            assert "LIMIT 100" in query_body
+            assert "OFFSET 100" in query_body
+
+    def test_pages_stops_when_page_empty(self):
+        """Se una pagina restituisce 0 righe, ci si ferma prima di pages totali."""
+        call = [0]
+
+        def side_effect(*a, **kw):
+            call[0] += 1
+            if call[0] == 1:
+                return _http_ok(text=self.CSV_P1, headers={"Content-Type": "text/csv"})
+            # Pagine successive vuote (solo header)
+            return _http_ok(text="name,value\n", headers={"Content-Type": "text/csv"})
+
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.side_effect = side_effect
+            source = SparqlSource()
+            payload, _ = source.fetch(
+                "https://example.test/sparql", "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
+                pages=5, step=10,
+            )
+            # Pagina 0 ok, pagina 1 vuota → stop (2 chiamate)
+            assert mock_cls.return_value.post.call_count == 2
+
+    def test_pages_early_stop_on_http_error(self):
+        """Se una pagina successiva da HTTP error, ci si ferma senza crash."""
+        from toolkit.core.exceptions import DownloadError
+        call = [0]
+
+        def side_effect(*a, **kw):
+            call[0] += 1
+            if call[0] == 1:
+                return _http_ok(text=self.CSV_P1, headers={"Content-Type": "text/csv"})
+            raise DownloadError("endpoint returned HTTP 500 for page 2")
+
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.side_effect = side_effect
+            source = SparqlSource()
+            payload, _ = source.fetch(
+                "https://example.test/sparql", "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
+                pages=3, step=10,
+            )
+            # Prima pagina ok, seconda fallisce → stop, ritorna solo pagina 1
+            assert payload.decode().count("foo") == 1
+            assert payload.decode().count("baz") == 0

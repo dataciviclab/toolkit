@@ -163,10 +163,10 @@ def scout_url(
         raise typer.Exit(code=1)
 
     # Step 3: Suggerimento prossimo passo (solo in modalità umana)
-    if not scaffold and not json_output and source_type in ("file", "html", "ckan", "sdmx"):
+    if not scaffold and not json_output and source_type in ("file", "html", "ckan", "sdmx", "sparql"):
         _echo("")
         _echo(f"Next: toolkit scout \"{url}\" --scaffold")
-        if source_type == "file":
+        if source_type in ("file", "sparql"):
             _echo("      toolkit scout <URL> --scaffold --run  (include raw run)")
 
     if json_output:

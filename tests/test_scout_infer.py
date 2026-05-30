@@ -314,3 +314,88 @@ class TestShorthandTypes:
         }
         sql = suggest_mart_sql(cols, profile)
         assert 'SUM("valore")' in sql
+
+
+# ── Routing SPARQL in probe_url_routed ───────────────────────────────────────
+
+
+class TestProbeUrlRoutedSparql:
+    """probe_url_routed() must recognize SPARQL endpoints and return sparql_info.
+
+    Uses monkeypatch to avoid real HTTP calls (deterministic, runs in CI).
+    """
+
+    @pytest.mark.regression
+    def test_is_sparql_endpoint_detected_by_url(self) -> None:
+        """URL con /sparql nel path deve essere riconosciuto."""
+        from toolkit.scout.http import is_sparql_endpoint
+        assert is_sparql_endpoint("https://dati.camera.it/sparql")
+        assert is_sparql_endpoint("https://example.org/sparql/query")
+        assert not is_sparql_endpoint("https://example.org/data.csv")
+        assert not is_sparql_endpoint("https://dati.consip.it/dataset/foo")
+
+    @pytest.mark.regression
+    def test_is_sparql_endpoint_detected_by_content_type(self) -> None:
+        """Content-Type application/sparql-results+json deve attivare il rilevamento."""
+        from toolkit.scout.http import is_sparql_endpoint
+        assert is_sparql_endpoint("https://example.org/data", "application/sparql-results+json")
+        assert not is_sparql_endpoint("https://example.org/data", "text/html")
+
+    @pytest.mark.regression
+    def test_probe_url_routed_returns_sparql_info(self, monkeypatch) -> None:
+        """probe_url_routed deve restituire source_type=sparql e sparql_info."""
+        from toolkit.scout.probe import probe_url_routed
+
+        # Mock probe_url_headers per evitare HTTP reali
+        def _mock_headers(url, **kw):
+            return {
+                "status_code": 200,
+                "content_type": "text/html",
+                "content_disposition": None,
+                "final_url": url,
+            }
+        monkeypatch.setattr("toolkit.scout.probe.probe_url_headers", _mock_headers)
+
+        # Mock SparqlSource.fetch() per evitare query SPARQL reali
+        _fetch_results = [
+            # Primo call (ASK) → CSV vuoto
+            (b"", "https://dati.camera.it/sparql"),
+            # Secondo call (DCAT) → CSV con un dataset
+            (b"dataset,title,description\r\nhttp://example.org/ds1,Dataset 1,Test dataset\r\n", "https://dati.camera.it/sparql"),
+        ]
+
+        def _mock_fetch(self, endpoint, query, accept_format="csv"):
+            return _fetch_results.pop(0)
+
+        monkeypatch.setattr("toolkit.plugins.sparql.SparqlSource.fetch", _mock_fetch)
+
+        result = probe_url_routed("https://dati.camera.it/sparql", timeout=5)
+        assert result["source_type"] == "sparql"
+        si = result.get("sparql_info") or {}
+        assert si.get("responded") is True
+        assert si.get("dataset_count", 0) >= 1
+        assert si.get("datasets", [{}])[0].get("title") == "Dataset 1"
+
+    @pytest.mark.regression
+    def test_probe_url_routed_sparql_ask_failure_falls_to_opaque(self, monkeypatch) -> None:
+        """Se l'ASK probe fallisce (timeout/refused), source_type deve essere opaco."""
+        from toolkit.scout.probe import probe_url_routed
+
+        def _mock_headers(url, **kw):
+            return {
+                "status_code": 200,
+                "content_type": "text/html",
+                "content_disposition": None,
+                "final_url": url,
+            }
+        monkeypatch.setattr("toolkit.scout.probe.probe_url_headers", _mock_headers)
+
+        # Mock SparqlSource.fetch() per simulare un timeout
+        def _mock_fetch_fail(self, endpoint, query, accept_format="csv"):
+            raise RuntimeError("timeout connecting to SPARQL endpoint")
+
+        monkeypatch.setattr("toolkit.plugins.sparql.SparqlSource.fetch", _mock_fetch_fail)
+
+        result = probe_url_routed("https://slow-endpoint.org/sparql", timeout=5)
+        assert result["source_type"] == "opaque"
+        assert "timeout" in str(result.get("sparql_info", {}).get("error", ""))

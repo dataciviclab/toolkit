@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from toolkit.core.logging import bind_logger, safe_console_text
+
+pytestmark = pytest.mark.pure_unit
 
 
 def test_bind_logger_includes_context(caplog):

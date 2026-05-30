@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from toolkit.cli.cmd_run import run as run_cmd
 from toolkit.cli.cmd_validate import validate as validate_cmd
+
+pytestmark = pytest.mark.smoke
 
 
 def test_cli_run_all_and_validate_all_on_project_example(

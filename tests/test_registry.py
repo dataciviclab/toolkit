@@ -2,6 +2,8 @@ import pytest
 
 from toolkit.core.registry import Registry, register_builtin_plugins
 
+pytestmark = pytest.mark.pure_unit
+
 
 def test_registry_register_and_create():
     r = Registry()

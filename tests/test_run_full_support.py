@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from toolkit.cli.app import app
+
+pytestmark = pytest.mark.regression
 
 
 def test_run_full_dry_run_with_support(

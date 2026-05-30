@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from toolkit.raw._fetch_utils import _format_args
+
+pytestmark = pytest.mark.pure_unit
 
 
 class TestFormatArgs:

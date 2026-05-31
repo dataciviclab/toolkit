@@ -1,6 +1,6 @@
 """SPARQL source plugin.
 
-Fetches tabular data from a SPARQL endpoint via HTTP POST.
+Fetches tabular data from a SPARQL endpoint via HTTP (POST + GET fallback).
 Supports direct CSV responses and SPARQL Results JSON (converted to CSV).
 """
 
@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import urllib.parse
 from typing import Any
 
 from lab_connectors.http import HttpClient
@@ -19,12 +20,94 @@ from toolkit.core.exceptions import DownloadError
 class SparqlSource:
     """Query a SPARQL endpoint and return results as CSV bytes.
 
-    Uses HttpClient.post() with retries=2 (safe because SPARQL POST
-    is idempotent: same query → same result).
+    Tenta POST form-encoded (standard SPARQL protocol).
+    Se POST fallisce (403, timeout), prova GET URL-encoded (Virtuoso, WAF).
     """
 
     def __init__(self, timeout: int = 60):
         self._client = HttpClient(timeout=timeout)
+
+    def _do_fetch(self, endpoint: str, q: str, accept_format: str) -> bytes:
+        """Esegue una singola query SPARQL, restituisce CSV bytes.
+
+        Tenta POST → GET fallback.
+        Supporta CSV diretto e SPARQL Results JSON (convertito a CSV).
+        """
+        is_json = accept_format == "sparql-results+json"
+        headers: dict[str, str] = {
+            "Accept": (
+                "application/sparql-results+json"
+                if is_json
+                else "text/csv,text/plain;q=0.5"
+            ),
+        }
+        post_data = {"query": q}
+
+        # --- Tentativo 1: POST ---
+        result = self._client.post(
+            endpoint, post_data, headers=headers, retries=2,
+        )
+        if result.is_ok:
+            return self._parse_response(result.response, is_json)
+
+        # --- Tentativo 2: GET fallback ---
+        url = f"{endpoint}?query={urllib.parse.quote(q)}"
+        get_headers = {
+            "Accept": (
+                "application/sparql-results+xml,"
+                "application/sparql-results+json,application/json,text/csv"
+            ),
+        }
+        result = self._client.get(url, headers=get_headers)
+        if result.is_ok:
+            return self._parse_response(result.response, is_json)
+
+        raise DownloadError(
+            f"SPARQL request failed for {endpoint}: "
+            f"POST → {result.err or 'unknown'}"
+        )
+
+    def _parse_response(self, r: Any, prefer_json: bool) -> bytes:
+        """Parsa la risposta HTTP in CSV bytes."""
+        content_type = (r.headers.get("Content-Type") or "").lower()
+
+        if r.status_code != 200:
+            raise DownloadError(
+                f"SPARQL endpoint returned HTTP {r.status_code} "
+                f"for {r.url}: {r.text[:200]}"
+            )
+
+        # CSV diretto
+        if "text/csv" in content_type:
+            return r.content
+
+        # SPARQL Results JSON (standard o fallback)
+        if prefer_json or "sparql-results+json" in content_type or "json" in content_type:
+            return _sparql_json_to_csv(r.text)
+
+        # text/plain: potrebbe essere CSV o JSON con Content-Type sbagliato
+        if "text/plain" in content_type:
+            stripped = r.text.strip()
+            if stripped.startswith("{"):
+                try:
+                    return _sparql_json_to_csv(r.text)
+                except (DownloadError, json.JSONDecodeError):
+                    pass
+            else:
+                # Assume CSV — se non è CSV, fallirà in CLEAN con errore chiaro
+                return r.content
+
+        # XML SPARQL Results — non supportato
+        if "sparql-results+xml" in content_type:
+            raise DownloadError(
+                "SPARQL endpoint returned XML results. "
+                "Request JSON or CSV format."
+            )
+
+        raise DownloadError(
+            f"Unsupported Content-Type '{content_type}' for SPARQL fetch. "
+            "Expected 'text/csv' or 'application/sparql-results+json'."
+        )
 
     def fetch(
         self,
@@ -66,51 +149,22 @@ class SparqlSource:
         # Se e' richiesta paginazione, assicura che la query abbia LIMIT
         if pages > 1:
             if "limit" not in query.lower():
-                # Inietta LIMIT {step} prima di eventuali OFFSET o clausole finali
                 query = f"{query.rstrip().rstrip(';')} LIMIT {step}"
 
-        # Esegue una singola pagina con OFFSET opzionale
-        def _do_fetch(offset: int = 0) -> bytes:
-            q = query
-            if offset > 0:
-                q = f"{q.rstrip().rstrip(';')} OFFSET {offset}"
-            headers: dict[str, str] = {
-                "Accept": "application/sparql-results+json" if accept_format == "sparql-results+json" else "text/csv",
-                "Content-Type": "application/x-www-form-urlencoded",
-            }
-            params: dict[str, Any] = {"query": q}
-            result = self._client.post(endpoint, data=params, headers=headers, retries=2)
-            if result.is_error:
-                raise DownloadError(f"SPARQL request failed for {endpoint}: {result.err}") from result.err
-            r = result.response
-            if r.status_code != 200:
-                raise DownloadError(f"SPARQL endpoint returned HTTP {r.status_code} for {endpoint}: {r.text[:200]}")
-            content_type = r.headers.get("Content-Type", "")
-            if "text/csv" in content_type:
-                return r.content
-            if "sparql-results+json" in content_type:
-                return _sparql_json_to_csv(r.text)
-            if "text/plain" in content_type:
-                stripped = r.text.strip()
-                if stripped.startswith("{"):
-                    try:
-                        return _sparql_json_to_csv(r.text)
-                    except (DownloadError, json.JSONDecodeError):
-                        pass
-                else:
-                    return r.content
-            raise DownloadError(
-                f"Unsupported Content-Type '{content_type}' for SPARQL fetch. "
-                "Expected 'text/csv' or 'application/sparql-results+json'."
-            )
-
         # Prima pagina
-        all_bytes = _do_fetch(offset=0)
+        all_bytes = self._do_fetch(endpoint, query, accept_format)
 
         # Paginazione: pagine successive, concatena CSV (saltando l'header)
         for page in range(1, pages):
             try:
-                page_bytes = _do_fetch(offset=page * step)
+                q = query
+                if "offset" not in q.lower():
+                    q = f"{q.rstrip().rstrip(';')} OFFSET {page * step}"
+                else:
+                    q = f"{q.rstrip().rstrip(';')} OFFSET {page * step}"
+
+                page_bytes = self._do_fetch(endpoint, q, accept_format)
+
                 # Se la pagina e' vuota (solo header, nessun dato), fermati
                 data_start = page_bytes.find(b"\n")
                 if data_start < 0 or len(page_bytes) <= data_start + 1:
@@ -127,57 +181,20 @@ class SparqlSource:
 
         return all_bytes, endpoint
 
-        headers: dict[str, str] = {
-            "Accept": "application/sparql-results+json" if accept_format == "sparql-results+json" else "text/csv",
-            "Content-Type": "application/x-www-form-urlencoded",
-        }
-        params: dict[str, Any] = {"query": query}
+    def _fetch_bindings(
+        self, endpoint: str, query: str,
+    ) -> list[dict[str, Any]]:
+        """Esegue query SPARQL e restituisce i bindings JSON (per probe).
 
-        result = self._client.post(
-            endpoint,
-            data=params,
-            headers=headers,
-            retries=2,
-        )
-        if result.is_error:
-            raise DownloadError(
-                f"SPARQL request failed for {endpoint}: {result.err}"
-            ) from result.err
+        Separato da _do_fetch per consentire ai test di mockare
+        solo il recupero bindings senza toccare la logica CSV.
+        """
+        from lab_connectors.http.sparql import execute_sparql
 
-        r = result.response
-        if r.status_code != 200:
-            raise DownloadError(
-                f"SPARQL endpoint returned HTTP {r.status_code} for {endpoint}: {r.text[:200]}"
-            )
-
-        content_type = r.headers.get("Content-Type", "")
-
-        if "text/csv" in content_type:
-            return r.content, endpoint
-
-        if "sparql-results+json" in content_type:
-            csv_bytes = _sparql_json_to_csv(r.text)
-            return csv_bytes, endpoint
-
-        # Fallback per Content-Type text/plain: alcuni endpoint SPARQL
-        # (es. dati.camera.it) rispondono con Content-Type sbagliato
-        # ma corpo CSV o JSON valido. Altri Content-Type (es. application/xml)
-        # rimangono errore.
-        if "text/plain" in content_type:
-            stripped = r.text.strip()
-            if stripped.startswith("{"):
-                try:
-                    return _sparql_json_to_csv(r.text), endpoint
-                except (DownloadError, json.JSONDecodeError):
-                    pass
-            else:
-                # Assume CSV — se non è CSV, fallirà in CLEAN con errore chiaro
-                return r.content, endpoint
-
-        raise DownloadError(
-            f"Unsupported Content-Type '{content_type}' for SPARQL fetch. "
-            "Expected 'text/csv' or 'application/sparql-results+json'."
-        )
+        try:
+            return execute_sparql(endpoint, query, timeout=self._client.timeout)
+        except RuntimeError as e:
+            raise DownloadError(str(e)) from e
 
     def probe(
         self,
@@ -211,51 +228,14 @@ class SparqlSource:
         if "limit" not in safe_query.lower():
             safe_query = f"{safe_query.rstrip(';')} LIMIT {limit}"
 
-        headers: dict[str, str] = {
-            "Accept": "application/sparql-results+json",
-            "Content-Type": "application/x-www-form-urlencoded",
-        }
-        params: dict[str, Any] = {"query": safe_query}
-
         start = time.monotonic()
-        result = self._client.post(
-            endpoint,
-            data=params,
-            headers=headers,
-            retries=0,
-        )
-        if result.is_error:
-            raise DownloadError(
-                f"SPARQL probe failed for {endpoint}: {result.err}"
-            ) from result.err
-
-        r = result.response
+        bindings = self._fetch_bindings(endpoint, safe_query)
         query_time_ms = int((time.monotonic() - start) * 1000)
 
-        if r.status_code != 200:
-            raise DownloadError(
-                f"SPARQL endpoint returned HTTP {r.status_code} for {endpoint}: {r.text[:200]}"
-            )
+        if not bindings:
+            raise DownloadError("SPARQL probe: query returned no results")
 
-        try:
-            payload = json.loads(r.text)
-        except json.JSONDecodeError as e:
-            raise DownloadError(f"Invalid SPARQL JSON response during probe: {e}") from e
-
-        bindings: list[dict[str, Any]] = (
-            (payload.get("results") or {}).get("bindings") or []
-        )
-        if not isinstance(bindings, list):
-            raise DownloadError("SPARQL probe: unexpected payload structure")
-
-        vars_list: list[str] = (payload.get("head") or {}).get("vars") or []
-        if not bindings and not vars_list:
-            raise DownloadError("SPARQL probe: query returned no variables")
-
-        # If vars_list is empty but we have bindings, infer from first binding
-        if not vars_list and bindings:
-            vars_list = list(bindings[0].keys())
-
+        vars_list = list(bindings[0].keys())
         row_count = len(bindings)
 
         # Compute null and distinct counts per variable
@@ -267,16 +247,7 @@ class SparqlSource:
             row: dict[str, str] = {}
             for var in vars_list:
                 cell = binding.get(var)
-                value: str
-                if cell and isinstance(cell, dict):
-                    raw_value = cell.get("value")
-                    # SPARQL JSON can have null values as JSON null
-                    if raw_value is None:
-                        value = ""
-                    else:
-                        value = str(raw_value)
-                else:
-                    value = str(cell if cell is not None else "")
+                value: str = (cell.get("value") or "") if cell else ""
                 row[var] = value
                 if not value:
                     null_counts[var] = null_counts.get(var, 0) + 1
@@ -288,7 +259,9 @@ class SparqlSource:
         warnings: list[str] = []
         for var in vars_list:
             if null_counts.get(var, 0) > 0:
-                warnings.append(f"variable '{var}' has {null_counts[var]} null/unbound value(s)")
+                warnings.append(
+                    f"variable '{var}' has {null_counts[var]} null/unbound value(s)"
+                )
 
         return {
             "endpoint": endpoint,
@@ -322,8 +295,9 @@ def _sparql_json_to_csv(json_text: str) -> bytes:
     if not bindings:
         raise DownloadError("SPARQL query returned no results")
 
-    # Use head.vars as canonical column list; bindings may omit unbound variables.
-    var_names: list[str] = (payload.get("head") or {}).get("vars") or list(bindings[0].keys())
+    var_names: list[str] = (
+        (payload.get("head") or {}).get("vars") or list(bindings[0].keys())
+    )
     rows: list[dict[str, str]] = []
 
     for binding in bindings:
@@ -331,7 +305,6 @@ def _sparql_json_to_csv(json_text: str) -> bytes:
         for var in var_names:
             cell = binding.get(var)
             if cell and isinstance(cell, dict):
-                # SPARQL JSON binding: {"value": "...", "type": "..."}
                 row[var] = str(cell.get("value", ""))
             else:
                 row[var] = str(cell if cell is not None else "")

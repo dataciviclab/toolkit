@@ -87,9 +87,9 @@ def test_sparql_fetch_http_error():
 def test_sparql_fetch_network_error():
     """Network error raises DownloadError."""
     with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
-        mock_cls.return_value.post.return_value = HttpResult(
-            response=None, err=Exception("connection refused"),
-        )
+        err_result = HttpResult(response=None, err=Exception("connection refused"))
+        mock_cls.return_value.post.return_value = err_result
+        mock_cls.return_value.get.return_value = err_result
         source = SparqlSource()
         with pytest.raises(DownloadError, match="connection refused"):
             source.fetch("https://example.test/sparql", "SELECT * WHERE { }")
@@ -231,23 +231,13 @@ def test_sparql_json_to_csv_binding_types():
 
 def test_sparql_probe_returns_schema_and_stats():
     """Probe returns schema, stats, and warnings."""
-    json_response = """{
-  "head": { "vars": ["name", "value"] },
-  "results": {
-    "bindings": [
-      { "name": { "type": "literal", "value": "Alice" }, "value": { "type": "literal", "value": "42" } },
-      { "name": { "type": "literal", "value": "Bob" }, "value": { "type": "literal", "value": null } },
-      { "name": { "type": "literal", "value": "Charlie" }, "value": { "type": "literal", "value": "7" } }
+    bindings = [
+        {"name": {"type": "literal", "value": "Alice"}, "value": {"type": "literal", "value": "42"}},
+        {"name": {"type": "literal", "value": "Bob"}, "value": {"type": "literal", "value": None}},
+        {"name": {"type": "literal", "value": "Charlie"}, "value": {"type": "literal", "value": "7"}},
     ]
-  }
-}"""
-    with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
-        mock_cls.return_value.post.return_value = _http_ok(
-            status=200,
-            text=json_response,
-            headers={"Content-Type": "application/sparql-results+json"},
-        )
-        source = SparqlSource(timeout=30)
+    source = SparqlSource(timeout=30)
+    with patch.object(source, "_fetch_bindings", return_value=bindings):
         result = source.probe(
             "https://example.test/sparql",
             "SELECT ?name ?value WHERE { }",
@@ -268,41 +258,42 @@ def test_sparql_probe_returns_schema_and_stats():
 
 def test_sparql_probe_adds_limit_if_missing():
     """Probe appends LIMIT if not in query."""
-    with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
-        mock_cls.return_value.post.return_value = _http_ok(
-            status=200,
-            text='{"head":{"vars":["x"]},"results":{"bindings":[{"x":{"type":"literal","value":"1"}}]}}',
-            headers={"Content-Type": "application/sparql-results+json"},
-        )
-        source = SparqlSource()
+    captured_query = None
+
+    def _mock_fetch(endpoint, query):
+        nonlocal captured_query
+        captured_query = query
+        return [{"x": {"type": "literal", "value": "1"}}]
+
+    source = SparqlSource()
+    with patch.object(source, "_fetch_bindings", side_effect=_mock_fetch):
         source.probe("https://example.test/sparql", "SELECT ?x WHERE { }", limit=50)
 
-        sent_query = mock_cls.return_value.post.call_args[1]["data"]["query"]
-        assert "LIMIT 50" in sent_query.upper()
+    assert captured_query is not None
+    assert "LIMIT 50" in captured_query.upper()
 
 
 def test_sparql_probe_preserves_existing_limit():
     """Probe does not double-LIMIT."""
-    with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
-        mock_cls.return_value.post.return_value = _http_ok(
-            status=200,
-            text='{"head":{"vars":["x"]},"results":{"bindings":[{"x":{"type":"literal","value":"1"}}]}}',
-            headers={"Content-Type": "application/sparql-results+json"},
-        )
-        source = SparqlSource()
+    captured_query = None
+
+    def _mock_fetch(endpoint, query):
+        nonlocal captured_query
+        captured_query = query
+        return [{"x": {"type": "literal", "value": "1"}}]
+
+    source = SparqlSource()
+    with patch.object(source, "_fetch_bindings", side_effect=_mock_fetch):
         source.probe("https://example.test/sparql", "SELECT ?x WHERE { } LIMIT 10", limit=50)
 
-        sent_query = mock_cls.return_value.post.call_args[1]["data"]["query"]
-        assert sent_query.upper().count("LIMIT") == 1
+    assert captured_query is not None
+    assert captured_query.upper().count("LIMIT") == 1
 
 
 def test_sparql_probe_http_error():
-    """Non-200 during probe raises DownloadError."""
-    with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
-        mock_cls.return_value.post.return_value = _http_ok(
-            status=500, text="Internal Server Error",
-        )
-        source = SparqlSource()
+    """Error during probe raises DownloadError."""
+    source = SparqlSource()
+    with patch.object(source, "_fetch_bindings", side_effect=DownloadError("HTTP 500 from SPARQL")):
         with pytest.raises(DownloadError, match="HTTP 500"):
             source.probe("https://example.test/sparql", "SELECT * WHERE { }")
 
@@ -383,7 +374,7 @@ class TestSparqlPagination:
             )
             # La seconda chiamata deve avere LIMIT 100 + OFFSET 100
             second_call = mock_cls.return_value.post.call_args_list[1]
-            query_body = second_call.kwargs.get("data", {}).get("query", "")
+            query_body = second_call.args[1].get("query", "")
             assert "LIMIT 100" in query_body
             assert "OFFSET 100" in query_body
 

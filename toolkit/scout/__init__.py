@@ -8,11 +8,17 @@ Strato indipendente dalla CLI, usabile da:
 
 Moduli:
   http      → HTTP transport: probe, fetch, format detection, CKAN/SDMX
+  sparql    → SPARQL scout: named graph discovery, schema inference
   infer     → Inferenze pure: anni, granularità, topic
   probe     → Orchestrazione: probe_url(), probe_url_routed()
 
 Scaffold non e' piu' in scout. Usa toolkit.scaffold.full e toolkit.scaffold.sources.
 """
+
+from toolkit.scout.sparql import (  # noqa: F401
+    discover_named_graphs,
+    infer_graph_schema,
+)
 
 from toolkit.scout.http import (  # noqa: F401
     probe_url_headers,

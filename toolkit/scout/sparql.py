@@ -8,16 +8,9 @@ Le funzioni di routing/orchestrazione stanno in toolkit.scout.probe.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-from lab_connectors.http.sparql import (
-    discover_graphs,
-    execute_sparql,
-    infer_schema,
-)
-
-log = logging.getLogger(__name__)
+from lab_connectors.http.sparql import discover_graphs, infer_schema
 
 
 def discover_named_graphs(

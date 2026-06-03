@@ -39,5 +39,6 @@ from toolkit.mcp.scout_ops import (
     mcp_list_sdmx_dataflows,
     mcp_probe_url,
     mcp_probe_url_routed,
+    mcp_sdmx_dataflow_info,
     mcp_sparql_query,
 )

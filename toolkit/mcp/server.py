@@ -28,6 +28,7 @@ from .toolkit_client import (
     mcp_infer_topic as infer_topic_impl,
     mcp_list_ckan_datasets as list_ckan_datasets_impl,
     mcp_list_sdmx_dataflows as list_sdmx_dataflows_impl,
+    mcp_sdmx_dataflow_info as sdmx_dataflow_info_impl,
     mcp_probe_url as probe_url_impl,
     mcp_probe_url_routed as probe_url_routed_impl,
     mcp_sparql_query as sparql_query_impl,
@@ -253,6 +254,21 @@ def toolkit_list_sdmx_dataflows(
     timeout: int = 30,
 ) -> dict[str, Any]:
     return guard_timed(list_sdmx_dataflows_impl, "toolkit_list_sdmx_dataflows", agency, timeout)
+
+
+@mcp.tool(
+    description="Restituisce dimensioni e codici validi per un dataflow SDMX "
+    "(es. ISTAT). Usa SdmxSource.preview_constraints(). "
+    "Utile per capire come comporre i filtri prima di chiamare fetch.",
+    structured_output=True,
+)
+def toolkit_sdmx_dataflow_info(
+    dataflow_id: str,
+    agency: str = "IT1",
+    version: str = "1.0",
+    timeout: int = 30,
+) -> dict[str, Any]:
+    return guard_timed(sdmx_dataflow_info_impl, "toolkit_sdmx_dataflow_info", dataflow_id, agency, version, timeout)
 
 
 @mcp.tool(

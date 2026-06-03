@@ -10,7 +10,7 @@ from typing import Any
 
 from lab_connectors.http import HttpClient
 
-from toolkit.plugins.sdmx import ISTAT_ESPLORADATI_BASE
+from toolkit.plugins.sdmx import ISTAT_ESPLORADATI_BASE, SdmxSource
 from toolkit.plugins.sparql import SparqlSource
 from toolkit.scout.http import (
     extract_candidate_links,
@@ -342,4 +342,50 @@ def mcp_list_sdmx_dataflows(
         "agency": agency,
         "returned": len(dataflows),
         "dataflows": dataflows,
+    }
+
+
+# ---------------------------------------------------------------------------
+# SDMX dataflow info (dimensions, valid codes)
+# ---------------------------------------------------------------------------
+
+
+def mcp_sdmx_dataflow_info(
+    dataflow_id: str,
+    agency: str = "IT1",
+    version: str = "1.0",
+    timeout: int = 30,
+) -> dict[str, Any]:
+    """Restituisce dimensioni e codici validi per un dataflow SDMX.
+
+    Usa ``SdmxSource.preview_constraints()`` per ottenere, per ogni
+    dimensione, la lista dei codici validi. Utile per capire come
+    comporre i filtri prima di chiamare fetch.
+
+    Args:
+        dataflow_id: ID del dataflow (es. ``150_915``).
+        agency: ID agenzia SDMX (default ``IT1`` per ISTAT).
+        version: Versione del dataflow (default ``1.0``).
+        timeout: Timeout HTTP in secondi.
+
+    Returns:
+        Dict con ``dataflow_id``, ``agency``, ``version``,
+        ``dimensions`` (mappa dim_id → [codici validi]).
+    """
+    source = SdmxSource(timeout=timeout, retries=1)
+    try:
+        constraints = source.preview_constraints(agency, dataflow_id, version)
+    except Exception as exc:
+        return {
+            "dataflow_id": dataflow_id,
+            "agency": agency,
+            "version": version,
+            "error": str(exc),
+        }
+
+    return {
+        "dataflow_id": dataflow_id,
+        "agency": agency,
+        "version": version,
+        "dimensions": constraints,
     }

@@ -480,6 +480,7 @@ def _scaffold_sparql(url: str, probe_result: dict[str, Any], *, run_raw: bool = 
 def _scaffold_sdmx(url: str, probe_result: dict[str, Any], *, run_raw: bool = False) -> None:
     """Scaffold per endpoint SDMX."""
     slug = slugify(url)
+    from toolkit.plugins.sdmx import SdmxSource
     from toolkit.scaffold.sources import block_sdmx as _generate_raw_sources_block_sdmx
 
     sdmx_info = probe_result.get("sdmx_info") or {}
@@ -490,6 +491,20 @@ def _scaffold_sdmx(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
         inferred_years = list(range(year_min, year_max + 1))
     else:
         inferred_years = [2024]
+
+    # Scopri dimensioni e codici validi per arricchire lo scaffold
+    dims: dict[str, list[str]] | None = None
+    flow_id = sdmx_info.get("flow_id")
+    if flow_id:
+        try:
+            source = SdmxSource(timeout=15, retries=1)
+            agency = sdmx_info.get("agency") or "IT1"
+            version = sdmx_info.get("version") or "1.0"
+            dims = source.preview_constraints(agency, flow_id, version)
+            sdmx_info["agency"] = agency
+            sdmx_info["version"] = version
+        except Exception:
+            dims = None
 
     # Scaffold minimo per SDMX (no profiling CSV)
     # generate_full_scaffold non usato perché SDMX ha template diverso
@@ -511,7 +526,7 @@ def _scaffold_sdmx(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
         "  output_policy: overwrite",
         "  sources:",
     ]
-    lines.extend(_generate_raw_sources_block_sdmx(sdmx_info, url))
+    lines.extend(_generate_raw_sources_block_sdmx(sdmx_info, url, dimensions=dims))
     lines.append("")
     lines.append("clean:")
     lines.append('  sql: "sql/clean.sql"')

@@ -116,18 +116,54 @@ def block_links(links: list[str]) -> list[str]:
     return lines
 
 
-def block_sdmx(sdmx_info: dict[str, Any] | None, url: str) -> list[str]:
-    """Blocchi raw.sources per endpoint SDMX."""
-    if sdmx_info and sdmx_info.get("flow_id"):
-        return [
-            f'    - name: "sdmx_{sdmx_info["flow_id"]}"',
-            '      type: "sdmx"',
-            "      args:",
-            f'        endpoint: "{url}"',
-            f'        flow: "{sdmx_info["flow_id"]}"',
-            "      primary: true",
-        ]
-    return block_http_file(url, "sdmx")
+def block_sdmx(
+    sdmx_info: dict[str, Any] | None,
+    url: str,
+    *,
+    dimensions: dict[str, list[str]] | None = None,
+) -> list[str]:
+    """Blocchi raw.sources per endpoint SDMX.
+
+    Se *dimensions* è fornito, genera anche ``agency``, ``version`` e un
+    blocco ``filters:`` commentato con le dimensioni scoperte e i loro
+    codici validi, pronto per essere personalizzato.
+    """
+    if not sdmx_info or not sdmx_info.get("flow_id"):
+        return block_http_file(url, "sdmx")
+
+    flow_id = sdmx_info["flow_id"]
+    agency = sdmx_info.get("agency") or "IT1"
+    version = sdmx_info.get("version") or "1.0"
+
+    lines = [
+        f'    - name: "sdmx_{flow_id}"',
+        '      type: "sdmx"',
+        "      args:",
+        f'        agency: "{agency}"',
+        f'        flow: "{flow_id}"',
+        f'        version: "{version}"',
+    ]
+
+    if dimensions:
+        lines.append("        # filters:  # decommentare e personalizzare")
+        for dim, codes in sorted(dimensions.items()):
+            if not codes:
+                lines.append(f"        #   {dim}: []  # nessun codice restituito")
+                continue
+            if len(codes) == 1:
+                lines.append(f"        #   {dim}: \"{codes[0]}\"")
+            elif len(codes) <= 5:
+                codes_str = ", ".join(f'"{c}"' for c in codes)
+                lines.append(f"        #   {dim}: [{codes_str}]  # {len(codes)} valori")
+            else:
+                sample = ", ".join(f'"{c}"' for c in codes[:3])
+                lines.append(f"        #   {dim}: [{sample}, ...]  # {len(codes)} valori")
+    else:
+        lines.append("        # filters:  # decommentare e personalizzare")
+        lines.append(f'        endpoint: "{url}"')
+
+    lines.append("      primary: true")
+    return lines
 
 
 def block_sparql(endpoint: str, query_hint: str = "") -> list[str]:

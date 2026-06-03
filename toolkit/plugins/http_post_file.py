@@ -19,12 +19,19 @@ Usage in dataset.yml::
 from __future__ import annotations
 
 import logging
+from pathlib import Path
+from urllib.parse import urlparse
 
 from lab_connectors.http import HttpClient
 
 from toolkit.core.exceptions import DownloadError
 
 logger = logging.getLogger("toolkit.plugins.http_post_file")
+
+# Vedi http_file.py per la spiegazione.
+_NON_TRUNCABLE_EXTS: set[str] = {
+    ".parquet", ".zip", ".xlsx", ".xls", ".gz", ".bz2", ".7z", ".rar",
+}
 
 
 class HttpPostFileSource:
@@ -57,7 +64,7 @@ class HttpPostFileSource:
             data: Form-encoded POST body (dict of key-value pairs).
             sample_bytes: If set, adds ``Range: bytes=0-N`` header for
                 partial download (non-standard on POST, alcuni server lo
-                supportano).
+                supportano). Ignorato per formati binari non troncabili.
 
         Returns:
             Raw response bytes.
@@ -66,6 +73,17 @@ class HttpPostFileSource:
             DownloadError: on network error or non-200 HTTP status.
 
         """
+        if sample_bytes is not None:
+            path = urlparse(url).path
+            suffix = Path(path).suffix.lower()
+            if suffix in _NON_TRUNCABLE_EXTS:
+                logger.info(
+                    "sample_bytes=%s ignorato per formato non troncabile (POST): %s",
+                    sample_bytes,
+                    url,
+                )
+                sample_bytes = None
+
         headers = None
         if sample_bytes is not None:
             headers = {"Range": f"bytes=0-{sample_bytes - 1}"}

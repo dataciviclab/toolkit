@@ -147,7 +147,7 @@ def test_sdmx_fetch_blocks_version_mismatch(monkeypatch):
     monkeypatch.setattr(HttpClient, "get", _fake_get)
 
     try:
-        SdmxSource().fetch("IT1", "22_289", "2.0", {"FREQ": "A"})
+        SdmxSource().fetch("IT1", "22_289", "1.0", {"FREQ": "A"})
     except DownloadError as exc:
         assert "current version is 1.5" in str(exc)
     else:
@@ -315,9 +315,9 @@ def test_sdmx_fetch_does_not_fallback_on_404(monkeypatch):
     def _fake_get(self, url, **kwargs):
         if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
             return _ok(_FakeResponse(200, DATAFLOW_XML, url))
-        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.0/all":
+        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
             return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
-        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.0/A.001001.JAN.9.TOTAL.99":
+        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
             return _ok(_FakeResponse(404, "not found", url))
         raise AssertionError(f"Unexpected URL {url}")
 
@@ -331,7 +331,7 @@ def test_sdmx_fetch_does_not_fallback_on_404(monkeypatch):
         ).fetch(
             "IT1",
             "22_289",
-            "1.0",  # già alla versione di fallback → 404 è terminale
+            "1.5",
             {
                 "FREQ": "A",
                 "REF_AREA": "001001",
@@ -392,22 +392,3 @@ def test_sdmx_fetch_does_not_fallback_on_connection_error(monkeypatch):
         "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all",
         "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99",
     ]
-
-
-def test_sdmx_preview_constraints_falls_back_to_1_0(monkeypatch):
-    """preview_constraints with non-1.0 version → 404 → fallback to 1.0."""
-    import json
-
-    def _fake_get(self, url, **kwargs):
-        params = kwargs.get("params")
-        if url.endswith("/data/IT1,150_915,1.2/all"):
-            return _ok(_FakeResponse(404, json.dumps({"error": "not found"}), url))
-        if url.endswith("/data/IT1,150_915,1.0/all"):
-            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
-        raise AssertionError(f"Unexpected URL {url}")
-
-    monkeypatch.setattr(HttpClient, "get", _fake_get)
-
-    dims = SdmxSource(retries=1).preview_constraints("IT1", "150_915", "1.2")
-    assert "FREQ" in dims
-    assert dims["FREQ"] == ["A"]

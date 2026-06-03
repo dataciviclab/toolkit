@@ -211,14 +211,14 @@ def test_toolkit_list_sdmx_dataflows_forwards_params(monkeypatch: pytest.MonkeyP
 def test_toolkit_sdmx_dataflow_info_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: dict = {}
 
-    def fake_impl(dataflow_id: str, agency: str, version: str | None, timeout: int) -> dict:
+    def fake_impl(dataflow_id: str, agency: str, version: str, timeout: int) -> dict:
         calls.update(dataflow_id=dataflow_id, agency=agency, version=version, timeout=timeout)
-        return {"dataflow_id": "150_915", "agency": "IT1", "version": "1.2", "dimensions": {}}
+        return {"dataflow_id": "150_915", "agency": "IT1", "version": "1.0", "dimensions": {}}
 
     monkeypatch.setattr(mcp_server, "sdmx_dataflow_info_impl", fake_impl)
     result = mcp_server.toolkit_sdmx_dataflow_info("150_915", agency="IT1", timeout=30)
-    assert result == {"dataflow_id": "150_915", "agency": "IT1", "version": "1.2", "dimensions": {}}
-    assert calls == {"dataflow_id": "150_915", "agency": "IT1", "version": None, "timeout": 30}
+    assert result == {"dataflow_id": "150_915", "agency": "IT1", "version": "1.0", "dimensions": {}}
+    assert calls == {"dataflow_id": "150_915", "agency": "IT1", "version": "1.0", "timeout": 30}
 
 
 def test_toolkit_probe_url_error_has_error_code(monkeypatch: pytest.MonkeyPatch) -> None:

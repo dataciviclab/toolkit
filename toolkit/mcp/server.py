@@ -265,7 +265,7 @@ def toolkit_list_sdmx_dataflows(
 def toolkit_sdmx_dataflow_info(
     dataflow_id: str,
     agency: str = "IT1",
-    version: str | None = None,
+    version: str = "1.0",
     timeout: int = 30,
 ) -> dict[str, Any]:
     return guard_timed(sdmx_dataflow_info_impl, "toolkit_sdmx_dataflow_info", dataflow_id, agency, version, timeout)

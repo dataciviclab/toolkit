@@ -353,38 +353,35 @@ def mcp_list_sdmx_dataflows(
 def mcp_sdmx_dataflow_info(
     dataflow_id: str,
     agency: str = "IT1",
-    version: str | None = None,
+    version: str = "1.0",
     timeout: int = 30,
 ) -> dict[str, Any]:
-    """Restituisce dimensioni, codici validi e versione corrente di un dataflow SDMX.
-
-    Se *version* non è specificata, la risolve automaticamente dal metadata
-    del dataflow (``SdmxSource.current_version()``).
+    """Restituisce dimensioni e codici validi per un dataflow SDMX.
 
     Args:
         dataflow_id: ID del dataflow (es. ``150_915``).
         agency: ID agenzia SDMX (default ``IT1`` per ISTAT).
-        version: Versione del dataflow. Se None, viene risolta automaticamente.
+        version: Versione del dataflow (default ``1.0``).
         timeout: Timeout HTTP in secondi.
 
     Returns:
-        Dict con ``dataflow_id``, ``agency``, ``version`` (quella corrente),
+        Dict con ``dataflow_id``, ``agency``, ``version``,
         ``dimensions`` (mappa dim_id → [codici validi]).
     """
     source = SdmxSource(timeout=timeout, retries=1)
     try:
-        resolved_version = version or source.current_version(agency, dataflow_id)
-        constraints = source.preview_constraints(agency, dataflow_id, resolved_version)
+        constraints = source.preview_constraints(agency, dataflow_id, version)
     except Exception as exc:
         return {
             "dataflow_id": dataflow_id,
             "agency": agency,
+            "version": version,
             "error": str(exc),
         }
 
     return {
         "dataflow_id": dataflow_id,
         "agency": agency,
-        "version": resolved_version,
+        "version": version,
         "dimensions": constraints,
     }

@@ -180,33 +180,8 @@ class SdmxSource:
         version = _safe_text(structure_ref.attrib.get("version"))
         return version
 
-    def current_version(self, agency: str, flow: str) -> str:
-        """Return the current (latest) version of a dataflow.
-
-        Fetches the dataflow metadata XML and extracts the version from the
-        ``Structure/Ref`` element.
-        """
-        root = self._get_dataflow(agency, flow)
-        return self._current_version(root)
-
     def preview_constraints(self, agency: str, flow: str, version: str) -> dict[str, list[str]]:
-        """Return valid codes per dimension for a dataflow.
-
-        Tries *version* first; if the SDMX endpoint returns 404, falls back
-        to version ``1.0`` (ISTAT sometimes exposes constraints only on the
-        oldest version).
-        """
-        for candidate in (version, "1.0"):
-            try:
-                return self._preview_constraints_version(agency, flow, candidate)
-            except DownloadError as exc:
-                if "404" not in str(exc) or candidate == "1.0":
-                    raise
-        return self._preview_constraints_version(agency, flow, "1.0")
-
-    def _preview_constraints_version(
-        self, agency: str, flow: str, version: str
-    ) -> dict[str, list[str]]:
+        """Return valid codes per dimension for a dataflow."""
         flow_ref = _flow_ref(agency, flow, version)
         payload, _origin = self._get_json(
             self._data_base_urls(agency),
@@ -341,7 +316,7 @@ class SdmxSource:
         dataflow_root = self._get_dataflow(agency, flow)
         current_version = self._current_version(dataflow_root)
 
-        if current_version != version and version != "1.0":
+        if current_version != version:
             raise DownloadError(
                 f"Requested SDMX version {version} for {agency}/{flow} is not available; "
                 f"current version is {current_version}"
@@ -367,23 +342,7 @@ class SdmxSource:
                     f"allowed: {allowed[:10]}{ellipsis}"
                 )
 
-        # Fetch data: try requested version, fall back to 1.0 on 404
-        # (ISTAT sometimes serves data only on the oldest version)
-        last_err: DownloadError | None = None
-        for data_version in (version, "1.0"):
-            if data_version != version:
-                flow_ref = _flow_ref(agency, flow, data_version)
-            try:
-                payload, origin = self._get_json(
-                    self._data_base_urls(agency), f"data/{flow_ref}/{key}"
-                )
-                break
-            except DownloadError as exc:
-                last_err = exc
-                if "404" not in str(exc) or data_version == "1.0":
-                    raise
-        else:
-            raise last_err or DownloadError(f"SDMX data fetch failed for {agency}/{flow}")
+        payload, origin = self._get_json(self._data_base_urls(agency), f"data/{flow_ref}/{key}")
         header, rows = self._normalize_rows(payload)
         if not rows:
             raise DownloadError(f"SDMX data returned no rows for {agency}/{flow} and key={key}")

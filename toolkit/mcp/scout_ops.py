@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from lab_connectors.http import HttpClient
+
+from toolkit.plugins.sdmx import ISTAT_ESPLORADATI_BASE
 from toolkit.plugins.sparql import SparqlSource
 from toolkit.scout.http import (
     extract_candidate_links,
@@ -185,4 +188,158 @@ def mcp_sparql_query(
         "total_rows": len(rows),
         "results": rows,
         "truncated": len(rows) >= max_rows,
+    }
+
+
+# ---------------------------------------------------------------------------
+# CKAN dataset listing
+# ---------------------------------------------------------------------------
+
+
+def _ckan_action_url(base_url: str, action: str) -> str:
+    """Build a CKAN action URL from a portal base URL."""
+    base = base_url.rstrip("/")
+    if base.endswith("/api/3/action"):
+        return f"{base}/{action}"
+    return f"{base}/api/3/action/{action}"
+
+
+def mcp_list_ckan_datasets(
+    portal_url: str,
+    query: str | None = None,
+    rows: int = 100,
+    timeout: int = 30,
+) -> dict[str, Any]:
+    """Elenca i dataset di un portale CKAN via ``package_search``.
+
+    Args:
+        portal_url: URL del portale CKAN (es. ``https://www.dati.gov.it/opendata``).
+        query: Query testuale di ricerca (Solr). Default ``*:*`` (tutti).
+        rows: Numero massimo di dataset da restituire (default 100, max 500).
+        timeout: Timeout HTTP in secondi.
+
+    Returns:
+        Dict con ``portal_url``, ``count`` (totale disponibile), ``returned``,
+        ``datasets`` (lista di dataset con id, name, title, organization, resources_count).
+    """
+    safe_rows = max(1, min(int(rows or 100), 500))
+    search_url = _ckan_action_url(portal_url, "package_search")
+    client = HttpClient(timeout=timeout, max_retries=1)
+
+    result = client.get(search_url, params={
+        "q": query or "*:*",
+        "rows": safe_rows,
+    })
+
+    if not result.is_ok or result.response is None:
+        return {
+            "portal_url": portal_url,
+            "error": "CKAN request failed",
+            "detail": str(result.err),
+        }
+    response = result.response
+    if response.status_code != 200:
+        return {
+            "portal_url": portal_url,
+            "error": f"HTTP {response.status_code}",
+        }
+
+    try:
+        data = response.json()
+    except Exception as exc:
+        return {"portal_url": portal_url, "error": f"Invalid JSON: {exc}"}
+
+    if not data.get("success"):
+        return {
+            "portal_url": portal_url,
+            "error": "CKAN API returned unsuccessful response",
+        }
+
+    search_result = data.get("result", {})
+    count = search_result.get("count", 0)
+    raw_datasets = search_result.get("results", [])
+
+    datasets = []
+    for ds in raw_datasets:
+        org = ds.get("organization") or {}
+        datasets.append({
+            "id": ds.get("id") or ds.get("name"),
+            "name": ds.get("name") or ds.get("id"),
+            "title": ds.get("title"),
+            "organization": org.get("title") or org.get("name"),
+            "resources_count": len(ds.get("resources") or []),
+            "metadata_modified": ds.get("metadata_modified"),
+        })
+
+    return {
+        "portal_url": portal_url,
+        "query": query,
+        "count": count,
+        "returned": len(datasets),
+        "datasets": datasets,
+    }
+
+
+# ---------------------------------------------------------------------------
+# SDMX dataflow listing
+# ---------------------------------------------------------------------------
+
+
+def mcp_list_sdmx_dataflows(
+    agency: str = "IT1",
+    timeout: int = 30,
+) -> dict[str, Any]:
+    """Elenca i dataflow SDMX disponibili per un'agenzia.
+
+    Args:
+        agency: ID dell'agenzia SDMX (default ``IT1`` per ISTAT).
+        timeout: Timeout HTTP in secondi.
+
+    Returns:
+        Dict con ``agency``, ``returned``, ``dataflows`` (lista con id, name,
+        agency_id, version).
+    """
+    import json
+
+    client = HttpClient(timeout=timeout, max_retries=1)
+    dataflow_url = f"{ISTAT_ESPLORADATI_BASE}/dataflow/{agency}/all/latest"
+
+    result = client.get(
+        dataflow_url,
+        headers={"Accept": "application/vnd.sdmx.structure+json; version=2"},
+    )
+
+    if not result.is_ok or result.response is None:
+        return {
+            "agency": agency,
+            "error": "SDMX request failed",
+            "detail": str(result.err),
+        }
+
+    response = result.response
+    if response.status_code != 200:
+        return {
+            "agency": agency,
+            "error": f"HTTP {response.status_code}",
+        }
+
+    try:
+        payload = json.loads(response.text)
+    except Exception as exc:
+        return {"agency": agency, "error": f"Invalid JSON: {exc}"}
+
+    flows = payload.get("data", {}).get("dataflows", [])
+    dataflows = []
+    for flow in flows:
+        dataflows.append({
+            "dataflow_id": flow.get("id"),
+            "name": flow.get("name"),
+            "agency_id": flow.get("agencyID"),
+            "version": flow.get("version"),
+        })
+
+    return {
+        "agency": agency,
+        "returned": len(dataflows),
+        "dataflows": dataflows,
     }

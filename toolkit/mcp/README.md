@@ -21,6 +21,8 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 - `toolkit_probe_url_routed(url, timeout=15)` — probe arricchito con routing automatico (rileva CKAN, SDMX, HTML, file diretto)
 - `toolkit_infer_topic(text)` — inferisce topic tematici da un testo (18 topic: lavoro, economia, sanita, ...)
 - `toolkit_ckan_package_show(endpoint, package_id, timeout=30)` — fetch dataset CKAN via API `package_show`
+- `toolkit_list_ckan_datasets(portal_url, query=None, rows=100, timeout=30)` — elenca dataset di un portale CKAN via `package_search`
+- `toolkit_list_sdmx_dataflows(agency="IT1", timeout=30)` — elenca dataflow SDMX disponibili per un'agenzia
 - `toolkit_html_extract_links(url, timeout=20)` — estrae link a file dati (CSV, JSON, XLSX, ZIP, XML) da pagina HTML
 - `toolkit_sparql_query(endpoint, query, timeout=60, max_rows=500)` — esegue query SPARQL SELECT su endpoint pubblico
 

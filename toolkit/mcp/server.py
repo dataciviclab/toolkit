@@ -26,6 +26,8 @@ from .toolkit_client import (
     mcp_ckan_package_show as ckan_package_show_impl,
     mcp_html_extract_links as html_extract_links_impl,
     mcp_infer_topic as infer_topic_impl,
+    mcp_list_ckan_datasets as list_ckan_datasets_impl,
+    mcp_list_sdmx_dataflows as list_sdmx_dataflows_impl,
     mcp_probe_url as probe_url_impl,
     mcp_probe_url_routed as probe_url_routed_impl,
     mcp_sparql_query as sparql_query_impl,
@@ -215,14 +217,42 @@ def toolkit_infer_topic(text: str) -> dict[str, Any]:
 
 
 @mcp.tool(
-    description="Fetch di un dataset CKAN via API package_show. Restituisce metadati, "
-    "risorse, organization, tags, formato e DataStore availability.",
+    description="Fetch di un dataset CKAN via API package_show. "
+    "Restituisce metadati, risorse, organization, tags, formato e DataStore availability.",
     structured_output=True,
 )
 def toolkit_ckan_package_show(
-    endpoint: str, package_id: str, timeout: int = 30
+    endpoint: str,
+    package_id: str,
+    timeout: int = 30,
 ) -> dict[str, Any]:
     return guard_timed(ckan_package_show_impl, "toolkit_ckan_package_show", endpoint, package_id, timeout)
+
+
+@mcp.tool(
+    description="Elenca i dataset di un portale CKAN via API package_search. "
+    "Accetta portal_url, query testuale opzionale (Solr), e numero massimo di risultati.",
+    structured_output=True,
+)
+def toolkit_list_ckan_datasets(
+    portal_url: str,
+    query: str | None = None,
+    rows: int = 100,
+    timeout: int = 30,
+) -> dict[str, Any]:
+    return guard_timed(list_ckan_datasets_impl, "toolkit_list_ckan_datasets", portal_url, query, rows, timeout)
+
+
+@mcp.tool(
+    description="Elenca i dataflow SDMX disponibili per un'agenzia SDMX. "
+    "Default: IT1 (ISTAT). Restituisce id, nome, agency_id e versione.",
+    structured_output=True,
+)
+def toolkit_list_sdmx_dataflows(
+    agency: str = "IT1",
+    timeout: int = 30,
+) -> dict[str, Any]:
+    return guard_timed(list_sdmx_dataflows_impl, "toolkit_list_sdmx_dataflows", agency, timeout)
 
 
 @mcp.tool(

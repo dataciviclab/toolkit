@@ -33,6 +33,8 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_infer_topic",
         "toolkit_ckan_package_show",
         "toolkit_html_extract_links",
+        "toolkit_list_ckan_datasets",
+        "toolkit_list_sdmx_dataflows",
         "toolkit_sparql_query",
     }
 
@@ -177,6 +179,32 @@ def test_toolkit_sparql_query_forwards_params(monkeypatch: pytest.MonkeyPatch) -
     result = mcp_server.toolkit_sparql_query("https://example.org/sparql", "SELECT * WHERE {?s ?p ?o}", timeout=60, max_rows=500)
     assert result == {"columns": ["s", "p", "o"], "total_rows": 10}
     assert calls == {"endpoint": "https://example.org/sparql", "query": "SELECT * WHERE {?s ?p ?o}", "timeout": 60, "max_rows": 500}
+
+
+def test_toolkit_list_ckan_datasets_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict = {}
+
+    def fake_impl(portal_url: str, query: str | None, rows: int, timeout: int) -> dict:
+        calls.update(portal_url=portal_url, query=query, rows=rows, timeout=timeout)
+        return {"count": 10, "datasets": []}
+
+    monkeypatch.setattr(mcp_server, "list_ckan_datasets_impl", fake_impl)
+    result = mcp_server.toolkit_list_ckan_datasets("https://dati.gov.it/opendata", query="pensioni", rows=50, timeout=25)
+    assert result == {"count": 10, "datasets": []}
+    assert calls == {"portal_url": "https://dati.gov.it/opendata", "query": "pensioni", "rows": 50, "timeout": 25}
+
+
+def test_toolkit_list_sdmx_dataflows_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict = {}
+
+    def fake_impl(agency: str, timeout: int) -> dict:
+        calls.update(agency=agency, timeout=timeout)
+        return {"agency": "IT1", "returned": 5, "dataflows": []}
+
+    monkeypatch.setattr(mcp_server, "list_sdmx_dataflows_impl", fake_impl)
+    result = mcp_server.toolkit_list_sdmx_dataflows(agency="IT1", timeout=20)
+    assert result == {"agency": "IT1", "returned": 5, "dataflows": []}
+    assert calls == {"agency": "IT1", "timeout": 20}
 
 
 def test_toolkit_probe_url_error_has_error_code(monkeypatch: pytest.MonkeyPatch) -> None:

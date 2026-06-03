@@ -341,7 +341,7 @@ class SdmxSource:
         dataflow_root = self._get_dataflow(agency, flow)
         current_version = self._current_version(dataflow_root)
 
-        if current_version != version:
+        if current_version != version and version != "1.0":
             raise DownloadError(
                 f"Requested SDMX version {version} for {agency}/{flow} is not available; "
                 f"current version is {current_version}"
@@ -366,7 +366,24 @@ class SdmxSource:
                     f"Invalid value(s) for SDMX dimension {dim}: {invalid} — "
                     f"allowed: {allowed[:10]}{ellipsis}"
                 )
-        payload, origin = self._get_json(self._data_base_urls(agency), f"data/{flow_ref}/{key}")
+
+        # Fetch data: try requested version, fall back to 1.0 on 404
+        # (ISTAT sometimes serves data only on the oldest version)
+        last_err: DownloadError | None = None
+        for data_version in (version, "1.0"):
+            if data_version != version:
+                flow_ref = _flow_ref(agency, flow, data_version)
+            try:
+                payload, origin = self._get_json(
+                    self._data_base_urls(agency), f"data/{flow_ref}/{key}"
+                )
+                break
+            except DownloadError as exc:
+                last_err = exc
+                if "404" not in str(exc) or data_version == "1.0":
+                    raise
+        else:
+            raise last_err or DownloadError(f"SDMX data fetch failed for {agency}/{flow}")
         header, rows = self._normalize_rows(payload)
         if not rows:
             raise DownloadError(f"SDMX data returned no rows for {agency}/{flow} and key={key}")

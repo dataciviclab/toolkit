@@ -492,14 +492,16 @@ def _scaffold_sdmx(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
     else:
         inferred_years = [2024]
 
-    # Scopri dimensioni e codici validi per arricchire lo scaffold
+    # Scopri dimensioni e codici validi per arricchire lo scaffold.
+    # Usa version "1.0" come default: ISTAT serve i dati su questa versione,
+    # anche quando il metadata riporta versioni più recenti.
     dims: dict[str, list[str]] | None = None
     flow_id = sdmx_info.get("flow_id")
     if flow_id:
         try:
             source = SdmxSource(timeout=15, retries=1)
             agency = sdmx_info.get("agency") or "IT1"
-            version = source.current_version(agency, flow_id)
+            version = "1.0"
             dims = source.preview_constraints(agency, flow_id, version)
             sdmx_info["agency"] = agency
             sdmx_info["version"] = version

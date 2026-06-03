@@ -133,7 +133,7 @@ def block_sdmx(
 
     flow_id = sdmx_info["flow_id"]
     agency = sdmx_info.get("agency") or "IT1"
-    version = sdmx_info.get("version") or "1.0"
+    version = sdmx_info.get("version") or ""
 
     lines = [
         f'    - name: "sdmx_{flow_id}"',

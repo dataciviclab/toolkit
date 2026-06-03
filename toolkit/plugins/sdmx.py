@@ -180,6 +180,15 @@ class SdmxSource:
         version = _safe_text(structure_ref.attrib.get("version"))
         return version
 
+    def current_version(self, agency: str, flow: str) -> str:
+        """Return the current (latest) version of a dataflow.
+
+        Fetches the dataflow metadata XML and extracts the version from the
+        ``Structure/Ref`` element.
+        """
+        root = self._get_dataflow(agency, flow)
+        return self._current_version(root)
+
     def preview_constraints(self, agency: str, flow: str, version: str) -> dict[str, list[str]]:
         """Return valid codes per dimension for a dataflow.
 

@@ -499,7 +499,7 @@ def _scaffold_sdmx(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
         try:
             source = SdmxSource(timeout=15, retries=1)
             agency = sdmx_info.get("agency") or "IT1"
-            version = sdmx_info.get("version") or "1.0"
+            version = source.current_version(agency, flow_id)
             dims = source.preview_constraints(agency, flow_id, version)
             sdmx_info["agency"] = agency
             sdmx_info["version"] = version

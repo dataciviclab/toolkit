@@ -192,9 +192,21 @@ class SdmxSource:
     def preview_constraints(self, agency: str, flow: str, version: str) -> dict[str, list[str]]:
         """Return valid codes per dimension for a dataflow.
 
-        Useful to validate filters before calling fetch(), or to understand
-        which values are available without downloading data.
+        Tries *version* first; if the SDMX endpoint returns 404, falls back
+        to version ``1.0`` (ISTAT sometimes exposes constraints only on the
+        oldest version).
         """
+        for candidate in (version, "1.0"):
+            try:
+                return self._preview_constraints_version(agency, flow, candidate)
+            except DownloadError as exc:
+                if "404" not in str(exc) or candidate == "1.0":
+                    raise
+        return self._preview_constraints_version(agency, flow, "1.0")
+
+    def _preview_constraints_version(
+        self, agency: str, flow: str, version: str
+    ) -> dict[str, list[str]]:
         flow_ref = _flow_ref(agency, flow, version)
         payload, _origin = self._get_json(
             self._data_base_urls(agency),

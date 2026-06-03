@@ -183,11 +183,23 @@ class SdmxSource:
     def preview_constraints(self, agency: str, flow: str, version: str) -> dict[str, list[str]]:
         """Return valid codes per dimension for a dataflow."""
         flow_ref = _flow_ref(agency, flow, version)
-        payload, _origin = self._get_json(
-            self._data_base_urls(agency),
-            f"data/{flow_ref}/all",
-            params={"firstNObservations": "0"},
-        )
+        urls = self._data_base_urls(agency)
+        last_err: DownloadError | None = None
+        for base_url in urls:
+            url = f"{_normalize_base_url(base_url)}/data/{flow_ref}/all"
+            try:
+                text, _origin = self._get_text(base_url, f"data/{flow_ref}/all",
+                                               accept="application/json",
+                                               params={"firstNObservations": "0"})
+                payload = json.loads(text)
+                break
+            except DownloadError as exc:
+                last_err = exc
+                continue
+        else:
+            raise last_err or DownloadError(
+                f"SDMX constraints not found for {agency}/{flow} v{version}"
+            )
         structure = payload.get("structure") or {}
         dimensions = structure.get("dimensions") or {}
         result: dict[str, list[str]] = {}

@@ -23,7 +23,7 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 - `toolkit_ckan_package_show(endpoint, package_id, timeout=30)` — fetch dataset CKAN via API `package_show`
 - `toolkit_list_ckan_datasets(portal_url, query=None, rows=100, timeout=30)` — elenca dataset di un portale CKAN via `package_search`
 - `toolkit_list_sdmx_dataflows(agency="IT1", timeout=30)` — elenca dataflow SDMX disponibili per un'agenzia
-- `toolkit_sdmx_dataflow_info(dataflow_id, agency="IT1", version=None, timeout=30)` — restituisce dimensioni, codici validi e versione corrente di un dataflow SDMX
+- `toolkit_sdmx_dataflow_info(dataflow_id, agency="IT1", version="1.0", timeout=30)` — restituisce dimensioni e codici validi di un dataflow SDMX
 - `toolkit_html_extract_links(url, timeout=20)` — estrae link a file dati (CSV, JSON, XLSX, ZIP, XML) da pagina HTML
 - `toolkit_sparql_query(endpoint, query, timeout=60, max_rows=500)` — esegue query SPARQL SELECT su endpoint pubblico
 

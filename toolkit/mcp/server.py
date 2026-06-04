@@ -16,6 +16,8 @@ from typing import Any
 
 from lab_connectors.mcp import create_mcp_server, guard_timed
 
+from toolkit.core.dataset_loader import validate_config as _validate_config_impl
+
 from .toolkit_client import (
     clean_preview as clean_preview_impl,
     csv_preview as csv_preview_impl,
@@ -182,6 +184,19 @@ def toolkit_list_runs(
 )
 def toolkit_csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     return guard_timed(csv_preview_impl, "toolkit_csv_preview", csv_path, limit)
+
+
+# ---------------------------------------------------------------------------
+# Validate config
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description="Validazione leggera dataset.yml: campi obbligatori, coerenza.",
+    structured_output=True,
+)
+def toolkit_validate_config(config_path: str) -> dict[str, Any]:
+    return guard_timed(_validate_config_impl, "toolkit_validate_config", config_path)
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@ import typer
 
 from toolkit.cli.common import iter_selected_years, load_cfg_and_logger
 from toolkit.clean.validate import run_clean_validation
+from toolkit.core.dataset_loader import validate_config
 from toolkit.mart.validate import run_mart_validation
 from toolkit.raw.validate import run_raw_validation
 
@@ -16,20 +17,44 @@ _VALIDATORS = {
 }
 
 
+def _validate_config_cmd(config_arg: str, as_json: bool) -> None:
+    """Valida dataset.yml — cammini obbligatori, coerenza campi."""
+    result = validate_config(config_arg)
+    if as_json:
+        typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        slug = result["slug"]
+        if result["errors"]:
+            for e in result["errors"]:
+                typer.echo(f"🔴 {slug}: {e}")
+        for w in result["warnings"]:
+            typer.echo(f"🟡 {slug}: {w}")
+        if result["ok"]:
+            typer.echo(f"✅ {slug}: configurazione valida")
+    if not result["ok"]:
+        raise typer.Exit(code=1)
+
+
 def validate(
-    step: str = typer.Argument(..., help="raw | clean | mart | all"),
-    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    step: str = typer.Argument(..., help="raw | clean | mart | all | config"),
+    config_path: str = typer.Option("", "--config", "-c", help="Path to dataset.yml"),
     year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
 ):
     """
-    Quality gate per RAW, CLEAN (include cross-layer raw→clean) e MART.
-    Usa regole opzionali in dataset.yml:
-      clean.validate.*
-      mart.validate.table_rules.*
+    Quality gate per dataset.yml, RAW, CLEAN e MART.
+
+    - ``config``: valida il file dataset.yml (campi obbligatori, coerenza)
+    - ``raw/clean/mart``: valida output della pipeline
+    - ``all``: raw + clean + mart
     """
-    cfg, logger = load_cfg_and_logger(config)
+    if step == "config":
+        cfg_path = config_path or "dataset.yml"
+        _validate_config_cmd(cfg_path, as_json)
+        return
+
+    cfg, logger = load_cfg_and_logger(config_path)
     years_arg = years if isinstance(years, str) else None
     year_arg = year if isinstance(year, int) else None
     selected_years = iter_selected_years(cfg, year_arg=year_arg, years_arg=years_arg)

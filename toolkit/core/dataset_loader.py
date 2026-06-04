@@ -75,6 +75,64 @@ def load_dataset_manifest(path: str | Path) -> dict[str, Any]:
     return result
 
 
+def validate_config(path: str | Path) -> dict[str, Any]:
+    """Validazione leggera di un file ``dataset.yml``.
+
+    Controlli:
+    - ``dataset`` section presente
+    - ``dataset.name`` presente
+    - ``dataset.years`` presente e non vuoto
+    - Almeno una ``raw.sources`` o sezione ``support``
+    - Opzionale: ``source_id`` se ci sono sources
+
+    Args:
+        path: Path al file ``dataset.yml`` o directory.
+
+    Returns:
+        Dict con ``ok`` (bool), ``errors`` (list),
+        ``warnings`` (list), ``slug`` (str).
+    """
+    from toolkit.core.dataset_loader import load_dataset_manifest
+
+    manifest = load_dataset_manifest(path)
+    if "error" in manifest:
+        return {"ok": False, "errors": [manifest["error"]], "warnings": [], "slug": manifest.get("slug", "?")}
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    slug = manifest["slug"]
+
+    if not manifest.get("dataset"):
+        errors.append("Sezione 'dataset' mancante")
+
+    name = manifest.get("name")
+    if not name:
+        errors.append("'dataset.name' mancante o vuoto")
+
+    years = manifest.get("years", [])
+    if not years:
+        errors.append("'dataset.years' mancante o vuoto")
+    elif not all(isinstance(y, int) for y in years):
+        errors.append("'dataset.years' deve essere una lista di interi")
+
+    sources = manifest.get("sources", [])
+    support = manifest.get("support", [])
+
+    if not sources and not support:
+        errors.append("Nessuna 'raw.sources' né sezione 'support' — niente da fetchare")
+
+    if sources and not manifest.get("source_id"):
+        warnings.append("'dataset.source_id' non impostato (utile per catalogazione)")
+
+    return {
+        "ok": len(errors) == 0,
+        "errors": errors,
+        "warnings": warnings,
+        "slug": slug,
+    }
+
+
 def has_mart_sql(path: str | Path) -> bool:
     """Verifica se esiste SQL mart nella directory candidate.
 

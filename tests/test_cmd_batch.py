@@ -55,6 +55,56 @@ class TestReadConfigList:
         result = _read_config_list(configs_file)
         assert result == [dataset_file.resolve()]
 
+    def test_relative_path_resolved_from_cwd_first(self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Se il path relativo esiste sia in CWD che nel parent del batch,
+        viene usato quello della CWD."""
+        # Setup: crea due file con lo stesso path relativo
+        batch_parent = tmp_path / "batches"
+        batch_parent.mkdir()
+        configs_file = batch_parent / "configs.txt"
+
+        # File in CWD (tmp_path / "project" / "dataset.yml")
+        cwd_project = tmp_path / "project"
+        cwd_project.mkdir()
+        cwd_file = cwd_project / "dataset.yml"
+        cwd_file.write_text("from_cwd", encoding="utf-8")
+
+        # File in batch_parent (tmp_path / "batches" / "project" / "dataset.yml")
+        batch_project = batch_parent / "project"
+        batch_project.mkdir()
+        batch_file = batch_project / "dataset.yml"
+        batch_file.write_text("from_batch_parent", encoding="utf-8")
+
+        configs_file.write_text("project/dataset.yml\n", encoding="utf-8")
+
+        # Cambia CWD a tmp_path e verifica che prenda cwd_file
+        monkeypatch.chdir(tmp_path)
+        result = _read_config_list(configs_file)
+        assert len(result) == 1
+        assert result[0] == cwd_file.resolve()
+        assert result[0].read_text() == "from_cwd"
+
+    def test_relative_path_fallback_to_batch_parent(self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Se il path relativo NON esiste in CWD, viene usato il parent del batch."""
+        batch_parent = tmp_path / "batches"
+        batch_parent.mkdir()
+        configs_file = batch_parent / "configs.txt"
+
+        # File solo nel batch_parent
+        batch_project = batch_parent / "project"
+        batch_project.mkdir()
+        batch_file = batch_project / "dataset.yml"
+        batch_file.write_text("from_batch_parent", encoding="utf-8")
+
+        configs_file.write_text("project/dataset.yml\n", encoding="utf-8")
+
+        # CWD è tmp_path dove NON esiste project/dataset.yml
+        monkeypatch.chdir(tmp_path)
+        result = _read_config_list(configs_file)
+        assert len(result) == 1
+        assert result[0] == batch_file.resolve()
+        assert result[0].read_text() == "from_batch_parent"
+
     def test_multiple_paths_with_comments_and_blanks(
         self, tmp_path: pytest.TempPathFactory
     ) -> None:

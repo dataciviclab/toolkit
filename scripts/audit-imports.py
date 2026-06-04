@@ -219,7 +219,6 @@ def run_audit(consumer_filter: str | None = None,
                 by_file[filepath].append((line, name))
 
             for filepath in sorted(by_file):
-                names = ", ".join([n for _, _, n in consumers if _ == by_file[filepath][0][0]])
                 # meglio: elenca ciò che importa
                 imported = sorted(set(n for _, n in by_file[filepath]))
                 if output_markdown:
@@ -289,7 +288,6 @@ def run_audit(consumer_filter: str | None = None,
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
     flags = set(a for a in sys.argv[1:] if a.startswith("--"))
 
     consumer_filter = None

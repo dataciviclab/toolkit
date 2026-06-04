@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import ast
 import pathlib
-import re
 import sys
 
 TOOLKIT_DIR = pathlib.Path(__file__).resolve().parent.parent
@@ -131,7 +130,7 @@ def generate() -> str:
     lines.append("Consulta questa mappa **prima** di implementare una nuova funzione")
     lines.append("per verificare se il contratto esiste già.")
     lines.append("")
-    lines.append(f"Totale: {{count}} funzioni/metodi in {{files}} file.")
+    lines.append("Totale: {count} funzioni/metodi in {files} file.")
     lines.append("")
 
     # Raccogli per file

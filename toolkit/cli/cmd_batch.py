@@ -12,7 +12,7 @@ import typer
 from toolkit.cli.common import load_cfg_and_logger
 from toolkit.cli.cmd_run import run_year
 
-_ALLOWED_STEPS = {"raw", "clean", "mart", "all"}
+_ALLOWED_STEPS = {"probe", "raw", "clean", "mart", "all"}
 
 
 @contextlib.contextmanager
@@ -52,7 +52,14 @@ def _read_config_list(configs_file: Path) -> list[Path]:
 
         config_path = Path(line)
         if not config_path.is_absolute():
-            config_path = (configs_file.parent / config_path).resolve()
+            # Risolvi prima rispetto alla CWD (caso d'uso normale:
+            # lancio da root progetto con path relativi al root),
+            # poi rispetto al file batch come fallback.
+            cwd_resolved = (Path.cwd() / config_path).resolve()
+            if cwd_resolved.exists():
+                config_path = cwd_resolved
+            else:
+                config_path = (configs_file.parent / config_path).resolve()
         config_paths.append(config_path)
 
     if not config_paths:
@@ -111,7 +118,7 @@ def batch(
     configs: str = typer.Option(
         ..., "--configs", help="Path to a text file with one dataset.yml path per line"
     ),
-    step: str = typer.Option("all", "--step", help="raw | clean | mart | all"),
+    step: str = typer.Option("all", "--step", help="probe | raw | clean | mart | all"),
     smoke: bool = typer.Option(
         False, "--smoke", help="Alias per --sample-rows 1000 --sample-bytes 1048576"
     ),
@@ -137,7 +144,7 @@ def batch(
     con # sono ignorati) e li esegue uno dopo l'altro per lo step indicato.
     """
     if step not in _ALLOWED_STEPS:
-        raise typer.BadParameter("step must be one of: raw, clean, mart, all")
+        raise typer.BadParameter("step must be one of: probe, raw, clean, mart, all")
 
     dry_flag = dry_run if isinstance(dry_run, bool) else False
     sample_rows_final = 1000 if smoke else sample_rows

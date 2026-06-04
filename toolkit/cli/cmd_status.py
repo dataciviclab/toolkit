@@ -8,6 +8,7 @@ import typer
 
 from toolkit.cli.common import format_profile_preview, load_layer_profile_summaries
 from toolkit.core.config import load_config
+from toolkit.core.io import read_json_or_none
 from toolkit.core.paths import METADATA, RAW_PROFILE_DIR, RAW_SUGGESTED_READ, layer_dataset_dir
 from toolkit.core.run_records import get_run_dir, read_run_record
 from toolkit.cli.inspect.readiness_ops import summary as _summary
@@ -59,9 +60,8 @@ def _print_validation_summaries(layers: dict[str, Any]) -> None:
 
 def _print_validation_details(layer_name: str, vpath: Path) -> None:
     """Legge validation JSON e stampa dettagli extra (missing columns, tables, ecc.)."""
-    try:
-        content = json.loads(vpath.read_text(encoding="utf-8"))
-    except Exception:
+    content = read_json_or_none(vpath)
+    if content is None:
         return
     summary = content.get("summary") or {}
     details: list[str] = []

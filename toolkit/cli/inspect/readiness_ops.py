@@ -6,9 +6,10 @@ MCP wrappa le eccezioni in ToolkitClientError.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
+
+from toolkit.core.io import read_json_or_none
 
 from toolkit.cli.inspect._helpers import (
     _check_run_record_coherence,
@@ -53,10 +54,7 @@ def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
     if latest_run and latest_run.get("path"):
         latest_path = Path(latest_run["path"])
         if latest_path.exists():
-            try:
-                latest_payload = json.loads(latest_path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
+            latest_payload = read_json_or_none(latest_path)
 
     years_seen = (
         sorted({p.parent.name for p in run_dir.parent.glob("*/*.json") if p.parent.name.isdigit()})
@@ -121,10 +119,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
 
     latest_run_record: dict[str, Any] | None = None
     if latest_run_path and Path(latest_run_path).exists():
-        try:
-            latest_run_record = json.loads(Path(latest_run_path).read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        latest_run_record = read_json_or_none(Path(latest_run_path))
 
     warnings: list[str] = []
     if primary_output_file and not _exists(primary_output_path):

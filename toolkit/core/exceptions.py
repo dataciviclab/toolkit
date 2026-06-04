@@ -1,12 +1,12 @@
+import warnings as _warnings
+
+
 class ToolkitError(Exception):
     """Base exception for the toolkit."""
 
 
 class DownloadError(ToolkitError):
     """Raised when a source download/fetch fails."""
-
-
-import warnings as _warnings
 
 
 class ValidationError(ToolkitError):

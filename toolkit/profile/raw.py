@@ -18,8 +18,8 @@ from toolkit.core.csv_read import (
     csv_read_option_strings,
     normalize_read_cfg,
     robust_preset,
-    sql_str,
 )
+from toolkit.core.sql_utils import sql_str
 from toolkit.core.paths import RAW_PROFILE, RAW_SUGGESTED_READ
 from toolkit.core.io import write_json_atomic
 from toolkit.profile._sniff_encoding import is_binary_file as _is_binary_file, sniff_encoding

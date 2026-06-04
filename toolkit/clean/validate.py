@@ -301,24 +301,25 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     profile_path = _profile_dir / RAW_PROFILE
     profile_parse_error: bool = False
     trusted_raw_cols: list[str] = []
-    raw_profile = read_json_or_none(profile_path) if profile_path.exists() else None
-    if raw_profile is not None:
-        def _to_snake(n: str) -> str:
-            s = _re.sub(r"([a-z])([A-Z])", r"\1_\2", n.strip())
-            s = _re.sub(r"[^a-zA-Z0-9]+", "_", s)
-            return _re.sub(r"_+", "_", s).lower().strip("_") or "col"
+    if profile_path.exists():
+        raw_profile = read_json_or_none(profile_path)
+        if raw_profile is not None:
+            def _to_snake(n: str) -> str:
+                s = _re.sub(r"([a-z])([A-Z])", r"\1_\2", n.strip())
+                s = _re.sub(r"[^a-zA-Z0-9]+", "_", s)
+                return _re.sub(r"_+", "_", s).lower().strip("_") or "col"
 
-        trusted_raw_cols = raw_profile.get("columns_raw") or []
-        scaffold_cols = {_to_snake(c) for c in trusted_raw_cols}
-        clean_cols_set = set(clean_cols)
-        unmapped = sorted(scaffold_cols - clean_cols_set)
-        if unmapped:
-            merged_warnings.append(
-                f"[scaffold] {len(unmapped)} colonne raw non mappate nel clean "
-                f"(drop senza -- DROP: <motivo>?): {unmapped}"
-            )
-    else:
-        profile_parse_error = True
+            trusted_raw_cols = raw_profile.get("columns_raw") or []
+            scaffold_cols = {_to_snake(c) for c in trusted_raw_cols}
+            clean_cols_set = set(clean_cols)
+            unmapped = sorted(scaffold_cols - clean_cols_set)
+            if unmapped:
+                merged_warnings.append(
+                    f"[scaffold] {len(unmapped)} colonne raw non mappate nel clean "
+                    f"(drop senza -- DROP: <motivo>?): {unmapped}"
+                )
+        else:
+            profile_parse_error = True
 
     actual_raw_col_count: int | None = len(trusted_raw_cols) if trusted_raw_cols else None
     raw_missing_columns: list[str] = []

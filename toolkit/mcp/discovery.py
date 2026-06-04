@@ -72,7 +72,10 @@ def _find_latest_run_status(slug: str, runs_root: Path | None = None) -> str | N
         if not year_dir.is_dir() or not year_dir.name.isdigit():
             continue
         for run_file in year_dir.glob("*.json"):
-            mtime = run_file.stat().st_mtime
+            try:
+                mtime = run_file.stat().st_mtime
+            except OSError:
+                continue
             if mtime > latest_mtime:
                 data = read_json_or_none(run_file)
                 if isinstance(data, dict):

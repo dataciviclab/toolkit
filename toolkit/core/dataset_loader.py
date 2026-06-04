@@ -33,14 +33,19 @@ def load_dataset_manifest(path: str | Path) -> dict[str, Any]:
     if not cfg_path.exists():
         return {"slug": cfg_path.parent.name, "error": f"dataset.yml non trovato in {cfg_path}"}
 
-    with cfg_path.open(encoding="utf-8") as f:
-        cfg: dict[str, Any] = yaml.safe_load(f) or {}
+    try:
+        with cfg_path.open(encoding="utf-8") as f:
+            cfg: dict[str, Any] = yaml.safe_load(f) or {}
+    except Exception as exc:
+        return {"slug": cfg_path.parent.name, "error": f"YAML parse error: {exc}"}
 
     slug = cfg.get("slug") or cfg_path.parent.name
     ds: dict[str, Any] = cfg.get("dataset") or {}
 
     # Campi base
+    has_dataset_section = "dataset" in cfg
     result: dict[str, Any] = {
+        "dataset": has_dataset_section,
         "slug": slug,
         "name": ds.get("name"),
         "years": ds.get("years") or [],
@@ -76,7 +81,7 @@ def detect_candidate_layout(path: str | Path) -> str:
     Scansiona la directory per determinare la struttura:
 
     - ``single_source``: un solo file ``dataset.yml`` con raw.sources non vuoto
-    - ``multi_source``: una directory ``sources/`` con più sotto-directory
+    - ``multi-source``: una directory ``sources/`` con più sotto-directory
     - ``compose``: ``dataset.yml`` senza raw/clean, solo support + mart
     - ``support_dataset``: nella directory ``support_datasets/``
     """
@@ -103,15 +108,21 @@ def detect_candidate_layout(path: str | Path) -> str:
     if sources_subdir.is_dir():
         sub_items = [d for d in sources_subdir.iterdir() if d.is_dir()]
         if len(sub_items) > 1:
-            return "multi_source"
+            return "multi-source"
+
+    has_root_dataset = (cfg_path.parent / "dataset.yml").exists()
+    has_sources_dir = (cfg_path.parent / "sources").is_dir()
+
+    if has_root_dataset and has_sources_dir:
+        return "ambiguous"
 
     if has_raw and has_mart:
-        return "single_source"
+        return "single-source"
 
     if has_support_entries and not has_raw:
         return "compose"
 
-    return "single_source"
+    return "single-source"
 
 
 def has_mart_sql(path: str | Path) -> bool:

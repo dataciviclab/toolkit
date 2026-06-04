@@ -123,7 +123,7 @@ class TestDetectCandidateLayout:
         # Crea sql/mart.sql per farlo classificare come single_source
         (tmp_path / "sql").mkdir()
         (tmp_path / "sql" / "mart.sql").write_text("SELECT 1")
-        assert detect_candidate_layout(tmp_path) == "single_source"
+        assert detect_candidate_layout(tmp_path) == "single-source"
 
     def test_compose(self, tmp_path: Path) -> None:
         _write_dataset(tmp_path, {

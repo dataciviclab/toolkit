@@ -1,7 +1,9 @@
-"""Operazioni DuckDB comuni su file Parquet.
+"""Operazioni DuckDB comuni su file Parquet e CSV.
 
 Centralizza DESCRIBE, COUNT e preview per evitare SQL inline
-sparso in 4 file diversi del toolkit.
+sparso in file diversi del toolkit. Contiene sia le funzioni
+per Parquet che ``csv_quick_shape`` per CSV (stesso pattern
+DuckDB, formato diverso).
 """
 
 from __future__ import annotations
@@ -9,12 +11,55 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import duckdb
+
 from lab_connectors.duckdb import safe_connect
 from toolkit.core.sql_utils import sql_literal
 
 
 def _rel(path: Path) -> str:
     return f"read_parquet('{sql_literal(str(path))}')"
+
+
+# ---------------------------------------------------------------------------
+# CSV quick shape
+# ---------------------------------------------------------------------------
+
+
+def csv_quick_shape(csv_path: str | Path) -> dict[str, Any]:
+    """Quick row count and column count for a CSV file via DuckDB auto-detect.
+
+    Args:
+        csv_path: Path to the CSV file.
+
+    Returns:
+        Dict with ``row_count_estimate`` (int | None) and ``column_count`` (int | None).
+        Returns empty dict if file not found or unreadable (non-CSV, encoding issues, etc.).
+
+    Note:
+        Uses ``read_csv_auto`` with ``auto_detect=true``. Non fa sniff esplicito,
+        approssimativo ma veloce. Per profiling completo vedi
+        ``toolkit.profile.raw.profile_raw``.
+    """
+    path = Path(csv_path)
+    if not path.exists():
+        return {}
+    try:
+        with duckdb.connect(database=":memory:") as conn:
+            conn.execute("PRAGMA disable_progress_bar")
+            rel = f"read_csv_auto('{sql_literal(str(path))}', auto_detect=true)"
+            describe = conn.execute(f"DESCRIBE SELECT * FROM {rel}").fetchall()
+            col_count = len(describe)
+            count_row = conn.execute(f"SELECT COUNT(*) FROM {rel}").fetchone()
+            row_count = int(count_row[0]) if count_row else None
+            return {"row_count_estimate": row_count, "column_count": col_count}
+    except Exception:
+        return {}
+
+
+# ---------------------------------------------------------------------------
+# Parquet operations
+# ---------------------------------------------------------------------------
 
 
 def parquet_schema(path: Path) -> list[dict[str, str]]:

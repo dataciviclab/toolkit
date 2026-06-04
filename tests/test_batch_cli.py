@@ -199,6 +199,47 @@ def test_batch_json_output(tmp_path: Path) -> None:
     assert report["rows"][0]["status"] == "SUCCESS"
 
 
+def test_batch_step_probe(tmp_path: Path) -> None:
+    """--step probe esegue probe (salta local_file) e produce report JSON."""
+    project = tmp_path / "project"
+    _write_batch_project(project, "batch_probe", 2023)
+    configs_file = _write_configs_file(tmp_path, "project")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--configs", str(configs_file), "--step", "probe"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert "Batch Report" in result.output
+    assert "batch_probe" in result.output
+    assert "SUCCESS" in result.output
+
+
+def test_batch_step_probe_json_output(tmp_path: Path) -> None:
+    """--step probe --json produce JSON valido."""
+    project = tmp_path / "project"
+    _write_batch_project(project, "batch_probe_json", 2023)
+    configs_file = _write_configs_file(tmp_path, "project")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--configs", str(configs_file), "--step", "probe", "--json"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    report = json.loads(result.output)
+    assert report["summary"]["total"] == 1
+    assert report["summary"]["passed"] == 1
+    assert report["rows"][0]["dataset"] == "batch_probe_json"
+    assert report["rows"][0]["step"] == "probe"
+    assert report["rows"][0]["status"] == "SUCCESS"
+
+
 def test_batch_dry_run_with_json(tmp_path: Path) -> None:
     """--dry-run --json: stdout JSON puro (execution plan silenziato)."""
     project = tmp_path / "project"

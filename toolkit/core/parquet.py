@@ -10,14 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from lab_connectors.duckdb import safe_connect
-
-
-def _sql_literal(path: str) -> str:
-    return path.replace("'", "''")
+from toolkit.core.sql_utils import sql_literal
 
 
 def _rel(path: Path) -> str:
-    return f"read_parquet('{_sql_literal(str(path))}')"
+    return f"read_parquet('{sql_literal(str(path))}')"
 
 
 def parquet_schema(path: Path) -> list[dict[str, str]]:

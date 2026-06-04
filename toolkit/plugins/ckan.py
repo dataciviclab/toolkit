@@ -7,6 +7,7 @@ from urllib.parse import urlparse, urlunparse
 from lab_connectors.http import HttpClient
 
 from toolkit.core.exceptions import DownloadError
+from toolkit.plugins._http_utils import truncate_at_line
 
 
 def _normalize_datastore_search_url(portal_url: str) -> str:
@@ -79,11 +80,8 @@ class CkanSource:
             if response.status_code not in (200, 206):
                 raise DownloadError(f"HTTP {response.status_code} for {url}")
             content = response.content
-            if sample_bytes is not None and len(content) > sample_bytes:
-                content = content[:sample_bytes]
-                last_newline = content.rfind(b"\n")
-                if last_newline > 0:
-                    content = content[: last_newline + 1]
+            if sample_bytes is not None:
+                content = truncate_at_line(content, sample_bytes)
             return content
         err = result.err
         raise DownloadError(str(err) if err else f"Failed to fetch {url}")

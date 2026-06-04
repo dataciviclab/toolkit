@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import re
 import json
-from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
+from pathlib import Path
 from typing import Any
 
-from toolkit.core.paths import to_root_relative
+from toolkit.core.paths import _to_pure_path, to_root_relative
 
 
 _WINDOWS_ABS_RE = re.compile(r"^[A-Za-z]:[\\/]")
@@ -28,12 +28,6 @@ _PORTABLE_RUN_PATH_FIELDS: set[tuple[str, ...]] = {
 
 def _root_from_run_dir(run_dir: Path) -> Path:
     return run_dir.parents[3]
-
-
-def _to_pure_path(path: str) -> PurePath:
-    if "\\" in path or _WINDOWS_ABS_RE.match(path):
-        return PureWindowsPath(path)
-    return PurePosixPath(path)
 
 
 def _is_absolute_path_string(value: str) -> bool:

@@ -10,10 +10,7 @@ from typing import Any
 
 import duckdb
 
-
-def _sql_literal(value: str) -> str:
-    """Escape a string for safe use inside a SQL single-quoted literal."""
-    return value.replace("'", "''")
+from toolkit.core.sql_utils import sql_literal
 
 
 def csv_quick_shape(csv_path: str | Path) -> dict[str, Any]:
@@ -37,7 +34,7 @@ def csv_quick_shape(csv_path: str | Path) -> dict[str, Any]:
     try:
         with duckdb.connect(database=":memory:") as conn:
             conn.execute("PRAGMA disable_progress_bar")
-            rel = f"read_csv_auto('{_sql_literal(str(path))}', auto_detect=true)"
+            rel = f"read_csv_auto('{sql_literal(str(path))}', auto_detect=true)"
             describe = conn.execute(f"DESCRIBE SELECT * FROM {rel}").fetchall()
             col_count = len(describe)
             count_row = conn.execute(f"SELECT COUNT(*) FROM {rel}").fetchone()

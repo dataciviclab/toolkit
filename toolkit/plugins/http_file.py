@@ -1,28 +1,13 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from urllib.parse import urlparse
 
 from lab_connectors.http import HttpClient
 
 from toolkit.core.exceptions import DownloadError
+from toolkit.plugins._http_utils import is_non_truncable_url, truncate_at_line
 
 logger = logging.getLogger("toolkit.plugins.http_file")
-
-# Estensioni che NON possono essere troncate: formati binari, compressi,
-# o contentitori i cui metadati sono in coda al file.
-# Campionare questi formati con HTTP Range produce file corrotti.
-_NON_TRUNCABLE_EXTS: set[str] = {
-    ".parquet",
-    ".zip",
-    ".xlsx",
-    ".xls",
-    ".gz",
-    ".bz2",
-    ".7z",
-    ".rar",
-}
 
 
 class HttpFileSource:
@@ -42,18 +27,8 @@ class HttpFileSource:
             user_agent=self.user_agent,
         )
 
-    @staticmethod
-    def _is_non_truncable(url: str) -> bool:
-        """Restituisce True se l'estensione del file non è troncabile in modo sicuro."""
-        path = urlparse(url).path
-        suffix = Path(path).suffix.lower()
-        # URL senza estensione o con parametri di query: assumiamo troncabile
-        if not suffix:
-            return False
-        return suffix in _NON_TRUNCABLE_EXTS
-
     def fetch(self, url: str, sample_bytes: int | None = None) -> bytes:
-        if sample_bytes is not None and self._is_non_truncable(url):
+        if sample_bytes is not None and is_non_truncable_url(url):
             logger.info(
                 "sample_bytes=%s ignorato per formato non troncabile: %s",
                 sample_bytes,
@@ -69,16 +44,8 @@ class HttpFileSource:
             if result.response.status_code not in (200, 206):
                 raise DownloadError(f"HTTP {result.response.status_code} for {url}")
             content = result.response.content
-            # Troncamento locale: server che ignorano Range (200 invece di 206)
-            # restituiscono tutto il file. Taglia per garantire il limite byte,
-            # poi tronca all'ultima linea completa (evita CSV con quote non
-            # chiuse, JSON troncato, ecc.).
-            if sample_bytes is not None and len(content) > sample_bytes:
-                content = content[:sample_bytes]
-                # Trova l'ultimo newline per chiudere l'ultima linea completa
-                last_newline = content.rfind(b"\n")
-                if last_newline > 0:
-                    content = content[: last_newline + 1]
+            if sample_bytes is not None:
+                content = truncate_at_line(content, sample_bytes)
             return content
         err = result.err
         raise DownloadError(str(err) if err else f"Failed to fetch {url}")

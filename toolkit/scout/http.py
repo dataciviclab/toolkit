@@ -476,6 +476,110 @@ def fetch_ckan_package(
     return None
 
 
+def search_ckan_datasets(
+    portal_url: str,
+    query: str = "*:*",
+    rows: int = 100,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> dict[str, Any]:
+    """Cerca dataset in un portale CKAN via ``package_search``.
+
+    Args:
+        portal_url: URL base del portale CKAN.
+        query: Query Solr (default ``*:*`` per tutti).
+        rows: Max risultati (default 100, max 500).
+        timeout: Timeout HTTP.
+
+    Returns:
+        Dict con ``count`` (totale), ``datasets`` (lista).
+
+    Raises:
+        RuntimeError: se la richiesta fallisce o l'API risponde con errore.
+    """
+    safe_rows = max(1, min(int(rows), 500))
+    base = portal_url.rstrip("/")
+    search_url = f"{base}/api/3/action/package_search" if not base.endswith("/api/3/action") else f"{base}/package_search"
+    client = _mk_client(timeout=timeout)
+
+    result = client.get(search_url, params={"q": query, "rows": safe_rows})
+    if not result.is_ok or result.response is None:
+        raise RuntimeError(f"CKAN package_search failed: {result.err}")
+
+    resp = result.response
+    if resp.status_code != 200:
+        raise RuntimeError(f"CKAN HTTP {resp.status_code} for {search_url}")
+
+    data = resp.json()
+    if not data.get("success"):
+        raise RuntimeError("CKAN package_search returned unsuccessful")
+
+    search_result = data.get("result", {})
+    raw_datasets = search_result.get("results", [])
+
+    datasets: list[dict[str, Any]] = []
+    for ds in raw_datasets:
+        org = ds.get("organization") or {}
+        datasets.append({
+            "id": ds.get("id") or ds.get("name"),
+            "name": ds.get("name") or ds.get("id"),
+            "title": ds.get("title"),
+            "organization": org.get("title") or org.get("name"),
+            "resources_count": len(ds.get("resources") or []),
+            "metadata_modified": ds.get("metadata_modified"),
+        })
+
+    return {"count": search_result.get("count", 0), "datasets": datasets}
+
+
+ISTAT_ESPLORADATI_BASE = "https://esploradati.istat.it/SDMXWS/rest"
+
+
+def list_sdmx_dataflows(
+    agency: str = "IT1",
+    timeout: int = 30,
+) -> list[dict[str, str]]:
+    """Elenca i dataflow SDMX disponibili per un'agenzia.
+
+    Args:
+        agency: ID agenzia SDMX (default ``IT1`` per ISTAT).
+        timeout: Timeout HTTP.
+
+    Returns:
+        Lista di dict con ``dataflow_id``, ``name``, ``agency_id``, ``version``.
+
+    Raises:
+        RuntimeError: se la richiesta fallisce o l'API risponde con errore.
+    """
+    import json
+
+    client = _mk_client(timeout=timeout)
+    dataflow_url = f"{ISTAT_ESPLORADATI_BASE}/dataflow/{agency}/all/latest"
+
+    result = client.get(
+        dataflow_url,
+        headers={"Accept": "application/vnd.sdmx.structure+json; version=2"},
+    )
+    if not result.is_ok or result.response is None:
+        raise RuntimeError(f"SDMX dataflow request failed: {result.err}")
+
+    resp = result.response
+    if resp.status_code != 200:
+        raise RuntimeError(f"SDMX HTTP {resp.status_code} for {dataflow_url}")
+
+    payload = json.loads(resp.text)
+    flows = payload.get("data", {}).get("dataflows", [])
+
+    dataflows: list[dict[str, str]] = []
+    for flow in flows:
+        dataflows.append({
+            "dataflow_id": flow.get("id"),
+            "name": flow.get("name"),
+            "agency_id": flow.get("agencyID"),
+            "version": flow.get("version"),
+        })
+    return dataflows
+
+
 def discover_ckan_resources(pkg: dict[str, Any]) -> list[dict[str, Any]]:
     """Estrae risorse scaricabili da un package CKAN."""
     resources: list[dict[str, Any]] = pkg.get("resources") or []

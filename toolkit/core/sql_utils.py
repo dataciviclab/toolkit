@@ -23,6 +23,19 @@ def sql_path(p: Path) -> str:
     return s.replace("'", "''")
 
 
+def sql_literal(value: str) -> str:
+    """Escape a string for safe use inside a SQL single-quoted literal.
+
+    Replaces single quotes with doubled single quotes (the SQL standard
+    for escaping). Use this when interpolating arbitrary strings into
+    SQL string literals to prevent injection or syntax errors.
+
+    Example:
+        ``sql_literal("it's")`` → ``"it''s"``
+    """
+    return value.replace("'", "''")
+
+
 def quote_list(paths: list[Path]) -> str:
     """Return a SQL comma-separated list of quoted path literals.
 

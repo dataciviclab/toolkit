@@ -7,4 +7,10 @@ class DownloadError(ToolkitError):
 
 
 class ValidationError(ToolkitError):
-    """Raised when validation fails (schema, keys, required columns)."""
+    """Raised when validation fails (schema, keys, required columns).
+
+    Deprecated: il sistema di validazione usa :class:`ValidationResult`
+    da ``toolkit.core.validation``, non eccezioni. ``ValidationError``
+    non è importata in produzione e potrebbe essere rimossa in una versione
+    futura.
+    """

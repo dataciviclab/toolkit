@@ -222,11 +222,6 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
 # FileNotFoundError/RuntimeError invece di return silenziosi.
 
 
-def _sql_literal(value: str) -> str:
-    """Escape a string for safe use inside a SQL single-quoted literal."""
-    return value.replace("'", "''")
-
-
 def _schema_from_parquet(parquet_path: Path) -> dict[str, Any]:
     from toolkit.core.parquet import parquet_schema
 

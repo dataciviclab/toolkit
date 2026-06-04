@@ -67,6 +67,12 @@ def write_json_atomic(path: Path, data: dict[str, Any]) -> None:
 
 
 def read_json(path: Path) -> dict[str, Any]:
+    """Read JSON file.
+
+    Deprecated: prefer :func:`read_json_or_none` che gestisce I/O ed errori
+    di parsing senza eccezioni. ``read_json`` non è usata in produzione;
+    potrebbe essere rimossa in una versione futura.
+    """
     return json.loads(path.read_text(encoding="utf-8"))
 
 

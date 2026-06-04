@@ -26,7 +26,6 @@ def _cli_helpers():
         _read_parquet_row_count,
         _read_validation_content,
         _schema_from_parquet,
-        _sql_literal,
         _validation_summary_for_layer,
     )
     return (
@@ -36,16 +35,11 @@ def _cli_helpers():
         _read_parquet_row_count,
         _read_validation_content,
         _schema_from_parquet,
-        _sql_literal,
         _validation_summary_for_layer,
     )
 
 
 # --- Pure re-exports (no error wrapping needed) ---
-
-
-def _sql_literal(value: str) -> str:
-    return _cli_helpers()[6](value)
 
 
 def _read_parquet_row_count(parquet_path: Path | None) -> int | None:
@@ -69,7 +63,7 @@ def _check_run_record_coherence(
 def _validation_summary_for_layer(
     layer_dir: Path, validation_filename: str
 ) -> dict[str, Any] | None:
-    return _cli_helpers()[7](layer_dir, validation_filename)
+    return _cli_helpers()[6](layer_dir, validation_filename)
 
 
 # --- Wrapped with ToolkitClientError ---

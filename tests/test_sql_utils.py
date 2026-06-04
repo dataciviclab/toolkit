@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from toolkit.core.sql_utils import q_ident, quote_list, sql_path
+from toolkit.core.sql_utils import q_ident, quote_list, sql_literal, sql_path
 
 pytestmark = pytest.mark.pure_unit
 
@@ -59,6 +59,38 @@ class TestSqlPath:
         result = sql_path(p)
         assert "'" not in result.replace("''", "")
         assert "''" in result
+
+
+class TestSqlLiteral:
+    """Contract: sql_literal is the single canonical SQL string escaper."""
+
+    def test_plain_string(self) -> None:
+        assert sql_literal("hello") == "hello"
+
+    def test_single_quote(self) -> None:
+        assert sql_literal("it's") == "it''s"
+
+    def test_multiple_quotes(self) -> None:
+        assert sql_literal("a'b'c") == "a''b''c"
+
+    def test_double_quotes_untouched(self) -> None:
+        assert sql_literal('a"b"c') == 'a"b"c'
+
+    def test_empty_string(self) -> None:
+        assert sql_literal("") == ""
+
+    def test_backslash_not_escaped(self) -> None:
+        assert sql_literal("a\\b") == "a\\b"
+
+    def test_only_quotes(self) -> None:
+        assert sql_literal("'''") == "''''''"
+
+    def test_already_escaped(self) -> None:
+        # Single quotes are always escaped — no "already escaped" concept in SQL
+        assert sql_literal("a''b") == "a''''b"
+
+    def test_returns_string(self) -> None:
+        assert isinstance(sql_literal("x"), str)
 
 
 class TestQuoteList:

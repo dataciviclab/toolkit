@@ -19,19 +19,13 @@ Usage in dataset.yml::
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from urllib.parse import urlparse
 
 from lab_connectors.http import HttpClient
 
 from toolkit.core.exceptions import DownloadError
+from toolkit.plugins._http_utils import is_non_truncable_url, truncate_at_line
 
 logger = logging.getLogger("toolkit.plugins.http_post_file")
-
-# Vedi http_file.py per la spiegazione.
-_NON_TRUNCABLE_EXTS: set[str] = {
-    ".parquet", ".zip", ".xlsx", ".xls", ".gz", ".bz2", ".7z", ".rar",
-}
 
 
 class HttpPostFileSource:
@@ -73,16 +67,13 @@ class HttpPostFileSource:
             DownloadError: on network error or non-200 HTTP status.
 
         """
-        if sample_bytes is not None:
-            path = urlparse(url).path
-            suffix = Path(path).suffix.lower()
-            if suffix in _NON_TRUNCABLE_EXTS:
-                logger.info(
-                    "sample_bytes=%s ignorato per formato non troncabile (POST): %s",
-                    sample_bytes,
-                    url,
-                )
-                sample_bytes = None
+        if sample_bytes is not None and is_non_truncable_url(url):
+            logger.info(
+                "sample_bytes=%s ignorato per formato non troncabile (POST): %s",
+                sample_bytes,
+                url,
+            )
+            sample_bytes = None
 
         headers = None
         if sample_bytes is not None:
@@ -93,11 +84,8 @@ class HttpPostFileSource:
             if result.response.status_code not in (200, 206):
                 raise DownloadError(f"HTTP {result.response.status_code} for {url}")
             content = result.response.content
-            if sample_bytes is not None and len(content) > sample_bytes:
-                content = content[:sample_bytes]
-                last_newline = content.rfind(b"\n")
-                if last_newline > 0:
-                    content = content[: last_newline + 1]
+            if sample_bytes is not None:
+                content = truncate_at_line(content, sample_bytes)
             return content
         err = result.err
         raise DownloadError(str(err) if err else f"Failed to fetch {url}")

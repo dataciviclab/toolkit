@@ -37,7 +37,7 @@ def _validate_config_cmd(config_arg: str, as_json: bool) -> None:
 
 def validate(
     step: str = typer.Argument(..., help="raw | clean | mart | all | config"),
-    config_path: str = typer.Option("", "--config", "-c", help="Path to dataset.yml"),
+    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
@@ -50,11 +50,10 @@ def validate(
     - ``all``: raw + clean + mart
     """
     if step == "config":
-        cfg_path = config_path or "dataset.yml"
-        _validate_config_cmd(cfg_path, as_json)
+        _validate_config_cmd(config, as_json)
         return
 
-    cfg, logger = load_cfg_and_logger(config_path)
+    cfg, logger = load_cfg_and_logger(config)
     years_arg = years if isinstance(years, str) else None
     year_arg = year if isinstance(year, int) else None
     selected_years = iter_selected_years(cfg, year_arg=year_arg, years_arg=years_arg)

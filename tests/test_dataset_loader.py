@@ -14,6 +14,7 @@ import yaml
 from toolkit.core.dataset_loader import (
     has_mart_sql,
     load_dataset_manifest,
+    validate_config,
 )
 
 pytestmark = pytest.mark.pure_unit
@@ -152,6 +153,76 @@ class TestHasMartSql:
         assert has_mart_sql(tmp_path) is False
 
     def test_sql_dir_no_mart_files(self, tmp_path: Path) -> None:
+        (tmp_path / "sql").mkdir(parents=True)
+        (tmp_path / "sql" / "clean.sql").write_text("SELECT 1")
+        assert has_mart_sql(tmp_path) is False
+
+
+class TestValidateConfig:
+    """Contract: validate_config controlla campi obbligatori dataset.yml."""
+
+    def test_valid(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {
+            "dataset": {"name": "test", "years": [2023]},
+            "raw": {"sources": [{"name": "src1"}]},
+        })
+        result = validate_config(tmp_path)
+        assert result["ok"] is True
+        assert result["errors"] == []
+
+    def test_missing_dataset_section(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {"raw": {"sources": [{"name": "src"}]}})
+        result = validate_config(tmp_path)
+        assert result["ok"] is False
+        assert any("dataset" in e for e in result["errors"])
+
+    def test_missing_name(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {
+            "dataset": {"years": [2023]},
+            "raw": {"sources": [{"name": "src"}]},
+        })
+        result = validate_config(tmp_path)
+        assert result["ok"] is False
+        assert any("name" in e for e in result["errors"])
+
+    def test_missing_years(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {
+            "dataset": {"name": "test"},
+            "raw": {"sources": [{"name": "src"}]},
+        })
+        result = validate_config(tmp_path)
+        assert result["ok"] is False
+        assert any("years" in e for e in result["errors"])
+
+    def test_years_not_list(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {
+            "dataset": {"name": "test", "years": "2023"},
+            "raw": {"sources": [{"name": "src"}]},
+        })
+        result = validate_config(tmp_path)
+        assert result["ok"] is False
+        assert any("interi" in e for e in result["errors"])
+
+    def test_no_sources_no_support(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {"dataset": {"name": "test", "years": [2023]}})
+        result = validate_config(tmp_path)
+        assert result["ok"] is False
+        assert any("fetchare" in e for e in result["errors"])
+
+    def test_warns_missing_source_id(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {
+            "dataset": {"name": "test", "years": [2023]},
+            "raw": {"sources": [{"name": "src1"}]},
+        })
+        result = validate_config(tmp_path)
+        assert result["ok"] is True
+        assert any("source_id" in w for w in result["warnings"])
+
+    def test_invalid_yaml(self, tmp_path: Path) -> None:
+        (tmp_path / "dataset.yml").write_text("invalid: [")
+        result = validate_config(tmp_path)
+        assert result["ok"] is False
+        assert any("YAML" in e for e in result["errors"])
         (tmp_path / "sql").mkdir(parents=True)
         (tmp_path / "sql" / "clean.sql").write_text("SELECT 1")
         assert has_mart_sql(tmp_path) is False

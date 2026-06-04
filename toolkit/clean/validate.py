@@ -352,12 +352,9 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
             try:
                 with safe_connect() as _con:
                     if _raw_file.suffix == ".parquet":
-                        _query = f'DESCRIBE SELECT * FROM read_parquet("{_raw_file.as_posix()}")'
+                        _query = f"DESCRIBE SELECT * FROM read_parquet('{sql_path(_raw_file)}')"
                     else:
-                        _csv_path = _raw_file.as_posix()
-                        _query = (
-                            f"DESCRIBE SELECT * FROM read_csv(\"{_csv_path}\", auto_detect=true)"
-                        )
+                        _query = f"DESCRIBE SELECT * FROM read_csv('{sql_path(_raw_file)}', auto_detect=true)"
                         raw_probe_source = "legacy_autodetect"
                         if raw_probe_reason:
                             merged_warnings.append(

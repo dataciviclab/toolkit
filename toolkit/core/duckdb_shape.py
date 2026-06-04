@@ -4,6 +4,8 @@ Centralizza DESCRIBE, COUNT e preview per evitare SQL inline
 sparso in file diversi del toolkit. Contiene sia le funzioni
 per Parquet che ``csv_quick_shape`` per CSV (stesso pattern
 DuckDB, formato diverso).
+
+Rinominato da ``core/parquet.py`` — ora in ``core/duckdb_shape.py``.
 """
 
 from __future__ import annotations

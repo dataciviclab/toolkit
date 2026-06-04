@@ -296,7 +296,7 @@ def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[s
 
     Returns the same dict shape as ``profile_with_read_cfg``.
     """
-    from toolkit.clean.read_excel import _load_excel_frame
+    from toolkit.core.read_excel import _load_excel_frame
 
     cfg = read_cfg or {}
     try:

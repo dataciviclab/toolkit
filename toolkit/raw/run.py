@@ -243,7 +243,7 @@ def run_raw(
     col_count = None
     if primary_output_path.exists() and primary_output_path.suffix.lower() in {".csv", ".tsv", ".txt"}:
         try:
-            from toolkit.core.parquet import csv_quick_shape
+            from toolkit.core.duckdb_shape import csv_quick_shape
 
             shape = csv_quick_shape(str(primary_output_path))
             output_rows = shape.get("row_count_estimate")

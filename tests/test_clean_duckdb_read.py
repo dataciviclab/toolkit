@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from toolkit.clean import duckdb_read
+from toolkit.core import duckdb_read
 from toolkit.clean.read_config import resolve_clean_read_cfg
 
 

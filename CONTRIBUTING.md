@@ -13,14 +13,24 @@ li normalizza e li aggrega in parquet pronti per analisi.
 
 Pipeline: `RAW → CLEAN → MART`
 
-Qui stanno:
+## Architettura dei layer
 
-- il motore della pipeline (`toolkit/core/`, `toolkit/raw/`, `toolkit/clean/`, `toolkit/mart/`)
-- i plugin sorgente (`toolkit/plugins/`: http_file, ckan, sdmx, sparql, local_file)
-- la CLI (`toolkit/cli/`)
-- il profiler RAW (`toolkit/profile/`)
-- il server MCP (`toolkit/mcp/`)
-- `docs/` — documentazione tecnica del motore
+La struttura del toolkit segue una gerarchia chiara: ogni livello ha un ruolo
+e dipende solo dai livelli sottostanti.
+
+| Layer | Cosa contiene | Dipende da |
+|---|---|---|
+| `core/` | Utility pure: SQL, path, I/O, validation rules, config models, DuckDB shape (parquet + CSV), template, run records | Solo `lab-connectors` |
+| `plugins/` | Connettori fonte: HTTP, CKAN, SDMX, SPARQL, file locale | `core` (solo `exceptions.DownloadError`) |
+| `profile/` | Sniffing RAW: encoding, delim, profiling | `core` (csv_read, sql_utils, io) |
+| `raw/` | Fetch + salva raw | `core` + `plugins` |
+| `clean/` | Trasforma raw → parquet pulito | `core` + `profile` |
+| `mart/` | Aggrega clean → mart | `core` |
+| `cli/`, `mcp/` | Entry point | Tutti i layer |
+
+**Regola**: un modulo in un layer deve importare solo dai layer da cui dipende
+(secondo la tabella). Se ti trovi a importare da `clean/` in `profile/` o da
+`clean/` in `cli/`, probabilmente la logica che cerchi dovrebbe stare in `core/`.
 
 Qui non stanno:
 

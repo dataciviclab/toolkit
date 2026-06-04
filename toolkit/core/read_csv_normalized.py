@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from toolkit.clean.read_sql_utils import _parse_column_value
+from toolkit.core.read_sql_utils import _parse_column_value
 from toolkit.core.io import normalize_encoding
 
 

@@ -49,6 +49,8 @@ mypy toolkit/
 - [ ] Perimetro stretto: una PR = un layer o un fix mirato
 - [ ] Se nuovo plugin: test + docs inclusi
 - [ ] Issue collegata o motivazione dell'assenza
+- [ ] **Se rimuovo un modulo/funzione pubblica**: ho verificato l'assenza di import con `rg` su tutta l'org
+  e lasciato shim backward compat con `DeprecationWarning` (vedi deprecation policy in CONTRIBUTING)
 
 ## Note per chi revisiona
 

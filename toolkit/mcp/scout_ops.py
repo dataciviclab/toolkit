@@ -224,47 +224,6 @@ def mcp_list_ckan_datasets(
         }
     except RuntimeError as exc:
         return {"portal_url": portal_url, "error": str(exc)}
-    response = result.response
-    if response.status_code != 200:
-        return {
-            "portal_url": portal_url,
-            "error": f"HTTP {response.status_code}",
-        }
-
-    try:
-        data = response.json()
-    except Exception as exc:
-        return {"portal_url": portal_url, "error": f"Invalid JSON: {exc}"}
-
-    if not data.get("success"):
-        return {
-            "portal_url": portal_url,
-            "error": "CKAN API returned unsuccessful response",
-        }
-
-    search_result = data.get("result", {})
-    count = search_result.get("count", 0)
-    raw_datasets = search_result.get("results", [])
-
-    datasets = []
-    for ds in raw_datasets:
-        org = ds.get("organization") or {}
-        datasets.append({
-            "id": ds.get("id") or ds.get("name"),
-            "name": ds.get("name") or ds.get("id"),
-            "title": ds.get("title"),
-            "organization": org.get("title") or org.get("name"),
-            "resources_count": len(ds.get("resources") or []),
-            "metadata_modified": ds.get("metadata_modified"),
-        })
-
-    return {
-        "portal_url": portal_url,
-        "query": query,
-        "count": count,
-        "returned": len(datasets),
-        "datasets": datasets,
-    }
 
 
 # ---------------------------------------------------------------------------

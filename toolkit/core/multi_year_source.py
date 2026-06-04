@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from toolkit.core.paths import layer_year_dir
+from toolkit.core.sql_utils import sql_path
 
 
 def collect_multi_year_files(
@@ -74,9 +75,9 @@ def bind_multi_year_view(con, files: list[Path], *, source_layer: str = "clean")
         source_layer: ``"clean"`` (default) or ``"mart"``.
     """
     if len(files) == 1:
-        source_expr = f"read_parquet('{files[0].as_posix()}')"
+        source_expr = f"read_parquet('{sql_path(files[0])}')"
     else:
-        paths = ",".join(f"'{p.as_posix()}'" for p in files)
+        paths = ",".join(f"'{sql_path(p)}'" for p in files)
         source_expr = f"read_parquet([{paths}])"
 
     # Views universali (sempre disponibili)

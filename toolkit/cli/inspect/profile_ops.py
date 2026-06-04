@@ -12,8 +12,9 @@ from logging import Logger
 from pathlib import Path
 from typing import Any
 
-import duckdb
 import typer
+
+from lab_connectors.duckdb import safe_connect
 
 from toolkit.cli.common import dump_cfg_section, iter_selected_years, load_cfg_and_logger
 from toolkit.core.artifacts import should_write
@@ -69,7 +70,7 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     read_opts = csv_read_option_strings(preview_cfg, include_header_skip=True)
     opt_sql = f"union_by_name=true, {', '.join(read_opts)}"
 
-    with duckdb.connect(database=":memory:") as conn:
+    with safe_connect() as conn:
         conn.execute("PRAGMA disable_progress_bar")
         conn.execute(
             f"CREATE VIEW csv_preview AS SELECT * FROM read_csv("

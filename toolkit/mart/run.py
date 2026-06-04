@@ -12,6 +12,7 @@ from toolkit.core.layer_profile import compare_layer_profiles, profile_relation,
 from toolkit.core.metadata import config_hash_for_year, file_record, merge_layer_manifest, write_metadata
 from toolkit.core.multi_year_source import bind_multi_year_view, collect_multi_year_files
 from toolkit.core.paths import MART_VALIDATION, layer_dataset_dir, layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
+from toolkit.core.sql_utils import sql_path as _sql_path_quote
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 
@@ -326,9 +327,9 @@ def run_mart(
         if clean_files:
             # clean_input view
             if len(clean_files) == 1:
-                con.execute(f"CREATE VIEW clean_input AS SELECT * FROM read_parquet('{clean_files[0]}')")
+                con.execute(f"CREATE VIEW clean_input AS SELECT * FROM read_parquet('{_sql_path_quote(clean_files[0])}')")
             else:
-                paths = ",".join([f"'{p}'" for p in clean_files])
+                paths = ",".join([f"'{_sql_path_quote(p)}'" for p in clean_files])
                 con.execute(f"CREATE VIEW clean_input AS SELECT * FROM read_parquet([{paths}])")
 
             # alias for backward-compatible SQL (old templates may reference "clean")

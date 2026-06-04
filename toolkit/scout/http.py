@@ -509,7 +509,10 @@ def search_ckan_datasets(
     if resp.status_code != 200:
         raise RuntimeError(f"CKAN HTTP {resp.status_code} for {search_url}")
 
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError as exc:
+        raise RuntimeError(f"CKAN JSON invalido: {exc}") from exc
     if not data.get("success"):
         raise RuntimeError("CKAN package_search returned unsuccessful")
 
@@ -566,7 +569,10 @@ def list_sdmx_dataflows(
     if resp.status_code != 200:
         raise RuntimeError(f"SDMX HTTP {resp.status_code} for {dataflow_url}")
 
-    payload = json.loads(resp.text)
+    try:
+        payload = json.loads(resp.text)
+    except ValueError as exc:
+        raise RuntimeError(f"SDMX JSON invalido: {exc}") from exc
     flows = payload.get("data", {}).get("dataflows", [])
 
     dataflows: list[dict[str, str]] = []

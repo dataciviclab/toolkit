@@ -195,14 +195,6 @@ def mcp_sparql_query(
 # ---------------------------------------------------------------------------
 
 
-def _ckan_action_url(base_url: str, action: str) -> str:
-    """Build a CKAN action URL from a portal base URL."""
-    base = base_url.rstrip("/")
-    if base.endswith("/api/3/action"):
-        return f"{base}/{action}"
-    return f"{base}/api/3/action/{action}"
-
-
 def mcp_list_ckan_datasets(
     portal_url: str,
     query: str | None = None,

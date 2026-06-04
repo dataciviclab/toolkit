@@ -8,7 +8,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from toolkit.core.io import write_json_atomic
+from toolkit.core.io import read_json_or_none, write_json_atomic
 from toolkit.core.paths import METADATA
 from toolkit.version import __version__
 
@@ -70,10 +70,7 @@ def _read_metadata(folder: Path, filename: str = METADATA) -> dict[str, Any] | N
     path = folder / filename
     if not path.exists():
         return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-        return None
+    return read_json_or_none(path)
 
 
 def read_layer_metadata(layer_dir: Path) -> dict[str, Any]:

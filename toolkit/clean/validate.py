@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from lab_connectors.duckdb import safe_connect
+from toolkit.core.io import read_json_or_none
 
 from toolkit.core.column_rules import (
     check_max_null_pct,
@@ -211,15 +212,12 @@ def validate_promotion(
     profile_dir = raw_path / "_profile"
     saved_profile_path = profile_dir / RAW_PROFILE
 
-    if saved_profile_path.exists():
-        try:
-            saved = json.loads(saved_profile_path.read_text(encoding="utf-8"))
-            raw_profile = {
-                "row_count": saved.get("row_count"),
-                "columns": [{"name": c, "type": "VARCHAR"} for c in (saved.get("columns_raw") or [])],
-            }
-        except Exception:
-            raw_profile = _profile_raw_input(input_files, read_cfg, read_mode, logger)
+    saved = read_json_or_none(saved_profile_path) if saved_profile_path.exists() else None
+    if saved is not None:
+        raw_profile = {
+            "row_count": saved.get("row_count"),
+            "columns": [{"name": c, "type": "VARCHAR"} for c in (saved.get("columns_raw") or [])],
+        }
     else:
         raw_profile = _profile_raw_input(input_files, read_cfg, read_mode, logger)
     transition_profile = compare_layer_profiles(
@@ -303,26 +301,24 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     profile_path = _profile_dir / RAW_PROFILE
     profile_parse_error: bool = False
     trusted_raw_cols: list[str] = []
-    if profile_path.exists():
-        try:
-            def _to_snake(n: str) -> str:
-                s = _re.sub(r"([a-z])([A-Z])", r"\1_\2", n.strip())
-                s = _re.sub(r"[^a-zA-Z0-9]+", "_", s)
-                return _re.sub(r"_+", "_", s).lower().strip("_") or "col"
+    raw_profile = read_json_or_none(profile_path) if profile_path.exists() else None
+    if raw_profile is not None:
+        def _to_snake(n: str) -> str:
+            s = _re.sub(r"([a-z])([A-Z])", r"\1_\2", n.strip())
+            s = _re.sub(r"[^a-zA-Z0-9]+", "_", s)
+            return _re.sub(r"_+", "_", s).lower().strip("_") or "col"
 
-            raw_profile = json.loads(profile_path.read_text(encoding="utf-8"))
-            trusted_raw_cols = raw_profile.get("columns_raw") or []
-            scaffold_cols = {_to_snake(c) for c in trusted_raw_cols}
-            clean_cols_set = set(clean_cols)
-            unmapped = sorted(scaffold_cols - clean_cols_set)
-            if unmapped:
-                merged_warnings.append(
-                    f"[scaffold] {len(unmapped)} colonne raw non mappate nel clean "
-                    f"(drop senza -- DROP: <motivo>?): {unmapped}"
-                )
-        except Exception:
-            profile_parse_error = True
-            pass
+        trusted_raw_cols = raw_profile.get("columns_raw") or []
+        scaffold_cols = {_to_snake(c) for c in trusted_raw_cols}
+        clean_cols_set = set(clean_cols)
+        unmapped = sorted(scaffold_cols - clean_cols_set)
+        if unmapped:
+            merged_warnings.append(
+                f"[scaffold] {len(unmapped)} colonne raw non mappate nel clean "
+                f"(drop senza -- DROP: <motivo>?): {unmapped}"
+            )
+    else:
+        profile_parse_error = True
 
     actual_raw_col_count: int | None = len(trusted_raw_cols) if trusted_raw_cols else None
     raw_missing_columns: list[str] = []

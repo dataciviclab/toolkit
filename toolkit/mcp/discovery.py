@@ -10,9 +10,10 @@ del workspace DataCivicLab.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Literal
+
+from toolkit.core.io import read_json_or_none
 
 import yaml
 
@@ -71,15 +72,12 @@ def _find_latest_run_status(slug: str, runs_root: Path | None = None) -> str | N
         if not year_dir.is_dir() or not year_dir.name.isdigit():
             continue
         for run_file in year_dir.glob("*.json"):
-            try:
-                mtime = run_file.stat().st_mtime
-                if mtime > latest_mtime:
-                    data = json.loads(run_file.read_text(encoding="utf-8"))
-                    if isinstance(data, dict):
-                        latest = data
-                        latest_mtime = mtime
-            except Exception:
-                continue
+            mtime = run_file.stat().st_mtime
+            if mtime > latest_mtime:
+                data = read_json_or_none(run_file)
+                if isinstance(data, dict):
+                    latest = data
+                    latest_mtime = mtime
 
     if latest:
         return latest.get("status")

@@ -5,7 +5,6 @@ Not part of the public API — internal utility module.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +23,7 @@ from toolkit.core.paths import (
 )
 from toolkit.core.run_records import get_run_dir, latest_run
 from toolkit.core.support import resolve_support_payloads
+from toolkit.core.io import read_json_or_none
 from toolkit.profile.raw import sniff_source_file
 
 
@@ -59,11 +59,9 @@ def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
     if not columns_preview and profile_hints.get("is_binary_file"):
         raw_profile_path = raw_dir / RAW_PROFILE_DIR / RAW_PROFILE
         if raw_profile_path.exists():
-            try:
-                raw_profile_data = json.loads(raw_profile_path.read_text(encoding="utf-8"))
+            raw_profile_data = read_json_or_none(raw_profile_path)
+            if raw_profile_data:
                 columns_preview = raw_profile_data.get("columns_norm") or raw_profile_data.get("columns_raw") or []
-            except Exception:
-                pass
 
     warnings = list(profile_hints.get("warnings") or [])
     if sniff_error is not None:
@@ -263,10 +261,7 @@ def _read_validation_content(path: str | None) -> dict[str, Any] | None:
     """Read a validation JSON file and return its content, or None if missing."""
     if not path or not _exists(path):
         return None
-    try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
-    except Exception:
-        return None
+    return read_json_or_none(Path(path))
 
 
 def _check_run_record_coherence(

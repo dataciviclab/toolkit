@@ -6,7 +6,7 @@ from typing import Any
 import duckdb
 from lab_connectors.duckdb import safe_connect
 
-from toolkit.core.sql_utils import q_ident
+from toolkit.core.sql_utils import q_ident, sql_path
 
 
 def profile_relation(con: duckdb.DuckDBPyConnection, relation_name: str) -> dict[str, Any]:
@@ -27,10 +27,10 @@ def profile_parquet_files(files: list[Path]) -> dict[str, Any]:
     with safe_connect() as con:
         if len(files) == 1:
             con.execute(
-                f"CREATE VIEW profiled_input AS SELECT * FROM read_parquet('{files[0].as_posix()}')"
+                f"CREATE VIEW profiled_input AS SELECT * FROM read_parquet('{sql_path(files[0])}')"
             )
         else:
-            paths = ",".join(f"'{path.as_posix()}'" for path in files)
+            paths = ",".join(f"'{sql_path(p)}'" for p in files)
             con.execute(
                 f"CREATE VIEW profiled_input AS SELECT * FROM read_parquet([{paths}])"
             )

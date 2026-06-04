@@ -10,7 +10,7 @@ from typing import Any
 
 from lab_connectors.duckdb import safe_connect
 
-from toolkit.clean.duckdb_read import read_raw_to_relation
+from toolkit.core.duckdb_read import read_raw_to_relation
 from toolkit.core.layer_profile import profile_relation
 
 

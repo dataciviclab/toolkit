@@ -221,7 +221,7 @@ def _payload_for_year(cfg, year: int) -> dict[str, Any]:
 
 
 def _schema_from_parquet(parquet_path: Path) -> dict[str, Any]:
-    from toolkit.core.parquet import parquet_schema
+    from toolkit.core.duckdb_shape import parquet_schema
 
     if not parquet_path.exists():
         raise FileNotFoundError(f"Parquet non trovato: {parquet_path}")
@@ -232,7 +232,7 @@ def _schema_from_parquet(parquet_path: Path) -> dict[str, Any]:
 
 
 def _read_parquet_row_count(parquet_path: Path | None) -> int | None:
-    from toolkit.core.parquet import parquet_row_count
+    from toolkit.core.duckdb_shape import parquet_row_count
 
     if parquet_path is None:
         return None
@@ -240,7 +240,7 @@ def _read_parquet_row_count(parquet_path: Path | None) -> int | None:
 
 
 def _read_parquet_preview(parquet_path: Path, limit: int = 10) -> dict[str, Any]:
-    from toolkit.core.parquet import parquet_preview
+    from toolkit.core.duckdb_shape import parquet_preview
 
     if not parquet_path.exists():
         raise FileNotFoundError(f"Parquet non trovato: {parquet_path}")

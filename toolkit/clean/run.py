@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from toolkit.clean.duckdb_read import SUPPORTED_INPUT_EXTS
+from toolkit.core.duckdb_read import SUPPORTED_INPUT_EXTS
 from toolkit.clean.read_config import resolve_clean_read_cfg
 from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import should_write

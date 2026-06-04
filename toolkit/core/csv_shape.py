@@ -6,4 +6,4 @@ Questo modulo verrà rimosso in una versione futura.
 
 from __future__ import annotations
 
-from toolkit.core.parquet import csv_quick_shape  # noqa: F401
+from toolkit.core.duckdb_shape import csv_quick_shape  # noqa: F401

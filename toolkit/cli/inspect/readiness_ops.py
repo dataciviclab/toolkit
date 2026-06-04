@@ -19,7 +19,7 @@ from toolkit.cli.inspect._helpers import (
     _validation_summary_for_layer,
 )
 from toolkit.core.config import load_config
-from toolkit.core.parquet import parquet_row_count
+from toolkit.core.duckdb_shape import parquet_row_count
 from toolkit.core.paths import (
     RAW_VALIDATION,
     CLEAN_VALIDATION,

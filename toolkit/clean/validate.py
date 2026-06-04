@@ -10,6 +10,8 @@ from typing import Any
 from lab_connectors.duckdb import safe_connect
 from toolkit.core.io import read_json_or_none
 
+from toolkit.core.sql_utils import sql_path
+
 from toolkit.core.column_rules import (
     check_max_null_pct,
     check_not_null,
@@ -108,7 +110,9 @@ def validate_clean(
         )
 
     with safe_connect() as con:
-        con.execute(f"CREATE VIEW t AS SELECT * FROM read_parquet('{p.as_posix()}')")
+        con.execute(
+            f"CREATE VIEW t AS SELECT * FROM read_parquet('{sql_path(p)}')"
+        )
 
         cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
 

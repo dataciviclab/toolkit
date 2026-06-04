@@ -1,7 +1,7 @@
 """Tests for toolkit.core.dataset_loader — contratto di lettura dataset.yml.
 
-Protegge il contratto pubblico: load_dataset_manifest, detect_candidate_layout,
-has_mart_sql. I test usano dataset.yml minimi per verificare ogni campo.
+Protegge il contratto pubblico: load_dataset_manifest, has_mart_sql.
+I test usano dataset.yml minimi per verificare ogni campo.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ import pytest
 import yaml
 
 from toolkit.core.dataset_loader import (
-    detect_candidate_layout,
     has_mart_sql,
     load_dataset_manifest,
 )
@@ -111,38 +110,48 @@ class TestLoadDatasetManifest:
         result = load_dataset_manifest(filepath)
         assert result["name"] == "test"
 
+    def test_dataset_key_present(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {"dataset": {"name": "test"}})
+        result = load_dataset_manifest(tmp_path)
+        assert result["dataset"] is True
 
-class TestDetectCandidateLayout:
-    """Contract: detect_candidate_layout classifica la struttura candidate."""
+    def test_dataset_key_absent(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {"slug": "no-dataset-section"})
+        result = load_dataset_manifest(tmp_path)
+        assert result["dataset"] is False
 
-    def test_single_source(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test", "years": [2023]},
-            "raw": {"sources": [{"name": "src1"}]},
-        })
-        # Crea sql/mart.sql per farlo classificare come single_source
-        (tmp_path / "sql").mkdir()
-        (tmp_path / "sql" / "mart.sql").write_text("SELECT 1")
-        assert detect_candidate_layout(tmp_path) == "single-source"
-
-    def test_compose(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test"},
-            "support": [{"name": "sup1", "config": "path.yml"}],
-        })
-        assert detect_candidate_layout(tmp_path) == "compose"
-
-    def test_unknown_on_missing(self, tmp_path: Path) -> None:
-        assert detect_candidate_layout(tmp_path / "missing") == "unknown"
+    def test_yaml_parse_error(self, tmp_path: Path) -> None:
+        (tmp_path / "dataset.yml").write_text("invalid: [yaml: bad", encoding="utf-8")
+        result = load_dataset_manifest(tmp_path)
+        assert "error" in result
+        assert "YAML parse error" in result["error"]
 
 
 class TestHasMartSql:
-    """Contract: has_mart_sql verifica esistenza di sql/mart.sql."""
+    """Contract: has_mart_sql verifica esistenza di SQL mart nei formati DI."""
 
-    def test_exists(self, tmp_path: Path) -> None:
+    def test_mart_sql_exact(self, tmp_path: Path) -> None:
         (tmp_path / "sql").mkdir(parents=True)
         (tmp_path / "sql" / "mart.sql").write_text("SELECT 1")
         assert has_mart_sql(tmp_path) is True
 
+    def test_mart_star_sql(self, tmp_path: Path) -> None:
+        (tmp_path / "sql").mkdir(parents=True)
+        (tmp_path / "sql" / "mart_indicatori.sql").write_text("SELECT 1")
+        assert has_mart_sql(tmp_path) is True
+
+    def test_mart_subdir(self, tmp_path: Path) -> None:
+        (tmp_path / "sql" / "mart").mkdir(parents=True)
+        (tmp_path / "sql" / "mart" / "table1.sql").write_text("SELECT 1")
+        assert has_mart_sql(tmp_path) is True
+
     def test_missing(self, tmp_path: Path) -> None:
+        assert has_mart_sql(tmp_path) is False
+
+    def test_no_sql_dir(self, tmp_path: Path) -> None:
+        assert has_mart_sql(tmp_path) is False
+
+    def test_sql_dir_no_mart_files(self, tmp_path: Path) -> None:
+        (tmp_path / "sql").mkdir(parents=True)
+        (tmp_path / "sql" / "clean.sql").write_text("SELECT 1")
         assert has_mart_sql(tmp_path) is False

@@ -75,60 +75,31 @@ def load_dataset_manifest(path: str | Path) -> dict[str, Any]:
     return result
 
 
-def detect_candidate_layout(path: str | Path) -> str:
-    """Rileva il tipo di candidate dataset.
-
-    Scansiona la directory per determinare la struttura:
-
-    - ``single_source``: un solo file ``dataset.yml`` con raw.sources non vuoto
-    - ``multi-source``: una directory ``sources/`` con più sotto-directory
-    - ``compose``: ``dataset.yml`` senza raw/clean, solo support + mart
-    - ``support_dataset``: nella directory ``support_datasets/``
-    """
-    cfg_path = Path(path)
-    if cfg_path.is_dir():
-        cfg_path = cfg_path / "dataset.yml"
-
-    if not cfg_path.exists():
-        return "unknown"
-
-    import yaml
-
-    with cfg_path.open(encoding="utf-8") as f:
-        cfg: dict[str, Any] = yaml.safe_load(f) or {}
-
-    raw: dict[str, Any] = cfg.get("raw") or {}
-    has_raw = bool(raw.get("sources"))
-    has_mart = _has_mart_sql(cfg_path.parent)
-    has_support_entries = bool(cfg.get("support"))
-
-    parent_dir = cfg_path.parent
-    sources_subdir = parent_dir / "sources"
-
-    if sources_subdir.is_dir():
-        sub_items = [d for d in sources_subdir.iterdir() if d.is_dir()]
-        if len(sub_items) > 1:
-            return "multi-source"
-
-    has_root_dataset = (cfg_path.parent / "dataset.yml").exists()
-    has_sources_dir = (cfg_path.parent / "sources").is_dir()
-
-    if has_root_dataset and has_sources_dir:
-        return "ambiguous"
-
-    if has_raw and has_mart:
-        return "single-source"
-
-    if has_support_entries and not has_raw:
-        return "compose"
-
-    return "single-source"
-
-
 def has_mart_sql(path: str | Path) -> bool:
-    """Verifica se esiste il file ``sql/mart.sql`` nella directory candidate."""
+    """Verifica se esiste SQL mart nella directory candidate.
+
+    Controlla tre pattern (in ordine di specificità):
+    - ``sql/mart.sql`` — file esatto
+    - ``sql/mart*.sql`` — qualsiasi file che inizia con ``mart`` in ``sql/``
+    - ``sql/mart/*.sql`` — qualsiasi file ``.sql`` in ``sql/mart/``
+
+    Corrisponde al contratto di ``dataset-incubator``.
+    """
     return _has_mart_sql(Path(path))
 
 
 def _has_mart_sql(path: Path) -> bool:
-    return (path / "sql" / "mart.sql").exists()
+    sql_dir = path / "sql"
+    if not sql_dir.is_dir():
+        return False
+    # mart.sql esatto
+    if (sql_dir / "mart.sql").exists():
+        return True
+    # mart*.sql in sql/
+    if any(p.name.startswith("mart") and p.suffix == ".sql" for p in sql_dir.iterdir()):
+        return True
+    # sql/mart/*.sql
+    mart_dir = sql_dir / "mart"
+    if mart_dir.is_dir() and any(p.suffix == ".sql" for p in mart_dir.iterdir()):
+        return True
+    return False

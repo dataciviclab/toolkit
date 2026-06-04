@@ -4,7 +4,7 @@ from pathlib import Path
 
 from tests.helpers import NoopLogger
 
-from toolkit.clean.read_csv_normalized import (
+from toolkit.core.read_csv_normalized import (
     _execute_normalized_csv_read,
     _load_normalized_csv_frame,
 )

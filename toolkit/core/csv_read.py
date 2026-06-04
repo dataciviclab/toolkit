@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from toolkit.core.sql_utils import sql_str  # noqa: F401 — backward compat
+
 
 ALLOWED_READ_CSV_KEYS = {
     "delim",
@@ -46,10 +48,6 @@ FORMAT_HINT_KEYS = {
 }
 READ_SELECTION_KEYS = {"mode", "glob", "prefer_from_raw_run", "allow_ambiguous", "include"}
 READ_SOURCE_MODES = {"auto", "config_only"}
-
-
-def sql_str(value: object) -> str:
-    return str(value).replace("'", "''")
 
 
 def normalize_encoding(enc: str | None) -> str | None:

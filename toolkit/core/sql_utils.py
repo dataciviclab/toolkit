@@ -36,6 +36,20 @@ def sql_literal(value: str) -> str:
     return value.replace("'", "''")
 
 
+def sql_str(value: object) -> str:
+    """Convert a value to a SQL-safe string literal.
+
+    Wraps :func:`sql_literal` dopo conversione a stringa.
+    Accetta qualsiasi tipo (``int``, ``float``, ecc.) e lo converte
+    prima di eseguire l'escape.
+
+    Example:
+        ``sql_str(42)`` → ``"42"``
+        ``sql_str("it's")`` → ``"it''s"``
+    """
+    return sql_literal(str(value))
+
+
 def quote_list(paths: list[Path]) -> str:
     """Return a SQL comma-separated list of quoted path literals.
 

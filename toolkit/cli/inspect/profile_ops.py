@@ -17,7 +17,8 @@ import typer
 
 from toolkit.cli.common import dump_cfg_section, iter_selected_years, load_cfg_and_logger
 from toolkit.core.artifacts import should_write
-from toolkit.core.csv_read import csv_read_option_strings, robust_preset, sql_str
+from toolkit.core.csv_read import csv_read_option_strings, robust_preset
+from toolkit.core.sql_utils import sql_str
 from toolkit.core.paths import layer_year_dir
 from toolkit.core.config import ToolkitConfig
 from toolkit.profile.raw import profile_raw, profile_with_read_cfg, sniff_source_file, write_raw_profile, write_suggested_read_yml

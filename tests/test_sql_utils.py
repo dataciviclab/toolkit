@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from toolkit.core.sql_utils import q_ident, quote_list, sql_literal, sql_path
+from toolkit.core.sql_utils import q_ident, quote_list, sql_literal, sql_path, sql_str
 
 pytestmark = pytest.mark.pure_unit
 
@@ -91,6 +91,35 @@ class TestSqlLiteral:
 
     def test_returns_string(self) -> None:
         assert isinstance(sql_literal("x"), str)
+
+
+class TestSqlStr:
+    """Contract: sql_str converte oggetti in string SQL-safe (delega a sql_literal)."""
+
+    def test_string_value(self) -> None:
+        assert sql_str("hello") == "hello"
+
+    def test_string_with_quote(self) -> None:
+        assert sql_str("it's") == "it''s"
+
+    def test_int_value(self) -> None:
+        assert sql_str(42) == "42"
+
+    def test_float_value(self) -> None:
+        assert sql_str(3.14) == "3.14"
+
+    def test_none_becomes_string_none(self) -> None:
+        assert sql_str(None) == "None"
+
+    def test_delegates_to_literal(self) -> None:
+        assert sql_str("a'b") == sql_literal("a'b")
+
+    def test_backward_compat_via_csv_read(self) -> None:
+        from toolkit.core.csv_read import sql_str as csv_sql_str
+        assert csv_sql_str("test") == sql_str("test")
+
+    def test_returns_string(self) -> None:
+        assert isinstance(sql_str(42), str)
 
 
 class TestQuoteList:

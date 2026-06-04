@@ -134,6 +134,17 @@ una issue in `dataset-incubator`.
 - [`lab-connectors`](https://github.com/dataciviclab/lab-connectors) — dipendenza condivisa
 - [`.github`](https://github.com/dataciviclab/.github) — policy condivise
 
+## Deprecation policy
+
+Prima di rimuovere un modulo, una funzione o una classe che fa parte dell'API pubblica:
+
+1. **Cerca consumer** — `rg "from toolkit\.core\.X import|import toolkit\.core\.X" --include "*.py"` in tutta l'org.
+2. Se ci sono consumer esterni, lascia uno **shim backward compat** che importi dal nuovo posto e emetta `DeprecationWarning`.
+3. Se non ci sono consumer, **puoi rimuovere direttamente** ma annota nel commit message che è stata verificata l'assenza di import.
+4. Se la rimozione è breaking (nessuno shim possibile), dichiara **esplicitamente** nel PR template la rottura e perché è accettabile.
+
+Regola pratica: se qualcuno fa `from toolkit.core.X import Y`, deve continuare a funzionare per almeno una release dopo la deprecazione.
+
 ## Regole del codice: path artifact
 
 Ogni path di file prodotto da un layer (validation, profile, metadata)

@@ -1,6 +1,6 @@
-"""Backward-compat shim: ``csv_quick_shape`` è stata spostata in ``toolkit.core.parquet``.
+"""Backward-compat shim: ``csv_quick_shape`` è stata spostata in ``toolkit.core.duckdb_shape``.
 
-Importare da ``toolkit.core.parquet`` direttamente.
+Importare da ``toolkit.core.duckdb_shape`` direttamente.
 Questo modulo verrà rimosso in una versione futura.
 """
 

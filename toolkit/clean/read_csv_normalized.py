@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 
 from toolkit.clean.read_sql_utils import _parse_column_value
-from toolkit.core.csv_read import normalize_encoding
+from toolkit.core.io import normalize_encoding
 
 
 def _normalized_csv_reader_kwargs(read_cfg: dict[str, Any]) -> dict[str, Any]:

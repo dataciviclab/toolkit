@@ -66,6 +66,28 @@ def write_json_atomic(path: Path, data: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def normalize_encoding(enc: str | None) -> str | None:
+    """Normalize encoding name to DuckDB canonical form.
+
+    Mappa alias comuni (``latin1``, ``utf8``, ``win1252``, ecc.)
+    alla forma canonica attesa da DuckDB (``latin-1``, ``utf-8``, ``CP1252``).
+    """
+    if enc is None:
+        return None
+    e = enc.strip()
+    if e.lower() == "latin1":
+        return "latin-1"
+    if e.lower() == "utf8":
+        return "utf-8"
+    if e.lower() in {"win1252", "windows1252"}:
+        return "CP1252"
+    if e.lower() in {"iso-8859-1", "iso8859-1"}:
+        return "latin-1"
+    if e.lower() == "ascii":
+        return "us-ascii"
+    return e
+
+
 def read_json(path: Path) -> dict[str, Any]:
     """Read JSON file.
 

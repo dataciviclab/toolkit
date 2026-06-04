@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from toolkit.core.io import normalize_encoding  # noqa: F401 — backward compat
 from toolkit.core.sql_utils import sql_str  # noqa: F401 — backward compat
 
 
@@ -48,25 +49,6 @@ FORMAT_HINT_KEYS = {
 }
 READ_SELECTION_KEYS = {"mode", "glob", "prefer_from_raw_run", "allow_ambiguous", "include"}
 READ_SOURCE_MODES = {"auto", "config_only"}
-
-
-def normalize_encoding(enc: str | None) -> str | None:
-    if enc is None:
-        return None
-    e = enc.strip()
-    if e.lower() == "latin1":
-        return "latin-1"
-    if e.lower() == "utf8":
-        return "utf-8"
-    if e.lower() in {"win1252", "windows1252"}:
-        return "CP1252"
-    # ISO-8859-1 variants — normalize to DuckDB's expected form
-    if e.lower() in {"iso-8859-1", "iso8859-1"}:
-        return "latin-1"
-    # ASCII normalization
-    if e.lower() == "ascii":
-        return "us-ascii"
-    return e
 
 
 def normalize_columns_spec(columns: object) -> dict[str, str] | None:

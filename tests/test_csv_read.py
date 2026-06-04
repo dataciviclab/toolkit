@@ -4,10 +4,10 @@ import pytest
 
 from toolkit.core.csv_read import (
     normalize_columns_spec,
-    normalize_encoding,
     normalize_read_cfg,
     _validate_nullstr,
 )
+from toolkit.core.io import normalize_encoding
 
 
 # ---------------------------------------------------------------------------

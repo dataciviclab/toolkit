@@ -6,4 +6,7 @@ Questo modulo verrà rimosso in una versione futura.
 
 from __future__ import annotations
 
-from toolkit.core.read_excel import *  # noqa: F401, F403
+from toolkit.core.read_excel import (  # noqa: F401
+    _execute_excel_read,
+    _load_excel_frame,
+)

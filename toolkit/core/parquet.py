@@ -8,4 +8,9 @@ Questo modulo verrà rimosso in una versione futura.
 
 from __future__ import annotations
 
-from toolkit.core.duckdb_shape import *  # noqa: F401, F403
+from toolkit.core.duckdb_shape import (  # noqa: F401
+    csv_quick_shape,
+    parquet_preview,
+    parquet_row_count,
+    parquet_schema,
+)

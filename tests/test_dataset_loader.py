@@ -6,10 +6,14 @@ I test usano dataset.yml minimi per verificare ogni campo.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 import yaml
+from typer.testing import CliRunner
+
+from toolkit.cli.app import app
 
 from toolkit.core.dataset_loader import (
     has_mart_sql,
@@ -223,6 +227,55 @@ class TestValidateConfig:
         result = validate_config(tmp_path)
         assert result["ok"] is False
         assert any("YAML" in e for e in result["errors"])
-        (tmp_path / "sql").mkdir(parents=True)
-        (tmp_path / "sql" / "clean.sql").write_text("SELECT 1")
-        assert has_mart_sql(tmp_path) is False
+
+
+class TestValidateConfigCLI:
+    """Contract CLI: toolkit validate config."""
+
+    def test_valid_json(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {
+            "dataset": {"name": "test", "years": [2023]},
+            "raw": {"sources": [{"name": "src"}]},
+        })
+        cfg = tmp_path / "dataset.yml"
+        runner = CliRunner()
+        result = runner.invoke(app, ["validate", "config", "-c", str(cfg), "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["slug"] == tmp_path.name
+
+    def test_valid_human(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {
+            "dataset": {"name": "test", "years": [2023]},
+            "raw": {"sources": [{"name": "src"}]},
+        })
+        cfg = tmp_path / "dataset.yml"
+        runner = CliRunner()
+        result = runner.invoke(app, ["validate", "config", "-c", str(cfg)])
+        assert result.exit_code == 0
+        assert "configurazione valida" in result.output
+
+    def test_invalid_exit_code(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {"slug": "no-dataset"})
+        cfg = tmp_path / "dataset.yml"
+        runner = CliRunner()
+        result = runner.invoke(app, ["validate", "config", "-c", str(cfg)])
+        assert result.exit_code != 0
+        assert "Sezione 'dataset' mancante" in result.output
+
+    def test_invalid_json(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {"slug": "no-dataset"})
+        cfg = tmp_path / "dataset.yml"
+        runner = CliRunner()
+        result = runner.invoke(app, ["validate", "config", "-c", str(cfg), "--json"])
+        assert result.exit_code != 0
+        data = json.loads(result.output)
+        assert data["ok"] is False
+
+    def test_missing_config_file(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "nonexistent.yml"
+        runner = CliRunner()
+        result = runner.invoke(app, ["validate", "config", "-c", str(cfg)])
+        assert result.exit_code != 0
+        assert "non trovato" in result.output

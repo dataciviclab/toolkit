@@ -15,6 +15,7 @@ from toolkit.core.column_rules import (
 from toolkit.core.config_models import MartTableRuleConfig, MartValidationSpec
 from toolkit.core.metadata import merge_layer_manifest
 from toolkit.core.paths import MART_VALIDATION, METADATA, layer_year_dir, to_root_relative
+from toolkit.core.sql_utils import sql_path
 from toolkit.core.validation import (
     ValidationResult,
     build_validation_summary,
@@ -92,7 +93,7 @@ def validate_mart(
             name = p.stem
 
             try:
-                rc = int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{p.as_posix()}')").fetchone()[0])
+                rc = int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{sql_path(p)}')").fetchone()[0])
                 row_counts[name] = rc
             except Exception as e:
                 warnings.append(f"Could not count rows for {p.name}: {e}")
@@ -106,7 +107,9 @@ def validate_mart(
             if min_rows is not None and rc < min_rows:
                 errors.append(f"[{name}] row_count too small: {rc} < {min_rows}")
 
-            con.execute(f"CREATE OR REPLACE VIEW t AS SELECT * FROM read_parquet('{p.as_posix()}')")
+            con.execute(
+                f"CREATE OR REPLACE VIEW t AS SELECT * FROM read_parquet('{sql_path(p)}')"
+            )
             cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
 
             # required columns

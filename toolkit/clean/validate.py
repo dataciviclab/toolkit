@@ -10,6 +10,8 @@ from typing import Any
 from lab_connectors.duckdb import safe_connect
 from toolkit.core.io import read_json_or_none
 
+from toolkit.core.sql_utils import sql_path
+
 from toolkit.core.column_rules import (
     check_max_null_pct,
     check_not_null,
@@ -108,7 +110,9 @@ def validate_clean(
         )
 
     with safe_connect() as con:
-        con.execute(f"CREATE VIEW t AS SELECT * FROM read_parquet('{p.as_posix()}')")
+        con.execute(
+            f"CREATE VIEW t AS SELECT * FROM read_parquet('{sql_path(p)}')"
+        )
 
         cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
 
@@ -301,24 +305,25 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     profile_path = _profile_dir / RAW_PROFILE
     profile_parse_error: bool = False
     trusted_raw_cols: list[str] = []
-    raw_profile = read_json_or_none(profile_path) if profile_path.exists() else None
-    if raw_profile is not None:
-        def _to_snake(n: str) -> str:
-            s = _re.sub(r"([a-z])([A-Z])", r"\1_\2", n.strip())
-            s = _re.sub(r"[^a-zA-Z0-9]+", "_", s)
-            return _re.sub(r"_+", "_", s).lower().strip("_") or "col"
+    if profile_path.exists():
+        raw_profile = read_json_or_none(profile_path)
+        if raw_profile is not None:
+            def _to_snake(n: str) -> str:
+                s = _re.sub(r"([a-z])([A-Z])", r"\1_\2", n.strip())
+                s = _re.sub(r"[^a-zA-Z0-9]+", "_", s)
+                return _re.sub(r"_+", "_", s).lower().strip("_") or "col"
 
-        trusted_raw_cols = raw_profile.get("columns_raw") or []
-        scaffold_cols = {_to_snake(c) for c in trusted_raw_cols}
-        clean_cols_set = set(clean_cols)
-        unmapped = sorted(scaffold_cols - clean_cols_set)
-        if unmapped:
-            merged_warnings.append(
-                f"[scaffold] {len(unmapped)} colonne raw non mappate nel clean "
-                f"(drop senza -- DROP: <motivo>?): {unmapped}"
-            )
-    else:
-        profile_parse_error = True
+            trusted_raw_cols = raw_profile.get("columns_raw") or []
+            scaffold_cols = {_to_snake(c) for c in trusted_raw_cols}
+            clean_cols_set = set(clean_cols)
+            unmapped = sorted(scaffold_cols - clean_cols_set)
+            if unmapped:
+                merged_warnings.append(
+                    f"[scaffold] {len(unmapped)} colonne raw non mappate nel clean "
+                    f"(drop senza -- DROP: <motivo>?): {unmapped}"
+                )
+        else:
+            profile_parse_error = True
 
     actual_raw_col_count: int | None = len(trusted_raw_cols) if trusted_raw_cols else None
     raw_missing_columns: list[str] = []
@@ -347,12 +352,9 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
             try:
                 with safe_connect() as _con:
                     if _raw_file.suffix == ".parquet":
-                        _query = f'DESCRIBE SELECT * FROM read_parquet("{_raw_file.as_posix()}")'
+                        _query = f"DESCRIBE SELECT * FROM read_parquet('{sql_path(_raw_file)}')"
                     else:
-                        _csv_path = _raw_file.as_posix()
-                        _query = (
-                            f"DESCRIBE SELECT * FROM read_csv(\"{_csv_path}\", auto_detect=true)"
-                        )
+                        _query = f"DESCRIBE SELECT * FROM read_csv('{sql_path(_raw_file)}', auto_detect=true)"
                         raw_probe_source = "legacy_autodetect"
                         if raw_probe_reason:
                             merged_warnings.append(

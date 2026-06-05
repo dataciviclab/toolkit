@@ -470,3 +470,52 @@ def test_run_clean_align_by_header_integration(tmp_path: Path):
     ).fetchall()
     con.close()
     assert rows == [(2023, None, 200.3), (2024, None, 100.5)]
+
+
+@pytest.mark.policy
+def test_run_clean_align_by_header_requires_normalize_config():
+    """CleanReadConfig con align_by_header=true senza normalize_rows_to_columns alza ValueError."""
+    from toolkit.core.config_models.clean import CleanReadConfig
+
+    with pytest.raises(ValueError, match="align_by_header=true requires normalize_rows_to_columns=true"):
+        CleanReadConfig(
+            align_by_header=True,
+            normalize_rows_to_columns=False,
+            columns={"a": "VARCHAR", "b": "VARCHAR"},
+        )
+
+
+@pytest.mark.policy
+def test_run_clean_align_by_header_requires_normalize_runtime(tmp_path: Path):
+    """run_clean con align_by_header=true senza normalize_rows_to_columns alza ValueError con causa."""
+    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = raw_dir / "data.csv"
+    csv_path.write_text("b;a\n1;2\n", encoding="utf-8")
+
+    sql_path = tmp_path / "clean.sql"
+    sql_path.write_text("SELECT a, b FROM raw_input", encoding="utf-8")
+
+    with pytest.raises(ValueError) as exc_info:
+        run_clean(
+            "demo",
+            2024,
+            str(tmp_path),
+            {
+                "sql": str(sql_path),
+                "read": {
+                    "mode": "latest",
+                    "delim": ";",
+                    "header": True,
+                    "columns": {"a": "VARCHAR", "b": "VARCHAR"},
+                    "align_by_header": True,
+                    # normalize_rows_to_columns: NOT SET — should fail
+                },
+            },
+            NoopLogger(),
+        )
+    # L'errore originale è incatenato come causa diretta
+    assert exc_info.value.__cause__ is not None
+    assert "align_by_header=true requires normalize_rows_to_columns=true" in str(
+        exc_info.value.__cause__
+    )

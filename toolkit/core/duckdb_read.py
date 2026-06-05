@@ -127,6 +127,11 @@ def _execute_csv_read(
     if read_cfg.get("normalize_rows_to_columns"):
         return _execute_normalized_csv_read(con, input_files, read_cfg)
 
+    if read_cfg.get("align_by_header"):
+        raise ValueError(
+            "align_by_header=true requires normalize_rows_to_columns=true"
+        )
+
     paths = quote_list(input_files)
     trim_whitespace = read_cfg.get("trim_whitespace", True)
     sample_size = read_cfg.get("sample_size")

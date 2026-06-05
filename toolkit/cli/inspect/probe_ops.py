@@ -1,4 +1,4 @@
-"""inspect probe command — probe SPARQL endpoints for schema and statistics."""
+"""inspect sparql command — query SPARQL endpoints for schema and statistics."""
 
 from __future__ import annotations
 

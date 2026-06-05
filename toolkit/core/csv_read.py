@@ -13,6 +13,7 @@ ALLOWED_READ_CSV_KEYS = {
     "header",
     "encoding",
     "decimal",
+    "thousands",
     "skip",
     "auto_detect",
     "quote",
@@ -39,6 +40,7 @@ FORMAT_HINT_KEYS = {
     "header",
     "encoding",
     "decimal",
+    "thousands",
     "skip",
     "quote",
     "escape",
@@ -193,7 +195,7 @@ def csv_read_option_strings(
     ``union_by_name=true``) and append caller-specific ones (e.g. columns).
 
     Supported keys:
-    ``delim``, ``sep``, ``encoding``, ``decimal``, ``nullstr``,
+    ``delim``, ``sep``, ``encoding``, ``decimal``, ``thousands``, ``nullstr``,
     ``auto_detect``, ``strict_mode``, ``ignore_errors``, ``null_padding``,
     ``parallel``, ``quote``, ``escape``, ``comment``, ``max_line_size``,
     ``columns``.
@@ -217,6 +219,10 @@ def csv_read_option_strings(
     decimal = read_cfg.get("decimal")
     if decimal is not None:
         opts.append(f"decimal_separator='{sql_str(str(decimal))}'")
+
+    thousands = read_cfg.get("thousands")
+    if thousands is not None:
+        opts.append(f"thousands='{sql_str(str(thousands))}'")
 
     nullstr = read_cfg.get("nullstr")
     if nullstr is not None:

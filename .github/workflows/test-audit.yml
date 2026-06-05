@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - "tests/test_*.py"
-      - ".github/scripts/audit_test_markers.py"
       - ".github/workflows/test-audit.yml"
 
 jobs:
@@ -15,9 +14,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v6
+      - uses: dataciviclab/.github/actions/python-setup@main
         with:
           python-version: "3.12"
+          # toolkit non ha requirements.txt — installa il package con dev extras
+          extra-packages: -e ".[dev]"
+
+      # Preflight: verifica che il CLI esista anche se nessun test è cambiato
+      - name: Verify audit-test-markers CLI
+        run: audit-test-markers --help
 
       - name: Audit test markers on changed files
         run: |
@@ -35,6 +40,6 @@ jobs:
           # Extract just filenames for the audit script
           files=$(echo "$changed" | xargs -n1 basename | tr '\n' ' ')
 
-          python .github/scripts/audit_test_markers.py tests/ \
+          audit-test-markers tests/ \
             --diff \
             --files $files

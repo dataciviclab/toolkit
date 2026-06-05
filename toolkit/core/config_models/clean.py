@@ -24,6 +24,7 @@ class CleanReadConfig(BaseModel):
     header: bool = True
     encoding: str | None = None
     decimal: str | None = None
+    thousands: str | None = None
     skip: int | None = None
     auto_detect: bool | None = None
     quote: str | None = None

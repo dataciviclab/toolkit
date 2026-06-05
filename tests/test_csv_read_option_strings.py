@@ -35,6 +35,9 @@ class TestCsvReadOptionStrings:
     def test_decimal(self):
         assert csv_read_option_strings({"decimal": ","}) == ["decimal_separator=','"]
 
+    def test_thousands(self):
+        assert csv_read_option_strings({"thousands": "."}) == ["thousands='.'"]
+
     def test_nullstr_scalar(self):
         assert csv_read_option_strings({"nullstr": ""}) == ["nullstr=''"]
 
@@ -108,6 +111,7 @@ class TestCsvReadOptionStrings:
             "delim": ";",
             "encoding": "utf-8",
             "decimal": ",",
+            "thousands": ".",
             "nullstr": ["", "NA"],
             "auto_detect": False,
             "strict_mode": False,
@@ -121,7 +125,7 @@ class TestCsvReadOptionStrings:
             "columns": {"id": "VARCHAR", "val": "DOUBLE"},
         }
         result = csv_read_option_strings(cfg)
-        # sep, encoding, decimal, nullstr, auto_detect, strict_mode,
+        # sep, encoding, decimal, thousands, nullstr, auto_detect, strict_mode,
         # ignore_errors, null_padding, parallel, quote, escape, comment,
-        # max_line_size, columns = 14
-        assert len(result) == 14
+        # max_line_size, columns = 15
+        assert len(result) == 15

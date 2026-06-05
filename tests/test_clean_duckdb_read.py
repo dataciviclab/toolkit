@@ -465,3 +465,32 @@ def test_filter_suggested_read_excludes_robustness_keys(tmp_path: Path):
     assert "null_padding" not in relation_cfg
     assert "strict_mode" not in relation_cfg
     assert "sample_size" not in relation_cfg
+
+
+@pytest.mark.policy
+def test_read_raw_to_relation_with_thousands_separator(tmp_path: Path):
+    """DuckDB read_csv respects decimal=',' + thousands='.'.
+
+    CSV con separatore migliaia "." e decimale ",".
+    1.234,56 deve essere letto come 1234.56 (non 1.234).
+    """
+    input_file = tmp_path / "thousands.csv"
+    input_file.write_text("id;val\n1;1.234,56\n2;7.890,12\n", encoding="utf-8")
+
+    con = duckdb.connect(":memory:")
+    logger = logging.getLogger("tests.clean.duckdb_read.thousands")
+
+    info = duckdb_read.read_raw_to_relation(
+        con,
+        [input_file],
+        {"delim": ";", "encoding": "utf-8", "header": True,
+         "decimal": ",", "thousands": "."},
+        "strict",
+        logger,
+    )
+
+    assert info.params_used["decimal"] == ","
+    assert info.params_used["thousands"] == "."
+    rows = con.execute("SELECT id, val FROM raw_input ORDER BY id").fetchall()
+    assert rows == [(1, 1234.56), (2, 7890.12)], f"got {rows}"
+    con.close()

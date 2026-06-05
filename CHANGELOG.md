@@ -21,7 +21,20 @@ All notable changes to this project will be documented in this file.
 - **Backward-compat cleanup**: rimossi 9 artefatti backward-compat (shim `mcp/contracts.py`, alias `build_profile_hints`, re-export `run_context`, stub CLI `cross_year` e `inspect url`, MCP aliases `toolkit_show_schema`/`toolkit_raw_profile`, `block_url_direct`, scaffold re-export da `scout`). Netto -140 righe (PR #300).
 - **MCP tool names allineati a CLI**: `toolkit_show_schema` → `toolkit_inspect_schema`, `toolkit_raw_profile` → `toolkit_inspect_profile`. Help comandi `run` arricchito con docstring specifici per step (PR #299).
 
+## [1.25.0] - 2026-06-05
+
+### Added
+
+- **`align_by_header` in `clean.read`**: nuovo flag che attiva l'allineamento delle righe CSV per nome colonna invece che per posizione. Colonne attese ma assenti nell'header → stringa vuota; colonne extra → ignorate; ordine diverso → riallineato. Richiede `normalize_rows_to_columns: true` e `header: true`. Risolve schema drift con colonne intermedie che appaiono/scompaiono tra anni (PR #329).
+
+### Changed
+
+- Bump versione: 1.24.0 → 1.25.0
+
 ## [Unreleased]
+
+### Added
+
 - **HTTP centralizzato su `lab_connectors.http`**: `http_file`, `ckan`, `sdmx` e `inspect url` ora usano `HttpClient` invece di `requests.get` diretto, con retry, SSL fallback e timeout uniformi (PR #232, #233, #234, #235).
 - `lab-connectors` aggiunto come dipendenza core (git URL in `pyproject.toml`).
 

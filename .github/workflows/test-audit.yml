@@ -17,6 +17,12 @@ jobs:
       - uses: dataciviclab/.github/actions/python-setup@main
         with:
           python-version: "3.12"
+          # toolkit non ha requirements.txt — installa il package con dev extras
+          extra-packages: -e ".[dev]"
+
+      # Preflight: verifica che il CLI esista anche se nessun test è cambiato
+      - name: Verify audit-test-markers CLI
+        run: audit-test-markers --help
 
       - name: Audit test markers on changed files
         run: |

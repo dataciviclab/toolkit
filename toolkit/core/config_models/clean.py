@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from toolkit.core.csv_read import normalize_columns_spec
 from toolkit.core.config_models.common import (
@@ -37,6 +37,7 @@ class CleanReadConfig(BaseModel):
     nullstr: str | list[str] | None = None
     columns: dict[str, str] | None = None
     normalize_rows_to_columns: bool = False
+    align_by_header: bool = False
     trim_whitespace: bool = True
     sample_size: int | None = None
     sheet_name: str | int | None = None
@@ -56,12 +57,25 @@ class CleanReadConfig(BaseModel):
     def _normalize_rows_to_columns(cls, value: Any) -> bool:
         return parse_bool(value, "clean.read.normalize_rows_to_columns")
 
+    @field_validator("align_by_header", mode="before")
+    @classmethod
+    def _normalize_align_by_header(cls, value: Any) -> bool:
+        return parse_bool(value, "clean.read.align_by_header")
+
     @field_validator("include", mode="before")
     @classmethod
     def _normalize_include(cls, value: Any) -> list[str] | None:
         if value is None:
             return None
         return ensure_str_list(value, "clean.read.include")
+
+    @model_validator(mode="after")
+    def _validate_align_by_header(self) -> "CleanReadConfig":
+        if self.align_by_header and not self.normalize_rows_to_columns:
+            raise ValueError(
+                "align_by_header=true requires normalize_rows_to_columns=true"
+            )
+        return self
 
 
 class CleanValidateConfig(BaseModel):

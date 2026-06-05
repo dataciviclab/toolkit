@@ -167,6 +167,7 @@ Note pratiche per `http_post_file`:
 | `nullstr` | `string \| list[string] \| null` | `null` |
 | `columns` | `dict[string,string] \| null` | `null` |
 | `normalize_rows_to_columns` | `bool` | `false` |
+| `align_by_header` | `bool` | `false` |
 | `trim_whitespace` | `bool` | `true` |
 | `sample_size` | `int \| null` | `null` |
 | `sheet_name` | `string \| int \| null` | `null` |
@@ -189,6 +190,7 @@ Note pratiche:
 - con `header: false` + `columns` è possibile specificare i nomi-colonna manualmente per file Excel senza intestazione
 - `normalize_rows_to_columns: true` ha senso solo insieme a `columns`
 - con `normalize_rows_to_columns: true`, il toolkit normalizza le righe corte del CSV allo schema atteso prima di esporre `raw_input`
+- `align_by_header: true` (insieme a `normalize_rows_to_columns: true`) allinea le righe per nome colonna invece che per posizione: colonne attese ma non presenti nell'header vengono riempite con stringa vuota; colonne extra nel CSV vengono ignorate; colonne in ordine diverso vengono riallineate. Richiede `header: true`.
 
 `CleanValidate`:
 

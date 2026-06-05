@@ -329,3 +329,193 @@ def test_run_clean_compact_columns_format_no_trim_whitespace(tmp_path: Path):
     ).fetchall()
     con.close()
     assert rows == [(2024, 42)]
+
+
+@pytest.mark.policy
+def test_run_clean_align_by_header_missing_middle_column(tmp_path: Path):
+    """align_by_header: colonna attesa mancante in mezzo viene riempita con stringa vuota."""
+    csv_path = tmp_path / "missing_mid.csv"
+    csv_path.write_text("a;b;d\n1;2;4\n5;6;7\n", encoding="utf-8")
+
+    read_cfg = {
+        "columns": {"a": "VARCHAR", "b": "VARCHAR", "c": "VARCHAR", "d": "VARCHAR"},
+        "normalize_rows_to_columns": True,
+        "align_by_header": True,
+        "header": True,
+        "delim": ";",
+        "trim_whitespace": True,
+    }
+    df = _load_normalized_csv_frame(csv_path, read_cfg, read_cfg["columns"])
+
+    assert list(df.columns) == ["a", "b", "c", "d"]
+    assert len(df) == 2
+    assert df.iloc[0].tolist() == ["1", "2", "", "4"]
+    assert df.iloc[1].tolist() == ["5", "6", "", "7"]
+
+
+@pytest.mark.policy
+def test_run_clean_align_by_header_reorder(tmp_path: Path):
+    """align_by_header: colonne in ordine diverso vengono riallineate per nome."""
+    csv_path = tmp_path / "reordered.csv"
+    csv_path.write_text("c;a;b\nx;1;2\ny;3;4\n", encoding="utf-8")
+
+    read_cfg = {
+        "columns": {"a": "VARCHAR", "b": "VARCHAR", "c": "VARCHAR"},
+        "normalize_rows_to_columns": True,
+        "align_by_header": True,
+        "header": True,
+        "delim": ";",
+        "trim_whitespace": True,
+    }
+    df = _load_normalized_csv_frame(csv_path, read_cfg, read_cfg["columns"])
+
+    assert list(df.columns) == ["a", "b", "c"]
+    assert len(df) == 2
+    assert df.iloc[0].tolist() == ["1", "2", "x"]
+    assert df.iloc[1].tolist() == ["3", "4", "y"]
+
+
+@pytest.mark.policy
+def test_run_clean_align_by_header_extra_columns_ignored(tmp_path: Path):
+    """align_by_header: colonne CSV extra non attese vengono ignorate."""
+    csv_path = tmp_path / "extra.csv"
+    csv_path.write_text("a;x;b;y\n1;ignored;2;also_ignored\n", encoding="utf-8")
+
+    read_cfg = {
+        "columns": {"a": "VARCHAR", "b": "VARCHAR"},
+        "normalize_rows_to_columns": True,
+        "align_by_header": True,
+        "header": True,
+        "delim": ";",
+        "trim_whitespace": True,
+    }
+    df = _load_normalized_csv_frame(csv_path, read_cfg, read_cfg["columns"])
+
+    assert list(df.columns) == ["a", "b"]
+    assert len(df) == 1
+    assert df.iloc[0].tolist() == ["1", "2"]
+
+
+@pytest.mark.policy
+def test_run_clean_align_by_header_no_header_raises(tmp_path: Path):
+    """align_by_header=true con header=false deve alzare ValueError."""
+    csv_path = tmp_path / "noheader.csv"
+    csv_path.write_text("1;2;3\n", encoding="utf-8")
+
+    read_cfg = {
+        "columns": {"a": "VARCHAR", "b": "VARCHAR", "c": "VARCHAR"},
+        "normalize_rows_to_columns": True,
+        "align_by_header": True,
+        "header": False,
+        "delim": ";",
+        "trim_whitespace": True,
+    }
+    with pytest.raises(ValueError, match="align_by_header=true requires header=true"):
+        _load_normalized_csv_frame(csv_path, read_cfg, read_cfg["columns"])
+
+
+@pytest.mark.policy
+def test_run_clean_align_by_header_integration(tmp_path: Path):
+    """align_by_header funziona end-to-end via run_clean con colonna mancante."""
+    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = raw_dir / "data.csv"
+    csv_path.write_text(
+        "Anno di Riferimento;Codice Regione;Consumi sanitari\n"
+        "2024;15;100.5\n"
+        "2023;16;200.3\n",
+        encoding="utf-8",
+    )
+
+    sql_path = tmp_path / "clean.sql"
+    sql_path.write_text(
+        "SELECT "
+        "try_cast(\"Anno di Riferimento\" AS INTEGER) AS anno, "
+        "try_cast(\"Oneri Finanziari\" AS DOUBLE) AS oneri, "
+        "try_cast(\"Consumi sanitari\" AS DOUBLE) AS consumi "
+        "FROM raw_input",
+        encoding="utf-8",
+    )
+
+    run_clean(
+        "demo",
+        2024,
+        str(tmp_path),
+        {
+            "sql": str(sql_path),
+            "read": {
+                "mode": "latest",
+                "delim": ";",
+                "header": True,
+                "columns": {
+                    "Anno di Riferimento": "VARCHAR",
+                    "Codice Regione": "VARCHAR",
+                    "Oneri Finanziari": "VARCHAR",
+                    "Consumi sanitari": "VARCHAR",
+                },
+                "normalize_rows_to_columns": True,
+                "align_by_header": True,
+                "trim_whitespace": True,
+            },
+        },
+        NoopLogger(),
+    )
+
+    out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
+    assert out.exists()
+
+    con = duckdb.connect(":memory:")
+    rows = con.execute(
+        f"SELECT anno, oneri, consumi FROM read_parquet('{out.as_posix()}') ORDER BY anno"
+    ).fetchall()
+    con.close()
+    assert rows == [(2023, None, 200.3), (2024, None, 100.5)]
+
+
+@pytest.mark.policy
+def test_run_clean_align_by_header_requires_normalize_config():
+    """CleanReadConfig con align_by_header=true senza normalize_rows_to_columns alza ValueError."""
+    from toolkit.core.config_models.clean import CleanReadConfig
+
+    with pytest.raises(ValueError, match="align_by_header=true requires normalize_rows_to_columns=true"):
+        CleanReadConfig(
+            align_by_header=True,
+            normalize_rows_to_columns=False,
+            columns={"a": "VARCHAR", "b": "VARCHAR"},
+        )
+
+
+@pytest.mark.policy
+def test_run_clean_align_by_header_requires_normalize_runtime(tmp_path: Path):
+    """run_clean con align_by_header=true senza normalize_rows_to_columns alza ValueError con causa."""
+    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = raw_dir / "data.csv"
+    csv_path.write_text("b;a\n1;2\n", encoding="utf-8")
+
+    sql_path = tmp_path / "clean.sql"
+    sql_path.write_text("SELECT a, b FROM raw_input", encoding="utf-8")
+
+    with pytest.raises(ValueError) as exc_info:
+        run_clean(
+            "demo",
+            2024,
+            str(tmp_path),
+            {
+                "sql": str(sql_path),
+                "read": {
+                    "mode": "latest",
+                    "delim": ";",
+                    "header": True,
+                    "columns": {"a": "VARCHAR", "b": "VARCHAR"},
+                    "align_by_header": True,
+                    # normalize_rows_to_columns: NOT SET — should fail
+                },
+            },
+            NoopLogger(),
+        )
+    # L'errore originale è incatenato come causa diretta
+    assert exc_info.value.__cause__ is not None
+    assert "align_by_header=true requires normalize_rows_to_columns=true" in str(
+        exc_info.value.__cause__
+    )

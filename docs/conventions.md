@@ -23,8 +23,12 @@ La forma canonica è `clean.read.source: auto|config_only`. Gli alias legacy
 ## 4. Positional Fixed Schema
 Usa `normalize_rows_to_columns: true` per CSV multi-anno instabili con schema posizionale:
 - Richiede `clean.read.columns` (mapping fisso).
-- Pad-da a destra le righe corte, fallisce su quelle col numero di colonne in eccesso.
-- Ideale per fonti IRPEF, AIFA, SIOPE con drift di colonne finali.
+- **Senza `align_by_header`** (default): padding a destra per righe corte, fallisce su colonne in eccesso.
+  Ideale per fonti IRPEF, AIFA, SIOPE con drift di colonne finali.
+- **Con `align_by_header: true`**: allineamento per nome colonna invece che posizionale.
+  Colonne attese ma non nell'header → stringa vuota. Colonne CSV extra → ignorate.
+  Colonne in ordine diverso → riallineate. Ideale per fonti BDAP dove colonne
+  intermedie appaiono/scompaiono tra anni (`header: true` obbligatorio).
 
 ## 5. Quirks fonti PA Italiane (Checklist)
 

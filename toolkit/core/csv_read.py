@@ -31,6 +31,7 @@ ALLOWED_READ_CSV_KEYS = {
     "include",
     "columns",
     "normalize_rows_to_columns",
+    "align_by_header",
     "trim_whitespace",
     "sample_size",
     "sheet_name",
@@ -49,6 +50,7 @@ FORMAT_HINT_KEYS = {
     "parallel",
     "columns",
     "normalize_rows_to_columns",
+    "align_by_header",
     "trim_whitespace",
 }
 READ_SELECTION_KEYS = {"mode", "glob", "prefer_from_raw_run", "allow_ambiguous", "include"}

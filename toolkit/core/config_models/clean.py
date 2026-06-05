@@ -37,6 +37,7 @@ class CleanReadConfig(BaseModel):
     nullstr: str | list[str] | None = None
     columns: dict[str, str] | None = None
     normalize_rows_to_columns: bool = False
+    align_by_header: bool = False
     trim_whitespace: bool = True
     sample_size: int | None = None
     sheet_name: str | int | None = None
@@ -55,6 +56,11 @@ class CleanReadConfig(BaseModel):
     @classmethod
     def _normalize_rows_to_columns(cls, value: Any) -> bool:
         return parse_bool(value, "clean.read.normalize_rows_to_columns")
+
+    @field_validator("align_by_header", mode="before")
+    @classmethod
+    def _normalize_align_by_header(cls, value: Any) -> bool:
+        return parse_bool(value, "clean.read.align_by_header")
 
     @field_validator("include", mode="before")
     @classmethod

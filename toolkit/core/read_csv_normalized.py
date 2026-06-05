@@ -32,6 +32,7 @@ def _load_normalized_csv_frame(
     trim_whitespace = bool(read_cfg.get("trim_whitespace", True))
     header = bool(read_cfg.get("header", True))
     skip = int(read_cfg.get("skip") or 0)
+    align_by_header = bool(read_cfg.get("align_by_header", False))
     # Build list of raw column names from columns dict, parsing compact format
     # ("clean_name:DUCKDB_TYPE") to extract only the raw name for CSV reading.
     # The projection/copy step applies the rename separately.
@@ -41,8 +42,18 @@ def _load_normalized_csv_frame(
         raw_names.append(actual_raw)
     expected_names = raw_names
     expected_len = len(expected_names)
-    skip_rows = skip + (1 if header else 0)
 
+    if align_by_header:
+        if not header:
+            raise ValueError(
+                "align_by_header=true requires header=true, "
+                "cannot align by column name without a CSV header row."
+            )
+        return _load_aligned_by_header(
+            input_file, read_cfg, expected_names, encoding, trim_whitespace, skip
+        )
+
+    skip_rows = skip + (1 if header else 0)
     rows: list[list[Any]] = []
     with input_file.open("r", encoding=encoding, newline="") as handle:
         reader = csv.reader(handle, **_normalized_csv_reader_kwargs(read_cfg))
@@ -64,6 +75,64 @@ def _load_normalized_csv_frame(
             if trim_whitespace:
                 row = [value.strip() if isinstance(value, str) else value for value in row]
             rows.append(row)
+
+    return pd.DataFrame(rows, columns=expected_names)
+
+
+def _load_aligned_by_header(
+    input_file: Path,
+    read_cfg: dict[str, Any],
+    expected_names: list[str],
+    encoding: str,
+    trim_whitespace: bool,
+    skip: int,
+) -> pd.DataFrame:
+    """Read CSV aligning rows to expected columns by header name.
+
+    For each expected column, looks up its position in the CSV header.
+    If the column is missing from the header, fills with empty string.
+    Extra CSV columns not in expected_names are ignored.
+    """
+    kwargs = _normalized_csv_reader_kwargs(read_cfg)
+    header = bool(read_cfg.get("header", True))
+
+    # Read CSV header to map column names to positions
+    with input_file.open("r", encoding=encoding, newline="") as handle:
+        reader = csv.reader(handle, **kwargs)
+        for _ in range(skip):
+            next(reader, None)
+        actual_headers = next(reader, []) if header else []
+
+    # Build position map: for each expected column, its index in CSV row
+    # (None if the column is missing from the header).
+    if trim_whitespace:
+        header_index = {h.strip(): i for i, h in enumerate(actual_headers)}
+    else:
+        header_index = {h: i for i, h in enumerate(actual_headers)}
+
+    col_positions: list[int | None] = []
+    for name in expected_names:
+        lookup = name.strip() if trim_whitespace else name
+        col_positions.append(header_index.get(lookup))
+
+    # Read data rows aligned to expected columns
+    skip_rows = skip + (1 if header else 0)
+    rows: list[list[Any]] = []
+    with input_file.open("r", encoding=encoding, newline="") as handle:
+        reader = csv.reader(handle, **kwargs)
+        for _ in range(skip_rows):
+            next(reader, None)
+        for row in reader:
+            aligned = []
+            for col_pos in col_positions:
+                if col_pos is not None and col_pos < len(row):
+                    val = row[col_pos]
+                else:
+                    val = ""
+                if trim_whitespace and isinstance(val, str):
+                    val = val.strip()
+                aligned.append(val)
+            rows.append(aligned)
 
     return pd.DataFrame(rows, columns=expected_names)
 
@@ -93,6 +162,7 @@ def _execute_normalized_csv_read(
     params_used: dict[str, Any] = {
         "columns": dict(columns),
         "normalize_rows_to_columns": True,
+        "align_by_header": bool(read_cfg.get("align_by_header", False)),
         "trim_whitespace": bool(read_cfg.get("trim_whitespace", True)),
         "header": bool(read_cfg.get("header", True)),
     }

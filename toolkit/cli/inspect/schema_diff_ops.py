@@ -1,8 +1,13 @@
-"""inspect schema-diff command — compare RAW schema signals across years."""
+"""inspect schema-diff command — compare RAW schema signals across years.
+
+Implementazione condivisa: sia CLI che MCP la chiamano.
+MCP wrappa le eccezioni in ToolkitClientError.
+"""
 
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import typer
 
@@ -12,6 +17,34 @@ from toolkit.core.config import load_config
 from ._helpers import _compare_schema_entries, _raw_schema_payload
 
 
+# --- Implementazione condivisa ---
+
+
+def schema_diff_payload(config_path: str) -> dict[str, Any]:
+    """Confronta i segnali di schema RAW tra gli anni configurati.
+
+    Args:
+        config_path: path al dataset.yml.
+
+    Returns:
+        Dict con entries per anno e comparazioni pairwise.
+    """
+    cfg = load_config(config_path)
+    years = iter_years(cfg, None)
+    entries = [_raw_schema_payload(cfg, selected_year) for selected_year in years]
+    comparisons = _compare_schema_entries(entries)
+    return {
+        "dataset": cfg.dataset,
+        "config_path": str(cfg.base_dir / "dataset.yml"),
+        "years": [entry["year"] for entry in entries],
+        "entries": entries,
+        "comparisons": comparisons,
+    }
+
+
+# --- CLI wrapper (Typer) ---
+
+
 def schema_diff(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
@@ -19,16 +52,9 @@ def schema_diff(
     """
     Confronta i principali segnali di schema RAW tra gli anni configurati.
     """
-    cfg = load_config(config)
-    entries = [_raw_schema_payload(cfg, selected_year) for selected_year in iter_years(cfg, None)]
-    comparisons = _compare_schema_entries(entries)
-    payload = {
-        "dataset": cfg.dataset,
-        "config_path": str(cfg.base_dir / "dataset.yml"),
-        "years": [entry["year"] for entry in entries],
-        "entries": entries,
-        "comparisons": comparisons,
-    }
+    payload = schema_diff_payload(config)
+    entries = payload["entries"]
+    comparisons = payload["comparisons"]
 
     if as_json:
         typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))

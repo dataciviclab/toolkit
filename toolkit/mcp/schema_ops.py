@@ -31,19 +31,6 @@ def _inspect_paths(*args: Any, **kwargs: Any) -> Any:
     return _impl(*args, **kwargs)
 
 
-def _raw_schema_payload(*args: Any, **kwargs: Any) -> Any:
-    """Lazy import to avoid circular dependency with cli/inspect."""
-    from toolkit.cli.inspect._helpers import _raw_schema_payload as _impl
-
-    return _impl(*args, **kwargs)
-
-
-def _compare_schema_entries(*args: Any, **kwargs: Any) -> Any:
-    """Lazy import to avoid circular dependency with cli/inspect."""
-    from toolkit.cli.inspect._helpers import _compare_schema_entries as _impl
-
-    return _impl(*args, **kwargs)
-
 
 def show_schema(config_path: str, layer: str = "clean", year: int | None = None) -> dict[str, Any]:
     """Mostra lo schema (colonne + tipi) di raw, clean o mart.
@@ -373,24 +360,17 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
 def schema_diff(config_path: str) -> dict[str, Any]:
     """Compare RAW schema signals across the years configured for a dataset.
 
-    Returns entries per year (encoding, delim, columns, etc.) and pairwise
-    comparisons showing added/removed columns between consecutive years.
+    Thin wrapper MCP: delega a ``toolkit.cli.inspect.schema_diff_ops.schema_diff_payload``.
     """
-    config, cfg = _load_cfg(config_path)
+    from toolkit.cli.inspect.schema_diff_ops import schema_diff_payload as _payload
 
-    from toolkit.cli.common import iter_years
+    try:
+        return _payload(config_path)
+    except (ValueError, FileNotFoundError) as exc:
+        from toolkit.mcp.errors import ToolkitClientError
+        from lab_connectors.mcp.errors import ErrorCode
 
-    years = iter_years(cfg, None)
-    entries = [_raw_schema_payload(cfg, selected_year) for selected_year in years]
-    comparisons = _compare_schema_entries(entries)
-
-    return {
-        "dataset": cfg.dataset,
-        "config_path": str(config_path),
-        "years": [entry["year"] for entry in entries],
-        "entries": entries,
-        "comparisons": comparisons,
-    }
+        raise ToolkitClientError(str(exc), code=ErrorCode.INVALID_PARAMS) from exc
 
 
 def clean_preview(

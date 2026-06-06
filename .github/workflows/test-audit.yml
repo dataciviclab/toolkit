@@ -12,3 +12,4 @@ jobs:
     uses: dataciviclab/.github/.github/workflows/test-audit-reusable.yml@main
     with:
       test-dirs: "tests"
+      extra-packages: "-e .[dev]"

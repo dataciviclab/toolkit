@@ -81,7 +81,11 @@ def _csv_read_options(
 
     # Build the shared option strings, then prepend union_by_name and
     # append header/skip (which are layer-specific).
-    opts = ["union_by_name=true"] + csv_read_option_strings(read_cfg)
+    # NOTE: rejects_table è incompatibile con union_by_name in DuckDB.
+    # Quando rejects_table è attivo, union_by_name viene omesso perché
+    # l'utente sta debugghing un singolo file CSV, non un multi-file merge.
+    use_union = read_cfg.get("rejects_table") is None
+    opts = (["union_by_name=true"] if use_union else []) + csv_read_option_strings(read_cfg)
     opts.append(f"header={'true' if parser_header else 'false'}")
     if parser_skip is not None:
         opts.append(f"skip={parser_skip}")
@@ -94,10 +98,14 @@ def _csv_read_options(
         "encoding",
         "decimal",
         "thousands",
+        "dateformat",
+        "timestampformat",
         "nullstr",
         "auto_detect",
         "strict_mode",
         "ignore_errors",
+        "rejects_table",
+        "rejects_scan",
         "null_padding",
         "parallel",
         "quote",

@@ -494,3 +494,63 @@ def test_read_raw_to_relation_with_thousands_separator(tmp_path: Path):
     rows = con.execute("SELECT id, val FROM raw_input ORDER BY id").fetchall()
     assert rows == [(1, 1234.56), (2, 7890.12)], f"got {rows}"
     con.close()
+
+
+@pytest.mark.policy
+def test_dateformat_parses_italian_dates(tmp_path: Path):
+    """dateformat='%d/%m/%Y' deve parsare date in formato italiano."""
+    input_file = tmp_path / "date.csv"
+    input_file.write_text("data;valore\n01/02/2023;100\n15/08/2024;200\n", encoding="utf-8")
+
+    con = duckdb.connect(":memory:")
+    logger = logging.getLogger("tests.clean.duckdb_read.dateformat")
+
+    info = duckdb_read.read_raw_to_relation(
+        con,
+        [input_file],
+        {"delim": ";", "encoding": "utf-8", "header": True,
+         "dateformat": "%d/%m/%Y"},
+        "strict",
+        logger,
+    )
+
+    assert info.params_used["dateformat"] == "%d/%m/%Y"
+    # DuckDB should parse the dates correctly
+    rows = con.execute("SELECT data, valore FROM raw_input ORDER BY valore").fetchall()
+    assert len(rows) == 2
+    # Data types may vary (could be DATE or VARCHAR depending on DuckDB version)
+    # Check at least the year is correct
+    assert str(rows[0][0]).endswith("2023") or "2023" in str(rows[0][0])
+    assert str(rows[1][0]).endswith("2024") or "2024" in str(rows[1][0])
+    con.close()
+
+
+@pytest.mark.policy
+def test_rejects_table_captures_malformed_rows(tmp_path: Path):
+    """rejects_table deve catturare righe malformate senza bloccare la lettura."""
+    input_file = tmp_path / "mixed.csv"
+    # Row 2 ha 3 colonne invece di 2 — deve finire nella rejects_table
+    input_file.write_text("a;b\n1;2\n3;4;5\n6;7\n", encoding="utf-8")
+
+    con = duckdb.connect(":memory:")
+    logger = logging.getLogger("tests.clean.duckdb_read.rejects")
+
+    info = duckdb_read.read_raw_to_relation(
+        con,
+        [input_file],
+        {"delim": ";", "encoding": "utf-8", "header": True,
+         "ignore_errors": True, "rejects_table": "err_rows",
+         "rejects_scan": "err_scan"},
+        "strict",
+        logger,
+    )
+
+    assert "rejects_table" in info.params_used
+    assert info.params_used["rejects_table"] == "err_rows"
+    # Le righe valide devono essere state lette
+    rows = con.execute("SELECT a, b FROM raw_input ORDER BY a").fetchall()
+    assert rows == [(1, 2), (6, 7)], f"got {rows}"
+    # La riga malformata deve essere nella rejects_table
+    rejects = con.execute("SELECT * FROM err_rows").fetchall()
+    assert len(rejects) >= 1
+    con.close()

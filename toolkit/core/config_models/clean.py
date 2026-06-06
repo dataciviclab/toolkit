@@ -25,12 +25,16 @@ class CleanReadConfig(BaseModel):
     encoding: str | None = None
     decimal: str | None = None
     thousands: str | None = None
+    dateformat: str | None = None
+    timestampformat: str | None = None
     skip: int | None = None
     auto_detect: bool | None = None
     quote: str | None = None
     escape: str | None = None
     comment: str | None = None
     ignore_errors: bool | None = None
+    rejects_table: str | None = None
+    rejects_scan: str | None = None
     strict_mode: bool | None = None
     null_padding: bool | None = None
     parallel: bool | None = None

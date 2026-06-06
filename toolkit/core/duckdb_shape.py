@@ -53,7 +53,7 @@ def _parquet_connect(path: Path) -> Generator[Any, None, None]:
     (via ``lab_connectors.duckdb`` v0.13.0).
     """
     if _is_s3_path(str(path)):
-        with safe_connect(extensions=["httpfs"], config=_s3_config()) as con:
+        with safe_connect(extensions=["httpfs"], config=dict(_s3_config())) as con:
             yield con
     else:
         with safe_connect() as con:

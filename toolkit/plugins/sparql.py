@@ -192,7 +192,7 @@ class SparqlSource:
         from lab_connectors.http.sparql import execute_sparql
 
         try:
-            return execute_sparql(endpoint, query, timeout=self._client.timeout)
+            return execute_sparql(endpoint, query, timeout=int(self._client.timeout))
         except RuntimeError as e:
             raise DownloadError(str(e)) from e
 

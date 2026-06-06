@@ -107,17 +107,33 @@ def parquet_preview(
     """Schema + conteggio + preview righe di un file Parquet.
 
     Args:
-        path: Path al file parquet (usato solo se ``sql`` è ``None``).
+        path: Path al file parquet.
         limit: Numero massimo di righe in preview (default 10).
-        sql: SQL arbitrario da eseguire sul parquet. Se ``None`` (default),
-            esegue ``SELECT * FROM file LIMIT {limit}`` (backward compat).
+        sql: SQL SELECT da eseguire sul parquet. Il parquet è disponibile
+            come vista ``data``. Esempi::
+
+                SELECT * FROM data WHERE anno > 2020
+                SELECT regione, COUNT(*) FROM data GROUP BY regione
+
+            Se ``None`` (default), esegue ``SELECT * FROM data LIMIT {limit}``
+            (backward compat).
+
+            Nota: solo SELECT singolo (DuckDB non supporta multi-statement
+            in una chiamata ``execute()``).
 
     Returns:
         ``{"path": str, "column_count": int, "columns": [...],
           "row_count": int | None, "preview": [...], "truncated": bool,
           "sql": str | None}``.
+
+    Raises:
+        FileNotFoundError: se il parquet non esiste (solo quando ``sql``
+            è fornito; in modalità default graceful empty dict).
+        RuntimeError: se la query SQL fallisce (solo con ``sql``).
     """
-    if not path.exists() and sql is None:
+    if not path.exists():
+        if sql is not None:
+            raise FileNotFoundError(f"Parquet non trovato: {path}")
         return {"path": str(path), "column_count": 0, "columns": [],
                 "row_count": None, "preview": [], "truncated": False, "sql": None}
 
@@ -126,7 +142,8 @@ def parquet_preview(
             con.execute("PRAGMA disable_progress_bar")
 
             if sql is not None:
-                # SQL arbitrario: lo esegue direttamente, con LIMIT finale
+                # Registra il parquet come vista 'data' per query naturali
+                con.execute(f"CREATE OR REPLACE VIEW data AS SELECT * FROM {_rel(path)}")
                 source = f"({sql})"
             else:
                 source = _rel(path)
@@ -154,6 +171,9 @@ def parquet_preview(
                 "sql": sql,
             }
     except Exception:
+        if sql is not None:
+            # In modalità SQL esplicito, propaga l'errore
+            raise
         base = {"path": str(path), "column_count": 0, "columns": [],
                 "row_count": None, "preview": [], "truncated": False}
         base["sql"] = sql

@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import Any
 
 import typer
-import yaml
 
 from toolkit.cli.common import iter_years, load_cfg_and_logger
+from toolkit.core.io import read_yaml
 from toolkit.core.paths import RAW_PROFILE, RAW_SUGGESTED_READ, layer_year_dir
 from toolkit.scaffold.clean import format_clean_read_proposal, generate_clean_sql
 
@@ -52,8 +52,8 @@ def scaffold_clean(
         # Build a minimal profile dict from it so propose_clean_read works.
         if suggested_read_yml.exists():
             try:
-                raw_yaml = yaml.safe_load(suggested_read_yml.read_text(encoding="utf-8"))
-            except yaml.YAMLError as exc:
+                raw_yaml = read_yaml(suggested_read_yml)
+            except ValueError as exc:
                 raise typer.BadParameter(f"suggested_read.yml non valido: {exc}")
             clean_section = raw_yaml.get("clean", {}) if isinstance(raw_yaml, dict) else {}
             read_section = clean_section.get("read", {}) if isinstance(clean_section, dict) else {}

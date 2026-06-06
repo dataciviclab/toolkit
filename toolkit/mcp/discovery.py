@@ -13,9 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from toolkit.core.io import read_json_or_none
-
-import yaml
+from toolkit.core.io import read_json_or_none, read_yaml
 
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import WORKSPACE_ROOT
@@ -28,7 +26,7 @@ def _read_minimal_config(dataset_yml: Path) -> dict[str, Any]:
     Restituisce un dict con: name, years, root (stringa raw dal YAML).
     """
     try:
-        data = yaml.safe_load(dataset_yml.read_text(encoding="utf-8"))
+        data = read_yaml(dataset_yml)
     except Exception as exc:
         return {"_error": f"YAML non valido: {exc}"}
 

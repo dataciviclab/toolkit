@@ -20,6 +20,7 @@ from lab_connectors.mcp.errors import ErrorCode
 
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import _load_cfg, _safe_path
+from toolkit.core.io import read_yaml
 from toolkit.core.paths import RAW_PROFILE, RAW_SUGGESTED_READ
 from toolkit.core.run_records import get_run_dir_dataset, list_runs as _list_runs_records
 
@@ -70,11 +71,9 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
             ) from exc
     elif suggested_read_yml.exists():
         # Fallback: suggested_read.yml contains the same hints in YAML form
-        import yaml
-
         try:
-            raw_yaml = yaml.safe_load(suggested_read_yml.read_text(encoding="utf-8"))
-        except yaml.YAMLError as exc:
+            raw_yaml = read_yaml(suggested_read_yml)
+        except ValueError as exc:
             raise ToolkitClientError(
                 f"suggested_read.yml non valido in {suggested_read_yml}: {exc}",
                 code=ErrorCode.ARTIFACT_UNREADABLE,

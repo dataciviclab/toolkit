@@ -23,7 +23,15 @@ from toolkit.core.duckdb_shape import parquet_preview
 
 
 def _resolve_path_from_config(config_path: str, layer: str, year: int | None) -> Path:
-    """Risolve il parquet clean o mart da dataset.yml + layer + year."""
+    """Risolve il parquet clean o mart da dataset.yml + layer + year.
+
+    Returns:
+        Path al file parquet.
+
+    Raises:
+        FileNotFoundError: se il parquet non esiste su disco o non è configurato.
+        ValueError: se layer non è 'clean' o 'mart'.
+    """
     from toolkit.cli.inspect._helpers import _payload_for_year
 
     cfg = load_config(config_path)
@@ -34,15 +42,22 @@ def _resolve_path_from_config(config_path: str, layer: str, year: int | None) ->
     if layer == "clean":
         parquet_str = paths["paths"]["clean"].get("output")
         if not parquet_str:
-            raise FileNotFoundError(f"Nessun output clean per {cfg.dataset}/{year}")
-        return Path(parquet_str)
+            raise FileNotFoundError(f"Nessun output clean configurato per {cfg.dataset}/{year}")
+        parquet_path = Path(parquet_str)
     elif layer == "mart":
         outputs = paths["paths"]["mart"].get("outputs") or []
         if not outputs:
-            raise FileNotFoundError(f"Nessun output mart per {cfg.dataset}/{year}")
-        return Path(outputs[0])
+            raise FileNotFoundError(f"Nessun output mart configurato per {cfg.dataset}/{year}")
+        parquet_path = Path(outputs[0])
     else:
         raise ValueError(f"layer deve essere 'clean' o 'mart', non '{layer}'")
+
+    if not parquet_path.exists():
+        raise FileNotFoundError(
+            f"Parquet {layer} non trovato: {parquet_path}\n"
+            f"  Esegui 'toolkit run all -c {config_path}' per generarlo."
+        )
+    return parquet_path
 
 
 def _render_human(result: dict[str, Any]) -> None:

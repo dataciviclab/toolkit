@@ -4,42 +4,12 @@ on:
   pull_request:
     paths:
       - "tests/test_*.py"
+      - "tests/**/test_*.py"
       - ".github/workflows/test-audit.yml"
 
 jobs:
-  audit-markers:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - uses: dataciviclab/.github/actions/python-setup@main
-        with:
-          python-version: "3.12"
-          # toolkit non ha requirements.txt — installa il package con dev extras
-          extra-packages: -e ".[dev]"
-
-      # Preflight: verifica che il CLI esista anche se nessun test è cambiato
-      - name: Verify audit-test-markers CLI
-        run: audit-test-markers --help
-
-      - name: Audit test markers on changed files
-        run: |
-          # List test files changed in PR (vs base branch)
-          changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'tests/test_*.py' || true)
-
-          if [ -z "$changed" ]; then
-            echo "No test files changed. OK."
-            exit 0
-          fi
-
-          echo "Changed test files:"
-          echo "$changed"
-
-          # Extract just filenames for the audit script
-          files=$(echo "$changed" | xargs -n1 basename | tr '\n' ' ')
-
-          audit-test-markers tests/ \
-            --diff \
-            --files $files
+  audit:
+    uses: dataciviclab/.github/.github/workflows/test-audit-reusable.yml@main
+    with:
+      test-dirs: "tests"
+      extra-packages: "-e .[dev]"

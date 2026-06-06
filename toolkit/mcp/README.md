@@ -4,16 +4,27 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 
 ## Tool esposti
 
-### Ispezione pipeline
+### Tool aggregati (raccomandati)
+
+- `toolkit_layer(config_path, layer="clean", mode="schema", year=0, limit=20, sql=None, mart_index=0)` — query unificata RAW/CLEAN/MART. Mode: `schema` (colonne+tipi), `preview` (anteprima righe), `profile` (diagnostica raw), `sql` (SQL arbitrario su vista `data`)
+- `toolkit_status(config_path, year=0)` — stato completo dataset: paths + summary + readiness + run_stats + info in una chiamata
+
+### Tool granulari (ispezione pipeline)
 
 - `toolkit_inspect_paths(config_path, year=0)` — path contract + run metadata (run_file_count, years_seen, latest_run)
 - `toolkit_inspect_schema(config_path, layer="clean", year=0)`
+- `toolkit_inspect_profile(config_path, year=0)` — profilo raw (encoding, delim, colonne, missingness)
 - `toolkit_run_summary(config_path, year=0)` — statistiche aggregate (totali, successi, durata media)
 - `toolkit_summary(config_path, year=0)` — dashboard diagnostico (layer + run + warnings)
 - `toolkit_review_readiness(config_path, year=0)` — check di prontezza per review candidate
 - `toolkit_list_runs(config_path, year=0, since=None, until=None, status=None, limit=20, cross_year=False)`
+- `toolkit_list_candidates(stage="all", status_filter=None)` — elenca dataset disponibili in workspace
+- `toolkit_dataset_info(config_path)` — info base da dataset.yml
 - `toolkit_schema_diff(config_path)` — confronto segnali schema raw cross-year (encoding, colonne, ecc.)
 - `toolkit_csv_preview(csv_path, limit=20)` — schema + preview CSV via profiler pipeline
+- `toolkit_clean_preview(config_path, layer="clean", mart_index=0, year=0, limit=10)` — preview dati puliti
+- `toolkit_raw_preview(config_path, year=0, limit=20)` — preview raw file
+- `toolkit_validate_config(config_path)` — validazione dataset.yml
 
 ### Scout fonti
 

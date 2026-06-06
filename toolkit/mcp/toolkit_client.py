@@ -5,7 +5,10 @@ This module is a thin facade. The actual implementation lives in dedicated sub-m
 - errors: ToolkitClientError
 - path_safety: _safe_path, _load_cfg
 - cli_adapter: inspect_paths (direct call, no subprocess)
-- schema_ops: list_runs, show_schema, raw_profile, run_state, summary, review_readiness
+- schema_ops: show_schema, raw_profile, run_state, summary, review_readiness, schema_diff, ...
+- aggregate_ops: layer_query (toolkit_layer), dataset_status (toolkit_status)
+- scout_ops: probe_url, infer_topic, ckan, sparql, html, sdmx
+- discovery: list_candidates
 
 Note: run_state is kept here for internal use (tests) but is no longer a registered MCP tool.
 Use inspect_paths (with run_file_count, years_seen) or summary (with latest_run_record) instead.
@@ -30,6 +33,10 @@ from toolkit.mcp.schema_ops import (
     schema_diff,
     show_schema,
     summary,
+)
+from toolkit.mcp.aggregate_ops import (
+    dataset_status,
+    layer_query,
 )
 from toolkit.mcp.scout_ops import (
     mcp_ckan_package_show,

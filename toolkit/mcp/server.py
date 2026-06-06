@@ -1,11 +1,18 @@
 """Toolkit MCP server.
 
-Espone 13 tool read-only per ispezione della pipeline toolkit:
-- ispezione standard: inspect_paths, inspect_schema, inspect_profile, summary
-- diagnostica: review_readiness, schema_diff, run_summary
-- run history: list_runs
-- discovery: list_candidates, dataset_info
-- preview: csv_preview, clean_preview, raw_preview
+Espone tool read-only per ispezione della pipeline toolkit.
+Include sia tool granulari (backward compat) che tool aggregati.
+
+Tool aggregati:
+- toolkit_layer: schema/preview/profile/sql su RAW/CLEAN/MART in un tool
+- toolkit_status: paths + summary + readiness + run_stats + info in un tool
+
+Tool granulari (mantenuti per backward compat):
+- inspect_paths, inspect_schema, inspect_profile, summary
+- review_readiness, schema_diff, run_summary
+- list_runs, list_candidates, dataset_info
+- csv_preview, clean_preview, raw_preview
+- scout: probe_url, probe_url_routed, infer_topic, ckan, sparql, html, sdmx
 
 Usa ``lab_connectors.mcp`` per init standardizzato, error handling e logging.
 """
@@ -40,6 +47,11 @@ from .toolkit_client import (
     schema_diff as schema_diff_impl,
     summary as summary_impl,
     show_schema as show_schema_impl,
+)
+
+from .aggregate_ops import (
+    dataset_status as dataset_status_impl,
+    layer_query as layer_query_impl,
 )
 
 mcp = create_mcp_server(
@@ -184,6 +196,54 @@ def toolkit_list_runs(
 )
 def toolkit_csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     return guard_timed(csv_preview_impl, "toolkit_csv_preview", csv_path, limit)
+
+
+# ---------------------------------------------------------------------------
+# Aggregated tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description="Query unificata su RAW/CLEAN/MART: schema, preview, profilo o SQL. "
+    "Sostituisce inspect_schema/clean_preview/raw_preview/inspect_profile/parquet_query "
+    "in un unico tool con parametro mode (schema|preview|profile|sql). "
+    "Esempi: mode=schema (colonne+tipi), mode=preview (anteprima righe), "
+    "mode=profile (diagnostica raw), mode=sql (SQL arbitrario su 'data').",
+    structured_output=True,
+)
+def toolkit_layer(
+    config_path: str,
+    layer: str = "clean",
+    mode: str = "schema",
+    year: int = 0,
+    limit: int = 20,
+    sql: str | None = None,
+    mart_index: int = 0,
+) -> dict[str, Any]:
+    return guard_timed(
+        layer_query_impl,
+        "toolkit_layer",
+        config_path,
+        layer=layer,
+        mode=mode,
+        year=year or None,
+        limit=limit,
+        sql=sql,
+        mart_index=mart_index,
+    )
+
+
+@mcp.tool(
+    description="Stato completo di un dataset: paths + summary + readiness + run_stats + info. "
+    "Aggrega inspect_paths, summary, review_readiness, run_summary e dataset_info "
+    "in una unica chiamata.",
+    structured_output=True,
+)
+def toolkit_status(
+    config_path: str,
+    year: int = 0,
+) -> dict[str, Any]:
+    return guard_timed(dataset_status_impl, "toolkit_status", config_path, year=year or None)
 
 
 # ---------------------------------------------------------------------------

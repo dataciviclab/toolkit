@@ -926,3 +926,141 @@ def test_list_candidates_stage_invalid(tmp_path: Path, monkeypatch: pytest.Monke
 
     with pytest.raises(ToolkitClientError, match="stage deve essere"):
         list_candidates(stage="bogus")
+
+
+# ---------------------------------------------------------------------------
+# Aggregated tools: layer_query e dataset_status
+# ---------------------------------------------------------------------------
+
+
+def _make_project_smoke(tmp_path: Path) -> tuple[Path, dict]:
+    """Crea project-example con output fittizi. Ritorna (config_path, paths_dict)."""
+    import duckdb
+
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
+    config_path = dst / "dataset.yml"
+
+    # Crea output fittizi per clean e mart
+    root = dst / "_smoke_out"
+    slug = "project_example"
+    year = 2022
+    clean_dir = root / "data" / "clean" / slug / str(year)
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    clean_pq = clean_dir / f"{slug}_{year}_clean.parquet"
+    with duckdb.connect(":memory:") as conn:
+        conn.execute("CREATE TABLE t AS SELECT 'a' AS cat, 1 AS val")
+        conn.execute(f"COPY t TO '{clean_pq}' (FORMAT PARQUET)")
+
+    mart_dir = root / "data" / "mart" / slug / str(year)
+    mart_dir.mkdir(parents=True, exist_ok=True)
+    mart_pq = mart_dir / "rd_by_regione.parquet"
+    with duckdb.connect(":memory:") as conn:
+        conn.execute("CREATE TABLE t AS SELECT 'x' AS k, 10 AS v")
+        conn.execute(f"COPY t TO '{mart_pq}' (FORMAT PARQUET)")
+
+    return config_path, {"dataset": slug, "year": year}
+
+
+@pytest.mark.contract
+def test_layer_query_schema_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """layer_query mode=schema: restituisce schema."""
+    from toolkit.mcp.aggregate_ops import layer_query
+
+    config_path, info = _make_project_smoke(tmp_path)
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    result = layer_query(str(config_path), layer="clean", mode="schema")
+    assert result["layer"] == "clean"
+    assert result["column_count"] >= 1
+    assert "columns" in result
+
+
+@pytest.mark.contract
+def test_layer_query_preview_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """layer_query mode=preview: restituisce schema + righe."""
+    from toolkit.mcp.aggregate_ops import layer_query
+
+    config_path, info = _make_project_smoke(tmp_path)
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    result = layer_query(str(config_path), layer="clean", mode="preview", limit=5)
+    assert result["column_count"] >= 1
+    assert len(result.get("preview", [])) >= 1
+    assert result["row_count"] >= 1
+
+
+@pytest.mark.contract
+def test_layer_query_sql_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """layer_query mode=sql: esegue SQL arbitrario."""
+    from toolkit.mcp.aggregate_ops import layer_query
+
+    config_path, info = _make_project_smoke(tmp_path)
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    result = layer_query(
+        str(config_path),
+        layer="clean",
+        mode="sql",
+        sql="SELECT cat, SUM(val) AS tot FROM data GROUP BY cat",
+    )
+    assert result["mode"] == "sql"
+    assert result["column_count"] >= 2
+    assert result["sql"] is not None
+
+
+@pytest.mark.contract
+def test_layer_query_mart_preview(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """layer_query su layer=mart: funziona."""
+    from toolkit.mcp.aggregate_ops import layer_query
+
+    config_path, info = _make_project_smoke(tmp_path)
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    result = layer_query(str(config_path), layer="mart", mode="preview", limit=3)
+    assert result["layer"] == "mart"
+    assert result["column_count"] >= 1
+
+
+@pytest.mark.policy
+def test_layer_query_invalid_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """layer_query con mode non valido: errore."""
+    from toolkit.mcp.aggregate_ops import layer_query
+    from toolkit.mcp.errors import ToolkitClientError
+
+    config_path, info = _make_project_smoke(tmp_path)
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    with pytest.raises(ToolkitClientError, match="mode deve essere"):
+        layer_query(str(config_path), mode="invalid")
+
+
+@pytest.mark.policy
+def test_layer_query_profile_on_clean_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """layer_query mode=profile su layer=clean: errore."""
+    from toolkit.mcp.aggregate_ops import layer_query
+    from toolkit.mcp.errors import ToolkitClientError
+
+    config_path, info = _make_project_smoke(tmp_path)
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    with pytest.raises(ToolkitClientError, match="mode=profile"):
+        layer_query(str(config_path), layer="clean", mode="profile")
+
+
+@pytest.mark.contract
+def test_dataset_status_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """dataset_status: restituisce tutte le 5 sezioni."""
+    from toolkit.mcp.aggregate_ops import dataset_status
+
+    config_path, info = _make_project_smoke(tmp_path)
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+
+    result = dataset_status(str(config_path))
+    assert "paths_info" in result
+    assert "summary" in result
+    assert "readiness" in result
+    assert "run_stats" in result
+    assert "info" in result
+    assert result["info"]["dataset"] == info["dataset"]

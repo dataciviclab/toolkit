@@ -359,9 +359,8 @@ def format_clean_read_proposal(profile: dict[str, Any]) -> str:
     Includes ``read_mode: robust`` as a top-level ``clean`` field when
     ``robust_read_suggested`` is set (not inside ``clean.read``).
     """
-    import yaml
-
     from toolkit.core.config_models.clean import CleanReadConfig
+    from toolkit.core.io import yaml_dumps
 
     proposed = propose_clean_read(profile)
     if not proposed:
@@ -376,4 +375,4 @@ def format_clean_read_proposal(profile: dict[str, Any]) -> str:
     if profile.get("robust_read_suggested"):
         result["clean"]["read_mode"] = "robust"
 
-    return yaml.safe_dump(result, default_flow_style=False, sort_keys=False)
+    return yaml_dumps(result)

@@ -107,3 +107,71 @@ def read_json_or_none(path: Path) -> dict[str, Any] | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, UnicodeDecodeError):
         return None
+
+
+# ---------------------------------------------------------------------------
+# YAML helpers — centralise yaml dependency here so callers don't import yaml
+# ---------------------------------------------------------------------------
+
+def read_yaml(path: Path) -> Any:
+    """Read and parse a YAML file.
+
+    Args:
+        path: Path to the YAML file.
+
+    Returns:
+        Parsed content (dict, list, or scalar).
+
+    Raises:
+        ValueError: if the file cannot be parsed as YAML.
+        OSError: if the file cannot be read.
+    """
+    import yaml as _yaml
+
+    try:
+        return _yaml.safe_load(path.read_text(encoding="utf-8"))
+    except _yaml.YAMLError as exc:
+        raise ValueError(f"YAML parse error in {path}: {exc}") from exc
+
+
+def read_yaml_or_none(path: Path) -> Any:
+    """Read and parse a YAML file, returning None on any error.
+
+    Use for optional files where absence or malformation is a valid state.
+    """
+    import yaml as _yaml
+
+    try:
+        return _yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, _yaml.YAMLError, UnicodeDecodeError):
+        return None
+
+
+def write_yaml(data: Any, path: Path) -> None:
+    """Serialize data to a YAML file (safe_dump, block style).
+
+    Args:
+        data: Data to serialize (typically dict or list).
+        path: Destination path. Parent directories are created if needed.
+    """
+    import yaml as _yaml
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        _yaml.safe_dump(data, default_flow_style=False, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
+def yaml_dumps(data: Any) -> str:
+    """Serialize data to a YAML string (safe_dump, block style).
+
+    Args:
+        data: Data to serialize.
+
+    Returns:
+        YAML-formatted string.
+    """
+    import yaml as _yaml
+
+    return _yaml.safe_dump(data, default_flow_style=False, sort_keys=False)

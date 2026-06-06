@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-import yaml
+from toolkit.core.io import read_yaml
 from toolkit.core.csv_read import (
     READ_SELECTION_KEYS,
     READ_SOURCE_MODES,
@@ -59,7 +59,7 @@ def load_suggested_read(raw_year_dir: Path) -> dict[str, Any] | None:
     if not suggested_path.exists():
         return None
 
-    payload = yaml.safe_load(suggested_path.read_text(encoding="utf-8"))
+    payload = read_yaml(suggested_path)
     if not isinstance(payload, dict):
         return None
 

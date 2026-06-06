@@ -1,18 +1,25 @@
 """Smoke test: parquet_preview su bucket GCS pubblici via S3.
 
-Questo file NON e' in CORE_TESTS ne in ADVANCED_TESTS (conftest.py).
-Richiede connettivita' esterna. Eseguire esplicitamente:
+Richiede connettivita' esterna. Skippato di default.
+Eseguire esplicitamente con:
 
-    pytest tests/test_s3_parquet_smoke.py -v
+    RUN_S3_SMOKE=1 pytest tests/test_s3_parquet_smoke.py -v
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.smoke
+pytestmark = [
+    pytest.mark.smoke,
+    pytest.mark.skipif(
+        not os.environ.get("RUN_S3_SMOKE"),
+        reason="S3 smoke test: set RUN_S3_SMOKE=1 per eseguire",
+    ),
+]
 
 
 @pytest.mark.smoke

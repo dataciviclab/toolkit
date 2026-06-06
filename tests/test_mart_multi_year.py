@@ -10,7 +10,7 @@ import yaml
 
 from toolkit.cli.cmd_run import run as run_cmd
 
-pytestmark = [pytest.mark.core]
+pytestmark = [pytest.mark.contract, pytest.mark.core]
 
 
 def test_mart_multi_year_on_project_example(project_example: Path) -> None:

@@ -48,24 +48,28 @@ def _s3_config() -> Mapping[str, Any]:
 def _parquet_connect(path: Path) -> Generator[Any, None, None]:
     """Context manager DuckDB con supporto S3 se il path e' ``s3://``.
 
-    Per path locali usa ``safe_connect`` (backward compat).
-    Per path ``s3://`` apre connessione DuckDB con httpfs + S3 config.
+    Per path locali usa ``safe_connect()`` (backward compat).
+    Per path ``s3://`` usa ``safe_connect(extensions=["httpfs"], config=...)``
+    (via ``lab_connectors.duckdb`` v0.13.0).
     """
-    path_str = str(path)
-    if _is_s3_path(path_str):
-        con = duckdb.connect(":memory:", config=_s3_config())  # type: ignore[arg-type]
-        try:
-            con.execute("LOAD httpfs")
+    if _is_s3_path(str(path)):
+        with safe_connect(extensions=["httpfs"], config=_s3_config()) as con:
             yield con
-        finally:
-            try:
-                con.close()
-            except Exception:
-                pass
     else:
-        # safe_connect e' gia' un context manager decorato
         with safe_connect() as con:
             yield con
+
+
+def _normalize_s3(path_str: str) -> str:
+    """Ripristina ``s3://`` se ``Path()`` l'ha normalizzato in ``s3:/``."""
+    if path_str.startswith("s3:/") and not path_str.startswith("s3://"):
+        return "s3://" + path_str[4:]
+    return path_str
+
+
+def _display_path(path: Path) -> str:
+    """Path come stringa, con ``s3://`` preservato."""
+    return _normalize_s3(str(path))
 
 
 def _rel(path: Path) -> str:
@@ -73,10 +77,7 @@ def _rel(path: Path) -> str:
 
     Preserva il prefisso ``s3://`` — ``Path()`` normalizza ``//`` in ``/``.
     """
-    path_str = str(path)
-    if path_str.startswith("s3:/") and not path_str.startswith("s3://"):
-        path_str = "s3://" + path_str[4:]
-    return f"read_parquet('{sql_literal(path_str)}')"
+    return f"read_parquet('{sql_literal(_display_path(path))}')"
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +195,7 @@ def parquet_preview(
     if not _is_s3_path(path) and not path.exists():
         if sql is not None:
             raise FileNotFoundError(f"Parquet non trovato: {path}")
-        return {"path": str(path), "column_count": 0, "columns": [],
+        return {"path": _display_path(path), "column_count": 0, "columns": [],
                 "row_count": None, "preview": [], "truncated": False, "sql": None}
 
     try:
@@ -222,7 +223,7 @@ def parquet_preview(
             preview_rows = [dict(zip(col_names, row)) for row in preview]
 
             return {
-                "path": str(path),
+                "path": _display_path(path),
                 "column_count": len(columns),
                 "columns": columns,
                 "row_count": row_count,
@@ -234,7 +235,7 @@ def parquet_preview(
         if sql is not None:
             # In modalità SQL esplicito, propaga l'errore
             raise
-        base = {"path": str(path), "column_count": 0, "columns": [],
+        base = {"path": _display_path(path), "column_count": 0, "columns": [],
                 "row_count": None, "preview": [], "truncated": False}
         base["sql"] = sql
         return base

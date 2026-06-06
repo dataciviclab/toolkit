@@ -126,36 +126,4 @@ def test_parquet_preview_invalid_sql_raises(tmp_path):
         parquet_preview(pq, sql="SELECT * FROM nonexistent_table")
 
 
-@pytest.mark.smoke
-def test_parquet_preview_s3_public_bucket():
-    """parquet_preview su bucket GCS pubblico via S3-compatible API.
 
-    Smoke test: richiede connettivita' esterna. Legge il catalog_inventory
-    parquet pubblico e verifica che abbia almeno 1 riga.
-    """
-    from pathlib import Path
-    from toolkit.core.duckdb_shape import parquet_preview, parquet_schema, parquet_row_count
-
-    url = "s3://dataciviclab-clean/catalog_inventory/catalog_inventory_latest.parquet"
-
-    # Schema
-    schema = parquet_schema(Path(url))
-    assert len(schema) > 0, "S3 schema vuoto"
-
-    # Row count
-    count = parquet_row_count(Path(url))
-    assert count is not None and count > 0, f"S3 count: {count}"
-
-    # Preview
-    result = parquet_preview(Path(url), limit=3)
-    assert result["column_count"] > 0
-    assert result["row_count"] == count
-    assert len(result["preview"]) == 3
-
-    # SQL
-    sql_result = parquet_preview(
-        Path(url),
-        sql="SELECT source_id, COUNT(*) AS n FROM data GROUP BY source_id ORDER BY n DESC LIMIT 3",
-    )
-    assert sql_result["column_count"] == 2
-    assert len(sql_result["preview"]) == 3

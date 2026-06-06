@@ -3,7 +3,9 @@
 Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cosa resta supportato ma secondario, e cosa non va trattato come parte del quickstart dei repo dataset clonati dal template.
 
 | Area | Stato | Uso raccomandato |
-|---|---|---|---|
+|---|---|---|
+| `query` | stable | query SQL su parquet (path o dataset.yml + layer) |
+| `parquet_preview(sql=...)` | stable | API core per SQL arbitrario su parquet |
 | `run all` | stable | percorso canonico |
 | `validate all` | stable | percorso canonico |
 | `status` | stable | percorso canonico |

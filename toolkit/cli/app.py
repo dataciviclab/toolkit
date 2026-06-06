@@ -10,6 +10,7 @@ from toolkit.cli.cmd_inspect import register as register_inspect
 from toolkit.cli.cmd_scaffold import register as register_scaffold
 from toolkit.cli.cmd_batch import register as register_batch
 from toolkit.cli.cmd_review_readiness import register as register_review_readiness
+from toolkit.cli.cmd_query import register as register_query
 from toolkit.cli.cmd_scout import register as register_scout
 from toolkit.version import __version__
 
@@ -35,6 +36,7 @@ register_inspect(app)
 register_scaffold(app)
 register_batch(app)
 register_review_readiness(app)
+register_query(app)
 register_scout(app)
 
 

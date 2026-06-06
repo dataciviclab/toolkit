@@ -110,6 +110,7 @@ Il toolkit non gestisce il deployment: scrive nella directory configurata via
 
 | Comando | Cosa fa |
 |---|---|
+| `toolkit query path/to/file.parquet [--sql "..."]` | Query SQL su parquet (via path o via dataset.yml + layer) |
 | `toolkit scout <URL>` | Esplora URL esterno (HTTP/CKAN/SDMX/HTML) — probe + routing + inferenze |
 | `toolkit scout <URL> --scaffold` | Probe + scaffold candidato completo (dataset.yml, SQL, README) |
 | `toolkit scout <URL> --run` | Probe + scaffold + raw run |
@@ -266,6 +267,7 @@ toolkit/
 | Problema | Soluzione |
 |---|---|
 | `toolkit: command not found` | Usa `python -m toolkit.cli.app` al posto di `toolkit` |
+| "fare una query SQL su un parquet?" | `toolkit query path/to/file.parquet --sql "SELECT * FROM data WHERE ..."` |
 | `run all` fallisce | `toolkit review-readiness --config dataset.yml` + controlla che la fonte sia raggiungibile |
 | "dove sono i parquet prodotti?" | `toolkit inspect paths --config dataset.yml --year <anno>` o cerca in `root/data/` |
 | "errore schema tra anni diversi" | `toolkit inspect schema-diff --config dataset.yml` per vedere il drift RAW |

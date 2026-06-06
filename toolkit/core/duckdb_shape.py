@@ -10,6 +10,8 @@ Rinominato da ``core/parquet.py`` — ora in ``core/duckdb_shape.py``.
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -19,8 +21,62 @@ from lab_connectors.duckdb import safe_connect
 from toolkit.core.sql_utils import sql_literal
 
 
+def _is_s3_path(path: str | Path) -> bool:
+    """True se il path inizia con ``s3://`` (path GCS via DuckDB httpfs).
+
+    Rileva anche ``s3:/`` (``Path()`` normalizza ``//`` in ``/``).
+
+    I bucket pubblici ``dataciviclab-clean`` e ``dataciviclab-mart``
+    sono accessibili in lettura anonima via S3-compatible API GCS.
+    """
+    s = str(path)
+    return s.startswith("s3://") or s.startswith("s3:/")
+
+
+def _s3_config() -> dict[str, str]:
+    """Config DuckDB per leggere bucket GCS pubblici via S3-compatible API."""
+    return {
+        "s3_endpoint": "storage.googleapis.com",
+        "s3_region": "auto",
+        "s3_access_key_id": "",
+        "s3_secret_access_key": "",
+        "s3_use_ssl": "true",
+    }
+
+
+@contextmanager
+def _parquet_connect(path: Path) -> Generator[Any, None, None]:
+    """Context manager DuckDB con supporto S3 se il path e' ``s3://``.
+
+    Per path locali usa ``safe_connect`` (backward compat).
+    Per path ``s3://`` apre connessione DuckDB con httpfs + S3 config.
+    """
+    path_str = str(path)
+    if _is_s3_path(path_str):
+        con = duckdb.connect(":memory:", config=_s3_config())
+        try:
+            con.execute("LOAD httpfs")
+            yield con
+        finally:
+            try:
+                con.close()
+            except Exception:
+                pass
+    else:
+        # safe_connect e' gia' un context manager decorato
+        with safe_connect() as con:
+            yield con
+
+
 def _rel(path: Path) -> str:
-    return f"read_parquet('{sql_literal(str(path))}')"
+    """Build ``read_parquet(...)`` reference.
+
+    Preserva il prefisso ``s3://`` — ``Path()`` normalizza ``//`` in ``/``.
+    """
+    path_str = str(path)
+    if path_str.startswith("s3:/") and not path_str.startswith("s3://"):
+        path_str = "s3://" + path_str[4:]
+    return f"read_parquet('{sql_literal(path_str)}')"
 
 
 # ---------------------------------------------------------------------------
@@ -67,14 +123,16 @@ def csv_quick_shape(csv_path: str | Path) -> dict[str, Any]:
 def parquet_schema(path: Path) -> list[dict[str, str]]:
     """Legge lo schema di un file Parquet (nomi colonne + tipo DuckDB).
 
+    Supporta path locali e ``s3://`` (bucket GCS pubblici).
+
     Returns:
         Lista di ``{"name": str, "type": str}``.
         Lista vuota se il file non esiste o non è leggibile.
     """
-    if not path.exists():
+    if not _is_s3_path(path) and not path.exists():
         return []
     try:
-        with safe_connect() as con:
+        with _parquet_connect(path) as con:
             con.execute("PRAGMA disable_progress_bar")
             rows = con.execute(f"DESCRIBE SELECT * FROM {_rel(path)}").fetchall()
             return [{"name": str(r[0]), "type": str(r[1])} for r in rows]
@@ -85,13 +143,15 @@ def parquet_schema(path: Path) -> list[dict[str, str]]:
 def parquet_row_count(path: Path) -> int | None:
     """Conta le righe di un file Parquet.
 
+    Supporta path locali e ``s3://`` (bucket GCS pubblici).
+
     Returns:
         Numero di righe, ``None`` se il file non esiste o non è leggibile.
     """
-    if not path.exists():
+    if not _is_s3_path(path) and not path.exists():
         return None
     try:
-        with safe_connect() as con:
+        with _parquet_connect(path) as con:
             con.execute("PRAGMA disable_progress_bar")
             result = con.execute(f"SELECT COUNT(*) FROM {_rel(path)}").fetchone()
             return int(result[0]) if result else None
@@ -131,14 +191,14 @@ def parquet_preview(
             è fornito; in modalità default graceful empty dict).
         RuntimeError: se la query SQL fallisce (solo con ``sql``).
     """
-    if not path.exists():
+    if not _is_s3_path(path) and not path.exists():
         if sql is not None:
             raise FileNotFoundError(f"Parquet non trovato: {path}")
         return {"path": str(path), "column_count": 0, "columns": [],
                 "row_count": None, "preview": [], "truncated": False, "sql": None}
 
     try:
-        with safe_connect() as con:
+        with _parquet_connect(path) as con:
             con.execute("PRAGMA disable_progress_bar")
 
             if sql is not None:

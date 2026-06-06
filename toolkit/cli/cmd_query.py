@@ -152,10 +152,14 @@ def query(
             resolved_config = str(Path(config).resolve())
             parquet_path = _resolve_path_from_config(resolved_config, layer, year or None)
         elif path_arg:
-            parquet_path = Path(path_arg).resolve()
-            if not parquet_path.exists():
-                typer.echo(f"error: file non trovato: {parquet_path}", err=True)
-                raise typer.Exit(code=1)
+            if path_arg.startswith("s3://"):
+                # Path GCS: non esiste localmente, non usare Path.resolve()
+                parquet_path = Path(path_arg)
+            else:
+                parquet_path = Path(path_arg).resolve()
+                if not parquet_path.exists():
+                    typer.echo(f"error: file non trovato: {parquet_path}", err=True)
+                    raise typer.Exit(code=1)
         else:
             typer.echo("error: specificare un path parquet o --config", err=True)
             raise typer.Exit(code=1)

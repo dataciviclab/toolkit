@@ -28,6 +28,8 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_dataset_info",
         "toolkit_clean_preview",
         "toolkit_raw_preview",
+        "toolkit_layer",
+        "toolkit_status",
         "toolkit_probe_url",
         "toolkit_probe_url_routed",
         "toolkit_infer_topic",

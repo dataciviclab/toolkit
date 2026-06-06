@@ -41,7 +41,8 @@ def test_hierarchy_generates_aggregation(tmp_path: Path) -> None:
 
     # Two hierarchy levels aggregate from clean_input
     written, executed, total_rows = _run_hierarchy_levels(
-        con, {
+        con,
+        {
             "hierarchy": {
                 "axis": "territoriale",
                 "levels": [
@@ -50,7 +51,10 @@ def test_hierarchy_generates_aggregation(tmp_path: Path) -> None:
                 ],
             }
         },
-        "test", 2024, mart_dir, logger=_null_logger,
+        "test",
+        2024,
+        mart_dir,
+        logger=_null_logger,
     )
     assert len(written) == 2
     assert (mart_dir / "h_comune.parquet").exists()
@@ -67,14 +71,24 @@ def test_hierarchy_generates_aggregation(tmp_path: Path) -> None:
     # Second pass: source_table override aggregates from a mart table
     con.execute("CREATE TABLE mart_base AS SELECT * FROM clean_input")
     w2, _, _ = _run_hierarchy_levels(
-        con, {
+        con,
+        {
             "hierarchy": {
-                "axis": "x", "levels": [
-                    {"level": "s", "table": "h_sub", "grain": ["regione"], "source_table": "mart_base"},
-                ]
+                "axis": "x",
+                "levels": [
+                    {
+                        "level": "s",
+                        "table": "h_sub",
+                        "grain": ["regione"],
+                        "source_table": "mart_base",
+                    },
+                ],
             }
         },
-        "test", 2024, mart_dir, logger=_null_logger,
+        "test",
+        2024,
+        mart_dir,
+        logger=_null_logger,
     )
     assert len(w2) == 1
     rows2 = con.execute(
@@ -94,8 +108,17 @@ def test_hierarchy_count_fallback(tmp_path: Path) -> None:
     mart_dir = tmp_path / "m"
     mart_dir.mkdir()
     written, _, _ = _run_hierarchy_levels(
-        con, {"hierarchy": {"axis": "x", "levels": [{"level": "c", "table": "h_c", "grain": ["comune"]}]}},
-        "test", 2024, mart_dir, logger=_null_logger,
+        con,
+        {
+            "hierarchy": {
+                "axis": "x",
+                "levels": [{"level": "c", "table": "h_c", "grain": ["comune"]}],
+            }
+        },
+        "test",
+        2024,
+        mart_dir,
+        logger=_null_logger,
     )
     rows = con.execute(
         f"SELECT record_count FROM read_parquet('{mart_dir / 'h_c.parquet'}')"
@@ -119,16 +142,24 @@ def test_hierarchy_exclude_metrics(tmp_path: Path) -> None:
 
     # exclude_metrics=['anno'] — anno è numerico ma non deve essere sommato
     written, executed, _ = _run_hierarchy_levels(
-        con, {
+        con,
+        {
             "hierarchy": {
                 "axis": "territoriale",
                 "levels": [
-                    {"level": "regione", "table": "h_reg", "grain": ["regione"],
-                     "exclude_metrics": ["anno"]},
+                    {
+                        "level": "regione",
+                        "table": "h_reg",
+                        "grain": ["regione"],
+                        "exclude_metrics": ["anno"],
+                    },
                 ],
             }
         },
-        "test", 2024, mart_dir, logger=_null_logger,
+        "test",
+        2024,
+        mart_dir,
+        logger=_null_logger,
     )
     assert len(written) == 1
 
@@ -139,8 +170,8 @@ def test_hierarchy_exclude_metrics(tmp_path: Path) -> None:
     col_names = [c[0].lower() for c in cols]
 
     assert "regione" in col_names
-    assert "valore" in col_names     # SUM(valore) — metrica
-    assert "costo" in col_names      # SUM(costo) — metrica
+    assert "valore" in col_names  # SUM(valore) — metrica
+    assert "costo" in col_names  # SUM(costo) — metrica
     assert "anno" not in col_names, f"anno should be excluded but found in: {col_names}"
 
     # Verify the SUM values are correct (compare as floats due to DuckDB Decimal)
@@ -166,15 +197,26 @@ def test_hierarchy_edge_cases(tmp_path: Path) -> None:
     # Numeric grain column (valore=INTEGER) must NOT appear as SUM metric
     # Grain column must be excluded from metric_cols
     w2, e2, _ = _run_hierarchy_levels(
-        con, {"hierarchy": {"axis": "x", "levels": [{"level": "x", "table": "h_test", "grain": ["valore"]}]}},
-        "t", 2024, d, logger=_null_logger,
+        con,
+        {
+            "hierarchy": {
+                "axis": "x",
+                "levels": [{"level": "x", "table": "h_test", "grain": ["valore"]}],
+            }
+        },
+        "t",
+        2024,
+        d,
+        logger=_null_logger,
     )
     cols = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{d / 'h_test.parquet'}')").fetchall()
     col_names = [c[0].lower() for c in cols]
     assert "valore" in col_names
     # There should NOT be a SUM(valore) AS valore_1 or similar extra metric
     metric_count = sum(1 for c in col_names if c.startswith("valore"))
-    assert metric_count == 1, f"valore appears {metric_count} times (grain leaking as metric): {col_names}"
+    assert metric_count == 1, (
+        f"valore appears {metric_count} times (grain leaking as metric): {col_names}"
+    )
     con.close()
 
     # Missing source → ValueError (separate connection without clean_input)
@@ -183,8 +225,17 @@ def test_hierarchy_edge_cases(tmp_path: Path) -> None:
     d2.mkdir()
     with pytest.raises(ValueError, match="source table.*not found"):
         _run_hierarchy_levels(
-            con2, {"hierarchy": {"axis": "x", "levels": [{"level": "x", "table": "x", "grain": ["comune"]}]}},
-            "t", 2024, d2, logger=_null_logger,
+            con2,
+            {
+                "hierarchy": {
+                    "axis": "x",
+                    "levels": [{"level": "x", "table": "x", "grain": ["comune"]}],
+                }
+            },
+            "t",
+            2024,
+            d2,
+            logger=_null_logger,
         )
     con2.close()
 
@@ -203,9 +254,13 @@ def test_hierarchy_integration_via_run(project_example: Path) -> None:
             {"level": "regione", "table": "h_regione", "grain": ["regione"]},
         ],
     }
-    config_path.write_text(yaml.dump(config_data, default_flow_style=False, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    config_path.write_text(
+        yaml.dump(config_data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
 
     from toolkit.cli.cmd_run import run as run_cmd
+
     run_cmd(step="all", config=str(config_path))
 
     mart_dir = project_example / "_smoke_out" / "data" / "mart" / "project_example" / "2022"
@@ -214,14 +269,26 @@ def test_hierarchy_integration_via_run(project_example: Path) -> None:
 
     # source_id in metadata
     for layer in ("clean", "mart"):
-        meta = json.loads((project_example / "_smoke_out" / "data" / layer / "project_example" / "2022" / "metadata.json").read_text())
+        meta = json.loads(
+            (
+                project_example
+                / "_smoke_out"
+                / "data"
+                / layer
+                / "project_example"
+                / "2022"
+                / "metadata.json"
+            ).read_text()
+        )
         assert meta.get("source_id") == "ispra_linked_data", f"{layer} missing source_id"
 
 
 def test_source_id_propagated(tmp_path: Path) -> None:
     """source_id from dataset.yml reaches ToolkitConfig."""
     yml = tmp_path / "d.yml"
-    yml.write_text("dataset:\n  name: t\n  years: [2024]\n  source_id: src1\nraw: {}\nclean: {}\nmart: {}\n")
+    yml.write_text(
+        "dataset:\n  name: t\n  years: [2024]\n  source_id: src1\nraw: {}\nclean: {}\nmart: {}\n"
+    )
     assert load_config(yml).source_id == "src1"
 
     yml2 = tmp_path / "d2.yml"

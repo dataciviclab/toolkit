@@ -110,7 +110,12 @@ def main() -> None:
     if mode == "json":
         print(
             json.dumps(
-                {"total": len(results), "marked": len(marked), "unmarked": len(unmarked), "tests": results},
+                {
+                    "total": len(results),
+                    "marked": len(marked),
+                    "unmarked": len(unmarked),
+                    "tests": results,
+                },
                 indent=2,
             )
         )

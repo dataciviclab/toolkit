@@ -1,4 +1,5 @@
 """inspect subcommand package — paths, schema-diff, probe, schema, profile."""
+
 from __future__ import annotations
 
 import typer
@@ -18,4 +19,6 @@ def register(app: typer.Typer) -> None:
     inspect_app.command("schema-diff")(schema_diff)
     inspect_app.command("schema")(schema)
     inspect_app.command("probe")(probe)
-    app.add_typer(inspect_app, name="inspect", help="Ispeziona path, schema, readiness e URL del dataset.")
+    app.add_typer(
+        inspect_app, name="inspect", help="Ispeziona path, schema, readiness e URL del dataset."
+    )

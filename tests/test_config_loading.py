@@ -78,7 +78,13 @@ def test_load_config_ok(tmp_path: Path):
 @pytest.mark.policy
 def test_load_config_parses_mart_transition_config(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    _yml(yml, years=[2024], mart={"validate": {"transition": {"max_row_drop_pct": 12.5, "warn_removed_columns": "false"}}})
+    _yml(
+        yml,
+        years=[2024],
+        mart={
+            "validate": {"transition": {"max_row_drop_pct": 12.5, "warn_removed_columns": "false"}}
+        },
+    )
 
     cfg = load_config(yml)
     assert cfg.mart.validate.transition is not None
@@ -91,7 +97,13 @@ def test_load_config_parses_mart_transition_config(tmp_path: Path):
 @pytest.mark.policy
 def test_load_config_parses_clean_promotion_config(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    _yml(yml, years=[2024], clean={"validate": {"promotion": {"max_row_drop_pct": 8.5, "warn_removed_columns": "false"}}})
+    _yml(
+        yml,
+        years=[2024],
+        clean={
+            "validate": {"promotion": {"max_row_drop_pct": 8.5, "warn_removed_columns": "false"}}
+        },
+    )
 
     cfg = load_config(yml)
     assert cfg.clean.validate.promotion is not None
@@ -120,12 +132,9 @@ def test_load_config_model_rejects_invalid_mart_transition_bool(tmp_path: Path):
 @pytest.mark.contract
 def test_load_config_missing_dataset_name(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    _yml_str(yml,
-        "dataset:\n"
-        "  years: [2022]\n"
-        "raw: {}\n"
-        "clean: {}\n"
-        "mart: {}",
+    _yml_str(
+        yml,
+        "dataset:\n  years: [2022]\nraw: {}\nclean: {}\nmart: {}",
     )
 
     with pytest.raises(ValueError) as e:
@@ -137,7 +146,8 @@ def test_load_config_missing_dataset_name(tmp_path: Path):
 @pytest.mark.contract
 def test_load_config_rejects_duplicate_support_names(tmp_path: Path):
     yml = tmp_path / "dataset.yml"
-    _yml_str(yml,
+    _yml_str(
+        yml,
         "root: './out'\n"
         "dataset:\n"
         "  name: demo\n"
@@ -173,7 +183,8 @@ def test_load_config_resolves_relative_paths_from_dataset_dir(tmp_path: Path):
     (project_dir / "sql" / "cross").mkdir(parents=True)
 
     yml = project_dir / "dataset.yml"
-    _yml_str(yml,
+    _yml_str(
+        yml,
         "root: './out'\n"
         "dataset:\n"
         "  name: demo\n"
@@ -219,7 +230,8 @@ def test_load_config_resolves_support_config_paths_from_dataset_dir(tmp_path: Pa
     support_dir.mkdir()
 
     yml = project_dir / "dataset.yml"
-    _yml_str(yml,
+    _yml_str(
+        yml,
         "root: './out'\n"
         "dataset:\n"
         "  name: demo\n"
@@ -248,7 +260,8 @@ def test_load_config_does_not_transform_non_whitelisted_path_like_fields(tmp_pat
     project_dir.mkdir()
 
     yml = project_dir / "dataset.yml"
-    _yml_str(yml,
+    _yml_str(
+        yml,
         "root: './out'\n"
         "dataset:\n"
         "  name: demo\n"
@@ -283,7 +296,8 @@ def test_load_config_preserves_year_template_in_raw_local_file_path(tmp_path: Pa
     project_dir.mkdir()
 
     yml = project_dir / "dataset.yml"
-    _yml_str(yml,
+    _yml_str(
+        yml,
         "root: './out'\n"
         "dataset:\n"
         "  name: demo\n"
@@ -300,7 +314,9 @@ def test_load_config_preserves_year_template_in_raw_local_file_path(tmp_path: Pa
 
     cfg = load_config(yml)
 
-    assert cfg.raw.sources[0].args["path"] == str((project_dir / "data" / "raw_{year}.csv").resolve())
+    assert cfg.raw.sources[0].args["path"] == str(
+        (project_dir / "data" / "raw_{year}.csv").resolve()
+    )
     assert cfg.raw.sources[0].args["filename"] == "raw_{year}.csv"
 
 
@@ -344,7 +360,9 @@ def test_load_config_uses_toolkit_outdir_for_managed_smoke_root(tmp_path: Path, 
 
 
 @pytest.mark.policy
-def test_load_config_uses_base_dir_when_root_missing_and_dcl_root_missing(tmp_path: Path, monkeypatch):
+def test_load_config_uses_base_dir_when_root_missing_and_dcl_root_missing(
+    tmp_path: Path, monkeypatch
+):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
 
@@ -383,7 +401,8 @@ def test_load_config_resolves_repo_out_for_dataset_incubator_layouts(
     dataset_dir = repo_root / Path(dataset_rel)
     dataset_dir.mkdir(parents=True, exist_ok=True)
     yml = dataset_dir / "dataset.yml"
-    _yml_str(yml,
+    _yml_str(
+        yml,
         f'root: "{root_value}"\n'
         "dataset:\n"
         "  name: demo\n"
@@ -406,7 +425,8 @@ def test_load_config_accepts_absolute_root_within_repo_when_repo_root_is_provide
     dataset_dir.mkdir(parents=True, exist_ok=True)
     allowed_root = (repo_root / "out").resolve()
     yml = dataset_dir / "dataset.yml"
-    _yml_str(yml,
+    _yml_str(
+        yml,
         f'root: "{allowed_root.as_posix()}"\n'
         "dataset:\n"
         "  name: demo\n"
@@ -429,7 +449,8 @@ def test_load_config_rejects_root_outside_repo_when_repo_root_is_provided(tmp_pa
     dataset_dir.mkdir(parents=True, exist_ok=True)
     outside_root = tmp_path / "outside"
     yml = dataset_dir / "dataset.yml"
-    _yml_str(yml,
+    _yml_str(
+        yml,
         f'root: "{outside_root.as_posix()}"\n'
         "dataset:\n"
         "  name: demo\n"
@@ -453,7 +474,8 @@ def test_load_config_allows_root_outside_repo_without_repo_root_guard(tmp_path: 
     dataset_dir = repo_root / "candidates" / "demo_dataset"
     dataset_dir.mkdir(parents=True, exist_ok=True)
     yml = dataset_dir / "dataset.yml"
-    _yml_str(yml,
+    _yml_str(
+        yml,
         "root: '../../../outside'\n"
         "dataset:\n"
         "  name: demo\n"
@@ -493,7 +515,8 @@ def test_mart_required_tables_auto_filled_from_tables(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     yml = project_dir / "dataset.yml"
-    _yml_str(yml,
+    _yml_str(
+        yml,
         "dataset:\n"
         "  name: demo\n"
         "  years: [2022]\n"
@@ -519,7 +542,8 @@ def test_mart_required_tables_explicit_empty_auto_fills(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     yml = project_dir / "dataset.yml"
-    _yml_str(yml,
+    _yml_str(
+        yml,
         "dataset:\n"
         "  name: demo\n"
         "  years: [2022]\n"
@@ -542,7 +566,8 @@ def test_mart_required_tables_explicit_subset(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     yml = project_dir / "dataset.yml"
-    _yml_str(yml,
+    _yml_str(
+        yml,
         "dataset:\n"
         "  name: demo\n"
         "  years: [2022]\n"

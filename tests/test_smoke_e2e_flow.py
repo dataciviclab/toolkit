@@ -136,9 +136,15 @@ class TestEndToEndFlow:
         assert (mart_dir / "_validate" / "mart_validation.json").exists()
 
         # --- FASE 3: validate --json ---
-        result = _invoke([
-            "validate", "all", "--config", str(config_path), "--json",
-        ])
+        result = _invoke(
+            [
+                "validate",
+                "all",
+                "--config",
+                str(config_path),
+                "--json",
+            ]
+        )
         assert result.exit_code == 0, f"validate fallito: {result.output}"
         val_results = json.loads(result.output)
         assert len(val_results) == 3  # raw + clean + mart
@@ -217,7 +223,9 @@ def test_zip_extractor(tmp_path: Path):
     assert result.exit_code == 0, result.output
 
     out = project / "out"
-    raw_meta = json.loads((out / "data" / "raw" / "tiny_zip" / "2025" / "metadata.json").read_text())
+    raw_meta = json.loads(
+        (out / "data" / "raw" / "tiny_zip" / "2025" / "metadata.json").read_text()
+    )
     assert raw_meta["primary_output_file"] == "zip_payload.csv"
     _assert_parquet_has_rows(out / "data" / "mart" / "tiny_zip" / "2025" / "mart_scores.parquet")
 
@@ -287,7 +295,9 @@ def test_year_template_in_path(tmp_path: Path):
     assert result.exit_code == 0, result.output
 
     out = project / "out"
-    raw_meta = json.loads((out / "data" / "raw" / "tiny_tpl" / "2024" / "metadata.json").read_text())
+    raw_meta = json.loads(
+        (out / "data" / "raw" / "tiny_tpl" / "2024" / "metadata.json").read_text()
+    )
     assert raw_meta["primary_output_file"] == "tiny_it_2024.csv"
     _assert_parquet_has_rows(out / "data" / "mart" / "tiny_tpl" / "2024" / "mart_totali.parquet")
 

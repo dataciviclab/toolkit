@@ -17,6 +17,7 @@ class ValidationResult:
     summary: dict[str, Any] = field(default_factory=dict)
     sections: dict[str, Any] = field(default_factory=dict)
 
+
 def write_validation_json(path: str | Path, result: ValidationResult) -> Path:
     out = Path(path)
     payload = {
@@ -130,8 +131,7 @@ def check_transitions(
 
     return {
         "enabled": (
-            transition_cfg.max_row_drop_pct is not None
-            or transition_cfg.warn_removed_columns
+            transition_cfg.max_row_drop_pct is not None or transition_cfg.warn_removed_columns
         ),
         "config": {
             "max_row_drop_pct": transition_cfg.max_row_drop_pct,

@@ -179,8 +179,15 @@ def parquet_preview(
     if not _is_s3_path(path) and not path.exists():
         if sql is not None:
             raise FileNotFoundError(f"Parquet non trovato: {path}")
-        return {"path": _display_path(path), "column_count": 0, "columns": [],
-                "row_count": None, "preview": [], "truncated": False, "sql": None}
+        return {
+            "path": _display_path(path),
+            "column_count": 0,
+            "columns": [],
+            "row_count": None,
+            "preview": [],
+            "truncated": False,
+            "sql": None,
+        }
 
     try:
         with _parquet_connect(path) as con:
@@ -219,7 +226,13 @@ def parquet_preview(
         if sql is not None:
             # In modalità SQL esplicito, propaga l'errore
             raise
-        base = {"path": _display_path(path), "column_count": 0, "columns": [],
-                "row_count": None, "preview": [], "truncated": False}
+        base = {
+            "path": _display_path(path),
+            "column_count": 0,
+            "columns": [],
+            "row_count": None,
+            "preview": [],
+            "truncated": False,
+        }
         base["sql"] = sql
         return base

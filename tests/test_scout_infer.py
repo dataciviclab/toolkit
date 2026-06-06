@@ -44,9 +44,13 @@ class TestInferYears:
             ("", None, None),
         ],
     )
-    def test_infer_years(self, text: str, expected_min: int | None, expected_max: int | None) -> None:
+    def test_infer_years(
+        self, text: str, expected_min: int | None, expected_max: int | None
+    ) -> None:
         result = infer_years(text)
-        assert result == (expected_min, expected_max), f"infer_years({text!r}) = {result}, expected ({expected_min}, {expected_max})"
+        assert result == (expected_min, expected_max), (
+            f"infer_years({text!r}) = {result}, expected ({expected_min}, {expected_max})"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +333,7 @@ class TestProbeUrlRoutedSparql:
     def test_is_sparql_endpoint_detected_by_url(self) -> None:
         """URL con /sparql nel path deve essere riconosciuto."""
         from toolkit.scout.http import is_sparql_endpoint
+
         assert is_sparql_endpoint("https://dati.camera.it/sparql")
         assert is_sparql_endpoint("https://example.org/sparql/query")
         assert not is_sparql_endpoint("https://example.org/data.csv")
@@ -338,6 +343,7 @@ class TestProbeUrlRoutedSparql:
     def test_is_sparql_endpoint_detected_by_content_type(self) -> None:
         """Content-Type application/sparql-results+json deve attivare il rilevamento."""
         from toolkit.scout.http import is_sparql_endpoint
+
         assert is_sparql_endpoint("https://example.org/data", "application/sparql-results+json")
         assert not is_sparql_endpoint("https://example.org/data", "text/html")
 
@@ -354,6 +360,7 @@ class TestProbeUrlRoutedSparql:
                 "content_disposition": None,
                 "final_url": url,
             }
+
         monkeypatch.setattr("toolkit.scout.probe.probe_url_headers", _mock_headers)
 
         # Mock SparqlSource.fetch() per evitare query SPARQL reali
@@ -361,7 +368,10 @@ class TestProbeUrlRoutedSparql:
             # Primo call (ASK) → CSV vuoto
             (b"", "https://dati.camera.it/sparql"),
             # Secondo call (DCAT) → CSV con un dataset
-            (b"dataset,title,description\r\nhttp://example.org/ds1,Dataset 1,Test dataset\r\n", "https://dati.camera.it/sparql"),
+            (
+                b"dataset,title,description\r\nhttp://example.org/ds1,Dataset 1,Test dataset\r\n",
+                "https://dati.camera.it/sparql",
+            ),
         ]
 
         def _mock_fetch(self, endpoint, query, accept_format="csv"):
@@ -388,6 +398,7 @@ class TestProbeUrlRoutedSparql:
                 "content_disposition": None,
                 "final_url": url,
             }
+
         monkeypatch.setattr("toolkit.scout.probe.probe_url_headers", _mock_headers)
 
         # Mock SparqlSource.fetch() per simulare un timeout

@@ -45,9 +45,11 @@ _SAMPLE_SIZE = 1024 * 1024  # 1MB
 
 def _make_echoer(json_mode: bool):
     """Restituisce una funzione echo che stampa solo se non in modalità JSON."""
+
     def _echo(msg: str, *, err: bool = False) -> None:
         if not json_mode:
             typer.echo(msg, err=err)
+
     return _echo
 
 
@@ -163,9 +165,13 @@ def scout_url(
         raise typer.Exit(code=1)
 
     # Step 3: Suggerimento prossimo passo (solo in modalità umana)
-    if not scaffold and not json_output and source_type in ("file", "html", "ckan", "sdmx", "sparql"):
+    if (
+        not scaffold
+        and not json_output
+        and source_type in ("file", "html", "ckan", "sdmx", "sparql")
+    ):
         _echo("")
-        _echo(f"Next: toolkit scout \"{url}\" --scaffold")
+        _echo(f'Next: toolkit scout "{url}" --scaffold')
         if source_type in ("file", "sparql"):
             _echo("      toolkit scout <URL> --scaffold --run  (include raw run)")
 
@@ -225,6 +231,7 @@ def _scaffold_file(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
             read_cfg["skip"] = sniff_hints["skip_suggested"]
         if sniff_hints.get("robust_read_suggested"):
             from toolkit.core.csv_read import robust_preset
+
             read_cfg = robust_preset(read_cfg)
 
         profile = profile_with_read_cfg(sample_path, sniff_hints, read_cfg)
@@ -241,8 +248,13 @@ def _scaffold_file(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
 
     enriched = dict(profile)
     for k in (
-        "encoding_suggested", "delim_suggested", "decimal_suggested",
-        "skip_suggested", "header_line", "true_header_line", "robust_read_suggested",
+        "encoding_suggested",
+        "delim_suggested",
+        "decimal_suggested",
+        "skip_suggested",
+        "header_line",
+        "true_header_line",
+        "robust_read_suggested",
     ):
         if sniff_hints.get(k) is not None:
             enriched[k] = sniff_hints[k]
@@ -250,7 +262,9 @@ def _scaffold_file(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
     clean_read = propose_clean_read(enriched)
 
     # 5. Inferenze
-    norm_cols = profile.get("columns_norm") or profile.get("columns_raw") or profile.get("columns") or []
+    norm_cols = (
+        profile.get("columns_norm") or profile.get("columns_raw") or profile.get("columns") or []
+    )
     col_names = [str(c) for c in norm_cols]
 
     inferred_years = suggest_years(url=url, column_names=col_names, profile=profile)
@@ -291,7 +305,9 @@ def _scaffold_file(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
 
     (out_dir / "notebooks").mkdir(exist_ok=True)
 
-    columns_count = len(clean_read.get("columns") or profile.get("columns_raw") or profile.get("columns_norm") or [])
+    columns_count = len(
+        clean_read.get("columns") or profile.get("columns_raw") or profile.get("columns_norm") or []
+    )
     typer.echo(f"\nDataset YAML generated: {out_dir / 'dataset.yml'}")
     typer.echo(f"  clean.read.columns: {columns_count} columns")
     typer.echo(f"  years: {inferred_years}")
@@ -327,7 +343,13 @@ def _scaffold_ckan(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
         _scaffold_minimal_ckan(url, probe_result, resources, run_raw=run_raw)
 
 
-def _scaffold_minimal_ckan(url: str, probe_result: dict[str, Any], resources: list[dict[str, Any]], *, run_raw: bool = False) -> None:
+def _scaffold_minimal_ckan(
+    url: str,
+    probe_result: dict[str, Any],
+    resources: list[dict[str, Any]],
+    *,
+    run_raw: bool = False,
+) -> None:
     """Genera scaffold minimale CKAN quando il profiling fallisce."""
     from toolkit.scaffold.sources import block_ckan, slugify
 
@@ -374,13 +396,11 @@ def _scaffold_minimal_ckan(url: str, probe_result: dict[str, Any], resources: li
         encoding="utf-8",
     )
     (out_dir / "sql/mart.sql").write_text(
-        "-- Default mart: SELECT * FROM clean_input.\n"
-        "SELECT * FROM clean_input\n",
+        "-- Default mart: SELECT * FROM clean_input.\nSELECT * FROM clean_input\n",
         encoding="utf-8",
     )
     (out_dir / "README.md").write_text(
-        f"# {slug}\n\nFonte: {url}\n\n"
-        "## Stato\n\n- intake (minimal scaffold)\n",
+        f"# {slug}\n\nFonte: {url}\n\n## Stato\n\n- intake (minimal scaffold)\n",
         encoding="utf-8",
     )
 
@@ -444,8 +464,7 @@ def _scaffold_sparql(url: str, probe_result: dict[str, Any], *, run_raw: bool = 
     clean_sql_path = out_dir / "sql" / "clean.sql"
     clean_sql_path.parent.mkdir(parents=True, exist_ok=True)
     clean_sql_path.write_text(
-        "-- SPARQL source: transform raw CSV to clean tabular.\n"
-        "SELECT * FROM raw_input\n",
+        "-- SPARQL source: transform raw CSV to clean tabular.\nSELECT * FROM raw_input\n",
         encoding="utf-8",
     )
 
@@ -453,8 +472,7 @@ def _scaffold_sparql(url: str, probe_result: dict[str, Any], *, run_raw: bool = 
     if not mart_sql_path.exists():
         mart_sql_path.parent.mkdir(parents=True, exist_ok=True)
         mart_sql_path.write_text(
-            "-- Default mart: SELECT * FROM clean_input.\n"
-            "SELECT * FROM clean_input\n",
+            "-- Default mart: SELECT * FROM clean_input.\nSELECT * FROM clean_input\n",
             encoding="utf-8",
         )
 
@@ -539,16 +557,12 @@ def _scaffold_sdmx(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
     if not mart_sql_path.exists():
         mart_sql_path.parent.mkdir(parents=True, exist_ok=True)
         mart_sql_path.write_text(
-            "-- Default mart: SELECT * FROM clean_input.\n"
-            "SELECT * FROM clean_input\n",
+            "-- Default mart: SELECT * FROM clean_input.\nSELECT * FROM clean_input\n",
             encoding="utf-8",
         )
 
     (out_dir / "README.md").write_text(
-        f"# {slug}\n\nFonte: {url}\n\n"
-        "## Domanda\n\n-\n\n"
-        "## Dataset\n\n-\n\n"
-        "## Stato\n\n- intake\n",
+        f"# {slug}\n\nFonte: {url}\n\n## Domanda\n\n-\n\n## Dataset\n\n-\n\n## Stato\n\n- intake\n",
         encoding="utf-8",
     )
     (out_dir / "notes.md").write_text(
@@ -625,10 +639,14 @@ def _fmt_years(years: list[int]) -> str:
 
 def scout(
     url: str = typer.Argument(..., help="URL da esplorare"),
-    scaffold: bool = typer.Option(False, "--scaffold", "-s", help="Genera scaffold candidate dataset"),
+    scaffold: bool = typer.Option(
+        False, "--scaffold", "-s", help="Genera scaffold candidate dataset"
+    ),
     run: bool = typer.Option(False, "--run", "-r", help="Scaffold + raw run (implies --scaffold)"),
     json_output: bool = typer.Option(False, "--json", help="Output in formato JSON"),
-    timeout: int = typer.Option(DEFAULT_TIMEOUT, "--timeout", min=1, help="Timeout HTTP in secondi"),
+    timeout: int = typer.Option(
+        DEFAULT_TIMEOUT, "--timeout", min=1, help="Timeout HTTP in secondi"
+    ),
 ):
     """
     Esplora un URL esterno: probe HTTP, routing automatico e inferenze.

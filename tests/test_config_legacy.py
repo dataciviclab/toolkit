@@ -246,7 +246,9 @@ def test_load_config_rejects_legacy_clean_read_scalar_form(tmp_path: Path):
     assert "clean.read" in str(exc.value)
 
 
-def test_load_config_warns_on_unknown_top_level_keys_in_non_strict_mode(tmp_path: Path, caplog, monkeypatch):
+def test_load_config_warns_on_unknown_top_level_keys_in_non_strict_mode(
+    tmp_path: Path, caplog, monkeypatch
+):
     yml = tmp_path / "dataset.yml"
     _yml(yml, unknown_top=True)
 

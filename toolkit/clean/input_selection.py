@@ -51,9 +51,7 @@ def _metadata_candidates(raw_dir: Path) -> list[Path]:
     try:
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"metadata.json malformato in {raw_dir}: {exc}"
-        ) from exc
+        raise ValueError(f"metadata.json malformato in {raw_dir}: {exc}") from exc
 
     file_names: list[str] = []
     for key in ("files", "outputs"):

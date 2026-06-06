@@ -83,9 +83,7 @@ class TestCollectMultiYearFiles:
     def test_mart_layer_missing_source_table(self, tmp_path: Path) -> None:
         """Layer mart senza source_table -> ValueError."""
         with pytest.raises(ValueError, match="source_table is required"):
-            collect_multi_year_files(
-                str(tmp_path), "demo", years=[2023], source_layer="mart"
-            )
+            collect_multi_year_files(str(tmp_path), "demo", years=[2023], source_layer="mart")
 
     def test_mart_layer_missing_file(self, tmp_path: Path) -> None:
         """Layer mart con file mancante -> FileNotFoundError."""
@@ -99,9 +97,7 @@ class TestCollectMultiYearFiles:
     def test_unsupported_layer_raises(self, tmp_path: Path) -> None:
         """Layer non supportato -> ValueError."""
         with pytest.raises(ValueError, match="Unsupported source_layer: raw"):
-            collect_multi_year_files(
-                str(tmp_path), "demo", years=[2023], source_layer="raw"
-            )
+            collect_multi_year_files(str(tmp_path), "demo", years=[2023], source_layer="raw")
 
 
 # ── bind_multi_year_view ──────────────────────────────────────────────────

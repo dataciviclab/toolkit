@@ -96,9 +96,11 @@ _FETCH_DISPATCH: dict[str, Callable[..., tuple[bytes, str]]] = {}
 
 def _register_fetch(stype: str):
     """Decorator to register a fetch handler for a source type."""
+
     def _wrap(fn):
         _FETCH_DISPATCH[stype] = fn
         return fn
+
     return _wrap
 
 
@@ -108,9 +110,13 @@ def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, 
     sample_bytes = formatted_args.get("sample_bytes")
     return src.fetch(
         formatted_args["portal_url"],
-        str(formatted_args["resource_id"]) if formatted_args.get("resource_id") is not None else None,
+        str(formatted_args["resource_id"])
+        if formatted_args.get("resource_id") is not None
+        else None,
         str(formatted_args["dataset_id"]) if formatted_args.get("dataset_id") is not None else None,
-        str(formatted_args["resource_name"]) if formatted_args.get("resource_name") is not None else None,
+        str(formatted_args["resource_name"])
+        if formatted_args.get("resource_name") is not None
+        else None,
         sample_bytes=sample_bytes,
     )
 
@@ -218,7 +224,9 @@ def _resolve_output_path(out_dir: Path, fname: str, policy: str) -> Path:
 def _choose_primary_output(source_outputs: list[dict], logger) -> str:
     available = [entry for entry in source_outputs if entry.get("output_file")]
     if not available:
-        raise RuntimeError("RAW manifest cannot determine primary output file because no outputs were written.")
+        raise RuntimeError(
+            "RAW manifest cannot determine primary output file because no outputs were written."
+        )
 
     primary_marked = [entry for entry in available if entry.get("primary")]
     if primary_marked:

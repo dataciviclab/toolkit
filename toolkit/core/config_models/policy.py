@@ -119,6 +119,7 @@ def _warn_or_reject_unknown_keys(
     from toolkit.core.config_models.raw import RawConfig
     from toolkit.core.config_models.clean import CleanConfig
     from toolkit.core.config_models.mart import MartConfig
+
     for section_name, allowed_keys, notice_key in (
         ("raw", _declared_model_keys(RawConfig), "unknown.raw"),
         ("clean", _declared_model_keys(CleanConfig), "unknown.clean"),

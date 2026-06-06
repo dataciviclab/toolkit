@@ -61,7 +61,11 @@ def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
         if raw_profile_path.exists():
             raw_profile_data = read_json_or_none(raw_profile_path)
             if raw_profile_data:
-                columns_preview = raw_profile_data.get("columns_norm") or raw_profile_data.get("columns_raw") or []
+                columns_preview = (
+                    raw_profile_data.get("columns_norm")
+                    or raw_profile_data.get("columns_raw")
+                    or []
+                )
 
     warnings = list(profile_hints.get("warnings") or [])
     if sniff_error is not None:
@@ -287,20 +291,24 @@ def _check_run_record_coherence(
         layer_info = layers.get(layer_name, {})
 
         if layer_name == "clean" and not layer_info.get("output_exists"):
-            hints.append({
-                "code": "run_says_clean_success_but_output_missing",
-                "severity": "blocker",
-                "message": "run record dice clean SUCCESS ma output file manca",
-            })
+            hints.append(
+                {
+                    "code": "run_says_clean_success_but_output_missing",
+                    "severity": "blocker",
+                    "message": "run record dice clean SUCCESS ma output file manca",
+                }
+            )
         elif layer_name == "mart":
             out_count = layer_info.get("output_count", 0) or 0
             exists_count = layer_info.get("output_exists_count", 0) or 0
             if exists_count == 0 and out_count > 0:
-                hints.append({
-                    "code": "run_says_mart_success_but_outputs_missing",
-                    "severity": "blocker",
-                    "message": "run record dice mart SUCCESS ma nessun output file presente",
-                })
+                hints.append(
+                    {
+                        "code": "run_says_mart_success_but_outputs_missing",
+                        "severity": "blocker",
+                        "message": "run record dice mart SUCCESS ma nessun output file presente",
+                    }
+                )
 
     return hints
 

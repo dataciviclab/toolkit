@@ -130,9 +130,7 @@ def batch(
         "--sample-bytes",
         help="Scarica solo N bytes in RAW (HTTP Range header + troncamento locale)",
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Print execution plan without executing"
-    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
     json_output: bool = typer.Option(
         False, "--json", help="Output in formato JSON (machine-readable)"
     ),
@@ -164,9 +162,7 @@ def batch(
             if smoke:
                 # Carica prima senza override per scoprire cfg.root originale,
                 # poi ricarica con root_override a {root}/smoke
-                _cfg0, _logger0 = load_cfg_and_logger(
-                    str(config_path)
-                )
+                _cfg0, _logger0 = load_cfg_and_logger(str(config_path))
                 if json_output:
                     _silence_logger()
                 cfg, logger = load_cfg_and_logger(
@@ -174,9 +170,7 @@ def batch(
                     root_override=str(_cfg0.root / "smoke"),
                 )
             else:
-                cfg, logger = load_cfg_and_logger(
-                    str(config_path)
-                )
+                cfg, logger = load_cfg_and_logger(str(config_path))
 
             # Quando --json è attivo, silenzia il logger dopo ogni
             # load_cfg_and_logger (che resetta il logger a ogni chiamata)

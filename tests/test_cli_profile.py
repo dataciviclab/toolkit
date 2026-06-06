@@ -16,7 +16,12 @@ def _run_raw(project_example: Path, runner) -> Path:
     config_path = project_example / "dataset.yml"
     run_result = runner.invoke(
         app,
-        ["run", "raw", "--config", str(config_path),],
+        [
+            "run",
+            "raw",
+            "--config",
+            str(config_path),
+        ],
     )
     assert run_result.exit_code == 0, run_result.output
     return config_path
@@ -29,37 +34,41 @@ def _assert_profile_written(project_example: Path) -> None:
     assert (profile_dir / "raw_profile.json").exists()
 
 
-def test_cli_profile_raw_happy_path(
-    project_example: Path, runner, chdir_tmp: Path
-) -> None:
+def test_cli_profile_raw_happy_path(project_example: Path, runner, chdir_tmp: Path) -> None:
     config_path = _run_raw(project_example, runner)
 
     profile_result = runner.invoke(
         app,
-        ["inspect", "profile", "--config", str(config_path),],
+        [
+            "inspect",
+            "profile",
+            "--config",
+            str(config_path),
+        ],
     )
     assert profile_result.exit_code == 0, profile_result.output
     assert "PROFILE RAW ->" in profile_result.output
     _assert_profile_written(project_example)
 
 
-def test_inspect_profile_happy_path(
-    project_example: Path, runner, chdir_tmp: Path
-) -> None:
+def test_inspect_profile_happy_path(project_example: Path, runner, chdir_tmp: Path) -> None:
     config_path = _run_raw(project_example, runner)
 
     profile_result = runner.invoke(
         app,
-        ["inspect", "profile", "--config", str(config_path),],
+        [
+            "inspect",
+            "profile",
+            "--config",
+            str(config_path),
+        ],
     )
     assert profile_result.exit_code == 0, profile_result.output
     assert "PROFILE RAW ->" in profile_result.output
     _assert_profile_written(project_example)
 
 
-def test_inspect_profile_single_year(
-    project_example: Path, runner, chdir_tmp: Path
-) -> None:
+def test_inspect_profile_single_year(project_example: Path, runner, chdir_tmp: Path) -> None:
     config_path = _run_raw(project_example, runner)
 
     profile_result = runner.invoke(
@@ -74,9 +83,7 @@ def test_inspect_profile_single_year(
 SIMPLE_CSV = "a,b,c\n1,2,3\n4,5,6\n"
 
 
-def test_inspect_profile_csv_path_text_output(
-    tmp_path: Path, runner, chdir_tmp: Path
-) -> None:
+def test_inspect_profile_csv_path_text_output(tmp_path: Path, runner, chdir_tmp: Path) -> None:
     """--csv-path stampa encoding/delim/colonne in output testo."""
     csv_file = tmp_path / "test.csv"
     csv_file.write_text(SIMPLE_CSV, encoding="utf-8")
@@ -90,16 +97,12 @@ def test_inspect_profile_csv_path_text_output(
     assert "b" in result.output
 
 
-def test_inspect_profile_csv_path_json_output(
-    tmp_path: Path, runner, chdir_tmp: Path
-) -> None:
+def test_inspect_profile_csv_path_json_output(tmp_path: Path, runner, chdir_tmp: Path) -> None:
     """--csv-path --json produce JSON parsabile con struttura attesa."""
     csv_file = tmp_path / "test.csv"
     csv_file.write_text(SIMPLE_CSV, encoding="utf-8")
 
-    result = runner.invoke(
-        app, ["inspect", "profile", "--csv-path", str(csv_file), "--json"]
-    )
+    result = runner.invoke(app, ["inspect", "profile", "--csv-path", str(csv_file), "--json"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["column_count"] == 3
@@ -108,13 +111,9 @@ def test_inspect_profile_csv_path_json_output(
     assert len(payload["preview"]) == 2  # 2 data rows
 
 
-def test_inspect_profile_csv_path_file_not_found(
-    tmp_path: Path, runner, chdir_tmp: Path
-) -> None:
+def test_inspect_profile_csv_path_file_not_found(tmp_path: Path, runner, chdir_tmp: Path) -> None:
     """--csv-path con file inesistente deve fallire con errore leggibile."""
-    result = runner.invoke(
-        app, ["inspect", "profile", "--csv-path", str(tmp_path / "missing.csv")]
-    )
+    result = runner.invoke(app, ["inspect", "profile", "--csv-path", str(tmp_path / "missing.csv")])
     assert result.exit_code != 0
     err_text = result.output or str(result.exception or "")
     assert "CSV non trovato" in err_text or "non trovato" in err_text

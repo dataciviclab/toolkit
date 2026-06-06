@@ -4,6 +4,7 @@ Tests use ``FakeHttpClient`` from ``lab_connectors.testing`` instead of
 monkeypatching ``HttpClient.get``. Retry, backoff, and SSL fallback
 logic lives in lab-connectors and is tested there.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -20,7 +21,8 @@ def test_fetch_success() -> None:
     """HttpResult ok → fetch returns bytes."""
     fake = FakeHttpClient()
     fake.responses["https://example.test/data.csv"] = HttpResult(
-        response=fake_response(200, "payload"), err=None,
+        response=fake_response(200, "payload"),
+        err=None,
     )
 
     source = HttpFileSource(timeout=15, retries=2, user_agent="ua-test")
@@ -39,7 +41,8 @@ def test_fetch_http_status_error() -> None:
     """Non-200 HTTP status → DownloadError with status code in message."""
     fake = FakeHttpClient()
     fake.responses["https://example.test/unavailable"] = HttpResult(
-        response=fake_response(503, "service unavailable"), err=None,
+        response=fake_response(503, "service unavailable"),
+        err=None,
     )
 
     source = HttpFileSource(retries=1)
@@ -54,7 +57,8 @@ def test_fetch_connection_error() -> None:
     """HttpResult with err → DownloadError."""
     fake = FakeHttpClient()
     fake.responses["https://example.test/fail"] = HttpResult(
-        response=None, err=ConnectionError("connection refused"),
+        response=None,
+        err=ConnectionError("connection refused"),
     )
 
     source = HttpFileSource(retries=2)
@@ -120,24 +124,28 @@ class TestNonTruncableSampleBytes:
     """
 
     @pytest.mark.contract
-    @pytest.mark.parametrize("url,should_ignore", [
-        ("https://example.test/data.parquet", True),
-        ("https://example.test/data.zip", True),
-        ("https://example.test/data.xlsx", True),
-        ("https://example.test/data.xls", True),
-        ("https://example.test/data.gz", True),
-        ("https://example.test/data.csv", False),
-        ("https://example.test/data.tsv", False),
-        ("https://example.test/data.txt", False),
-        ("https://example.test/data.json", False),
-        ("https://example.test/data", False),  # no extension
-        ("https://example.test/api/v1/download?format=csv", False),  # query params
-    ])
+    @pytest.mark.parametrize(
+        "url,should_ignore",
+        [
+            ("https://example.test/data.parquet", True),
+            ("https://example.test/data.zip", True),
+            ("https://example.test/data.xlsx", True),
+            ("https://example.test/data.xls", True),
+            ("https://example.test/data.gz", True),
+            ("https://example.test/data.csv", False),
+            ("https://example.test/data.tsv", False),
+            ("https://example.test/data.txt", False),
+            ("https://example.test/data.json", False),
+            ("https://example.test/data", False),  # no extension
+            ("https://example.test/api/v1/download?format=csv", False),  # query params
+        ],
+    )
     def test_sample_bytes_respected_for_truncable_only(self, url, should_ignore):
         data = "a" * 10000 + "\n"
         fake = FakeHttpClient()
         fake.responses[url] = HttpResult(
-            response=fake_response(200, data), err=None,
+            response=fake_response(200, data),
+            err=None,
         )
 
         source = HttpFileSource(retries=1)

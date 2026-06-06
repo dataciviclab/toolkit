@@ -107,4 +107,6 @@ def scaffold_clean(
 def register(app: typer.Typer) -> None:
     scaffold_app = typer.Typer(no_args_is_help=True, add_completion=False)
     scaffold_app.command("clean")(scaffold_clean)
-    app.add_typer(scaffold_app, name="scaffold", help="Genera scheletro candidate: dataset.yml, SQL template.")
+    app.add_typer(
+        scaffold_app, name="scaffold", help="Genera scheletro candidate: dataset.yml, SQL template."
+    )

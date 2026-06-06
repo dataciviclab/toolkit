@@ -40,7 +40,9 @@ def inspect_paths(config_path: str, year: int | None = None) -> InspectPathsResu
             year = years[0]
 
     if year is None:
-        raise ToolkitClientError("Nessun anno configurato nel dataset", code=ErrorCode.CONFIG_NOT_FOUND)
+        raise ToolkitClientError(
+            "Nessun anno configurato nel dataset", code=ErrorCode.CONFIG_NOT_FOUND
+        )
 
     result = cast(InspectPathsResult, _payload_for_year(cfg, year))
     if _year_resolution:

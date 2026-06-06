@@ -99,7 +99,9 @@ def toolkit_run_summary(
     since: str | None = None,
     until: str | None = None,
 ) -> dict[str, Any]:
-    return guard_timed(run_summary_impl, "toolkit_run_summary", config_path, year or None, since=since, until=until)
+    return guard_timed(
+        run_summary_impl, "toolkit_run_summary", config_path, year or None, since=since, until=until
+    )
 
 
 @mcp.tool(
@@ -148,7 +150,15 @@ def toolkit_clean_preview(
     year: int = 0,
     limit: int = 10,
 ) -> dict[str, Any]:
-    return guard_timed(clean_preview_impl, "toolkit_clean_preview", config_path, layer, mart_index, year or None, limit)
+    return guard_timed(
+        clean_preview_impl,
+        "toolkit_clean_preview",
+        config_path,
+        layer,
+        mart_index,
+        year or None,
+        limit,
+    )
 
 
 @mcp.tool(
@@ -185,7 +195,17 @@ def toolkit_list_runs(
     limit: int | None = None,
     cross_year: bool = False,
 ) -> dict[str, Any]:
-    return guard_timed(list_runs_impl, "toolkit_list_runs", config_path, year or None, since=since, until=until, status=status, limit=limit, cross_year=cross_year)
+    return guard_timed(
+        list_runs_impl,
+        "toolkit_list_runs",
+        config_path,
+        year or None,
+        since=since,
+        until=until,
+        status=status,
+        limit=limit,
+        cross_year=cross_year,
+    )
 
 
 @mcp.tool(
@@ -301,7 +321,9 @@ def toolkit_ckan_package_show(
     package_id: str,
     timeout: int = 30,
 ) -> dict[str, Any]:
-    return guard_timed(ckan_package_show_impl, "toolkit_ckan_package_show", endpoint, package_id, timeout)
+    return guard_timed(
+        ckan_package_show_impl, "toolkit_ckan_package_show", endpoint, package_id, timeout
+    )
 
 
 @mcp.tool(
@@ -315,7 +337,9 @@ def toolkit_list_ckan_datasets(
     rows: int = 100,
     timeout: int = 30,
 ) -> dict[str, Any]:
-    return guard_timed(list_ckan_datasets_impl, "toolkit_list_ckan_datasets", portal_url, query, rows, timeout)
+    return guard_timed(
+        list_ckan_datasets_impl, "toolkit_list_ckan_datasets", portal_url, query, rows, timeout
+    )
 
 
 @mcp.tool(
@@ -348,7 +372,9 @@ def toolkit_html_extract_links(url: str, timeout: int = 20) -> dict[str, Any]:
 def toolkit_sparql_query(
     endpoint: str, query: str, timeout: int = 60, max_rows: int = 500
 ) -> dict[str, Any]:
-    return guard_timed(sparql_query_impl, "toolkit_sparql_query", endpoint, query, timeout, max_rows)
+    return guard_timed(
+        sparql_query_impl, "toolkit_sparql_query", endpoint, query, timeout, max_rows
+    )
 
 
 if __name__ == "__main__":

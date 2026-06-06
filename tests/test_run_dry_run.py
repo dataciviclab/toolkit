@@ -1,4 +1,5 @@
 """Tests for ``toolkit run --dry-run``."""
+
 from __future__ import annotations
 
 import json
@@ -19,7 +20,8 @@ from tests.helpers import make_dataset_yml, make_standard_sql
 
 @pytest.mark.policy
 def test_run_dry_run_prints_plan_and_creates_only_run_record(
-    tmp_path: Path, runner,
+    tmp_path: Path,
+    runner,
 ) -> None:
     make_standard_sql(tmp_path)
     config_path = make_dataset_yml(
@@ -70,16 +72,18 @@ def test_run_dry_run_fails_on_clean_sql_syntax_error(tmp_path: Path, runner) -> 
 def test_run_dry_run_fails_on_mart_sql_binding_error(tmp_path: Path, runner) -> None:
     make_standard_sql(tmp_path)
     (tmp_path / "sql" / "clean.sql").write_text(
-        'select "x" as value from raw_input', encoding="utf-8",
+        'select "x" as value from raw_input',
+        encoding="utf-8",
     )
     (tmp_path / "sql" / "mart" / "mart_example.sql").write_text(
-        "select missing_col from clean_input", encoding="utf-8",
+        "select missing_col from clean_input",
+        encoding="utf-8",
     )
 
     config_path = make_dataset_yml(
         tmp_path / "dataset.yml",
         mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
-        extra="  read:\n    columns:\n      x: \"VARCHAR\"",
+        extra='  read:\n    columns:\n      x: "VARCHAR"',
     )
 
     result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
@@ -90,11 +94,13 @@ def test_run_dry_run_fails_on_mart_sql_binding_error(tmp_path: Path, runner) -> 
 
 @pytest.mark.policy
 def test_run_dry_run_accepts_unquoted_raw_columns_without_read_columns(
-    tmp_path: Path, runner,
+    tmp_path: Path,
+    runner,
 ) -> None:
     make_standard_sql(tmp_path)
     (tmp_path / "sql" / "clean.sql").write_text(
-        "select x as value from raw_input", encoding="utf-8",
+        "select x as value from raw_input",
+        encoding="utf-8",
     )
 
     config_path = make_dataset_yml(
@@ -110,7 +116,8 @@ def test_run_dry_run_accepts_unquoted_raw_columns_without_read_columns(
 
 @pytest.mark.policy
 def test_run_dry_run_accepts_mart_sql_with_root_posix_placeholder(
-    tmp_path: Path, runner,
+    tmp_path: Path,
+    runner,
 ) -> None:
     make_standard_sql(tmp_path)
     root_dir = tmp_path / "out"
@@ -125,7 +132,8 @@ def test_run_dry_run_accepts_mart_sql_with_root_posix_placeholder(
     )
 
     config_path = make_dataset_yml(
-        tmp_path / "dataset.yml", root=root_dir,
+        tmp_path / "dataset.yml",
+        root=root_dir,
         mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
     )
 
@@ -138,11 +146,15 @@ def test_run_dry_run_accepts_mart_sql_with_root_posix_placeholder(
 # ── Support datasets ────────────────────────────────────────────────────────
 
 
-def _make_support_config(support_root: Path, support_config: Path,
-                          tables: list[tuple[str, str]]) -> Path:
+def _make_support_config(
+    support_root: Path, support_config: Path, tables: list[tuple[str, str]]
+) -> Path:
     """Write a support dataset.yml and return its path."""
     make_dataset_yml(
-        support_config, root=support_root, name="lookup_ds", years=[2024],
+        support_config,
+        root=support_root,
+        name="lookup_ds",
+        years=[2024],
         clean_sql="sql/clean.sql",
         mart_tables=tables,
     )
@@ -151,30 +163,33 @@ def _make_support_config(support_root: Path, support_config: Path,
 
 @pytest.mark.policy
 def test_run_dry_run_accepts_mart_sql_with_support_placeholder(
-    tmp_path: Path, runner,
+    tmp_path: Path,
+    runner,
 ) -> None:
     make_standard_sql(tmp_path)
     root_dir = tmp_path / "out"
     support_root = tmp_path / "support_out"
 
-    support_output = (support_root / "data" / "mart" / "lookup_ds"
-                      / "2024" / "lookup_table.parquet")
+    support_output = support_root / "data" / "mart" / "lookup_ds" / "2024" / "lookup_table.parquet"
     support_output.parent.mkdir(parents=True, exist_ok=True)
     duckdb.execute(
         f"COPY (SELECT 7 AS lookup_value) TO '{support_output.as_posix()}' (FORMAT PARQUET)"
     )
 
     support_config = _make_support_config(
-        support_root, tmp_path / "support_dataset.yml",
+        support_root,
+        tmp_path / "support_dataset.yml",
         [("lookup_table", "sql/lookup.sql")],
     )
 
     (tmp_path / "sql" / "mart" / "mart_example.sql").write_text(
-        "select * from read_parquet('{support.lookup.mart}')", encoding="utf-8",
+        "select * from read_parquet('{support.lookup.mart}')",
+        encoding="utf-8",
     )
 
     config_path = make_dataset_yml(
-        tmp_path / "dataset.yml", root=root_dir,
+        tmp_path / "dataset.yml",
+        root=root_dir,
         mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
         extra=(
             "support:\n"
@@ -192,23 +207,27 @@ def test_run_dry_run_accepts_mart_sql_with_support_placeholder(
 
 @pytest.mark.policy
 def test_run_dry_run_fails_when_support_output_is_missing(
-    tmp_path: Path, runner,
+    tmp_path: Path,
+    runner,
 ) -> None:
     make_standard_sql(tmp_path)
     root_dir = tmp_path / "out"
     support_root = tmp_path / "support_out"
 
     support_config = _make_support_config(
-        support_root, tmp_path / "support_dataset.yml",
+        support_root,
+        tmp_path / "support_dataset.yml",
         [("lookup_table", "sql/lookup.sql")],
     )
 
     (tmp_path / "sql" / "mart" / "mart_example.sql").write_text(
-        "select * from read_parquet('{support.lookup.mart}')", encoding="utf-8",
+        "select * from read_parquet('{support.lookup.mart}')",
+        encoding="utf-8",
     )
 
     config_path = make_dataset_yml(
-        tmp_path / "dataset.yml", root=root_dir,
+        tmp_path / "dataset.yml",
+        root=root_dir,
         mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
         extra=(
             "support:\n"
@@ -226,30 +245,33 @@ def test_run_dry_run_fails_when_support_output_is_missing(
 
 @pytest.mark.policy
 def test_run_dry_run_fails_when_support_outputs_are_only_partially_present(
-    tmp_path: Path, runner,
+    tmp_path: Path,
+    runner,
 ) -> None:
     make_standard_sql(tmp_path)
     root_dir = tmp_path / "out"
     support_root = tmp_path / "support_out"
 
-    support_output = (support_root / "data" / "mart" / "lookup_ds"
-                      / "2024" / "lookup_a.parquet")
+    support_output = support_root / "data" / "mart" / "lookup_ds" / "2024" / "lookup_a.parquet"
     support_output.parent.mkdir(parents=True, exist_ok=True)
     duckdb.execute(
         f"COPY (SELECT 7 AS lookup_value) TO '{support_output.as_posix()}' (FORMAT PARQUET)"
     )
 
     support_config = _make_support_config(
-        support_root, tmp_path / "support_dataset.yml",
+        support_root,
+        tmp_path / "support_dataset.yml",
         [("lookup_a", "sql/lookup_a.sql"), ("lookup_b", "sql/lookup_b.sql")],
     )
 
     (tmp_path / "sql" / "mart" / "mart_example.sql").write_text(
-        "select * from read_parquet('{support.lookup.mart}')", encoding="utf-8",
+        "select * from read_parquet('{support.lookup.mart}')",
+        encoding="utf-8",
     )
 
     config_path = make_dataset_yml(
-        tmp_path / "dataset.yml", root=root_dir,
+        tmp_path / "dataset.yml",
+        root=root_dir,
         mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
         extra=(
             "support:\n"
@@ -302,12 +324,14 @@ def test_run_dry_run_accepts_mart_only_config(tmp_path: Path, runner) -> None:
     source_path = tmp_path / "external_source.parquet"
     duckdb.execute("COPY (SELECT 1 AS value) TO ? (FORMAT PARQUET)", [str(source_path)])
     (mart_sql / "mart_example.sql").write_text(
-        f"select * from read_parquet('{source_path.as_posix()}')", encoding="utf-8",
+        f"select * from read_parquet('{source_path.as_posix()}')",
+        encoding="utf-8",
     )
 
     config_path = make_dataset_yml(
         tmp_path / "compose" / "dataset.yml",
-        name="compose_demo", clean_sql=None,
+        name="compose_demo",
+        clean_sql=None,
         mart_tables=[("mart_example", "sql/mart_example.sql")],
     )
 
@@ -321,7 +345,8 @@ def test_run_dry_run_accepts_mart_only_config(tmp_path: Path, runner) -> None:
 
 @pytest.mark.policy
 def test_run_dry_run_all_fails_readably_on_mart_only_config(
-    tmp_path: Path, runner,
+    tmp_path: Path,
+    runner,
 ) -> None:
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)
@@ -329,7 +354,8 @@ def test_run_dry_run_all_fails_readably_on_mart_only_config(
 
     config_path = make_dataset_yml(
         tmp_path / "compose" / "dataset.yml",
-        name="compose_demo", clean_sql=None,
+        name="compose_demo",
+        clean_sql=None,
         mart_tables=[("mart_example", "sql/mart_example.sql")],
     )
 
@@ -346,13 +372,16 @@ def test_run_mart_executes_mart_only_config(tmp_path: Path, runner) -> None:
     source_path = tmp_path / "external_source.parquet"
     duckdb.execute("COPY (SELECT 1 AS value) TO ? (FORMAT PARQUET)", [str(source_path)])
     (mart_sql / "mart_example.sql").write_text(
-        f"select * from read_parquet('{source_path.as_posix()}')", encoding="utf-8",
+        f"select * from read_parquet('{source_path.as_posix()}')",
+        encoding="utf-8",
     )
 
     root_dir = tmp_path / "out"
     config_path = make_dataset_yml(
         tmp_path / "compose" / "dataset.yml",
-        name="compose_demo", root=root_dir, clean_sql=None,
+        name="compose_demo",
+        root=root_dir,
+        clean_sql=None,
         mart_tables=[("mart_example", "sql/mart_example.sql")],
     )
 
@@ -377,12 +406,14 @@ def test_run_mart_mart_only_ignores_stale_clean_dir(tmp_path: Path, runner) -> N
         f"COPY (SELECT 1 AS stale_value) TO '{stale_parquet.as_posix()}' (FORMAT PARQUET)"
     )
     (mart_sql / "mart_example.sql").write_text(
-        "select stale_value from clean_input", encoding="utf-8",
+        "select stale_value from clean_input",
+        encoding="utf-8",
     )
 
     config_path = make_dataset_yml(
         tmp_path / "compose" / "dataset.yml",
-        name="compose_demo", clean_sql=None,
+        name="compose_demo",
+        clean_sql=None,
         mart_tables=[("mart_example", "sql/mart_example.sql")],
     )
 
@@ -390,7 +421,9 @@ def test_run_mart_mart_only_ignores_stale_clean_dir(tmp_path: Path, runner) -> N
 
     assert result.exit_code != 0
     assert "clean_input" in str(result.exception)
-    assert not (root_dir / "data" / "mart" / "compose_demo" / "2022" / "mart_example.parquet").exists()
+    assert not (
+        root_dir / "data" / "mart" / "compose_demo" / "2022" / "mart_example.parquet"
+    ).exists()
 
 
 @pytest.mark.policy
@@ -401,7 +434,8 @@ def test_run_all_fails_readably_on_mart_only_config(tmp_path: Path, runner) -> N
 
     config_path = make_dataset_yml(
         tmp_path / "compose" / "dataset.yml",
-        name="compose_demo", clean_sql=None,
+        name="compose_demo",
+        clean_sql=None,
         mart_tables=[("mart_example", "sql/mart_example.sql")],
     )
 
@@ -416,7 +450,8 @@ def test_run_all_fails_readably_on_mart_only_config(tmp_path: Path, runner) -> N
 
 @pytest.mark.policy
 def test_run_all_fails_with_bootstrap_hint_when_clean_sql_missing(
-    tmp_path: Path, runner,
+    tmp_path: Path,
+    runner,
 ) -> None:
     raw_dir = tmp_path / "data" / "raw" / "demo_ds" / "2022"
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -449,6 +484,7 @@ def test_run_all_fails_with_bootstrap_hint_when_clean_sql_missing(
 def _make_probe_cfg(tmp_path: Path) -> tuple:
     """Helper: create a minimal config and return (cfg, year)."""
     from tests.helpers import make_dataset_yml, make_standard_sql
+
     make_standard_sql(tmp_path)
     config_path = make_dataset_yml(
         tmp_path / "dataset.yml",
@@ -459,12 +495,14 @@ def _make_probe_cfg(tmp_path: Path) -> tuple:
 
 class _FakeRawConfig:
     """Minimal RawConfig-like object for probe test."""
+
     def __init__(self, sources: list):
         self.sources = sources
 
 
 class _FakeCfg:
     """Minimal config mock for probe tests (ToolkitConfig e' frozen)."""
+
     def __init__(self, raw_sources: list):
         self.raw = _FakeRawConfig(raw_sources)
         self.base_dir = None
@@ -476,10 +514,19 @@ def test_probe_calls_probe_url_headers_for_http_source(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(
         "toolkit.scout.http.probe_url_headers",
-        lambda url, timeout=5: calls.append(url) or {"status_code": 200, "content_type": "text/csv"},
+        lambda url, timeout=5: (
+            calls.append(url) or {"status_code": 200, "content_type": "text/csv"}
+        ),
     )
     from toolkit.cli.cmd_run import _run_probe
-    _run_probe(_FakeCfg([{"name": "s1", "type": "http_file", "args": {"url": "https://example.com/data.csv"}}]), 2024, logging.getLogger("t"))
+
+    _run_probe(
+        _FakeCfg(
+            [{"name": "s1", "type": "http_file", "args": {"url": "https://example.com/data.csv"}}]
+        ),
+        2024,
+        logging.getLogger("t"),
+    )
 
     assert len(calls) == 1
     assert "example.com" in calls[0]
@@ -494,7 +541,12 @@ def test_probe_skips_local_file(monkeypatch) -> None:
         lambda url, timeout=5: calls.append(url) or {"status_code": 200},
     )
     from toolkit.cli.cmd_run import _run_probe
-    _run_probe(_FakeCfg([{"name": "s1", "type": "local_file", "args": {"path": "data/file.csv"}}]), 2024, logging.getLogger("t"))
+
+    _run_probe(
+        _FakeCfg([{"name": "s1", "type": "local_file", "args": {"path": "data/file.csv"}}]),
+        2024,
+        logging.getLogger("t"),
+    )
 
     assert calls == [], "probe_url_headers should NOT be called for local_file"
 
@@ -507,7 +559,14 @@ def test_probe_does_not_block_on_error(monkeypatch) -> None:
         lambda url, timeout=5: (_ for _ in ()).throw(RuntimeError("ConnectionError")),
     )
     from toolkit.cli.cmd_run import _run_probe
-    _run_probe(_FakeCfg([{"name": "s1", "type": "http_file", "args": {"url": "https://dead.test/data.csv"}}]), 2024, logging.getLogger("t"))
+
+    _run_probe(
+        _FakeCfg(
+            [{"name": "s1", "type": "http_file", "args": {"url": "https://dead.test/data.csv"}}]
+        ),
+        2024,
+        logging.getLogger("t"),
+    )
 
 
 @pytest.mark.contract
@@ -519,7 +578,22 @@ def test_probe_logs_ckan_portal(monkeypatch) -> None:
         lambda url, timeout=5: calls.append(url) or {"status_code": 200},
     )
     from toolkit.cli.cmd_run import _run_probe
-    _run_probe(_FakeCfg([{"name": "s1", "type": "ckan", "args": {"portal_url": "https://ckan.test/api/3/action"}}]), 2024, logging.getLogger("t"))
+
+    _run_probe(
+        _FakeCfg(
+            [
+                {
+                    "name": "s1",
+                    "type": "ckan",
+                    "args": {"portal_url": "https://ckan.test/api/3/action"},
+                }
+            ]
+        ),
+        2024,
+        logging.getLogger("t"),
+    )
 
     assert len(calls) == 1
-    assert "ckan.test/api/3/action" in calls[0], "should probe the full portal_url, not just scheme://host"
+    assert "ckan.test/api/3/action" in calls[0], (
+        "should probe the full portal_url, not just scheme://host"
+    )

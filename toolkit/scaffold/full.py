@@ -11,7 +11,13 @@ from typing import Any
 from urllib.parse import urlparse
 
 from toolkit.scaffold.clean import generate_clean_sql
-from toolkit.scaffold.sources import block_ckan, block_http_file, block_links, block_sdmx, infer_filename
+from toolkit.scaffold.sources import (
+    block_ckan,
+    block_http_file,
+    block_links,
+    block_sdmx,
+    infer_filename,
+)
 
 
 def _format_years(years: list[int]) -> str:
@@ -114,7 +120,16 @@ def _has_year_column(columns: list[dict[str, Any]] | list[str]) -> bool:
 
 
 def _has_region_column(columns: list[dict[str, Any]] | list[str]) -> bool:
-    region_keywords = ["regione", "region", "provincia", "province", "comune", "municip", "area", "territorio"]
+    region_keywords = [
+        "regione",
+        "region",
+        "provincia",
+        "province",
+        "comune",
+        "municip",
+        "area",
+        "territorio",
+    ]
     for col in columns:
         name = col if isinstance(col, str) else col.get("name", "")
         if any(kw in name.lower() for kw in region_keywords):
@@ -187,7 +202,18 @@ def suggest_mart_sql(columns: list[dict[str, Any]] | list[str], profile: dict[st
     has_numeric = _has_numeric_column(col_names, profile)
     if has_year and has_numeric:
         year_keywords = ["anno", "year", "periodo", "period"]
-        measure_keywords = ["importo", "ammontare", "valore", "costo", "spesa", "gettito", "reddito", "canone", "prezzo", "tariffa"]
+        measure_keywords = [
+            "importo",
+            "ammontare",
+            "valore",
+            "costo",
+            "spesa",
+            "gettito",
+            "reddito",
+            "canone",
+            "prezzo",
+            "tariffa",
+        ]
         mapping = profile.get("mapping_suggestions") or {}
         numeric_col = None
 
@@ -239,24 +265,26 @@ def suggest_mart_sql(columns: list[dict[str, Any]] | list[str], profile: dict[st
         if year_col is None:
             year_col = "anno"
         return (
-            f'-- Conteggio record per anno\n'
-            f'SELECT\n'
+            f"-- Conteggio record per anno\n"
+            f"SELECT\n"
             f'  "{year_col}" AS year,\n'
-            f'  COUNT(*) AS record_count\n'
-            f'FROM clean_input\n'
+            f"  COUNT(*) AS record_count\n"
+            f"FROM clean_input\n"
             f'GROUP BY "{year_col}"\n'
             f'ORDER BY "{year_col}"\n'
         )
     if has_region:
-        region_col = _find_matching_column(col_names, ["regione", "region", "provincia", "province", "comune"])
+        region_col = _find_matching_column(
+            col_names, ["regione", "region", "provincia", "province", "comune"]
+        )
         if region_col is None:
             region_col = "regione"
         return (
-            f'-- Conteggio record per regione\n'
-            f'SELECT\n'
+            f"-- Conteggio record per regione\n"
+            f"SELECT\n"
             f'  "{region_col}" AS {region_col},\n'
-            f'  COUNT(*) AS record_count\n'
-            f'FROM clean_input\n'
+            f"  COUNT(*) AS record_count\n"
+            f"FROM clean_input\n"
             f'GROUP BY "{region_col}"\n'
             f'ORDER BY "{region_col}"\n'
         )
@@ -330,7 +358,7 @@ def generate_full_scaffold(
                 for key, val in validate_block.items():
                     if isinstance(val, list):
                         items = ", ".join(f'"{v}"' for v in val)
-                        yml_lines.append(f'    {key}: [{items}]')
+                        yml_lines.append(f"    {key}: [{items}]")
                     elif isinstance(val, bool):
                         yml_lines.append(f"    {key}: {str(val).lower()}")
                     else:
@@ -351,7 +379,7 @@ def generate_full_scaffold(
                 for key, val in validate_block.items():
                     if isinstance(val, list):
                         items = ", ".join(f'"{v}"' for v in val)
-                        yml_lines.append(f'    {key}: [{items}]')
+                        yml_lines.append(f"    {key}: [{items}]")
                     elif isinstance(val, bool):
                         yml_lines.append(f"    {key}: {str(val).lower()}")
                     else:
@@ -360,7 +388,12 @@ def generate_full_scaffold(
     if profile:
         first_year = years[0]
         clean_sql = generate_clean_sql(profile, slug, first_year)
-        norm_cols = profile.get("columns_norm") or profile.get("columns_raw") or profile.get("columns") or []
+        norm_cols = (
+            profile.get("columns_norm")
+            or profile.get("columns_raw")
+            or profile.get("columns")
+            or []
+        )
         mart_sql = suggest_mart_sql(norm_cols, profile)
     else:
         mart_sql = "-- Default mart: SELECT * FROM clean_input.\nSELECT * FROM clean_input\n"

@@ -87,7 +87,9 @@ def test_profile_raw_writes_suggested_read_even_when_duckdb_sniff_fails(
         def close(self):
             return None
 
-    monkeypatch.setattr(profile_raw_module.duckdb, "connect", lambda *_args, **_kwargs: BrokenConnection())
+    monkeypatch.setattr(
+        profile_raw_module.duckdb, "connect", lambda *_args, **_kwargs: BrokenConnection()
+    )
 
     profile = profile_raw(raw_dir, "demo", 2024)
     suggested_cfg = build_suggested_read_cfg(profile)
@@ -223,9 +225,7 @@ def test_sniff_source_file_returns_all_keys(tmp_path: Path):
 def test_sniff_source_file_true_header_line_preserved(tmp_path: Path):
     """true_header_line is always read at line 0, independent of skip offset."""
     csv_path = tmp_path / "data.csv"
-    csv_path.write_text(
-        "Title row\ncol1;col2\n1;2\n", encoding="utf-8"
-    )
+    csv_path.write_text("Title row\ncol1;col2\n1;2\n", encoding="utf-8")
 
     hints = sniff_source_file(csv_path)
 
@@ -369,7 +369,9 @@ def test_profile_raw_xlsx_produces_real_columns(tmp_path: Path):
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
     xlsx_path = raw_dir / "input_2023.xlsx"
-    df = pd.DataFrame({"anno": [2020, 2021], "comune": ["Roma", "Milano"], "importo": [100.0, 200.5]})
+    df = pd.DataFrame(
+        {"anno": [2020, 2021], "comune": ["Roma", "Milano"], "importo": [100.0, 200.5]}
+    )
     df.to_excel(xlsx_path, index=False)
 
     profile = profile_raw(raw_dir, "test_ds", 2023)

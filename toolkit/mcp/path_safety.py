@@ -41,8 +41,7 @@ def _safe_path(config_path: str | Path) -> Path:
         if resolved is not None:
             return resolved
         raise ToolkitClientError(
-            f"Config non trovata: {path}. "
-            f"È una directory ma non contiene dataset.yml.",
+            f"Config non trovata: {path}. È una directory ma non contiene dataset.yml.",
             code=ErrorCode.CONFIG_NOT_FOUND,
         )
 
@@ -131,5 +130,7 @@ def _load_cfg(config_path: str | Path) -> tuple[Path, Any]:
     try:
         cfg = load_config(str(config), strict_config=False)
     except Exception as exc:
-        raise ToolkitClientError(f"Load config fallito per {config}: {exc}", code=ErrorCode.CONFIG_NOT_FOUND) from exc
+        raise ToolkitClientError(
+            f"Load config fallito per {config}: {exc}", code=ErrorCode.CONFIG_NOT_FOUND
+        ) from exc
     return config, cfg

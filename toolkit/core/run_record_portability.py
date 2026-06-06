@@ -31,7 +31,11 @@ def _root_from_run_dir(run_dir: Path) -> Path:
 
 
 def _is_absolute_path_string(value: str) -> bool:
-    return value.startswith("/") or value.startswith("\\\\") or _WINDOWS_ABS_RE.match(value) is not None
+    return (
+        value.startswith("/")
+        or value.startswith("\\\\")
+        or _WINDOWS_ABS_RE.match(value) is not None
+    )
 
 
 def _migrate_path_value(value: str, root: Path) -> tuple[str, bool]:

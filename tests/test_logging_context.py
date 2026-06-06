@@ -22,9 +22,7 @@ def test_bind_logger_includes_context(caplog):
         layer_logger.info("hello context")
 
     matching = [
-        rec
-        for rec in caplog.records
-        if rec.name == name and "hello context" in rec.getMessage()
+        rec for rec in caplog.records if rec.name == name and "hello context" in rec.getMessage()
     ]
     assert matching
     record = matching[-1]

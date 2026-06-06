@@ -88,9 +88,6 @@ def read_layer_metadata(layer_dir: Path) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-
-
-
 def merge_layer_manifest(
     folder: Path,
     *,

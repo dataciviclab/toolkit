@@ -27,7 +27,6 @@ from toolkit.core.paths import (
 )
 
 
-
 # ---------------------------------------------------------------------------
 # run_state
 # ---------------------------------------------------------------------------
@@ -228,11 +227,13 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
     checks: list[dict[str, Any]] = []
 
     # --- Config check ---
-    checks.append({
-        "check": "config_valid",
-        "ok": True,
-        "detail": "config parse ok",
-    })
+    checks.append(
+        {
+            "check": "config_valid",
+            "ok": True,
+            "detail": "config parse ok",
+        }
+    )
 
     # --- Raw layer ---
     s = summary(str(config_path), target_year)
@@ -243,13 +244,15 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
     else:
         raw_dir_path = Path(raw.get("dir", ""))
         raw_ok = raw_dir_path.exists() and any(raw_dir_path.iterdir())
-    checks.append({
-        "check": "raw_output_present",
-        "ok": raw_ok,
-        "detail": f"primary_output={raw.get('primary_output_file', 'unknown')}"
-        if raw_ok
-        else "raw output mancante",
-    })
+    checks.append(
+        {
+            "check": "raw_output_present",
+            "ok": raw_ok,
+            "detail": f"primary_output={raw.get('primary_output_file', 'unknown')}"
+            if raw_ok
+            else "raw output mancante",
+        }
+    )
 
     # --- Clean layer ---
     clean = s.get("layers", {}).get("clean", {})
@@ -262,13 +265,15 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
         if clean_path and clean_path.exists():
             clean_rows = parquet_row_count(clean_path)
     clean_ok = clean.get("output_exists") and (clean_rows is not None)
-    checks.append({
-        "check": "clean_output_readable",
-        "ok": clean_ok,
-        "detail": f"{clean_rows} rows"
-        if clean_rows is not None
-        else "clean output mancante o illeggibile",
-    })
+    checks.append(
+        {
+            "check": "clean_output_readable",
+            "ok": clean_ok,
+            "detail": f"{clean_rows} rows"
+            if clean_rows is not None
+            else "clean output mancante o illeggibile",
+        }
+    )
 
     # --- Mart layer ---
     mart = s.get("layers", {}).get("mart", {})
@@ -281,20 +286,24 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
         # Fallback: leggi dal parquet se validation non disponibile
         if rows is None and o_path.exists():
             rows = parquet_row_count(o_path)
-        mart_checks.append({
-            "name": o_path.name,
-            "exists": o_path.exists(),
-            "readable": rows is not None,
-            "rows": rows,
-        })
+        mart_checks.append(
+            {
+                "name": o_path.name,
+                "exists": o_path.exists(),
+                "readable": rows is not None,
+                "rows": rows,
+            }
+        )
     mart_ok = len(mart_outputs) > 0 and all(
         m.get("exists") and m.get("readable") for m in mart_checks
     )
-    checks.append({
-        "check": "mart_outputs_readable",
-        "ok": mart_ok,
-        "detail": mart_checks,
-    })
+    checks.append(
+        {
+            "check": "mart_outputs_readable",
+            "ok": mart_ok,
+            "detail": mart_checks,
+        }
+    )
 
     # --- Run record coherence ---
     rs = run_state(str(config_path), target_year)
@@ -310,11 +319,13 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
     else:
         run_detail = coherence_hints[0].get("message", "incoerenza run record")
 
-    checks.append({
-        "check": "run_record_coherent",
-        "ok": run_coherent,
-        "detail": run_detail,
-    })
+    checks.append(
+        {
+            "check": "run_record_coherent",
+            "ok": run_coherent,
+            "detail": run_detail,
+        }
+    )
 
     ok_count = sum(1 for c in checks if c["ok"])
     fail_count = sum(1 for c in checks if not c["ok"])

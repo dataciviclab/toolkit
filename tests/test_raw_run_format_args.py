@@ -34,10 +34,22 @@ class TestFormatArgs:
                 2024: "_04.12.2025.csv",
             },
         }
-        assert _format_args(args, 2018)["url"] == "https://www.aifa.gov.it/documents/20142/847578/dati2018_23.09.2020.csv"
-        assert _format_args(args, 2019)["url"] == "https://www.aifa.gov.it/documents/20142/847578/dati2019_23.09.2020.csv"
-        assert _format_args(args, 2020)["url"] == "https://www.aifa.gov.it/documents/20142/847578/dati2020_22.10.2021.csv"
-        assert _format_args(args, 2024)["url"] == "https://www.aifa.gov.it/documents/20142/847578/dati2024_04.12.2025.csv"
+        assert (
+            _format_args(args, 2018)["url"]
+            == "https://www.aifa.gov.it/documents/20142/847578/dati2018_23.09.2020.csv"
+        )
+        assert (
+            _format_args(args, 2019)["url"]
+            == "https://www.aifa.gov.it/documents/20142/847578/dati2019_23.09.2020.csv"
+        )
+        assert (
+            _format_args(args, 2020)["url"]
+            == "https://www.aifa.gov.it/documents/20142/847578/dati2020_22.10.2021.csv"
+        )
+        assert (
+            _format_args(args, 2024)["url"]
+            == "https://www.aifa.gov.it/documents/20142/847578/dati2024_04.12.2025.csv"
+        )
 
     def test_format_args_url_suffix_removed_from_output(self) -> None:
         """url_suffix_by_year must not appear in formatted output dict."""
@@ -46,7 +58,9 @@ class TestFormatArgs:
             "url_suffix_by_year": {2023: "_suffix.csv"},
         }
         result = _format_args(args, 2023)
-        assert "url_suffix_by_year" not in result, "url_suffix_by_year is internal config, must not leak into output"
+        assert "url_suffix_by_year" not in result, (
+            "url_suffix_by_year is internal config, must not leak into output"
+        )
 
     def test_format_args_url_suffix_year_not_in_map(self) -> None:
         """Year not in url_suffix_by_year map appends empty string."""

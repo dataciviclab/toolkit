@@ -58,6 +58,7 @@ def test_tool_error_has_error_code_and_message(monkeypatch: pytest.MonkeyPatch) 
 
     The error dict must have 'error' (code string) and 'message' keys.
     """
+
     def raising_impl(config_path: str, year: int | None) -> dict[str, object]:
         raise ToolkitClientError("config non trovato", code=ErrorCode.CONFIG_NOT_FOUND)
 
@@ -179,9 +180,16 @@ def test_toolkit_sparql_query_forwards_params(monkeypatch: pytest.MonkeyPatch) -
         return {"columns": ["s", "p", "o"], "total_rows": 10}
 
     monkeypatch.setattr(mcp_server, "sparql_query_impl", fake_impl)
-    result = mcp_server.toolkit_sparql_query("https://example.org/sparql", "SELECT * WHERE {?s ?p ?o}", timeout=60, max_rows=500)
+    result = mcp_server.toolkit_sparql_query(
+        "https://example.org/sparql", "SELECT * WHERE {?s ?p ?o}", timeout=60, max_rows=500
+    )
     assert result == {"columns": ["s", "p", "o"], "total_rows": 10}
-    assert calls == {"endpoint": "https://example.org/sparql", "query": "SELECT * WHERE {?s ?p ?o}", "timeout": 60, "max_rows": 500}
+    assert calls == {
+        "endpoint": "https://example.org/sparql",
+        "query": "SELECT * WHERE {?s ?p ?o}",
+        "timeout": 60,
+        "max_rows": 500,
+    }
 
 
 def test_toolkit_list_ckan_datasets_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -192,9 +200,16 @@ def test_toolkit_list_ckan_datasets_forwards_params(monkeypatch: pytest.MonkeyPa
         return {"count": 10, "datasets": []}
 
     monkeypatch.setattr(mcp_server, "list_ckan_datasets_impl", fake_impl)
-    result = mcp_server.toolkit_list_ckan_datasets("https://dati.gov.it/opendata", query="pensioni", rows=50, timeout=25)
+    result = mcp_server.toolkit_list_ckan_datasets(
+        "https://dati.gov.it/opendata", query="pensioni", rows=50, timeout=25
+    )
     assert result == {"count": 10, "datasets": []}
-    assert calls == {"portal_url": "https://dati.gov.it/opendata", "query": "pensioni", "rows": 50, "timeout": 25}
+    assert calls == {
+        "portal_url": "https://dati.gov.it/opendata",
+        "query": "pensioni",
+        "rows": 50,
+        "timeout": 25,
+    }
 
 
 def test_toolkit_list_sdmx_dataflows_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -424,9 +439,7 @@ def test_toolkit_raw_preview_passes_params(monkeypatch: pytest.MonkeyPatch) -> N
     """raw_preview must pass all params to the impl, converting year=0 → None."""
     calls: dict[str, object] = {}
 
-    def fake_impl(
-        config_path: str, year: int | None, limit: int
-    ) -> dict[str, object]:
+    def fake_impl(config_path: str, year: int | None, limit: int) -> dict[str, object]:
         calls.update(config_path=config_path, year=year, limit=limit)
         return {"ok": True}
 
@@ -441,9 +454,7 @@ def test_toolkit_raw_preview_converts_year_zero_to_none(monkeypatch: pytest.Monk
     """raw_preview(year=0) must send year=None to the impl."""
     calls: dict[str, object] = {}
 
-    def fake_impl(
-        config_path: str, year: int | None, limit: int
-    ) -> dict[str, object]:
+    def fake_impl(config_path: str, year: int | None, limit: int) -> dict[str, object]:
         calls["year"] = year
         return {"ok": True}
 

@@ -5,11 +5,21 @@ from pathlib import Path
 
 from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict, parse_bool
-from toolkit.core.metadata import config_hash_for_year, merge_layer_manifest, sha256_bytes, write_metadata
+from toolkit.core.metadata import (
+    config_hash_for_year,
+    merge_layer_manifest,
+    sha256_bytes,
+    write_metadata,
+)
 from toolkit.core.paths import RAW_VALIDATION, RAW_PROFILE, layer_year_dir, to_root_relative
 from toolkit.core.registry import register_builtin_plugins
 from toolkit.core.validation import write_validation_json
-from toolkit.profile.raw import sniff_source_file, profile_raw, write_raw_profile, write_suggested_read_yml
+from toolkit.profile.raw import (
+    sniff_source_file,
+    profile_raw,
+    write_raw_profile,
+    write_suggested_read_yml,
+)
 from toolkit.scaffold.clean import scaffold_clean_if_missing
 from toolkit.raw._fetch_utils import (
     _choose_primary_output,
@@ -149,7 +159,13 @@ def run_raw(
     primary_output_path = out_dir / primary_output_file
     profile_hints = None
     profile_ctx = {"clean": clean_cfg or {}, "output": output_cfg or {}}
-    if primary_output_path.exists() and primary_output_path.suffix.lower() in {".csv", ".tsv", ".txt", ".xlsx", ".xls"}:
+    if primary_output_path.exists() and primary_output_path.suffix.lower() in {
+        ".csv",
+        ".tsv",
+        ".txt",
+        ".xlsx",
+        ".xls",
+    }:
         try:
             profile_hints = sniff_source_file(primary_output_path)
             if should_write("profile", "suggested_read", profile_ctx):
@@ -179,7 +195,9 @@ def run_raw(
                     logger,
                 )
         except Exception as exc:
-            logger.warning("RAW profile/scaffold generation failed: %s: %s", type(exc).__name__, exc)
+            logger.warning(
+                "RAW profile/scaffold generation failed: %s: %s", type(exc).__name__, exc
+            )
 
     metadata_payload = {
         "layer": "raw",
@@ -190,8 +208,7 @@ def run_raw(
         "config_hash": config_hash_for_year(base_dir, year),
         "inputs": inputs,
         "outputs": [
-            {"file": f["file"], "sha256": f["sha256"], "bytes": f["bytes"]}
-            for f in files_written
+            {"file": f["file"], "sha256": f["sha256"], "bytes": f["bytes"]} for f in files_written
         ],
         "files": files_written,
         "profile_hints": profile_hints,
@@ -207,8 +224,7 @@ def run_raw(
         out_dir,
         validation_path=vpath.name,
         outputs=[
-            {"file": f["file"], "sha256": f["sha256"], "bytes": f["bytes"]}
-            for f in files_written
+            {"file": f["file"], "sha256": f["sha256"], "bytes": f["bytes"]} for f in files_written
         ],
         ok=result.ok,
         errors_count=len(result.errors),
@@ -221,7 +237,9 @@ def run_raw(
     )
 
     if result.warnings:
-        logger.warning(f"RAW QA warnings ({dataset} {year}): {len(result.warnings)} -> {vpath.name}")
+        logger.warning(
+            f"RAW QA warnings ({dataset} {year}): {len(result.warnings)} -> {vpath.name}"
+        )
         for w in result.warnings[:10]:
             logger.warning(f" - {w}")
 
@@ -234,14 +252,22 @@ def run_raw(
         logger.info(f"RAW QA OK ({dataset} {year}) -> {vpath.name}")
 
     output_bytes = sum(f.get("bytes", 0) for f in files_written) if files_written else None
-    source_urls = list(dict.fromkeys(
-        inp["origin"] for inp in inputs if inp.get("origin") and str(inp["origin"]).startswith("http")
-    ))
+    source_urls = list(
+        dict.fromkeys(
+            inp["origin"]
+            for inp in inputs
+            if inp.get("origin") and str(inp["origin"]).startswith("http")
+        )
+    )
 
     # Calcola righe/colonne del primary output (riusa csv_quick_shape da toolit.core)
     output_rows = None
     col_count = None
-    if primary_output_path.exists() and primary_output_path.suffix.lower() in {".csv", ".tsv", ".txt"}:
+    if primary_output_path.exists() and primary_output_path.suffix.lower() in {
+        ".csv",
+        ".tsv",
+        ".txt",
+    }:
         try:
             from toolkit.core.duckdb_shape import csv_quick_shape
 

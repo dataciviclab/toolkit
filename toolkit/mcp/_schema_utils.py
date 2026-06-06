@@ -28,6 +28,7 @@ def _cli_helpers():
         _schema_from_parquet,
         _validation_summary_for_layer,
     )
+
     return (
         _check_run_record_coherence,
         _exists,

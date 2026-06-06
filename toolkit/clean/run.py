@@ -8,8 +8,19 @@ from toolkit.clean.read_config import resolve_clean_read_cfg
 from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict
-from toolkit.core.metadata import config_hash_for_year, file_record, merge_layer_manifest, write_metadata
-from toolkit.core.paths import CLEAN_VALIDATION, layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
+from toolkit.core.metadata import (
+    config_hash_for_year,
+    file_record,
+    merge_layer_manifest,
+    write_metadata,
+)
+from toolkit.core.paths import (
+    CLEAN_VALIDATION,
+    layer_year_dir,
+    resolve_root,
+    resolve_sql_path,
+    serialize_metadata_path,
+)
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 from toolkit.clean.sql_execute import _normalize_output_profile, _run_sql
 
@@ -26,7 +37,9 @@ def load_clean_sql(
 ) -> tuple[Path, str, dict[str, Any]]:
     sql_ref = clean_cfg.get("sql")
     if not sql_ref:
-        raise ValueError("clean.sql missing in dataset.yml (expected: clean: { sql: 'sql/clean.sql' })")
+        raise ValueError(
+            "clean.sql missing in dataset.yml (expected: clean: { sql: 'sql/clean.sql' })"
+        )
 
     sql_path_obj = resolve_sql_path(sql_ref, base_dir=base_dir)
     if not sql_path_obj.exists():
@@ -36,6 +49,7 @@ def load_clean_sql(
     support_ctx: dict[str, Any] | None = None
     if support_cfg:
         from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
+
         try:
             payloads = resolve_support_payloads(support_cfg, require_exists=False, smoke=smoke)
             support_ctx = flatten_support_template_ctx(payloads)
@@ -193,10 +207,14 @@ def run_clean(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if not raw_dir.exists():
-        raise FileNotFoundError(f"RAW dir not found: {raw_dir}. Run: toolkit run raw -c dataset.yml")
+        raise FileNotFoundError(
+            f"RAW dir not found: {raw_dir}. Run: toolkit run raw -c dataset.yml"
+        )
 
     read_mode = str(clean_cfg.get("read_mode", "fallback"))
-    read_cfg, relation_read_cfg, read_params_source = resolve_clean_read_cfg(raw_dir, clean_cfg, logger)
+    read_cfg, relation_read_cfg, read_params_source = resolve_clean_read_cfg(
+        raw_dir, clean_cfg, logger
+    )
     selection_mode, glob_pattern, prefer_from_raw_run, allow_ambiguous = _selection_params(
         read_cfg,
         logger,
@@ -273,4 +291,8 @@ def run_clean(
     logger.info(f"CLEAN -> {output_path}")
     output_rows = int(output_profile.get("row_count") or 0)
     col_count = len(output_profile.get("columns") or [])
-    return {"output_rows": output_rows, "output_bytes": output_bytes, "col_count": col_count or None}
+    return {
+        "output_rows": output_rows,
+        "output_bytes": output_bytes,
+        "col_count": col_count or None,
+    }

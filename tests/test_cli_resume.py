@@ -15,12 +15,45 @@ pytestmark = pytest.mark.contract
 def _mock_all_runs(monkeypatch) -> dict:
     """Patch cmd_run run/validation functions; returns calls dict."""
     calls = {"raw": 0, "clean": 0, "mart": 0}
-    monkeypatch.setattr(cmd_run, "run_raw", lambda *args, **kwargs: calls.__setitem__("raw", calls["raw"] + 1))
-    monkeypatch.setattr(cmd_run, "run_clean", lambda *args, **kwargs: calls.__setitem__("clean", calls["clean"] + 1))
-    monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1))
-    monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
-    monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
-    monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: {"passed": True, "errors_count": 0, "warnings_count": 0, "checks": []})
+    monkeypatch.setattr(
+        cmd_run, "run_raw", lambda *args, **kwargs: calls.__setitem__("raw", calls["raw"] + 1)
+    )
+    monkeypatch.setattr(
+        cmd_run, "run_clean", lambda *args, **kwargs: calls.__setitem__("clean", calls["clean"] + 1)
+    )
+    monkeypatch.setattr(
+        cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1)
+    )
+    monkeypatch.setattr(
+        cmd_run,
+        "run_raw_validation",
+        lambda *args, **kwargs: {
+            "passed": True,
+            "errors_count": 0,
+            "warnings_count": 0,
+            "checks": [],
+        },
+    )
+    monkeypatch.setattr(
+        cmd_run,
+        "run_clean_validation",
+        lambda *args, **kwargs: {
+            "passed": True,
+            "errors_count": 0,
+            "warnings_count": 0,
+            "checks": [],
+        },
+    )
+    monkeypatch.setattr(
+        cmd_run,
+        "run_mart_validation",
+        lambda *args, **kwargs: {
+            "passed": True,
+            "errors_count": 0,
+            "warnings_count": 0,
+            "checks": [],
+        },
+    )
     return calls
 
 
@@ -36,8 +69,16 @@ def _write_old_run_record(path: Path, run_id: str) -> None:
                 "finished_at": "2026-02-28T09:05:00+00:00",
                 "status": "FAILED",
                 "layers": {
-                    "raw": {"status": "SUCCESS", "started_at": "2026-02-28T09:00:00+00:00", "finished_at": "2026-02-28T09:01:00+00:00"},
-                    "clean": {"status": "FAILED", "started_at": "2026-02-28T09:01:00+00:00", "finished_at": "2026-02-28T09:02:00+00:00"},
+                    "raw": {
+                        "status": "SUCCESS",
+                        "started_at": "2026-02-28T09:00:00+00:00",
+                        "finished_at": "2026-02-28T09:01:00+00:00",
+                    },
+                    "clean": {
+                        "status": "FAILED",
+                        "started_at": "2026-02-28T09:01:00+00:00",
+                        "finished_at": "2026-02-28T09:02:00+00:00",
+                    },
                     "mart": {"status": "PENDING", "started_at": None, "finished_at": None},
                 },
                 "validations": {"raw": {}, "clean": {}, "mart": {}},
@@ -63,7 +104,11 @@ def _write_non_portable_run_record(path: Path, run_id: str) -> None:
                 "status": "FAILED",
                 "layers": {
                     "raw": {"status": "SUCCESS", "artifact_path": "/outside/root/file.csv"},
-                    "clean": {"status": "FAILED", "started_at": "2026-02-28T09:01:00+00:00", "finished_at": "2026-02-28T09:02:00+00:00"},
+                    "clean": {
+                        "status": "FAILED",
+                        "started_at": "2026-02-28T09:01:00+00:00",
+                        "finished_at": "2026-02-28T09:02:00+00:00",
+                    },
                     "mart": {"status": "PENDING", "started_at": None, "finished_at": None},
                 },
                 "validations": {"raw": {}, "clean": {}, "mart": {}},
@@ -126,9 +171,21 @@ def _write_success_with_warnings_run_record(path: Path, run_id: str) -> None:
                 "finished_at": "2026-02-28T09:05:00+00:00",
                 "status": "SUCCESS_WITH_WARNINGS",
                 "layers": {
-                    "raw": {"status": "SUCCESS", "started_at": "2026-02-28T09:00:00+00:00", "finished_at": "2026-02-28T09:01:00+00:00"},
-                    "clean": {"status": "SUCCESS", "started_at": "2026-02-28T09:01:00+00:00", "finished_at": "2026-02-28T09:02:00+00:00"},
-                    "mart": {"status": "SUCCESS", "started_at": "2026-02-28T09:02:00+00:00", "finished_at": "2026-02-28T09:03:00+00:00"},
+                    "raw": {
+                        "status": "SUCCESS",
+                        "started_at": "2026-02-28T09:00:00+00:00",
+                        "finished_at": "2026-02-28T09:01:00+00:00",
+                    },
+                    "clean": {
+                        "status": "SUCCESS",
+                        "started_at": "2026-02-28T09:01:00+00:00",
+                        "finished_at": "2026-02-28T09:02:00+00:00",
+                    },
+                    "mart": {
+                        "status": "SUCCESS",
+                        "started_at": "2026-02-28T09:02:00+00:00",
+                        "finished_at": "2026-02-28T09:03:00+00:00",
+                    },
                 },
                 "validations": {
                     "raw": {"passed": True},
@@ -231,9 +288,7 @@ def test_cli_resume_uses_config_root_when_cwd_differs(
     assert calls["mart"] == 1
 
 
-def test_resume_finds_latest_run(
-    tmp_path: Path, monkeypatch, runner, chdir_tmp: Path
-) -> None:
+def test_resume_finds_latest_run(tmp_path: Path, monkeypatch, runner, chdir_tmp: Path) -> None:
     config_path = tmp_path / "project" / "dataset.yml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     make_dataset_yml(
@@ -286,22 +341,24 @@ def test_cli_resume_non_portable_record_warns_and_proceeds(tmp_path: Path, runne
     data_dir.mkdir()
     (data_dir / "dati.csv").write_text("a,b\n1,2\n", encoding="utf-8")
     config_path.write_text(
-        "\n".join([
-            f'root: "{(tmp_path / "out").as_posix()}"',
-            "dataset:",
-            '  name: "demo_ds"',
-            "  years: [2022]",
-            "raw:",
-            "  sources:",
-            "    - type: local_file",
-            f'      args: {{ path: "{data_dir / "dati.csv"}" }}',
-            "clean:",
-            '  sql: "sql/clean.sql"',
-            "mart:",
-            "  tables:",
-            '    - name: "mart_example"',
-            '      sql: "sql/mart/mart_example.sql"',
-        ]),
+        "\n".join(
+            [
+                f'root: "{(tmp_path / "out").as_posix()}"',
+                "dataset:",
+                '  name: "demo_ds"',
+                "  years: [2022]",
+                "raw:",
+                "  sources:",
+                "    - type: local_file",
+                f'      args: {{ path: "{data_dir / "dati.csv"}" }}',
+                "clean:",
+                '  sql: "sql/clean.sql"',
+                "mart:",
+                "  tables:",
+                '    - name: "mart_example"',
+                '      sql: "sql/mart/mart_example.sql"',
+            ]
+        ),
         encoding="utf-8",
     )
 

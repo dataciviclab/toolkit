@@ -31,9 +31,7 @@ def profile_parquet_files(files: list[Path]) -> dict[str, Any]:
             )
         else:
             paths = ",".join(f"'{sql_path(p)}'" for p in files)
-            con.execute(
-                f"CREATE VIEW profiled_input AS SELECT * FROM read_parquet([{paths}])"
-            )
+            con.execute(f"CREATE VIEW profiled_input AS SELECT * FROM read_parquet([{paths}])")
         return profile_relation(con, "profiled_input")
 
 

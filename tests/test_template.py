@@ -32,10 +32,7 @@ def test_comment_placeholder_does_not_raise():
 
 def test_unresolved_in_code_still_raises():
     """Unresolved placeholders outside comments still raise."""
-    sql = (
-        "-- comment with {n}\n"
-        "SELECT * FROM {unknown_placeholder}\n"
-    )
+    sql = "-- comment with {n}\nSELECT * FROM {unknown_placeholder}\n"
     with pytest.raises(ValueError, match=r"\{unknown_placeholder\}"):
         render_template(sql, {"year": 2024})
 

@@ -161,7 +161,9 @@ def _base_result(
     """Aggiunge le chiavi comuni a tutti i source_type."""
     result["source_type"] = source_type
     result.setdefault("ckan_resources", None)
-    result["candidate_links"] = candidate_links if candidate_links is not None else result.get("candidate_links", [])
+    result["candidate_links"] = (
+        candidate_links if candidate_links is not None else result.get("candidate_links", [])
+    )
     result.setdefault("sdmx_info", None)
     result.setdefault("sparql_info", None)
     return result
@@ -219,9 +221,7 @@ def _route_html(
     return _base_result(result, "html", candidate_links=candidate_links)
 
 
-def _route_sdmx(
-    final_url: str, result: dict[str, Any], *, timeout: int
-) -> dict[str, Any]:
+def _route_sdmx(final_url: str, result: dict[str, Any], *, timeout: int) -> dict[str, Any]:
     """Route per URL SDMX."""
     flow_id = None
     parsed_url = urlparse(final_url)
@@ -232,6 +232,7 @@ def _route_sdmx(
             flow_id = parts[1]
     elif parsed_url.query:
         from urllib.parse import parse_qs
+
         qs = parse_qs(parsed_url.query)
         flow_id = next(iter(qs.get("flow") or qs.get("id") or []), None)
 
@@ -249,9 +250,7 @@ def _route_sdmx(
     return result
 
 
-def _route_sparql(
-    final_url: str, result: dict[str, Any], *, timeout: int
-) -> dict[str, Any]:
+def _route_sparql(final_url: str, result: dict[str, Any], *, timeout: int) -> dict[str, Any]:
     """Route per URL SPARQL: probe + discovery dataset DCAT.
 
     1. **ASK probe**: ``ASK WHERE {{ ?s ?p ?o }}`` in formato CSV.
@@ -268,7 +267,11 @@ def _route_sparql(
         source.fetch(final_url, probe_query, accept_format="csv")
     except Exception as exc:
         exc_msg = str(exc)[:200]
-        if "timeout" in exc_msg.lower() or "refused" in exc_msg.lower() or "connect" in exc_msg.lower():
+        if (
+            "timeout" in exc_msg.lower()
+            or "refused" in exc_msg.lower()
+            or "connect" in exc_msg.lower()
+        ):
             result["source_type"] = "opaque"
         else:
             result["source_type"] = "sparql"
@@ -298,13 +301,16 @@ LIMIT 100"""
         dcat_csv, _ = source.fetch(final_url, dcat_query, accept_format="csv")
         import csv
         import io
+
         reader = csv.DictReader(io.StringIO(dcat_csv.decode("utf-8", errors="replace")))
         for row in reader:
-            datasets.append({
-                "uri": row.get("dataset", ""),
-                "title": row.get("title", "") or row.get("dataset", "").rsplit("/", 1)[-1],
-                "description": (row.get("description") or "")[:200],
-            })
+            datasets.append(
+                {
+                    "uri": row.get("dataset", ""),
+                    "title": row.get("title", "") or row.get("dataset", "").rsplit("/", 1)[-1],
+                    "description": (row.get("description") or "")[:200],
+                }
+            )
     except Exception:
         pass  # DCAT non disponibile — non blocca, info parziale
 

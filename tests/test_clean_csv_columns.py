@@ -11,9 +11,6 @@ from toolkit.core.read_csv_normalized import (
 from toolkit.clean.run import run_clean
 
 
-
-
-
 @pytest.mark.policy
 def test_run_clean_csv_columns_reads_trailing_delimiter_csv(tmp_path: Path):
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
@@ -204,9 +201,7 @@ def test_run_clean_compact_columns_format_renames_and_types(tmp_path: Path):
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     raw_dir.mkdir(parents=True, exist_ok=True)
     csv_path = raw_dir / "data.csv"
-    csv_path.write_text(
-        "a;b\n  val_a ; val_b \n", encoding="utf-8"
-    )
+    csv_path.write_text("a;b\n  val_a ; val_b \n", encoding="utf-8")
 
     sql_path = tmp_path / "clean.sql"
     sql_path.write_text("SELECT a_renamed, b_renamed FROM raw_input", encoding="utf-8")
@@ -421,18 +416,16 @@ def test_run_clean_align_by_header_integration(tmp_path: Path):
     raw_dir.mkdir(parents=True, exist_ok=True)
     csv_path = raw_dir / "data.csv"
     csv_path.write_text(
-        "Anno di Riferimento;Codice Regione;Consumi sanitari\n"
-        "2024;15;100.5\n"
-        "2023;16;200.3\n",
+        "Anno di Riferimento;Codice Regione;Consumi sanitari\n2024;15;100.5\n2023;16;200.3\n",
         encoding="utf-8",
     )
 
     sql_path = tmp_path / "clean.sql"
     sql_path.write_text(
         "SELECT "
-        "try_cast(\"Anno di Riferimento\" AS INTEGER) AS anno, "
-        "try_cast(\"Oneri Finanziari\" AS DOUBLE) AS oneri, "
-        "try_cast(\"Consumi sanitari\" AS DOUBLE) AS consumi "
+        'try_cast("Anno di Riferimento" AS INTEGER) AS anno, '
+        'try_cast("Oneri Finanziari" AS DOUBLE) AS oneri, '
+        'try_cast("Consumi sanitari" AS DOUBLE) AS consumi '
         "FROM raw_input",
         encoding="utf-8",
     )
@@ -477,7 +470,9 @@ def test_run_clean_align_by_header_requires_normalize_config():
     """CleanReadConfig con align_by_header=true senza normalize_rows_to_columns alza ValueError."""
     from toolkit.core.config_models.clean import CleanReadConfig
 
-    with pytest.raises(ValueError, match="align_by_header=true requires normalize_rows_to_columns=true"):
+    with pytest.raises(
+        ValueError, match="align_by_header=true requires normalize_rows_to_columns=true"
+    ):
         CleanReadConfig(
             align_by_header=True,
             normalize_rows_to_columns=False,

@@ -39,9 +39,6 @@ class ReadInfo:
     params_used: dict[str, Any]
 
 
-
-
-
 def _csv_read_options(
     read_cfg: dict[str, Any],
 ) -> tuple[list[str], dict[str, Any], dict[str, str] | None]:
@@ -128,9 +125,7 @@ def _execute_csv_read(
         return _execute_normalized_csv_read(con, input_files, read_cfg)
 
     if read_cfg.get("align_by_header"):
-        raise ValueError(
-            "align_by_header=true requires normalize_rows_to_columns=true"
-        )
+        raise ValueError("align_by_header=true requires normalize_rows_to_columns=true")
 
     paths = quote_list(input_files)
     trim_whitespace = read_cfg.get("trim_whitespace", True)
@@ -278,9 +273,8 @@ def _read_csv_relation(
         # These flags mask real config problems (e.g. column count mismatch).
         robust_null_padding = robust_cfg.get("null_padding", False)
         robust_ignore_errors = robust_cfg.get("ignore_errors", False)
-        workaround_was_needed = (
-            (robust_null_padding and not strict_null_padding)
-            or (robust_ignore_errors and not strict_ignore_errors)
+        workaround_was_needed = (robust_null_padding and not strict_null_padding) or (
+            robust_ignore_errors and not strict_ignore_errors
         )
 
         try:

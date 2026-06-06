@@ -113,6 +113,7 @@ def read_json_or_none(path: Path) -> dict[str, Any] | None:
 # YAML helpers — centralise yaml dependency here so callers don't import yaml
 # ---------------------------------------------------------------------------
 
+
 def read_yaml(path: Path) -> Any:
     """Read and parse a YAML file.
 

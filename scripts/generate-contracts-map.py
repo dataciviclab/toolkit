@@ -81,40 +81,50 @@ def scan_file(filepath: pathlib.Path) -> list[dict]:
             if args.startswith("self"):
                 args = args[4:].lstrip(", ")
             sig = f"{node.name}({args})"
-            entries.append({
-                "kind": "fun",
-                "name": node.name,
-                "signature": sig,
-                "doc": doc,
-                "file": rel_path,
-                "line": node.lineno,
-            })
+            entries.append(
+                {
+                    "kind": "fun",
+                    "name": node.name,
+                    "signature": sig,
+                    "doc": doc,
+                    "file": rel_path,
+                    "line": node.lineno,
+                }
+            )
         elif isinstance(node, ast.ClassDef) and _is_public(node.name):
             doc = _first_docstring(node)
-            entries.append({
-                "kind": "class",
-                "name": node.name,
-                "signature": node.name,
-                "doc": doc,
-                "file": rel_path,
-                "line": node.lineno,
-            })
+            entries.append(
+                {
+                    "kind": "class",
+                    "name": node.name,
+                    "signature": node.name,
+                    "doc": doc,
+                    "file": rel_path,
+                    "line": node.lineno,
+                }
+            )
             # metodi pubblici della classe
             for item in node.body:
-                if isinstance(item, ast.FunctionDef) and _is_public(item.name) and item.name != "__init__":
+                if (
+                    isinstance(item, ast.FunctionDef)
+                    and _is_public(item.name)
+                    and item.name != "__init__"
+                ):
                     mdoc = _first_docstring(item)
                     margs = ast.unparse(item.args) if hasattr(item, "args") else "(...)"
                     # skip self
                     if margs.startswith("self"):
                         margs = margs[4:].lstrip(", ")
-                    entries.append({
-                        "kind": "method",
-                        "name": f"  {item.name}",
-                        "signature": f"  {item.name}({margs})",
-                        "doc": mdoc,
-                        "file": rel_path,
-                        "line": item.lineno,
-                    })
+                    entries.append(
+                        {
+                            "kind": "method",
+                            "name": f"  {item.name}",
+                            "signature": f"  {item.name}({margs})",
+                            "doc": mdoc,
+                            "file": rel_path,
+                            "line": item.lineno,
+                        }
+                    )
 
     return entries
 

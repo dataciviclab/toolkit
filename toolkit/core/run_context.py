@@ -61,12 +61,19 @@ class RunContext:
         self.root = Path(root)
         self.resumed_from = resumed_from
         self.smoke = smoke
-        self.run_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:8]}"
+        self.run_id = (
+            f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:8]}"
+        )
         self.started_at = _now_iso()
         self.finished_at: str | None = None
         self.status = "RUNNING"
         self.layers = {
-            layer: {"status": "PENDING", "started_at": None, "finished_at": None, "metrics": _empty_layer_metrics()}
+            layer: {
+                "status": "PENDING",
+                "started_at": None,
+                "finished_at": None,
+                "metrics": _empty_layer_metrics(),
+            }
             for layer in _LAYER_NAMES
         }
         self.validations: dict[str, dict[str, Any]] = {layer: {} for layer in _LAYER_NAMES}

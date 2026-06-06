@@ -2,6 +2,7 @@
 
 Copre read_yaml, read_yaml_or_none, write_yaml, yaml_dumps.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,6 +22,7 @@ pytestmark = pytest.mark.pure_unit
 # ---------------------------------------------------------------------------
 # read_yaml
 # ---------------------------------------------------------------------------
+
 
 def test_read_yaml_valid(tmp_path: Path) -> None:
     path = tmp_path / "valid.yml"
@@ -52,6 +54,7 @@ def test_read_yaml_missing_file(tmp_path: Path) -> None:
 # read_yaml_or_none
 # ---------------------------------------------------------------------------
 
+
 def test_read_yaml_or_none_valid(tmp_path: Path) -> None:
     path = tmp_path / "ok.yml"
     path.write_text("a: 1\nb: 2\n", encoding="utf-8")
@@ -71,6 +74,7 @@ def test_read_yaml_or_none_invalid(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # write_yaml
 # ---------------------------------------------------------------------------
+
 
 def test_write_yaml_roundtrip(tmp_path: Path) -> None:
     data = {"key": "value", "list": [1, 2, 3]}
@@ -92,6 +96,7 @@ def test_write_yaml_creates_parent_dir(tmp_path: Path) -> None:
 # yaml_dumps
 # ---------------------------------------------------------------------------
 
+
 def test_yaml_dumps_roundtrip() -> None:
     data = {"name": "test", "items": [10, 20]}
     dumped = yaml_dumps(data)
@@ -100,6 +105,7 @@ def test_yaml_dumps_roundtrip() -> None:
     assert "items:" in dumped
     # Il risultato deve essere riparsabile
     import yaml
+
     reloaded = yaml.safe_load(dumped)
     assert reloaded == data
 

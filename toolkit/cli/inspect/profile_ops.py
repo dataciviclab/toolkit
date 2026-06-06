@@ -22,7 +22,13 @@ from toolkit.core.csv_read import csv_read_option_strings, robust_preset
 from toolkit.core.sql_utils import sql_str
 from toolkit.core.paths import layer_year_dir
 from toolkit.core.config import ToolkitConfig
-from toolkit.profile.raw import profile_raw, profile_with_read_cfg, sniff_source_file, write_raw_profile, write_suggested_read_yml
+from toolkit.profile.raw import (
+    profile_raw,
+    profile_with_read_cfg,
+    sniff_source_file,
+    write_raw_profile,
+    write_suggested_read_yml,
+)
 
 
 def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
@@ -73,8 +79,7 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     with safe_connect() as conn:
         conn.execute("PRAGMA disable_progress_bar")
         conn.execute(
-            f"CREATE VIEW csv_preview AS SELECT * FROM read_csv("
-            f"'{sql_str(str(path))}', {opt_sql})"
+            f"CREATE VIEW csv_preview AS SELECT * FROM read_csv('{sql_str(str(path))}', {opt_sql})"
         )
         describe_rows = conn.execute("DESCRIBE csv_preview").fetchall()
         col_names = [str(row[0]) for row in describe_rows]
@@ -86,14 +91,11 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
         ]
 
         count_result = conn.execute(
-            f"SELECT COUNT(*) FROM read_csv("
-            f"'{sql_str(str(path))}', {opt_sql})"
+            f"SELECT COUNT(*) FROM read_csv('{sql_str(str(path))}', {opt_sql})"
         ).fetchone()
         row_count_estimate = int(count_result[0]) if count_result else None
 
-        preview_rows = conn.execute(
-            f"SELECT * FROM csv_preview LIMIT {int(limit)}"
-        ).fetchall()
+        preview_rows = conn.execute(f"SELECT * FROM csv_preview LIMIT {int(limit)}").fetchall()
         preview = [dict(zip(col_names, row)) for row in preview_rows]
 
     return {
@@ -138,7 +140,9 @@ def run_profile(cfg: ToolkitConfig, years: list[int], logger: Logger) -> None:
 
 def profile(
     config: str = typer.Option(None, "--config", "-c", help="Path to dataset.yml"),
-    csv_path: str | None = typer.Option(None, "--csv-path", help="CSV file to preview (instead of --config)"),
+    csv_path: str | None = typer.Option(
+        None, "--csv-path", help="CSV file to preview (instead of --config)"
+    ),
     year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     json_output: bool = typer.Option(False, "--json", help="Emit JSON output"),
@@ -167,11 +171,11 @@ def profile(
             typer.echo(f"Skip:    {result['skip_suggested']}")
             typer.echo(f"Colonne: {result['column_count']}")
             typer.echo(f"Righe:   {result['row_count_estimate']}")
-            if result['columns']:
+            if result["columns"]:
                 typer.echo("")
-                for c in result['columns'][:12]:
+                for c in result["columns"][:12]:
                     typer.echo(f"  {c['name']:40s} {c['inferred_type']}")
-                if len(result['columns']) > 12:
+                if len(result["columns"]) > 12:
                     typer.echo(f"  ... ({len(result['columns'])} totali)")
         return
 

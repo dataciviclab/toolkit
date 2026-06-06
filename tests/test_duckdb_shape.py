@@ -50,10 +50,13 @@ def test_parquet_preview_with_where(tmp_path):
     from toolkit.core.duckdb_shape import parquet_preview
 
     pq = tmp_path / "test.parquet"
-    write_parquet(pq, "CREATE TABLE t AS "
-                       "SELECT 1 AS id, 'a' AS val UNION ALL "
-                       "SELECT 2, 'b' UNION ALL "
-                       "SELECT 3, 'a'")
+    write_parquet(
+        pq,
+        "CREATE TABLE t AS "
+        "SELECT 1 AS id, 'a' AS val UNION ALL "
+        "SELECT 2, 'b' UNION ALL "
+        "SELECT 3, 'a'",
+    )
 
     result = parquet_preview(pq, sql="SELECT * FROM data WHERE val = 'a'")
     assert result["row_count"] == 2
@@ -67,10 +70,13 @@ def test_parquet_preview_with_group_by(tmp_path):
     from toolkit.core.duckdb_shape import parquet_preview
 
     pq = tmp_path / "test.parquet"
-    write_parquet(pq, "CREATE TABLE t AS "
-                       "SELECT 'x' AS k, 10 AS v UNION ALL "
-                       "SELECT 'x', 20 UNION ALL "
-                       "SELECT 'y', 5")
+    write_parquet(
+        pq,
+        "CREATE TABLE t AS "
+        "SELECT 'x' AS k, 10 AS v UNION ALL "
+        "SELECT 'x', 20 UNION ALL "
+        "SELECT 'y', 5",
+    )
 
     result = parquet_preview(pq, sql="SELECT k, SUM(v) AS total FROM data GROUP BY k ORDER BY k")
     assert result["column_count"] == 2

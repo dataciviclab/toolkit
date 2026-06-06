@@ -69,7 +69,7 @@ def _write_raw_year(
                     "header_line": header_line,
                     "columns_preview": header_line.split(delim),
                     "warnings": [],
-                }
+                },
             }
         ),
         encoding="utf-8",
@@ -85,7 +85,15 @@ def test_inspect_schema_diff_reports_multi_year_changes(tmp_path: Path, monkeypa
     runner = CliRunner()
     monkeypatch.chdir(tmp_path)
 
-    result = runner.invoke(app, ["inspect", "schema-diff", "--config", str(config_path),])
+    result = runner.invoke(
+        app,
+        [
+            "inspect",
+            "schema-diff",
+            "--config",
+            str(config_path),
+        ],
+    )
 
     assert result.exit_code == 0, result.output
     assert "dataset: schema_diff_example" in result.output
@@ -105,7 +113,13 @@ def test_inspect_schema_diff_json_degrades_when_raw_is_missing(tmp_path: Path, m
 
     result = runner.invoke(
         app,
-        ["inspect", "schema-diff", "--config", str(config_path), "--json",],
+        [
+            "inspect",
+            "schema-diff",
+            "--config",
+            str(config_path),
+            "--json",
+        ],
     )
 
     assert result.exit_code == 0, result.output

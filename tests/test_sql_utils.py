@@ -116,6 +116,7 @@ class TestSqlStr:
 
     def test_backward_compat_via_csv_read(self) -> None:
         from toolkit.core.csv_read import sql_str as csv_sql_str
+
         assert csv_sql_str("test") == sql_str("test")
 
     def test_returns_string(self) -> None:

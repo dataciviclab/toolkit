@@ -12,19 +12,24 @@ def _make_multi_year(project_example: Path) -> Path:
     """Aggiunge un secondo anno e SQL cross al project-example."""
     config_path = project_example / "dataset.yml"
     config_text = config_path.read_text(encoding="utf-8")
-    config_text = config_text.replace('  years: [2022]\n', '  years: [2022, 2023]\n')
+    config_text = config_text.replace("  years: [2022]\n", "  years: [2022, 2023]\n")
     config_path.write_text(config_text, encoding="utf-8")
     return config_path
 
 
 @pytest.mark.contract
-def test_cli_run_all_supports_years_filter(
-    project_example: Path, runner, chdir_tmp: Path
-) -> None:
+def test_cli_run_all_supports_years_filter(project_example: Path, runner, chdir_tmp: Path) -> None:
     config_path = _make_multi_year(project_example)
     result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--years", "2023",],
+        [
+            "run",
+            "all",
+            "--config",
+            str(config_path),
+            "--years",
+            "2023",
+        ],
     )
     assert result.exit_code == 0, result.output
 
@@ -42,13 +47,27 @@ def test_cli_validate_all_supports_years_filter(
     config_path = _make_multi_year(project_example)
     run_result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--years", "2023",],
+        [
+            "run",
+            "all",
+            "--config",
+            str(config_path),
+            "--years",
+            "2023",
+        ],
     )
     assert run_result.exit_code == 0, run_result.output
 
     validate_result = runner.invoke(
         app,
-        ["validate", "all", "--config", str(config_path), "--years", "2023",],
+        [
+            "validate",
+            "all",
+            "--config",
+            str(config_path),
+            "--years",
+            "2023",
+        ],
     )
     assert validate_result.exit_code == 0, validate_result.output
 
@@ -60,7 +79,14 @@ def test_cli_years_filter_rejects_unconfigured_year(
     config_path = _make_multi_year(project_example)
     result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--years", "2024",],
+        [
+            "run",
+            "all",
+            "--config",
+            str(config_path),
+            "--years",
+            "2024",
+        ],
     )
     assert result.exit_code != 0
     assert result.exception is not None
@@ -75,7 +101,14 @@ def test_cli_run_all_with_year_single_filter(
     config_path = _make_multi_year(project_example)
     result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--year", "2023",],
+        [
+            "run",
+            "all",
+            "--config",
+            str(config_path),
+            "--year",
+            "2023",
+        ],
     )
     assert result.exit_code == 0, result.output
 
@@ -93,13 +126,27 @@ def test_cli_validate_with_year_single_filter(
 
     run_result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--year", "2023",],
+        [
+            "run",
+            "all",
+            "--config",
+            str(config_path),
+            "--year",
+            "2023",
+        ],
     )
     assert run_result.exit_code == 0, run_result.output
 
     validate_result = runner.invoke(
         app,
-        ["validate", "all", "--config", str(config_path), "--year", "2023",],
+        [
+            "validate",
+            "all",
+            "--config",
+            str(config_path),
+            "--year",
+            "2023",
+        ],
     )
     assert validate_result.exit_code == 0, validate_result.output
 

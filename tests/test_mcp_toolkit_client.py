@@ -62,7 +62,6 @@ def test_mcp_toolkit_client_works_from_repo_layout(tmp_path: Path, monkeypatch) 
     assert "mart_outputs_missing" in warnings
 
 
-
 def test_review_readiness_incomplete_when_no_outputs(tmp_path: Path, monkeypatch) -> None:
     src = Path("project-example")
     dst = tmp_path / "project-example"
@@ -148,20 +147,27 @@ def test_review_readiness_enriched_layers_shape(tmp_path: Path, monkeypatch) -> 
     clean_val_dir = clean_dir / "_validate"
     clean_val_dir.mkdir(parents=True, exist_ok=True)
     (clean_val_dir / "clean_validation.json").write_text(
-        json.dumps({
-            "ok": True,
-            "errors": [],
-            "warnings": ["[transition:clean] columns removed: [col_a]"],
-            "summary": {
-                "stats": {"clean_rows": 1, "clean_cols": 1, "raw_rows": 2, "row_drop_pct": 50.0},
-            },
-            "sections": {
-                "transition": {
-                    "raw_row_count": 2,
-                    "clean_row_count": 1,
+        json.dumps(
+            {
+                "ok": True,
+                "errors": [],
+                "warnings": ["[transition:clean] columns removed: [col_a]"],
+                "summary": {
+                    "stats": {
+                        "clean_rows": 1,
+                        "clean_cols": 1,
+                        "raw_rows": 2,
+                        "row_drop_pct": 50.0,
+                    },
                 },
-            },
-        }),
+                "sections": {
+                    "transition": {
+                        "raw_row_count": 2,
+                        "clean_row_count": 1,
+                    },
+                },
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -175,12 +181,14 @@ def test_review_readiness_enriched_layers_shape(tmp_path: Path, monkeypatch) -> 
     mart_val_dir = mart_dir / "_validate"
     mart_val_dir.mkdir(parents=True, exist_ok=True)
     (mart_val_dir / "mart_validation.json").write_text(
-        json.dumps({
-            "ok": False,
-            "errors": ["[mart_t] row_count too small"],
-            "warnings": [],
-            "summary": {"row_counts": {"mart_t": 1}},
-        }),
+        json.dumps(
+            {
+                "ok": False,
+                "errors": ["[mart_t] row_count too small"],
+                "warnings": [],
+                "summary": {"row_counts": {"mart_t": 1}},
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -290,7 +298,9 @@ def test_mcp_raw_profile_error_when_no_profile_file(tmp_path: Path, monkeypatch)
     from toolkit.mcp.toolkit_client import raw_profile
     from toolkit.mcp.errors import ToolkitClientError
 
-    with pytest.raises(ToolkitClientError, match="Nessun file raw_profile.json ne suggested_read.yml"):
+    with pytest.raises(
+        ToolkitClientError, match="Nessun file raw_profile.json ne suggested_read.yml"
+    ):
         raw_profile(str(config_path), 2022)
 
 
@@ -318,9 +328,7 @@ def test_list_runs_accepts_naive_datetime_filter(tmp_path: Path, monkeypatch) ->
             "clean": {"status": "SUCCESS"},
         },
     }
-    (run_dir / "20260101T120000Z_abc123.json").write_text(
-        json.dumps(run_record), encoding="utf-8"
-    )
+    (run_dir / "20260101T120000Z_abc123.json").write_text(json.dumps(run_record), encoding="utf-8")
 
     # Naive datetime filter — must NOT raise TypeError
     payload = list_runs(str(config_path), 2022, since="2025-12-01T00:00:00", limit=5)
@@ -360,7 +368,7 @@ def test_run_summary_accepts_since_until_filters(tmp_path: Path, monkeypatch) ->
         {"started_at": "2025-10-25T12:00:00+00:00", "status": "FAILED"},
     ]
     for i, rec in enumerate(records):
-        run_id = f"run_{i+1}"
+        run_id = f"run_{i + 1}"
         run_record = {
             "dataset": "project_example",
             "year": 2022,
@@ -423,7 +431,9 @@ def test_inspect_paths_cli_mcp_contract_alignment(tmp_path: Path, monkeypatch) -
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
 
-    result = runner.invoke(app, ["inspect", "paths", "--config", str(config_path), "--year", "2022", "--json"])
+    result = runner.invoke(
+        app, ["inspect", "paths", "--config", str(config_path), "--year", "2022", "--json"]
+    )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
 
@@ -458,12 +468,7 @@ def test_inspect_paths_multi_year_defaults_to_max_year(tmp_path: Path, monkeypat
     from toolkit.mcp.cli_adapter import inspect_paths
 
     yml = tmp_path / "dataset.yml"
-    yml.write_text(
-        "root: " + str(tmp_path) + "\n"
-        "dataset:\n"
-        "  name: test\n"
-        "  years: [2022, 2023]\n"
-    )
+    yml.write_text("root: " + str(tmp_path) + "\ndataset:\n  name: test\n  years: [2022, 2023]\n")
     monkeypatch.chdir(tmp_path)
 
     result = inspect_paths(str(yml))
@@ -502,7 +507,9 @@ def test_schema_diff_cli_contract_alignment(tmp_path: Path, monkeypatch) -> None
         assert key in payload, f"SchemaDiffResult: chiave '{key}' mancante"
     for entry in payload.get("entries", []):
         for key in RawSchemaEntry.__required_keys__:
-            assert key in entry, f"RawSchemaEntry: chiave '{key}' mancante in anno {entry.get('year')}"
+            assert key in entry, (
+                f"RawSchemaEntry: chiave '{key}' mancante in anno {entry.get('year')}"
+            )
     for comp in payload.get("comparisons", []):
         for key in SchemaComparison.__required_keys__:
             assert key in comp, f"SchemaComparison: chiave '{key}' mancante"
@@ -650,9 +657,12 @@ def test_dataset_info_from_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert result["raw_sources_count"] >= 1
 
 
-def test_list_candidates_with_minimal_candidate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_candidates_with_minimal_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """list_candidates deve trovare candidate creati nel workspace."""
     from toolkit.mcp import discovery as _discovery_mod
+
     monkeypatch.setattr(_discovery_mod, "WORKSPACE_ROOT", tmp_path)
 
     # Crea un candidate minimale
@@ -677,9 +687,12 @@ def test_list_candidates_with_minimal_candidate(tmp_path: Path, monkeypatch: pyt
             break
 
 
-def test_list_candidates_returns_sorted_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_candidates_returns_sorted_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """list_candidates deve restituire lista ordinata per slug."""
     from toolkit.mcp import discovery as _discmod
+
     monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
 
     for name in ("b-dataset", "a-dataset", "c-dataset"):
@@ -701,10 +714,13 @@ def test_list_candidates_returns_sorted_list(tmp_path: Path, monkeypatch: pytest
     assert "c-dataset" in slugs
 
 
-def test_list_candidates_resolves_custom_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_candidates_resolves_custom_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """list_candidates deve risolvere root:../../custom_out da dataset.yml
     e trovare clean/mart/runs sotto custom_out/ anziche' WORKSPACE_ROOT/out/."""
     from toolkit.mcp import discovery as _discmod
+
     monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
 
     import duckdb
@@ -716,11 +732,7 @@ def test_list_candidates_resolves_custom_root(tmp_path: Path, monkeypatch: pytes
 
     # dataset.yml con root custom (relativo al dataset.yml)
     (cand_dir / "dataset.yml").write_text(
-        f"root: \"../../custom_out\"\n"
-        f"schema_version: 1\n"
-        f"dataset:\n"
-        f"  name: {name}\n"
-        f"  years: [2024]\n",
+        f'root: "../../custom_out"\nschema_version: 1\ndataset:\n  name: {name}\n  years: [2024]\n',
         encoding="utf-8",
     )
 
@@ -746,12 +758,14 @@ def test_list_candidates_resolves_custom_root(tmp_path: Path, monkeypatch: pytes
     runs_dir = custom_root / "data" / "_runs" / name / "2024"
     runs_dir.mkdir(parents=True, exist_ok=True)
     (runs_dir / "run_success.json").write_text(
-        json.dumps({
-            "dataset": name,
-            "year": 2024,
-            "status": "SUCCESS",
-            "layers": {"clean": {"status": "SUCCESS"}, "mart": {"status": "SUCCESS"}},
-        }),
+        json.dumps(
+            {
+                "dataset": name,
+                "year": 2024,
+                "status": "SUCCESS",
+                "layers": {"clean": {"status": "SUCCESS"}, "mart": {"status": "SUCCESS"}},
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -766,7 +780,9 @@ def test_list_candidates_resolves_custom_root(tmp_path: Path, monkeypatch: pytes
     assert item["has_clean"] is True, (
         f"has_clean=False, clean_dir={clean_dir} esiste? {clean_dir.exists()}"
     )
-    assert item["has_mart"] is True, f"has_mart=False, mart_dir={mart_dir} esiste? {mart_dir.exists()}"
+    assert item["has_mart"] is True, (
+        f"has_mart=False, mart_dir={mart_dir} esiste? {mart_dir.exists()}"
+    )
     assert item["last_run_status"] == "SUCCESS"
 
     # Verifica che il fallback WORKSPACE_ROOT/out/ NON abbia i dati
@@ -774,7 +790,6 @@ def test_list_candidates_resolves_custom_root(tmp_path: Path, monkeypatch: pytes
     assert not wrong_clean.exists(), (
         f"Il dato non dovrebbe essere in {wrong_clean} ma in {custom_root}/data/clean/"
     )
-
 
 
 def test_safe_path_absolute_not_found_raises_clean_error(tmp_path: Path) -> None:
@@ -789,7 +804,9 @@ def test_safe_path_absolute_not_found_raises_clean_error(tmp_path: Path) -> None
         _safe_path(str(nonexistent))
 
 
-def test_safe_path_slug_not_found_raises_clean_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_safe_path_slug_not_found_raises_clean_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """_safe_path con slug inesistente deve alzare ToolkitClientError,
     non RecursionError (regressione recursion loop)."""
     from toolkit.mcp import path_safety as _ps_mod
@@ -832,7 +849,9 @@ def test_safe_path_directory_without_dataset_yml_raises_error(tmp_path: Path) ->
         _safe_path(str(empty_dir))
 
 
-def test_safe_path_directory_without_dataset_yml_falls_back_to_slug(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_safe_path_directory_without_dataset_yml_falls_back_to_slug(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """_safe_path con directory senza dataset.yml deve tentare risoluzione slug
     prima di alzare errore."""
     from toolkit.mcp import path_safety as _ps_mod
@@ -860,6 +879,7 @@ def test_safe_path_directory_without_dataset_yml_falls_back_to_slug(tmp_path: Pa
 def test_list_candidates_status_filter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """list_candidates(status_filter='SUCCESS') deve filtrare per last_run_status."""
     from toolkit.mcp import discovery as _discmod
+
     monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
 
     # Crea due candidate: uno senza run (status=None), l'altro mocka run SUCCESS
@@ -875,16 +895,19 @@ def test_list_candidates_status_filter(tmp_path: Path, monkeypatch: pytest.Monke
     runs_dir = tmp_path / "out" / "data" / "_runs" / "candidate-b" / "2024"
     runs_dir.mkdir(parents=True, exist_ok=True)
     import json
+
     (runs_dir / "run_success.json").write_text(
-        json.dumps({
-            "dataset": "candidate-b",
-            "year": 2024,
-            "run_id": "run_001",
-            "status": "SUCCESS",
-            "started_at": "2026-01-01T12:00:00+00:00",
-            "finished_at": "2026-01-01T12:01:00+00:00",
-            "layers": {"raw": {"status": "SUCCESS"}},
-        }),
+        json.dumps(
+            {
+                "dataset": "candidate-b",
+                "year": 2024,
+                "run_id": "run_001",
+                "status": "SUCCESS",
+                "started_at": "2026-01-01T12:00:00+00:00",
+                "finished_at": "2026-01-01T12:01:00+00:00",
+                "layers": {"raw": {"status": "SUCCESS"}},
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -904,10 +927,13 @@ def test_list_candidates_status_filter(tmp_path: Path, monkeypatch: pytest.Monke
     assert len(failed_results) == 0
 
 
-def test_list_candidates_status_filter_invalid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_candidates_status_filter_invalid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """list_candidates con status_filter non valido deve alzare errore."""
     from toolkit.mcp import discovery as _discmod
     from toolkit.mcp.errors import ToolkitClientError
+
     monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
 
     from toolkit.mcp.discovery import list_candidates
@@ -920,6 +946,7 @@ def test_list_candidates_stage_invalid(tmp_path: Path, monkeypatch: pytest.Monke
     """list_candidates con stage non valido deve alzare errore."""
     from toolkit.mcp import discovery as _discmod
     from toolkit.mcp.errors import ToolkitClientError
+
     monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
 
     from toolkit.mcp.discovery import list_candidates
@@ -1037,7 +1064,9 @@ def test_layer_query_invalid_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.policy
-def test_layer_query_profile_on_clean_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_layer_query_profile_on_clean_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """layer_query mode=profile su layer=clean: errore."""
     from toolkit.mcp.aggregate_ops import layer_query
     from toolkit.mcp.errors import ToolkitClientError

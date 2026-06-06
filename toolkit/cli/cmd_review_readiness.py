@@ -17,7 +17,9 @@ import typer
 
 def review_readiness(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
-    year: int | None = typer.Option(None, "--year", "-y", help="Dataset year (default: last declared year)"),
+    year: int | None = typer.Option(
+        None, "--year", "-y", help="Dataset year (default: last declared year)"
+    ),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
 ) -> None:
     """Check di prontezza per review candidate: layer, output e coerenza run record.
@@ -44,6 +46,7 @@ def review_readiness(
 
     if as_json:
         import json
+
         typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
         return
 
@@ -79,7 +82,9 @@ def review_readiness(
             for item in detail:
                 if isinstance(item, dict):
                     item_icon = "✅" if item.get("readable") else "🔴"
-                    typer.echo(f"      {item_icon} {item.get('name', '?')}  ({item.get('rows', '?')} righe)")
+                    typer.echo(
+                        f"      {item_icon} {item.get('name', '?')}  ({item.get('rows', '?')} righe)"
+                    )
                 else:
                     typer.echo(f"      {item}")
         elif detail:
@@ -139,7 +144,11 @@ def review_readiness(
         raw_info_parts.append(f"delim={raw_profile['delim']}")
     if raw_warnings:
         raw_info_parts.append(f"{len(raw_warnings)} warning")
-    typer.echo(f"  raw:   {raw_status}  {'  '.join(raw_info_parts)}" if raw_info_parts else f"  raw:   {raw_status}")
+    typer.echo(
+        f"  raw:   {raw_status}  {'  '.join(raw_info_parts)}"
+        if raw_info_parts
+        else f"  raw:   {raw_status}"
+    )
 
     # Clean layer
     clean_layer = layers.get("clean") or {}
@@ -157,7 +166,11 @@ def review_readiness(
         clean_info.append(f"raw→clean: {trans['row_drop_pct']}% righe")
     if trans.get("col_drop") is not None and trans["col_drop"] != 0:
         clean_info.append(f"-{trans['col_drop']} colonne")
-    typer.echo(f"  clean: {clean_status}  {'  '.join(clean_info)}" if clean_info else f"  clean: {clean_status}")
+    typer.echo(
+        f"  clean: {clean_status}  {'  '.join(clean_info)}"
+        if clean_info
+        else f"  clean: {clean_status}"
+    )
 
     # Mart layer
     mart_layer = layers.get("mart") or {}
@@ -166,7 +179,11 @@ def review_readiness(
     mart_tables = mart_layer.get("tables") or []
     mart_ready = sum(1 for t in mart_tables if t.get("readable"))
     mart_total = len(mart_tables)
-    typer.echo(f"  mart:  {mart_status}  {mart_ready}/{mart_total} tabelle" if mart_tables else f"  mart:  {mart_status}  (nessuna tabella)")
+    typer.echo(
+        f"  mart:  {mart_status}  {mart_ready}/{mart_total} tabelle"
+        if mart_tables
+        else f"  mart:  {mart_status}  (nessuna tabella)"
+    )
 
     typer.echo("")
     if readiness == "ready":

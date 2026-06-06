@@ -6,8 +6,6 @@ from toolkit.core.io import normalize_encoding
 from toolkit.core.sql_utils import sql_str
 
 
-
-
 ALLOWED_READ_CSV_KEYS = {
     "delim",
     "header",

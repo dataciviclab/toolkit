@@ -68,7 +68,9 @@ def check_primary_key(
             ).fetchone()[0]
         )
         if dup_groups > 0:
-            errors.append(_prefixed(prefix, f"Primary key duplicates found for {pk}: groups={dup_groups}"))
+            errors.append(
+                _prefixed(prefix, f"Primary key duplicates found for {pk}: groups={dup_groups}")
+            )
     return errors, warnings
 
 
@@ -132,5 +134,7 @@ def check_max_null_pct(
         nnull = int(con.execute(f"SELECT COUNT(*) FROM {table} WHERE {qc} IS NULL").fetchone()[0])
         pct = nnull / row_count
         if pct > thr:
-            errors.append(_prefixed(prefix, f"Column '{c}' null_pct too high: {pct:.3%} > {thr:.3%}"))
+            errors.append(
+                _prefixed(prefix, f"Column '{c}' null_pct too high: {pct:.3%} > {thr:.3%}")
+            )
     return errors, warnings

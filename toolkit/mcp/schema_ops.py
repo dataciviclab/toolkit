@@ -32,7 +32,6 @@ def _inspect_paths(*args: Any, **kwargs: Any) -> Any:
     return _impl(*args, **kwargs)
 
 
-
 def show_schema(config_path: str, layer: str = "clean", year: int | None = None) -> dict[str, Any]:
     """Mostra lo schema (colonne + tipi) di raw, clean o mart.
 
@@ -183,7 +182,9 @@ def list_runs(
             if since_dt.tzinfo is None:
                 since_dt = since_dt.replace(tzinfo=timezone.utc)
         except ValueError as exc:
-            raise ToolkitClientError(f"since must be a valid ISO datetime, got: {since}", code=ErrorCode.INVALID_PARAMS) from exc
+            raise ToolkitClientError(
+                f"since must be a valid ISO datetime, got: {since}", code=ErrorCode.INVALID_PARAMS
+            ) from exc
 
     until_dt = None
     if until:
@@ -193,11 +194,16 @@ def list_runs(
             if until_dt.tzinfo is None:
                 until_dt = until_dt.replace(tzinfo=timezone.utc)
         except ValueError as exc:
-            raise ToolkitClientError(f"until must be a valid ISO datetime, got: {until}", code=ErrorCode.INVALID_PARAMS) from exc
+            raise ToolkitClientError(
+                f"until must be a valid ISO datetime, got: {until}", code=ErrorCode.INVALID_PARAMS
+            ) from exc
 
     valid_statuses = {"SUCCESS", "FAILED", "RUNNING", "DRY_RUN"}
     if status and status not in valid_statuses:
-        raise ToolkitClientError(f"status must be one of: {', '.join(sorted(valid_statuses))}", code=ErrorCode.INVALID_PARAMS)
+        raise ToolkitClientError(
+            f"status must be one of: {', '.join(sorted(valid_statuses))}",
+            code=ErrorCode.INVALID_PARAMS,
+        )
 
     limit = limit if limit is not None else 20
 
@@ -263,7 +269,9 @@ def run_summary(
             if since_dt.tzinfo is None:
                 since_dt = since_dt.replace(tzinfo=timezone.utc)
         except ValueError as exc:
-            raise ToolkitClientError(f"since must be a valid ISO datetime, got: {since}", code=ErrorCode.INVALID_PARAMS) from exc
+            raise ToolkitClientError(
+                f"since must be a valid ISO datetime, got: {since}", code=ErrorCode.INVALID_PARAMS
+            ) from exc
 
     until_dt: datetime | None = None
     if until:
@@ -273,7 +281,9 @@ def run_summary(
             if until_dt.tzinfo is None:
                 until_dt = until_dt.replace(tzinfo=timezone.utc)
         except ValueError as exc:
-            raise ToolkitClientError(f"until must be a valid ISO datetime, got: {until}", code=ErrorCode.INVALID_PARAMS) from exc
+            raise ToolkitClientError(
+                f"until must be a valid ISO datetime, got: {until}", code=ErrorCode.INVALID_PARAMS
+            ) from exc
 
     all_records = list_runs(run_dir, since=since_dt, until=until_dt, limit=None)
 
@@ -294,8 +304,12 @@ def run_summary(
     total = len(all_records)
     success = sum(1 for r in all_records if r.get("status") == "SUCCESS")
     failed = sum(1 for r in all_records if r.get("status") == "FAILED")
-    durations = [r.get("duration_seconds") for r in all_records if r.get("duration_seconds") is not None]
-    avg_duration = round(sum(d for d in durations if d is not None) / len(durations), 1) if durations else None
+    durations = [
+        r.get("duration_seconds") for r in all_records if r.get("duration_seconds") is not None
+    ]
+    avg_duration = (
+        round(sum(d for d in durations if d is not None) / len(durations), 1) if durations else None
+    )
 
     thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     last_30d = 0
@@ -340,7 +354,6 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
         return _cli_summary(str(_safe_path(str(config_path))), year=year)
     except FileNotFoundError as exc:
         raise ToolkitClientError(str(exc), code=ErrorCode.CONFIG_NOT_FOUND) from exc
-
 
 
 def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any]:
@@ -398,7 +411,9 @@ def clean_preview(
     if layer == "clean":
         parquet_path_str = paths["paths"]["clean"].get("output")
         if not parquet_path_str:
-            raise ToolkitClientError("Nessun output clean risolto", code=ErrorCode.PARQUET_NOT_FOUND)
+            raise ToolkitClientError(
+                "Nessun output clean risolto", code=ErrorCode.PARQUET_NOT_FOUND
+            )
         parquet_path = Path(parquet_path_str)
     elif layer == "mart":
         outputs = paths["paths"]["mart"].get("outputs") or []
@@ -407,12 +422,14 @@ def clean_preview(
         if mart_index < 0 or mart_index >= len(outputs):
             code = ErrorCode.INVALID_PARAMS
             raise ToolkitClientError(
-                f"Indice mart {mart_index} non valido: {len(outputs)} output disponibili (indice 0-{len(outputs)-1})",
+                f"Indice mart {mart_index} non valido: {len(outputs)} output disponibili (indice 0-{len(outputs) - 1})",
                 code=code,
             )
         parquet_path = Path(outputs[mart_index])
     else:
-        raise ToolkitClientError("layer deve essere 'clean' o 'mart'", code=ErrorCode.INVALID_PARAMS)
+        raise ToolkitClientError(
+            "layer deve essere 'clean' o 'mart'", code=ErrorCode.INVALID_PARAMS
+        )
 
     # Verifica esistenza output
     if not parquet_path.exists():
@@ -432,13 +449,15 @@ def clean_preview(
     from toolkit.mcp._schema_utils import _read_parquet_preview
 
     result = _read_parquet_preview(parquet_path, limit=limit)
-    result.update({
-        "dataset": paths.get("dataset"),
-        "year": paths.get("year"),
-        "layer": layer,
-        "config_path": str(config_path),
-        "mart_name": parquet_path.stem if layer == "mart" else None,
-    })
+    result.update(
+        {
+            "dataset": paths.get("dataset"),
+            "year": paths.get("year"),
+            "layer": layer,
+            "config_path": str(config_path),
+            "mart_name": parquet_path.stem if layer == "mart" else None,
+        }
+    )
     return result
 
 
@@ -494,7 +513,7 @@ def raw_preview(
             "path": str(raw_file),
             "format": suffix.lstrip("."),
             "note": f"Formato '{suffix}' non supportato per preview raw. "
-                    "Usa toolkit_inspect_schema(layer='raw') per lo schema.",
+            "Usa toolkit_inspect_schema(layer='raw') per lo schema.",
             "dataset": paths.get("dataset"),
             "year": paths.get("year"),
         }
@@ -518,11 +537,7 @@ def dataset_info(config_path: str) -> dict[str, Any]:
     # Estrai URL fonti da raw.sources
     source_urls: list[str] = []
     for src in cfg.raw.sources:
-        url = (
-            src.args.get("url")
-            or src.args.get("data_url")
-            or src.args.get("endpoint")
-        )
+        url = src.args.get("url") or src.args.get("data_url") or src.args.get("endpoint")
         if url:
             source_urls.append(str(url))
 
@@ -544,7 +559,10 @@ def dataset_info(config_path: str) -> dict[str, Any]:
 
     time_cov = None
     if hasattr(cfg, "time_coverage") and cfg.time_coverage:
-        time_cov = {"start_year": cfg.time_coverage.start_year, "end_year": cfg.time_coverage.end_year}
+        time_cov = {
+            "start_year": cfg.time_coverage.start_year,
+            "end_year": cfg.time_coverage.end_year,
+        }
 
     return {
         "dataset": cfg.dataset if hasattr(cfg, "dataset") else None,
@@ -591,4 +609,6 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
         )
         return result
     except Exception as exc:
-        raise ToolkitClientError(f"Lettura CSV fallita per {path}: {exc}", code=ErrorCode.ARTIFACT_UNREADABLE) from exc
+        raise ToolkitClientError(
+            f"Lettura CSV fallita per {path}: {exc}", code=ErrorCode.ARTIFACT_UNREADABLE
+        ) from exc

@@ -132,7 +132,9 @@ def test_probe_url_uses_head_then_get_only_for_html(monkeypatch) -> None:
     calls: list[tuple[str, str]] = []  # (method, url)
 
     class _FakeResponse:
-        def __init__(self, *, content_type: str, text: str = "", url: str = "https://example.org/resource") -> None:
+        def __init__(
+            self, *, content_type: str, text: str = "", url: str = "https://example.org/resource"
+        ) -> None:
             self.headers = {"Content-Type": content_type}
             self.url = url
             self.status_code = 200
@@ -241,6 +243,7 @@ def test_probe_url_passes_timeout_and_user_agent(monkeypatch) -> None:
 
 # ── Tests for CKAN detection and scaffold ───────────────────────────────────────
 
+
 @pytest.mark.pure_unit
 class TestExtractCkanDatasetId:
     def test_uuid_from_id_param(self) -> None:
@@ -272,7 +275,7 @@ class TestDetectCkan:
         assert detect_ckan_in_html(html) is True
 
     def test_detects_api_action(self) -> None:
-        html = b'/api/3/action/package_show'
+        html = b"/api/3/action/package_show"
         assert detect_ckan_in_html(html) is True
 
     def test_detects_ckan_css_class(self) -> None:
@@ -284,7 +287,7 @@ class TestDetectCkan:
         assert detect_ckan_in_html(html) is True
 
     def test_rejects_non_ckan_html(self) -> None:
-        html = b'<html><body><p>Plain HTML page</p></body></html>'
+        html = b"<html><body><p>Plain HTML page</p></body></html>"
         assert detect_ckan_in_html(html) is False
 
 

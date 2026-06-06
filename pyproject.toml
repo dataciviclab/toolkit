@@ -86,11 +86,6 @@ disable_error_code = [
   "assignment",
 ]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-q --tb=short"
-filterwarnings = ["ignore::DeprecationWarning"]
-
 [project.scripts]
 toolkit = "toolkit.cli.app:app"
 

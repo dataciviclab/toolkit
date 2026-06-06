@@ -100,6 +100,21 @@ exclude = ["tests*"]
 [tool.setuptools.dynamic]
 version = { attr = "toolkit.version.__version__" }
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--timeout=30"
+markers = [
+    "contract: interfaccia pubblica, artifact format, contratto API",
+    "policy: regola non ovvia o comportamento cross-component",
+    "pure_unit: logica pura non banale isolata",
+    "adapter: adapter a servizio esterno (nostro wrapping)",
+    "smoke: test che fa chiamate HTTP reali (richiede connettività esterna)",
+    "regression: bug fix documentato in issue/PR",
+    "core: test core del toolkit (aggiunto automaticamente da conftest.py)",
+    "advanced: test avanzati del toolkit (aggiunto automaticamente da conftest.py)",
+    "compat: test compatibilità (aggiunto automaticamente da conftest.py)",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

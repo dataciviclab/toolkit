@@ -18,7 +18,7 @@ from typer.testing import CliRunner
 
 from toolkit.cli.app import app
 
-pytestmark = [pytest.mark.smoke, pytest.mark.core]
+pytestmark = [pytest.mark.core]
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 RUNNER = CliRunner()

@@ -102,32 +102,62 @@ def parquet_row_count(path: Path) -> int | None:
 def parquet_preview(
     path: Path,
     limit: int = 10,
+    sql: str | None = None,
 ) -> dict[str, Any]:
     """Schema + conteggio + preview righe di un file Parquet.
 
+    Args:
+        path: Path al file parquet.
+        limit: Numero massimo di righe in preview (default 10).
+        sql: SQL SELECT da eseguire sul parquet. Il parquet è disponibile
+            come vista ``data``. Esempi::
+
+                SELECT * FROM data WHERE anno > 2020
+                SELECT regione, COUNT(*) FROM data GROUP BY regione
+
+            Se ``None`` (default), esegue ``SELECT * FROM data LIMIT {limit}``
+            (backward compat).
+
+            Nota: solo SELECT singolo (DuckDB non supporta multi-statement
+            in una chiamata ``execute()``).
+
     Returns:
         ``{"path": str, "column_count": int, "columns": [...],
-          "row_count": int | None, "preview": [...], "truncated": bool}``.
+          "row_count": int | None, "preview": [...], "truncated": bool,
+          "sql": str | None}``.
+
+    Raises:
+        FileNotFoundError: se il parquet non esiste (solo quando ``sql``
+            è fornito; in modalità default graceful empty dict).
+        RuntimeError: se la query SQL fallisce (solo con ``sql``).
     """
     if not path.exists():
+        if sql is not None:
+            raise FileNotFoundError(f"Parquet non trovato: {path}")
         return {"path": str(path), "column_count": 0, "columns": [],
-                "row_count": None, "preview": [], "truncated": False}
+                "row_count": None, "preview": [], "truncated": False, "sql": None}
 
     try:
         with safe_connect() as con:
             con.execute("PRAGMA disable_progress_bar")
-            rel = _rel(path)
+
+            if sql is not None:
+                # Registra il parquet come vista 'data' per query naturali
+                con.execute(f"CREATE OR REPLACE VIEW data AS SELECT * FROM {_rel(path)}")
+                source = f"({sql})"
+            else:
+                source = _rel(path)
 
             # schema
-            describe = con.execute(f"DESCRIBE SELECT * FROM {rel}").fetchall()
+            describe = con.execute(f"DESCRIBE SELECT * FROM {source}").fetchall()
             columns = [{"name": str(r[0]), "type": str(r[1])} for r in describe]
 
             # row count
-            count_row = con.execute(f"SELECT COUNT(*) FROM {rel}").fetchone()
+            count_row = con.execute(f"SELECT COUNT(*) FROM {source}").fetchone()
             row_count = int(count_row[0]) if count_row else None
 
             # preview
-            preview = con.execute(f"SELECT * FROM {rel} LIMIT {int(limit)}").fetchall()
+            preview = con.execute(f"SELECT * FROM {source} LIMIT {int(limit)}").fetchall()
             col_names = [c["name"] for c in columns]
             preview_rows = [dict(zip(col_names, row)) for row in preview]
 
@@ -138,7 +168,13 @@ def parquet_preview(
                 "row_count": row_count,
                 "preview": preview_rows,
                 "truncated": bool(row_count and row_count > limit),
+                "sql": sql,
             }
     except Exception:
-        return {"path": str(path), "column_count": 0, "columns": [],
+        if sql is not None:
+            # In modalità SQL esplicito, propaga l'errore
+            raise
+        base = {"path": str(path), "column_count": 0, "columns": [],
                 "row_count": None, "preview": [], "truncated": False}
+        base["sql"] = sql
+        return base

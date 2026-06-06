@@ -303,7 +303,7 @@ def run_year(
             # RAW fallito: skip layer downstream (clean, mart)
             # per evitare output stale con dati di run precedenti
             layers_to_run = []
-    
+
     # Il resolver dei support deve sapere se il campionamento e' attivo
     # (root override in {root}/smoke), non solo se --smoke e' stato usato
     sampling_active = smoke or sample_rows is not None or sample_bytes is not None

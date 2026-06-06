@@ -360,6 +360,3 @@ def _validation_summary_for_layer(
                 result["row_count"] = row_counts[first_key]
 
     return result
-
-
-

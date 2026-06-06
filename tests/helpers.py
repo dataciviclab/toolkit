@@ -24,7 +24,7 @@ class NoopLogger:
 
 def write_parquet(path: Path, sql: str, *, table: str = "t") -> None:
     """Crea un parquet da una query SQL DuckDB in memoria.
-    
+
     Args:
         path: Output path per il parquet.
         sql: CREATE TABLE + INSERT (es. ``CREATE TABLE t AS SELECT 1 AS x``).

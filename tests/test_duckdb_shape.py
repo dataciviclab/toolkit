@@ -124,3 +124,6 @@ def test_parquet_preview_invalid_sql_raises(tmp_path):
 
     with pytest.raises(Exception, match="nonexistent_table"):
         parquet_preview(pq, sql="SELECT * FROM nonexistent_table")
+
+
+

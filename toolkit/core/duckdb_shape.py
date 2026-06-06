@@ -10,7 +10,7 @@ Rinominato da ``core/parquet.py`` — ora in ``core/duckdb_shape.py``.
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -33,7 +33,7 @@ def _is_s3_path(path: str | Path) -> bool:
     return s.startswith("s3://") or s.startswith("s3:/")
 
 
-def _s3_config() -> dict[str, str]:
+def _s3_config() -> Mapping[str, Any]:
     """Config DuckDB per leggere bucket GCS pubblici via S3-compatible API."""
     return {
         "s3_endpoint": "storage.googleapis.com",
@@ -53,7 +53,7 @@ def _parquet_connect(path: Path) -> Generator[Any, None, None]:
     """
     path_str = str(path)
     if _is_s3_path(path_str):
-        con = duckdb.connect(":memory:", config=_s3_config())
+        con = duckdb.connect(":memory:", config=_s3_config())  # type: ignore[arg-type]
         try:
             con.execute("LOAD httpfs")
             yield con

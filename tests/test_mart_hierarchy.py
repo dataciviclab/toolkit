@@ -16,7 +16,7 @@ from toolkit.mart.run import _run_hierarchy_levels
 _null_logger = logging.getLogger("test_null")
 _null_logger.addHandler(logging.NullHandler())
 
-pytestmark = [pytest.mark.smoke, pytest.mark.core]
+pytestmark = [pytest.mark.policy, pytest.mark.core]
 
 
 def _setup_clean_view(con: duckdb.DuckDBPyConnection) -> None:

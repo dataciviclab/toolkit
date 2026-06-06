@@ -127,8 +127,9 @@ def layer_query(
             return _raw_preview(config_path, year=year, limit=limit)
         return _clean_preview(config_path, layer=safe_layer, mart_index=mart_index, year=year, limit=limit)
 
-    # SQL mode
+    # SQL mode — sql non puo' essere None qui (guardato sopra)
     if safe_mode == "sql":
+        assert sql is not None  # mypy narrowing
         return _layer_sql(config_path, layer=safe_layer, year=year, limit=limit, sql=sql, mart_index=mart_index)
 
     raise RuntimeError(f"mode non gestito: {safe_mode}")

@@ -13,6 +13,7 @@ from toolkit.clean.validate import run_clean_validation
 from toolkit.core.logging import bind_logger, get_logger
 from toolkit.core.paths import RAW_PROFILE, layer_dataset_dir, layer_year_dir
 from toolkit.core.run_context import RunContext
+from toolkit.core.support import resolve_transitive_supports
 from toolkit.mart.run import run_mart, run_mart_multi_year
 from toolkit.mart.validate import run_mart_validation
 from toolkit.raw.run import run_raw
@@ -721,13 +722,20 @@ def run_full(
     # per le query MART del candidate (placeholder {support.NAME.mart} ecc.).
     # In dry-run i support vengono solo annunciati (non eseguiti): la validazione
     # SQL del candidate usa require_exists=False e non richiede file reali.
-    support_entries = cfg.support or []
-    if support_entries:
+    #
+    # Nota: resolve_transitive_supports() appiattisce le dipendenze transitive
+    # (support che hanno a loro volta support:) in un unico DAG topologico,
+    # con le dipendenze più annidate eseguite per prime.
+    support_dag = resolve_transitive_supports(cfg.support or [])
+    if support_dag:
         logger.info(
-            "RUN FULL — processing %d support dataset(s) before candidate",
-            len(support_entries),
+            "RUN FULL — processing %d support dataset(s) "
+            "(%d direct, %d transitive) before candidate",
+            len(support_dag),
+            len(cfg.support or []),
+            len(support_dag) - len(cfg.support or []),
         )
-        for entry in support_entries:
+        for entry in support_dag:
             logger.info("Support: %s — %s", entry.name, entry.config)
 
             if dry_flag:

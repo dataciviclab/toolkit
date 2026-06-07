@@ -8,6 +8,7 @@ import pytest
 from toolkit.core.support import (
     flatten_support_template_ctx,
     resolve_support_payloads,
+    resolve_transitive_supports,
     _support_expected_mart_outputs,
 )
 
@@ -322,3 +323,153 @@ class TestResolveAndFlatten:
         resolved = resolve_support_payloads(None, require_exists=True)
         ctx = flatten_support_template_ctx(resolved)
         assert ctx == {}
+
+
+# --- resolve_transitive_supports ---
+
+
+def _make_support_config(
+    tmp_path: Path,
+    name: str = "support_ds",
+    sub_supports: list[dict] | None = None,
+) -> tuple[Path, object]:
+    """Create a minimal support dataset with optional sub-supports.
+
+    Returns (config_path, config_object).
+    """
+
+    ds_dir = tmp_path / name
+    ds_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write a minimal dataset.yml so load_config() can read it
+    yml = f"root: {ds_dir}\ndataset:\n  name: {name}\n  years: [2024]\nmart:\n  tables:\n    - name: mart_result\n      sql: sql/mart.sql\n"
+    if sub_supports:
+        for s in sub_supports or []:
+            yml += f"support:\n  - name: {s['name']}\n    config: {s['config']}\n    years: [{s['years'][0]}]\n"
+
+    config_path = ds_dir / "dataset.yml"
+    config_path.write_text(yml, encoding="utf-8")
+
+    from toolkit.core.config import load_config
+
+    return config_path, load_config(str(config_path))
+
+
+def _make_sub_support(tmp_path: Path, name: str, grandchild: str | None = None) -> Path:
+    """Create a leaf support dataset (no sub-supports). Returns config path."""
+    return _make_support_config(tmp_path, name)[0]
+
+
+class TestResolveTransitiveSupports:
+    def test_empty_list(self):
+        """Lista vuota -> lista vuota."""
+        result = resolve_transitive_supports([])
+        assert result == []
+
+    def test_single_level_no_nesting(self, tmp_path: Path):
+        """Support singolo senza nesting -> stessa entry."""
+        cfg_path = _make_sub_support(tmp_path, "leaf")
+        entries = [{"name": "a", "config": str(cfg_path), "years": [2024]}]
+        from toolkit.core.config_models import SupportDatasetConfig
+
+        typed = [SupportDatasetConfig(**e) for e in entries]
+        result = resolve_transitive_supports(typed)
+
+        assert len(result) == 1
+        assert result[0].name == "a"
+
+    def test_multiple_siblings_no_nesting(self, tmp_path: Path):
+        """2 support senza nesting -> stesso ordine dichiarato."""
+        cfg_a = _make_sub_support(tmp_path, "alpha")
+        cfg_b = _make_sub_support(tmp_path, "beta")
+        from toolkit.core.config_models import SupportDatasetConfig
+
+        entries = [
+            SupportDatasetConfig(name="a", config=str(cfg_a), years=[2024]),
+            SupportDatasetConfig(name="b", config=str(cfg_b), years=[2024]),
+        ]
+        result = resolve_transitive_supports(entries)
+
+        assert len(result) == 2
+        assert result[0].name == "a"
+        assert result[1].name == "b"
+
+    def test_two_levels_deepest_first(self, tmp_path: Path):
+        """Compose -> support -> sub-support: sub-support deve apparire prima."""
+        # Crea sub-support (foglia)
+        sub_path = _make_sub_support(tmp_path, "sub")
+
+        # Crea support intermedio che ha sub come dipendenza
+        mid_dir = tmp_path / "mid"
+        mid_dir.mkdir(exist_ok=True)
+        mid_yml = (
+            f"root: {mid_dir}\n"
+            f"dataset:\n  name: mid\n  years: [2024]\n"
+            f"mart:\n  tables:\n    - name: mart_mid\n      sql: sql/mart.sql\n"
+            f"support:\n  - name: sub\n    config: {sub_path}\n    years: [2024]\n"
+        )
+        mid_path = mid_dir / "dataset.yml"
+        mid_path.write_text(mid_yml, encoding="utf-8")
+
+        # Top-level support che ha mid come dipendenza
+        from toolkit.core.config_models import SupportDatasetConfig
+
+        entries = [
+            SupportDatasetConfig(name="top", config=str(mid_path), years=[2024]),
+        ]
+        result = resolve_transitive_supports(entries)
+
+        # sub deve venire prima di mid (top non ha anni propri da runnare)
+        names = [e.name for e in result]
+        assert "sub" in names, f"sub non trovato in {names}"
+        assert "top" in names, f"mid/top non trovato in {names}"
+        # sub (foglia) deve stare prima di top
+        assert names.index("sub") < names.index("top"), f"Ordine sbagliato: {names}"
+
+    def test_dedup_same_config(self, tmp_path: Path):
+        """Stesso config path riferito da due entry diverse -> eseguito una volta sola."""
+        cfg_path = _make_sub_support(tmp_path, "shared")
+        from toolkit.core.config_models import SupportDatasetConfig
+
+        entries = [
+            SupportDatasetConfig(name="a", config=str(cfg_path), years=[2024]),
+            SupportDatasetConfig(name="b", config=str(cfg_path), years=[2024]),
+        ]
+        result = resolve_transitive_supports(entries)
+
+        # Deve apparire una volta sola (la prima entry)
+        assert len(result) == 1
+        assert result[0].name == "a"
+
+    def test_cycle_detection(self, tmp_path: Path):
+        """Ciclo A -> B -> A deve sollevare ValueError."""
+        cfg_a = tmp_path / "a" / "dataset.yml"
+        cfg_a.parent.mkdir(parents=True)
+        cfg_a.write_text(
+            f"root: {cfg_a.parent}\n"
+            f"dataset:\n  name: a\n  years: [2024]\n"
+            f"mart:\n  tables:\n    - name: m\n      sql: sql/m.sql\n"
+            f"support:\n  - name: b\n    config: {tmp_path}/b/dataset.yml\n    years: [2024]\n",
+            encoding="utf-8",
+        )
+
+        cfg_b = tmp_path / "b" / "dataset.yml"
+        cfg_b.parent.mkdir(parents=True)
+        cfg_b.write_text(
+            f"root: {cfg_b.parent}\n"
+            f"dataset:\n  name: b\n  years: [2024]\n"
+            f"mart:\n  tables:\n    - name: m\n      sql: sql/m.sql\n"
+            f"support:\n  - name: a\n    config: {cfg_a}\n    years: [2024]\n",
+            encoding="utf-8",
+        )
+
+        from toolkit.core.config_models import SupportDatasetConfig
+
+        # Il ciclo e' tra b (che punta ad a) e a (che punta a b).
+        # Il resolver parte dalla root che punta a b.
+        entries = [
+            SupportDatasetConfig(name="root_b", config=str(cfg_b), years=[2024]),
+        ]
+
+        with pytest.raises(ValueError, match="Circular support dependency"):
+            resolve_transitive_supports(entries)

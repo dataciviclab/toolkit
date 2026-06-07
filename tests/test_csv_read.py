@@ -7,7 +7,7 @@ from toolkit.core.csv_read import (
     normalize_read_cfg,
     _validate_nullstr,
 )
-from toolkit.core.io import normalize_encoding
+from toolkit.core.io import normalize_encoding, normalize_duckdb_encoding
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +98,23 @@ ENCODING_CASES = [
 def test_normalize_encoding(input_enc, expected):
     """normalize_encoding maps common encoding aliases to their canonical form."""
     assert normalize_encoding(input_enc) == expected
+
+
+DUCKDB_ENCODING_CASES = [
+    ("latin1", "CP1252"),
+    ("latin-1", "CP1252"),
+    ("iso-8859-1", "CP1252"),
+    ("utf-8", "utf-8"),
+    ("CP1252", "CP1252"),
+    (None, None),
+]
+
+
+@pytest.mark.policy
+@pytest.mark.parametrize("input_enc, expected", DUCKDB_ENCODING_CASES)
+def test_normalize_duckdb_encoding(input_enc, expected):
+    """normalize_duckdb_encoding mappa latin-1 → CP1252 per DuckDB."""
+    assert normalize_duckdb_encoding(input_enc) == expected
 
 
 # ---------------------------------------------------------------------------

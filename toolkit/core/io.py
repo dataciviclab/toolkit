@@ -76,13 +76,13 @@ def normalize_encoding(enc: str | None) -> str | None:
         return None
     e = enc.strip()
     if e.lower() == "latin1":
-        return "latin-1"
+        return "CP1252"
     if e.lower() == "utf8":
         return "utf-8"
     if e.lower() in {"win1252", "windows1252"}:
         return "CP1252"
-    if e.lower() in {"iso-8859-1", "iso8859-1"}:
-        return "latin-1"
+    if e.lower() in {"iso-8859-1", "iso8859-1", "latin-1"}:
+        return "CP1252"
     if e.lower() == "ascii":
         return "us-ascii"
     return e

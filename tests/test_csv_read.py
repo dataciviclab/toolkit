@@ -64,29 +64,29 @@ def test_normalize_columns_spec_valid_cases():
 
 
 ENCODING_CASES = [
-    # latin1 family
-    ("latin1", "latin-1"),
-    ("LATIN1", "latin-1"),
+    # latin1 family → CP1252 (superset, DuckDB-friendly)
+    ("latin1", "CP1252"),
+    ("LATIN1", "CP1252"),
     # utf-8 family
     ("utf8", "utf-8"),
     ("UTF8", "utf-8"),
     # windows cp variants
     ("win1252", "CP1252"),
     ("Windows1252", "CP1252"),
-    # iso-8859-1 variants
-    ("iso-8859-1", "latin-1"),
-    ("ISO-8859-1", "latin-1"),
-    ("iso8859-1", "latin-1"),
+    # iso-8859-1 variants → CP1252
+    ("iso-8859-1", "CP1252"),
+    ("ISO-8859-1", "CP1252"),
+    ("iso8859-1", "CP1252"),
     # ascii
     ("ascii", "us-ascii"),
     ("ASCII", "us-ascii"),
     # already normalized
     ("utf-8", "utf-8"),
-    ("latin-1", "latin-1"),
+    ("latin-1", "CP1252"),
     ("CP1252", "CP1252"),
     ("us-ascii", "us-ascii"),
     # whitespace stripping
-    ("  latin1  ", "latin-1"),
+    ("  latin1  ", "CP1252"),
     ("\tutf8\t", "utf-8"),
     # None
     (None, None),

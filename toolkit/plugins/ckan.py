@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 from lab_connectors.http import HttpClient
@@ -57,7 +58,7 @@ class CkanSource:
             user_agent=self.user_agent,
         )
 
-    def _get_json(self, url: str, params: dict[str, str]) -> dict:
+    def _get_json(self, url: str, params: dict[str, Any]) -> dict:
         result = self._client.get(url, params=params)
         if result.is_ok and result.response is not None:
             response = result.response

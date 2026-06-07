@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from toolkit.core.io import normalize_encoding
+from toolkit.core.io import normalize_duckdb_encoding
 from toolkit.core.sql_utils import sql_str
 
 
@@ -212,7 +212,7 @@ def csv_read_option_strings(
     if delim is not None:
         opts.append(f"sep='{sql_str(str(delim))}'")
 
-    encoding = normalize_encoding(read_cfg.get("encoding"))
+    encoding = normalize_duckdb_encoding(read_cfg.get("encoding"))
     if encoding is not None:
         opts.append(f"encoding='{sql_str(encoding)}'")
 

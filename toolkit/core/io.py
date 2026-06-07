@@ -67,24 +67,39 @@ def write_json_atomic(path: Path, data: dict[str, Any]) -> None:
 
 
 def normalize_encoding(enc: str | None) -> str | None:
-    """Normalize encoding name to DuckDB canonical form.
+    """Normalize encoding name to canonical form.
 
     Mappa alias comuni (``latin1``, ``utf8``, ``win1252``, ecc.)
-    alla forma canonica attesa da DuckDB (``latin-1``, ``utf-8``, ``CP1252``).
+    alla forma canonica: ``latin-1``, ``utf-8``, ``CP1252``, ``us-ascii``.
     """
     if enc is None:
         return None
     e = enc.strip()
     if e.lower() == "latin1":
-        return "CP1252"
+        return "latin-1"
     if e.lower() == "utf8":
         return "utf-8"
     if e.lower() in {"win1252", "windows1252"}:
         return "CP1252"
-    if e.lower() in {"iso-8859-1", "iso8859-1", "latin-1"}:
-        return "CP1252"
+    if e.lower() in {"iso-8859-1", "iso8859-1"}:
+        return "latin-1"
     if e.lower() == "ascii":
         return "us-ascii"
+    return e
+
+
+def normalize_duckdb_encoding(enc: str | None) -> str | None:
+    """Normalize encoding for DuckDB read_csv.
+
+    Come :func:`normalize_encoding` ma mappa ``latin-1`` → ``CP1252``
+    perche' DuckDB rifiuta ``latin-1`` su file cp1252 con byte 0x80-0x9F.
+    CP1252 e' superset di latin-1 e DuckDB lo accetta sempre.
+    """
+    e = normalize_encoding(enc)
+    if e is None:
+        return None
+    if e.lower() in ("latin-1",):
+        return "CP1252"
     return e
 
 

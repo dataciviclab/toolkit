@@ -10,16 +10,16 @@ from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.sparql import SparqlSource
 
 
-def probe(
+def sparql(
     source: str = typer.Option(..., "--source", "-s", help="Source type (e.g. sparql)"),
     endpoint: str | None = typer.Option(None, "--endpoint", help="SPARQL endpoint URL"),
     query: str | None = typer.Option(None, "--query", "-q", help="SPARQL SELECT query"),
     timeout: int = typer.Option(60, "--timeout", min=1, help="Timeout in seconds"),
-    limit: int = typer.Option(100, "--limit", min=1, help="Max rows for probe sample"),
+    limit: int = typer.Option(100, "--limit", min=1, help="Max rows for sparql sample"),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
 ) -> None:
     """
-    Probe a source endpoint to infer schema and basic statistics.
+    Query a SPARQL endpoint to infer schema and basic statistics.
     Currently supports SPARQL endpoints.
     """
     if source != "sparql":

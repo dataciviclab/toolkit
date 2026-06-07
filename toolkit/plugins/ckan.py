@@ -128,7 +128,15 @@ class CkanSource:
             if len(all_records) >= total:
                 break
 
-            offset += limit
+            # No-progress guard: server may cap at fewer records than limit
+            if not records:
+                break
+
+            # Advance by actual records returned, not by requested limit
+            # (alcuni portali CKAN ignorano limit=32000 e restituiscono
+            #  il loro default, es. 100. Offset su limit salterebbe dati
+            #  o causerebbe loop infinito.)
+            offset += len(records)
 
         if not all_records:
             raise DownloadError(

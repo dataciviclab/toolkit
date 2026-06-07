@@ -7,13 +7,21 @@ logic lives in lab-connectors and is tested there.
 
 from __future__ import annotations
 
+import os
+from unittest import mock
+
 import pytest
 
-from lab_connectors.http import HttpResult
+from lab_connectors.http import HttpResult, HttpFallbackError
 from lab_connectors.testing import FakeHttpClient, fake_response
 
 from toolkit.core.exceptions import DownloadError
-from toolkit.plugins.http_file import HttpFileSource
+from toolkit.plugins.http_file import (
+    HttpFileSource,
+    _sanitize_proxy_url,
+    _parse_curl_status,
+    _strip_curl_status,
+)
 
 
 @pytest.mark.contract
@@ -160,3 +168,97 @@ class TestNonTruncableSampleBytes:
         else:
             # CSV/JSON: sample_bytes rispettato con troncamento locale
             assert len(payload) <= 5000
+
+
+# --- curl fallback helpers ---
+
+
+@pytest.mark.contract
+class TestSanitizeProxyUrl:
+    def test_no_credentials(self):
+        assert _sanitize_proxy_url("http://proxy.example:8888") == "http://proxy.example:8888"
+
+    def test_username_only(self):
+        result = _sanitize_proxy_url("http://user@proxy.example:8888")
+        assert "user@" in result
+        assert "***" not in result
+
+    def test_username_password(self):
+        result = _sanitize_proxy_url("http://user:pass@proxy.example:8888")
+        assert "user:***@" in result
+        assert "pass" not in result
+
+    def test_no_port(self):
+        assert _sanitize_proxy_url("http://proxy.example") == "http://proxy.example"
+
+
+@pytest.mark.contract
+class TestParseCurlStatus:
+    def test_status_at_end(self):
+        assert _parse_curl_status(b"body\n200", b"") == 200
+
+    def test_status_with_trailing_newline(self):
+        assert _parse_curl_status(b"body\n200\n", b"") == 200
+
+    def test_no_status_raises(self):
+        with pytest.raises(DownloadError, match="no HTTP status"):
+            _parse_curl_status(b"body\n", b"curl: (7) Failed to connect")
+
+
+@pytest.mark.contract
+class TestStripCurlStatus:
+    def test_strips_trailing_status(self):
+        assert _strip_curl_status(b"body\n200", 200) == b"body"
+
+    def test_noop_when_not_suffixed(self):
+        assert _strip_curl_status(b"body", 200) == b"body"
+
+
+@pytest.mark.contract
+class TestCurlFallbackIntegration:
+    """Quando is_ssl_fallback_failed=True e HTTPS_PROXY è impostato,
+    fetch deve chiamare _fetch_via_curl invece di lanciare DownloadError."""
+
+    def test_fallback_triggered_with_proxy(self):
+        """ssl_fallback_failed + proxy → curl fallback chiamato."""
+        err = HttpFallbackError(
+            primary_error=ConnectionError("SSL err"), fallback_error=ConnectionError("fallback err")
+        )
+        fake = FakeHttpClient()
+        fake.responses["https://example.test/data.csv"] = HttpResult(
+            response=None,
+            err=err,
+            ssl_fallback_used=False,
+        )
+
+        source = HttpFileSource(retries=1)
+        source._client = fake
+
+        with mock.patch.dict(os.environ, {"HTTPS_PROXY": "http://proxy:8888"}):
+            with mock.patch(
+                "toolkit.plugins.http_file._fetch_via_curl",
+                return_value=b"curl-data",
+            ) as mock_curl:
+                payload = source.fetch("https://example.test/data.csv")
+
+        assert payload == b"curl-data"
+        mock_curl.assert_called_once()
+
+    def test_no_fallback_without_proxy(self):
+        """ssl_fallback_failed ma senza proxy → DownloadError (no curl)."""
+        err = HttpFallbackError(
+            primary_error=ConnectionError("SSL err"), fallback_error=ConnectionError("fallback err")
+        )
+        fake = FakeHttpClient()
+        fake.responses["https://example.test/data.csv"] = HttpResult(
+            response=None,
+            err=err,
+            ssl_fallback_used=False,
+        )
+
+        source = HttpFileSource(retries=1)
+        source._client = fake
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(DownloadError, match="fallback failed"):
+                source.fetch("https://example.test/data.csv")

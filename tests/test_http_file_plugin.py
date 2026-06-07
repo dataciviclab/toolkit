@@ -173,52 +173,59 @@ class TestNonTruncableSampleBytes:
 # --- curl fallback helpers ---
 
 
-@pytest.mark.contract
 class TestSanitizeProxyUrl:
+    @pytest.mark.pure_unit
     def test_no_credentials(self):
         assert _sanitize_proxy_url("http://proxy.example:8888") == "http://proxy.example:8888"
 
+    @pytest.mark.pure_unit
     def test_username_only(self):
         result = _sanitize_proxy_url("http://user@proxy.example:8888")
         assert "user@" in result
         assert "***" not in result
 
+    @pytest.mark.pure_unit
     def test_username_password(self):
         result = _sanitize_proxy_url("http://user:pass@proxy.example:8888")
         assert "user:***@" in result
         assert "pass" not in result
 
+    @pytest.mark.pure_unit
     def test_no_port(self):
         assert _sanitize_proxy_url("http://proxy.example") == "http://proxy.example"
 
 
-@pytest.mark.contract
 class TestParseCurlStatus:
+    @pytest.mark.pure_unit
     def test_status_at_end(self):
         assert _parse_curl_status(b"body\n200", b"") == 200
 
+    @pytest.mark.pure_unit
     def test_status_with_trailing_newline(self):
         assert _parse_curl_status(b"body\n200\n", b"") == 200
 
+    @pytest.mark.pure_unit
     def test_no_status_raises(self):
         with pytest.raises(DownloadError, match="no HTTP status"):
             _parse_curl_status(b"body\n", b"curl: (7) Failed to connect")
 
 
-@pytest.mark.contract
+@pytest.mark.pure_unit
 class TestStripCurlStatus:
+    @pytest.mark.pure_unit
     def test_strips_trailing_status(self):
         assert _strip_curl_status(b"body\n200", 200) == b"body"
 
+    @pytest.mark.pure_unit
     def test_noop_when_not_suffixed(self):
         assert _strip_curl_status(b"body", 200) == b"body"
 
 
-@pytest.mark.contract
 class TestCurlFallbackIntegration:
     """Quando is_ssl_fallback_failed=True e HTTPS_PROXY è impostato,
     fetch deve chiamare _fetch_via_curl invece di lanciare DownloadError."""
 
+    @pytest.mark.contract
     def test_fallback_triggered_with_proxy(self):
         """ssl_fallback_failed + proxy → curl fallback chiamato."""
         err = HttpFallbackError(
@@ -244,6 +251,7 @@ class TestCurlFallbackIntegration:
         assert payload == b"curl-data"
         mock_curl.assert_called_once()
 
+    @pytest.mark.contract
     def test_no_fallback_without_proxy(self):
         """ssl_fallback_failed ma senza proxy → DownloadError (no curl)."""
         err = HttpFallbackError(

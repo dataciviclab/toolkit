@@ -129,12 +129,18 @@ def _fetch_via_curl(
     except subprocess.TimeoutExpired:
         raise DownloadError(f"curl timeout after {timeout}s for {url}")
 
+    # Curl exit status: errori di rete, I/O, write failure, trasferimento
+    # parziale ecc. --fail-with-body copre solo HTTP 4xx/5xx, non tutto.
+    if r.returncode != 0:
+        stderr = r.stderr.decode("utf-8", errors="replace").strip()
+        raise DownloadError(f"curl exit={r.returncode} per {url}: {stderr or 'unknown error'}")
+
     # Estrai HTTP status code dall'ultima riga di stdout
     stdout = r.stdout
     status_code = _parse_curl_status(stdout, r.stderr)
     body = _strip_curl_status(stdout, status_code)
 
-    # --fail-with-body + exit 0 garantisce 2xx, ma verifichiamo 200/206
+    # Verifichiamo 200/206 (--fail-with-body già blocca 4xx/5xx ma teniamo il check)
     if status_code not in (200, 206):
         stderr = r.stderr.decode("utf-8", errors="replace").strip()
         raise DownloadError(f"curl HTTP {status_code} per {url}: {stderr or 'unexpected status'}")

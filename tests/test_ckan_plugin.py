@@ -538,3 +538,96 @@ def test_ckan_fetch_prefer_datastore_false_skips_datastore(monkeypatch):
     assert payload == b"csv-via-url"
     assert "csv-via-url" in origin or "dump.csv" in origin
     assert not any("datastore_search" in str(c) for c in calls)
+
+
+def test_ckan_datastore_search_paginates(monkeypatch):
+    """Verifica che _datastore_search pagini quando total > records per chiamata."""
+    calls = []
+    page1 = [{"id": i, "valore": f"record-{i}"} for i in range(3)]
+    page2 = [{"id": i + 3, "valore": f"record-{i + 3}"} for i in range(2)]
+    total = 5
+
+    def _fake_get(self, url, **kwargs):
+        calls.append((url, kwargs.get("params")))
+        if "datastore_search" in url:
+            params = kwargs.get("params", {})
+            offset = int(params.get("offset", 0))
+            page = page1 if offset == 0 else page2
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {
+                            "fields": [{"id": "id"}, {"id": "valore"}],
+                            "records": page,
+                            "total": total,
+                        },
+                    },
+                    url=url,
+                )
+            )
+        raise AssertionError(f"Unexpected request to {url}")
+
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
+
+    src = CkanSource()
+    csv_bytes = src._datastore_search(
+        "res-paginated", "https://portal.example.org/api/3", page_size=3
+    )
+
+    text = csv_bytes.decode("utf-8")
+    lines = text.strip().splitlines()
+    assert lines[0] == "id,valore"
+    assert len(lines) - 1 == total  # header escluso
+    assert lines[1] == "0,record-0"
+    assert lines[-1] == "4,record-4"
+    assert len(calls) == 2, f"Expected 2 API calls, got {len(calls)}"
+
+
+def test_ckan_datastore_search_partial_page(monkeypatch):
+    """Server cappa a 100 record anche con limit=32000: offset avanza per records reali."""
+    calls = []
+
+    def _fake_get(self, url, **kwargs):
+        calls.append((url, kwargs.get("params")))
+        if "datastore_search" in url:
+            params = kwargs.get("params", {})
+            offset = int(params.get("offset", 0))
+            # Simula server che ignora limit e restituisce sempre <= 2 record
+            remaining = 7 - offset
+            batch_size = min(2, remaining)
+            records = (
+                [{"id": offset + i, "valore": f"r-{offset + i}"} for i in range(batch_size)]
+                if batch_size > 0
+                else []
+            )
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {
+                            "fields": [{"id": "id"}, {"id": "valore"}],
+                            "records": records,
+                            "total": 7,
+                        },
+                    },
+                    url=url,
+                )
+            )
+        raise AssertionError(f"Unexpected request to {url}")
+
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
+
+    src = CkanSource()
+    csv_bytes = src._datastore_search("res-capped", "https://portal.example.org/api/3", page_size=32000)
+
+    text = csv_bytes.decode("utf-8")
+    lines = text.strip().splitlines()
+    assert lines[0] == "id,valore"
+    assert len(lines) - 1 == 7, f"Expected 7 records, got {len(lines) - 1}"
+    assert lines[1] == "0,r-0"
+    assert lines[-1] == "6,r-6"
+    # 7 records con batch da 2: offset 0→2→4→6 = 4 chiamate
+    assert len(calls) == 4, f"Expected 4 API calls (capped at 2/page), got {len(calls)}"

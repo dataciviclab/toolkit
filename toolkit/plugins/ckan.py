@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 from lab_connectors.http import HttpClient
@@ -57,7 +58,7 @@ class CkanSource:
             user_agent=self.user_agent,
         )
 
-    def _get_json(self, url: str, params: dict[str, str]) -> dict:
+    def _get_json(self, url: str, params: dict[str, Any]) -> dict:
         result = self._client.get(url, params=params)
         if result.is_ok and result.response is not None:
             response = result.response
@@ -86,25 +87,69 @@ class CkanSource:
         err = result.err
         raise DownloadError(str(err) if err else f"Failed to fetch {url}")
 
-    def _datastore_search(self, resource_id: str, api_base: str) -> bytes:
+    def _datastore_search(self, resource_id: str, api_base: str, page_size: int = 32000) -> bytes:
+        """Fetch ALL rows from a CKAN DataStore resource, paginating if needed.
+
+        CKAN DataStore default limit is 100 rows; API max is 32000.
+        Questa funzione pagina automaticamente fino a esaurimento records.
+        """
         url = _normalize_datastore_search_url(api_base)
-        payload = self._get_json(url, {"id": resource_id})
-        result = payload.get("result", {})
-        records = result.get("records") or []
-        if not records:
+        all_records: list[dict] = []
+        fields: list[str] = []
+        total: int | None = None
+        offset = 0
+        limit = min(page_size, 32000)
+
+        while True:
+            params: dict[str, str | int] = {
+                "id": resource_id,
+                "limit": limit,
+                "offset": offset,
+            }
+            payload = self._get_json(url, params)
+            result = payload.get("result", {})
+            records = result.get("records") or []
+            if not records and total is None:
+                raise DownloadError(
+                    f"CKAN datastore_search for resource {resource_id} returned no records"
+                )
+
+            # Capture field list from first response
+            if not fields:
+                fields = [f["id"] for f in result.get("fields") or []]
+                if not fields and records:
+                    fields = list(records[0].keys())
+
+            all_records.extend(records)
+
+            # Stop when we have all records
+            if total is None:
+                total = result.get("total") or len(records)
+            if len(all_records) >= total:
+                break
+
+            # No-progress guard: server may cap at fewer records than limit
+            if not records:
+                break
+
+            # Advance by actual records returned, not by requested limit
+            # (alcuni portali CKAN ignorano limit=32000 e restituiscono
+            #  il loro default, es. 100. Offset su limit salterebbe dati
+            #  o causerebbe loop infinito.)
+            offset += len(records)
+
+        if not all_records:
             raise DownloadError(
                 f"CKAN datastore_search for resource {resource_id} returned no records"
             )
-        # NOTE: other DownloadError from this method indicate empty-result only;
-        # HTTP/API errors surface as requests exceptions, caught by outer try-except in fetch()
-        fields = [f["id"] for f in result.get("fields") or []]
+
         buffer = io.StringIO(newline="")
         writer = csv.DictWriter(buffer, fieldnames=fields)
         writer.writeheader()
         # NOTE: CSV format does not distinguish None from empty string.
         # row.get(k) returns None for missing keys; csv.DictWriter emits '' for None.
         # If semantic distinction matters, a different format (JSONL) is needed.
-        for row in records:
+        for row in all_records:
             writer.writerow({k: row.get(k) for k in fields})
         return buffer.getvalue().encode("utf-8")
 

@@ -18,7 +18,9 @@ def dump_cfg_section(cfg_section: Any) -> Any:
     restituirebbe ``["a"]`` invece di ``{"a": 1}``.
     """
     if hasattr(cfg_section, "model_dump"):
-        return cfg_section.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True)
+        return cfg_section.model_dump(
+            mode="python", by_alias=True, exclude_none=True, exclude_unset=True
+        )
     if isinstance(cfg_section, dict):
         return cfg_section
     if hasattr(cfg_section, "__iter__") and not isinstance(cfg_section, str):
@@ -133,9 +135,7 @@ def _transition_summary(item: dict | None) -> dict | None:
 
 
 def load_layer_profile_summaries(root: Path, dataset: str, year: int) -> dict[str, object] | None:
-    clean_metadata = (
-        _read_json(layer_year_dir(root, "clean", dataset, year) / METADATA) or {}
-    )
+    clean_metadata = _read_json(layer_year_dir(root, "clean", dataset, year) / METADATA) or {}
     mart_metadata = _read_json(layer_year_dir(root, "mart", dataset, year) / METADATA) or {}
 
     clean_output = _profile_summary(clean_metadata.get("output_profile"))

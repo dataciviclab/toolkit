@@ -72,9 +72,7 @@ class CleanReadConfig(BaseModel):
     @model_validator(mode="after")
     def _validate_align_by_header(self) -> "CleanReadConfig":
         if self.align_by_header and not self.normalize_rows_to_columns:
-            raise ValueError(
-                "align_by_header=true requires normalize_rows_to_columns=true"
-            )
+            raise ValueError("align_by_header=true requires normalize_rows_to_columns=true")
         return self
 
 

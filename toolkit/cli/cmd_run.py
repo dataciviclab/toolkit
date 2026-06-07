@@ -19,9 +19,6 @@ from toolkit.raw.run import run_raw
 from toolkit.raw.validate import run_raw_validation
 
 
-
-
-
 class ValidationGateError(RuntimeError):
     pass
 
@@ -102,7 +99,9 @@ def _layers_from_start(layers: list[str], start_from_layer: str | None) -> list[
     return layers[start_index:]
 
 
-def _print_execution_plan(cfg, year: int, layers: list[str], context: RunContext, fail_on_error: bool) -> None:
+def _print_execution_plan(
+    cfg, year: int, layers: list[str], context: RunContext, fail_on_error: bool
+) -> None:
     typer.echo("Execution Plan")
     typer.echo(f"dataset: {cfg.dataset}")
     typer.echo(f"year: {year}")
@@ -158,9 +157,19 @@ def _run_probe(cfg, year: int, logger) -> None:
     from toolkit.scout.http import probe_url_headers
 
     for src in sources:
-        stype = getattr(src, "type", None) or src.get("type", "http_file") if isinstance(src, dict) else src.type
-        args = getattr(src, "args", None) or src.get("args", {}) if isinstance(src, dict) else src.args
-        name = getattr(src, "name", None) or src.get("name", stype) if isinstance(src, dict) else (src.name or stype)
+        stype = (
+            getattr(src, "type", None) or src.get("type", "http_file")
+            if isinstance(src, dict)
+            else src.type
+        )
+        args = (
+            getattr(src, "args", None) or src.get("args", {}) if isinstance(src, dict) else src.args
+        )
+        name = (
+            getattr(src, "name", None) or src.get("name", stype)
+            if isinstance(src, dict)
+            else (src.name or stype)
+        )
         url = (args.get("url") or "").replace("{year}", str(year))
 
         try:
@@ -170,7 +179,12 @@ def _run_probe(cfg, year: int, logger) -> None:
                 probe = probe_url_headers(url, timeout=5)
                 sc = probe.get("status_code", 0)
                 if 200 <= sc < 400:
-                    logger.info("PROBE | %s -> HTTP %s (%s)", name, sc, _probe_fmt(probe.get("content_type")))
+                    logger.info(
+                        "PROBE | %s -> HTTP %s (%s)",
+                        name,
+                        sc,
+                        _probe_fmt(probe.get("content_type")),
+                    )
                 else:
                     logger.warning("PROBE | %s -> HTTP %s %s", name, sc or "ERR", url)
 
@@ -180,9 +194,16 @@ def _run_probe(cfg, year: int, logger) -> None:
                     probe = probe_url_headers(portal, timeout=5)
                     sc = probe.get("status_code", 0)
                     if 200 <= sc < 400:
-                        logger.info("PROBE | %s CKAN -> HTTP %s (%s)", name, sc, probe.get("final_url", portal))
+                        logger.info(
+                            "PROBE | %s CKAN -> HTTP %s (%s)",
+                            name,
+                            sc,
+                            probe.get("final_url", portal),
+                        )
                     else:
-                        logger.warning("PROBE | %s CKAN -> HTTP %s at %s", name, sc or "ERR", portal)
+                        logger.warning(
+                            "PROBE | %s CKAN -> HTTP %s at %s", name, sc or "ERR", portal
+                        )
 
         except RuntimeError as exc:
             logger.warning("PROBE | %s -> unreachable: %s", name, exc)
@@ -276,7 +297,10 @@ def run_year(
             run_has_validation_warnings = True
             base_logger.warning(
                 "SKIP %s layer for %s (%s) — source unreachable? %s",
-                layer_name, cfg.dataset, year, exc,
+                layer_name,
+                cfg.dataset,
+                year,
+                exc,
             )
             return False
 
@@ -303,7 +327,7 @@ def run_year(
             # RAW fallito: skip layer downstream (clean, mart)
             # per evitare output stale con dati di run precedenti
             layers_to_run = []
-    
+
     # Il resolver dei support deve sapere se il campionamento e' attivo
     # (root override in {root}/smoke), non solo se --smoke e' stato usato
     sampling_active = smoke or sample_rows is not None or sample_bytes is not None
@@ -434,8 +458,15 @@ def run(
     selected_years = iter_selected_years(cfg, years_arg=years_arg)
 
     for year in selected_years:
-        run_year(cfg, year, step=step, dry_run=dry_flag, logger=logger,
-                 sample_rows=sample_rows, sample_bytes=sample_bytes)
+        run_year(
+            cfg,
+            year,
+            step=step,
+            dry_run=dry_flag,
+            logger=logger,
+            sample_rows=sample_rows,
+            sample_bytes=sample_bytes,
+        )
 
     # Multi-year mart: run once per dataset after per-year processing
     if step in ("all", "mart"):
@@ -484,11 +515,23 @@ def _make_step_cmd(step: str):
         config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
         year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
         years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
-        smoke: bool = typer.Option(False, "--smoke", help="Alias per --sample-rows 1000 --sample-bytes 1048576"),
-        sample_rows: int | None = typer.Option(None, "--sample-rows", help="Leggi solo N righe in CLEAN (LIMIT N sul output SQL)"),
-        sample_bytes: int | None = typer.Option(None, "--sample-bytes", help="Scarica solo N bytes in RAW (HTTP Range header + troncamento locale)"),
-        root: str | None = typer.Option(None, "--root", help="Override root output directory (es. DCL_ROOT)"),
-        dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
+        smoke: bool = typer.Option(
+            False, "--smoke", help="Alias per --sample-rows 1000 --sample-bytes 1048576"
+        ),
+        sample_rows: int | None = typer.Option(
+            None, "--sample-rows", help="Leggi solo N righe in CLEAN (LIMIT N sul output SQL)"
+        ),
+        sample_bytes: int | None = typer.Option(
+            None,
+            "--sample-bytes",
+            help="Scarica solo N bytes in RAW (HTTP Range header + troncamento locale)",
+        ),
+        root: str | None = typer.Option(
+            None, "--root", help="Override root output directory (es. DCL_ROOT)"
+        ),
+        dry_run: bool = typer.Option(
+            False, "--dry-run", help="Print execution plan without executing"
+        ),
     ):
         dry_flag = dry_run if isinstance(dry_run, bool) else False
 
@@ -510,14 +553,23 @@ def _make_step_cmd(step: str):
         selected_years = iter_selected_years(cfg, year_arg=year_arg, years_arg=years_arg)
 
         for year in selected_years:
-            run_year(cfg, year, step=_step, dry_run=dry_flag, logger=logger,
-                     sample_rows=sample_rows_final, sample_bytes=sample_bytes_final,
-                     smoke=smoke)
+            run_year(
+                cfg,
+                year,
+                step=_step,
+                dry_run=dry_flag,
+                logger=logger,
+                sample_rows=sample_rows_final,
+                sample_bytes=sample_bytes_final,
+                smoke=smoke,
+            )
 
         # Multi-year mart: run once per dataset after per-year processing
         if _step in ("all", "mart"):
             _sampling = sample_rows_final is not None or sample_bytes_final is not None
-            _maybe_run_multi_year_mart(cfg, selected_years, dry_run=dry_flag, logger=logger, sampling_active=_sampling)
+            _maybe_run_multi_year_mart(
+                cfg, selected_years, dry_run=dry_flag, logger=logger, sampling_active=_sampling
+            )
 
     cmd.__name__ = f"run_{_step}_cmd"
     cmd.__doc__ = _STEP_DOCSTRINGS.get(_step, f"Esegue lo step {_step} della pipeline.")
@@ -583,8 +635,7 @@ def run_init(
         clean_sql_path = Path(cfg.base_dir) / clean_sql_rel
         scaffold_existed_before = clean_sql_path.exists()
 
-        run_year(cfg, year, step="raw", dry_run=False, logger=logger,
-                 sample_bytes=sample_bytes)
+        run_year(cfg, year, step="raw", dry_run=False, logger=logger, sample_bytes=sample_bytes)
 
         typer.echo(f"[init] Bootstrap completato per {cfg.dataset}/{year}")
         typer.echo("  - raw scaricato")
@@ -608,7 +659,9 @@ def run_init(
                 )
             typer.echo("  - profiling disponibile")
             typer.echo("  - clean.sql non scaffoldato nonostante il profilo raw sia disponibile")
-            typer.echo("    Esegui: toolkit scaffold clean -c <config> oppure verifica i permessi di scrittura")
+            typer.echo(
+                "    Esegui: toolkit scaffold clean -c <config> oppure verifica i permessi di scrittura"
+            )
 
     typer.echo("")
     typer.echo("Prossimo passo: toolkit run clean -c <config>")
@@ -617,10 +670,20 @@ def run_init(
 def run_full(
     config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
-    smoke: bool = typer.Option(False, "--smoke", help="Alias per --sample-rows 1000 --sample-bytes 1048576"),
-    sample_rows: int | None = typer.Option(None, "--sample-rows", help="Leggi solo N righe in CLEAN (LIMIT N sul output SQL)"),
-    sample_bytes: int | None = typer.Option(None, "--sample-bytes", help="Scarica solo N bytes in RAW (HTTP Range header + troncamento locale)"),
-    root: str | None = typer.Option(None, "--root", help="Override root output directory (es. DCL_ROOT)"),
+    smoke: bool = typer.Option(
+        False, "--smoke", help="Alias per --sample-rows 1000 --sample-bytes 1048576"
+    ),
+    sample_rows: int | None = typer.Option(
+        None, "--sample-rows", help="Leggi solo N righe in CLEAN (LIMIT N sul output SQL)"
+    ),
+    sample_bytes: int | None = typer.Option(
+        None,
+        "--sample-bytes",
+        help="Scarica solo N bytes in RAW (HTTP Range header + troncamento locale)",
+    ),
+    root: str | None = typer.Option(
+        None, "--root", help="Override root output directory (es. DCL_ROOT)"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
 ):
@@ -680,9 +743,7 @@ def run_full(
                         root_override=str(_sup0.root / "smoke"),
                     )
                 else:
-                    support_cfg, support_logger = load_cfg_and_logger(
-                        str(entry.config)
-                    )
+                    support_cfg, support_logger = load_cfg_and_logger(str(entry.config))
             except Exception as exc:
                 logger.error("Support: cannot load config %s: %s", entry.config, exc)
                 results["status"] = "failed"
@@ -691,9 +752,15 @@ def run_full(
             for sy in entry.years:
                 logger.info("Support: running %s year=%s", entry.name, sy)
                 try:
-                    run_year(support_cfg, sy, step="all", logger=support_logger,
-                             sample_rows=sample_rows_final, sample_bytes=sample_bytes_final,
-                             smoke=smoke)
+                    run_year(
+                        support_cfg,
+                        sy,
+                        step="all",
+                        logger=support_logger,
+                        sample_rows=sample_rows_final,
+                        sample_bytes=sample_bytes_final,
+                        smoke=smoke,
+                    )
                 except Exception as exc:
                     logger.error("Support run failed: %s year=%s — %s", entry.name, sy, exc)
                     results["status"] = "failed"
@@ -701,12 +768,16 @@ def run_full(
 
                 # Validate all layers
                 try:
-                    sv_raw = run_raw_validation(support_cfg.root, support_cfg.dataset, sy, support_logger)
-                    sv_clean = run_clean_validation(support_cfg, sy, support_logger, sample_mode=sample_mode)
-                    sv_mart = run_mart_validation(support_cfg, sy, support_logger, sample_mode=sample_mode)
-                    all_support_passed = all(
-                        r.get("passed") for r in [sv_raw, sv_clean, sv_mart]
+                    sv_raw = run_raw_validation(
+                        support_cfg.root, support_cfg.dataset, sy, support_logger
                     )
+                    sv_clean = run_clean_validation(
+                        support_cfg, sy, support_logger, sample_mode=sample_mode
+                    )
+                    sv_mart = run_mart_validation(
+                        support_cfg, sy, support_logger, sample_mode=sample_mode
+                    )
+                    all_support_passed = all(r.get("passed") for r in [sv_raw, sv_clean, sv_mart])
                     if not all_support_passed:
                         logger.error("Support validation failed: %s year=%s", entry.name, sy)
                         results["status"] = "failed"
@@ -732,9 +803,16 @@ def run_full(
 
         for year in selected_years:
             logger.info("Run %s — year=%s", run_step, year)
-            run_year(cfg, year, step=run_step, dry_run=dry_flag, logger=logger,
-                     sample_rows=sample_rows_final, sample_bytes=sample_bytes_final,
-                     smoke=smoke)
+            run_year(
+                cfg,
+                year,
+                step=run_step,
+                dry_run=dry_flag,
+                logger=logger,
+                sample_rows=sample_rows_final,
+                sample_bytes=sample_bytes_final,
+                smoke=smoke,
+            )
 
             if not dry_flag:
                 if is_mart_only:
@@ -747,9 +825,7 @@ def run_full(
                     val_raw = run_raw_validation(cfg.root, cfg.dataset, year, logger)
                     val_clean = run_clean_validation(cfg, year, logger, sample_mode=sample_mode)
                     val_mart = run_mart_validation(cfg, year, logger, sample_mode=sample_mode)
-                    all_passed = all(
-                        r.get("passed") for r in [val_raw, val_clean, val_mart]
-                    )
+                    all_passed = all(r.get("passed") for r in [val_raw, val_clean, val_mart])
                 results["steps"][str(year)] = {
                     "run": "ok",
                     "validate": "passed" if all_passed else "failed",
@@ -759,6 +835,7 @@ def run_full(
 
                 # Review readiness (capture full result including layers)
                 from toolkit.cli.inspect.readiness_ops import review_readiness as _review_readiness
+
                 readiness = _review_readiness(config, year or None)
                 results["steps"][str(year)]["readiness"] = readiness.get("readiness")
                 results["steps"][str(year)]["checks"] = readiness.get("check_count", 0)
@@ -769,7 +846,9 @@ def run_full(
         # Multi-year mart: run once per dataset after per-year processing
         if not dry_flag and _has_multi_year_mart(cfg):
             try:
-                _maybe_run_multi_year_mart(cfg, selected_years, dry_run=False, logger=logger, sampling_active=sample_mode)
+                _maybe_run_multi_year_mart(
+                    cfg, selected_years, dry_run=False, logger=logger, sampling_active=sample_mode
+                )
                 results["multi_year_mart"] = "ok"
             except Exception as exc:
                 results["multi_year_mart"] = f"failed: {exc}"
@@ -815,8 +894,14 @@ def run_full(
                     tbl = ln.get("tables") or []
                     ready = sum(1 for t in tbl if t.get("readable"))
                     parts.append(f"{ready}/{len(tbl)} tabelle")
-                typer.echo(f"       {lname}: {icon}  {'  '.join(parts)}" if parts else f"       {lname}: {icon}")
-            typer.echo(f"       readiness: {s.get('readiness', '?')}  ({s.get('checks_ok', 0)}/{s.get('checks', 0)})")
+                typer.echo(
+                    f"       {lname}: {icon}  {'  '.join(parts)}"
+                    if parts
+                    else f"       {lname}: {icon}"
+                )
+            typer.echo(
+                f"       readiness: {s.get('readiness', '?')}  ({s.get('checks_ok', 0)}/{s.get('checks', 0)})"
+            )
 
     if results["status"] != "passed":
         raise typer.Exit(code=1)

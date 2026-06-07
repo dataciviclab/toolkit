@@ -33,9 +33,15 @@ def _get_impls():
     )
 
     return (
-        _inspect_paths, _clean_preview, _dataset_info,
-        _raw_preview, _raw_profile, _review_readiness,
-        _run_summary, _show_schema, _summary,
+        _inspect_paths,
+        _clean_preview,
+        _dataset_info,
+        _raw_preview,
+        _raw_profile,
+        _review_readiness,
+        _run_summary,
+        _show_schema,
+        _summary,
     )
 
 
@@ -108,9 +114,15 @@ def layer_query(
         )
 
     (
-        _inspect_paths, _clean_preview, _dataset_info,
-        _raw_preview, _raw_profile, _review_readiness,
-        _run_summary, _show_schema, _summary,
+        _inspect_paths,
+        _clean_preview,
+        _dataset_info,
+        _raw_preview,
+        _raw_profile,
+        _review_readiness,
+        _run_summary,
+        _show_schema,
+        _summary,
     ) = _get_impls()
 
     # Schema mode
@@ -125,12 +137,16 @@ def layer_query(
     if safe_mode == "preview":
         if safe_layer == "raw":
             return _raw_preview(config_path, year=year, limit=limit)
-        return _clean_preview(config_path, layer=safe_layer, mart_index=mart_index, year=year, limit=limit)
+        return _clean_preview(
+            config_path, layer=safe_layer, mart_index=mart_index, year=year, limit=limit
+        )
 
     # SQL mode — sql non puo' essere None qui (guardato sopra)
     if safe_mode == "sql":
         assert sql is not None  # mypy narrowing
-        return _layer_sql(config_path, layer=safe_layer, year=year, limit=limit, sql=sql, mart_index=mart_index)
+        return _layer_sql(
+            config_path, layer=safe_layer, year=year, limit=limit, sql=sql, mart_index=mart_index
+        )
 
     raise RuntimeError(f"mode non gestito: {safe_mode}")
 
@@ -183,13 +199,15 @@ def _layer_sql(
     from toolkit.core.duckdb_shape import parquet_preview
 
     result = parquet_preview(parquet_path, limit=limit, sql=sql)
-    result.update({
-        "dataset": paths.get("dataset"),
-        "year": resolved_year,
-        "layer": layer,
-        "config_path": str(config),
-        "mode": "sql",
-    })
+    result.update(
+        {
+            "dataset": paths.get("dataset"),
+            "year": resolved_year,
+            "layer": layer,
+            "config_path": str(config),
+            "mode": "sql",
+        }
+    )
     return result
 
 
@@ -214,9 +232,15 @@ def dataset_status(
         Dict con sezioni: paths_info, summary, readiness, run_stats, info.
     """
     (
-        _inspect_paths, _clean_preview, _dataset_info,
-        _raw_preview, _raw_profile, _review_readiness,
-        _run_summary, _show_schema, _summary,
+        _inspect_paths,
+        _clean_preview,
+        _dataset_info,
+        _raw_preview,
+        _raw_profile,
+        _review_readiness,
+        _run_summary,
+        _show_schema,
+        _summary,
     ) = _get_impls()
 
     return {

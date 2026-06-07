@@ -52,50 +52,75 @@ class TestLoadDatasetManifest:
         assert result["slug"] == missing.parent.name
 
     def test_sources(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test"},
-            "raw": {"sources": [{"name": "src1"}, {"name": "src2"}]},
-        })
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test"},
+                "raw": {"sources": [{"name": "src1"}, {"name": "src2"}]},
+            },
+        )
         result = load_dataset_manifest(tmp_path)
         assert len(result["sources"]) == 2
         assert result["sources"][0]["name"] == "src1"
 
     def test_extra_ca_cert_urls_single(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test"},
-            "raw": {"sources": [{"args": {"extra_ca_cert_url": "https://certs.example.com/cert.pem"}}]},
-        })
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test"},
+                "raw": {
+                    "sources": [
+                        {"args": {"extra_ca_cert_url": "https://certs.example.com/cert.pem"}}
+                    ]
+                },
+            },
+        )
         result = load_dataset_manifest(tmp_path)
         assert result["extra_ca_cert_urls"] == ["https://certs.example.com/cert.pem"]
 
     def test_extra_ca_cert_urls_multiple(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test"},
-            "raw": {"sources": [{"args": {"extra_ca_cert_urls": ["a.pem", "b.pem"]}}]},
-        })
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test"},
+                "raw": {"sources": [{"args": {"extra_ca_cert_urls": ["a.pem", "b.pem"]}}]},
+            },
+        )
         result = load_dataset_manifest(tmp_path)
         assert result["extra_ca_cert_urls"] == ["a.pem", "b.pem"]
 
     def test_support_root_level(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test"},
-            "support": [{"name": "sup1", "config": "path/to/config.yml"}],
-        })
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test"},
+                "support": [{"name": "sup1", "config": "path/to/config.yml"}],
+            },
+        )
         result = load_dataset_manifest(tmp_path)
         assert len(result["support"]) == 1
         assert result["support"][0]["name"] == "sup1"
 
     def test_support_in_dataset(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test", "support": [{"name": "sup1"}]},
-        })
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test", "support": [{"name": "sup1"}]},
+            },
+        )
         result = load_dataset_manifest(tmp_path)
         assert len(result["support"]) == 1
 
     def test_time_coverage(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test", "time_coverage": {"start_year": 2020, "end_year": 2024}},
-        })
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {
+                    "name": "test",
+                    "time_coverage": {"start_year": 2020, "end_year": 2024},
+                },
+            },
+        )
         result = load_dataset_manifest(tmp_path)
         assert result["time_coverage"]["start_year"] == 2020
         assert result["time_coverage"]["end_year"] == 2024
@@ -166,10 +191,13 @@ class TestValidateConfig:
     """Contract: validate_config controlla campi obbligatori dataset.yml."""
 
     def test_valid(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test", "years": [2023]},
-            "raw": {"sources": [{"name": "src1"}]},
-        })
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test", "years": [2023]},
+                "raw": {"sources": [{"name": "src1"}]},
+            },
+        )
         result = validate_config(tmp_path)
         assert result["ok"] is True
         assert result["errors"] == []
@@ -181,28 +209,37 @@ class TestValidateConfig:
         assert any("dataset" in e for e in result["errors"])
 
     def test_missing_name(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"years": [2023]},
-            "raw": {"sources": [{"name": "src"}]},
-        })
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"years": [2023]},
+                "raw": {"sources": [{"name": "src"}]},
+            },
+        )
         result = validate_config(tmp_path)
         assert result["ok"] is False
         assert any("name" in e for e in result["errors"])
 
     def test_missing_years(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test"},
-            "raw": {"sources": [{"name": "src"}]},
-        })
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test"},
+                "raw": {"sources": [{"name": "src"}]},
+            },
+        )
         result = validate_config(tmp_path)
         assert result["ok"] is False
         assert any("years" in e for e in result["errors"])
 
     def test_years_not_list(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test", "years": "2023"},
-            "raw": {"sources": [{"name": "src"}]},
-        })
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test", "years": "2023"},
+                "raw": {"sources": [{"name": "src"}]},
+            },
+        )
         result = validate_config(tmp_path)
         assert result["ok"] is False
         assert any("interi" in e for e in result["errors"])
@@ -214,10 +251,13 @@ class TestValidateConfig:
         assert any("fetchare" in e for e in result["errors"])
 
     def test_warns_missing_source_id(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test", "years": [2023]},
-            "raw": {"sources": [{"name": "src1"}]},
-        })
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test", "years": [2023]},
+                "raw": {"sources": [{"name": "src1"}]},
+            },
+        )
         result = validate_config(tmp_path)
         assert result["ok"] is True
         assert any("source_id" in w for w in result["warnings"])
@@ -233,10 +273,13 @@ class TestValidateConfigCLI:
     """Contract CLI: toolkit validate config."""
 
     def test_valid_json(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test", "years": [2023]},
-            "raw": {"sources": [{"name": "src"}]},
-        })
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test", "years": [2023]},
+                "raw": {"sources": [{"name": "src"}]},
+            },
+        )
         cfg = tmp_path / "dataset.yml"
         runner = CliRunner()
         result = runner.invoke(app, ["validate", "config", "-c", str(cfg), "--json"])
@@ -246,10 +289,13 @@ class TestValidateConfigCLI:
         assert data["slug"] == tmp_path.name
 
     def test_valid_human(self, tmp_path: Path) -> None:
-        _write_dataset(tmp_path, {
-            "dataset": {"name": "test", "years": [2023]},
-            "raw": {"sources": [{"name": "src"}]},
-        })
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test", "years": [2023]},
+                "raw": {"sources": [{"name": "src"}]},
+            },
+        )
         cfg = tmp_path / "dataset.yml"
         runner = CliRunner()
         result = runner.invoke(app, ["validate", "config", "-c", str(cfg)])

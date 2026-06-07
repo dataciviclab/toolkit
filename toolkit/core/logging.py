@@ -42,7 +42,9 @@ class ContextAdapter(logging.LoggerAdapter):
         return safe_console_text(message), kwargs
 
 
-def get_logger(name: str = "toolkit", level: str | int = "INFO", log_file: str | Path | None = None):
+def get_logger(
+    name: str = "toolkit", level: str | int = "INFO", log_file: str | Path | None = None
+):
     logger = logging.getLogger(name)
     logger.setLevel(level)
 

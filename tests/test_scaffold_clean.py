@@ -22,6 +22,7 @@ from toolkit.scaffold.clean import (
 # pure_unit: _select_expr
 # ---------------------------------------------------------------------------
 
+
 class TestSelectExpr:
     """pure_unit: _select_expr sceglie TRIM / REPLACE / TRY_CAST per tipo."""
 
@@ -73,6 +74,7 @@ class TestSelectExpr:
 # ---------------------------------------------------------------------------
 # pure_unit: _find_anno_raw_column / _has_anno_column
 # ---------------------------------------------------------------------------
+
 
 class TestFindAnnoColumn:
     """pure_unit: rilevamento colonna anno nel profilo."""
@@ -130,6 +132,7 @@ class TestFindAnnoColumn:
 # ---------------------------------------------------------------------------
 # pure_unit: _columns_spec
 # ---------------------------------------------------------------------------
+
 
 class TestColumnsSpec:
     """pure_unit: _columns_spec produce espressioni SELECT corrette."""
@@ -192,6 +195,7 @@ class TestColumnsSpec:
 # ---------------------------------------------------------------------------
 # pure_unit: generate_clean_sql
 # ---------------------------------------------------------------------------
+
 
 class TestGenerateCleanSql:
     """pure_unit: generate_clean_sql produce clean.sql completo."""
@@ -318,6 +322,7 @@ class TestGenerateCleanSql:
 # ---------------------------------------------------------------------------
 # pure_unit: integrazione con suggest_clean_sql (full.py)
 # ---------------------------------------------------------------------------
+
 
 class TestSuggestCleanSqlIntegration:
     """pure_unit: suggest_clean_sql aggiornato coerentemente."""

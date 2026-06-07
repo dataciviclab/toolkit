@@ -49,7 +49,12 @@ def test_read_run_record_migrates_absolute_paths_under_root_to_relative(tmp_path
         "started_at": "2026-02-28T09:00:00+00:00",
         "finished_at": None,
         "status": "FAILED",
-        "layers": {"raw": {"status": "SUCCESS", "artifact_path": str(tmp_path / "data" / "raw" / "demo_ds" / "2022" / "file.csv")}},
+        "layers": {
+            "raw": {
+                "status": "SUCCESS",
+                "artifact_path": str(tmp_path / "data" / "raw" / "demo_ds" / "2022" / "file.csv"),
+            }
+        },
         "validations": {"raw": {}, "clean": {}, "mart": {}},
         "error": None,
     }
@@ -180,7 +185,11 @@ def test_write_run_record_retries_on_permission_error(tmp_path: Path, monkeypatc
         "started_at": "2026-02-28T09:00:00+00:00",
         "finished_at": None,
         "status": "RUNNING",
-        "layers": {"raw": {"status": "PENDING"}, "clean": {"status": "PENDING"}, "mart": {"status": "PENDING"}},
+        "layers": {
+            "raw": {"status": "PENDING"},
+            "clean": {"status": "PENDING"},
+            "mart": {"status": "PENDING"},
+        },
         "validations": {"raw": {}, "clean": {}, "mart": {}},
         "error": None,
     }

@@ -61,6 +61,7 @@ def validate(
     # Silenzia logger per output JSON pulito
     if as_json:
         import logging as _logging
+
         _logging.getLogger("toolkit").setLevel(_logging.CRITICAL + 1)
 
     layers = ["raw", "clean", "mart"] if step == "all" else [step]
@@ -70,13 +71,15 @@ def validate(
         for layer in layers:
             fn = _VALIDATORS[layer]
             summary = fn(cfg, yr, logger)
-            results.append({
-                "year": yr,
-                "layer": layer,
-                "passed": summary.get("passed"),
-                "errors_count": summary.get("errors_count", 0),
-                "warnings_count": summary.get("warnings_count", 0),
-            })
+            results.append(
+                {
+                    "year": yr,
+                    "layer": layer,
+                    "passed": summary.get("passed"),
+                    "errors_count": summary.get("errors_count", 0),
+                    "warnings_count": summary.get("warnings_count", 0),
+                }
+            )
 
     any_failed = any(not r["passed"] for r in results)
 
@@ -87,7 +90,9 @@ def validate(
         return
     for r in results:
         icon = "✅" if r["passed"] else "🔴"
-        typer.echo(f"{icon} {r['year']}/{r['layer']}  errors={r['errors_count']} warnings={r['warnings_count']}")
+        typer.echo(
+            f"{icon} {r['year']}/{r['layer']}  errors={r['errors_count']} warnings={r['warnings_count']}"
+        )
 
     if any_failed:
         raise typer.Exit(code=1)

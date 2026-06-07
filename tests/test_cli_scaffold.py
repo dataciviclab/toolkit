@@ -606,6 +606,7 @@ def test_format_clean_read_proposal_valid_yaml_structure():
     assert read["decimal"] == ","
     # CleanReadConfig(**loaded) must not raise
     from toolkit.core.config_models.clean import CleanReadConfig
+
     CleanReadConfig(**read)
 
 

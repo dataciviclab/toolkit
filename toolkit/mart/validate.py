@@ -65,7 +65,9 @@ def validate_mart(
     d = Path(mart_dir)
     dir_value = to_root_relative(d, Path(root)) if root is not None else str(d)
     if not d.exists():
-        return ValidationResult(ok=False, errors=[f"Missing MART dir: {d}"], warnings=[], summary={"dir": dir_value})
+        return ValidationResult(
+            ok=False, errors=[f"Missing MART dir: {d}"], warnings=[], summary={"dir": dir_value}
+        )
 
     existing_files = sorted(d.glob("*.parquet"))
     existing_tables = sorted([p.stem for p in existing_files])
@@ -81,8 +83,7 @@ def validate_mart(
         orphan_rules = sorted(table for table in table_rules.keys() if table not in declared_tables)
         if orphan_rules:
             warnings.append(
-                "MART table_rules reference tables not declared in mart.tables: "
-                f"{orphan_rules}"
+                f"MART table_rules reference tables not declared in mart.tables: {orphan_rules}"
             )
 
     with safe_connect() as con:
@@ -93,7 +94,9 @@ def validate_mart(
             name = p.stem
 
             try:
-                rc = int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{sql_path(p)}')").fetchone()[0])
+                rc = int(
+                    con.execute(f"SELECT COUNT(*) FROM read_parquet('{sql_path(p)}')").fetchone()[0]
+                )
                 row_counts[name] = rc
             except Exception as e:
                 warnings.append(f"Could not count rows for {p.name}: {e}")
@@ -107,9 +110,7 @@ def validate_mart(
             if min_rows is not None and rc < min_rows:
                 errors.append(f"[{name}] row_count too small: {rc} < {min_rows}")
 
-            con.execute(
-                f"CREATE OR REPLACE VIEW t AS SELECT * FROM read_parquet('{sql_path(p)}')"
-            )
+            con.execute(f"CREATE OR REPLACE VIEW t AS SELECT * FROM read_parquet('{sql_path(p)}')")
             cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
 
             # required columns

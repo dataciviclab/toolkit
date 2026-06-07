@@ -126,8 +126,6 @@ def sniff_source_file(filepath: Path) -> Dict[str, Any]:
     }
 
 
-
-
 def build_suggested_read_cfg(
     profile: "RawProfile | Dict[str, Any]",
     read_cfg: Optional[Dict[str, Any]] = None,
@@ -268,19 +266,19 @@ def _sample_profile_rows(
         for c in cols_to_profile:
             col_ref = f'"{c}"'
             case_exprs.append(
-                f'SUM(CASE WHEN {col_ref} IS NULL OR TRIM(CAST({col_ref} AS VARCHAR)) = \'\' THEN 1 ELSE 0 END) AS "{c}__missing"'
+                f"SUM(CASE WHEN {col_ref} IS NULL OR TRIM(CAST({col_ref} AS VARCHAR)) = '' THEN 1 ELSE 0 END) AS \"{c}__missing\""
             )
 
-        row = con.execute(
-            f"SELECT COUNT(*) AS n_total, {', '.join(case_exprs)} FROM v"
-        ).fetchone()
+        row = con.execute(f"SELECT COUNT(*) AS n_total, {', '.join(case_exprs)} FROM v").fetchone()
         if row is not None:
             n_total = int(row[0])
             if n_total > 0:
                 for i, c in enumerate(cols_to_profile):
                     nmiss = int(row[i + 1])
                     if nmiss > 0:
-                        missingness_top.append({"column": c, "missing_pct": float(nmiss) / float(n_total) * 100.0})
+                        missingness_top.append(
+                            {"column": c, "missing_pct": float(nmiss) / float(n_total) * 100.0}
+                        )
 
                 missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
 
@@ -327,7 +325,9 @@ def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[s
         for col in columns_raw:
             nmiss = int(df[col].isna().sum())
             if nmiss > 0:
-                missingness_top.append({"column": str(col), "missing_pct": float(nmiss) / float(n) * 100.0})
+                missingness_top.append(
+                    {"column": str(col), "missing_pct": float(nmiss) / float(n) * 100.0}
+                )
     missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
 
     # Mapping suggestions — no DuckDB types for Excel, use empty
@@ -410,7 +410,9 @@ def profile_with_read_cfg(
             # rows than in the header row (IRPEF comunale pattern:
             # header=50 cols, data rows=52 cols).
             if true_header_line is not None:
-                true_header_tokens = true_header_line.count(effective_read_cfg.get("delim") or ";") + 1
+                true_header_tokens = (
+                    true_header_line.count(effective_read_cfg.get("delim") or ";") + 1
+                )
                 if len(columns_raw) > true_header_tokens:
                     warnings.append(
                         f"header_data_cols_mismatch: header has {true_header_tokens} tokens, "

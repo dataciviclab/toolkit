@@ -96,7 +96,12 @@ def validate_config(path: str | Path) -> dict[str, Any]:
 
     manifest = load_dataset_manifest(path)
     if "error" in manifest:
-        return {"ok": False, "errors": [manifest["error"]], "warnings": [], "slug": manifest.get("slug", "?")}
+        return {
+            "ok": False,
+            "errors": [manifest["error"]],
+            "warnings": [],
+            "slug": manifest.get("slug", "?"),
+        }
 
     errors: list[str] = []
     warnings: list[str] = []

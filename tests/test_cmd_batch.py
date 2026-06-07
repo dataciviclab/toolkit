@@ -44,7 +44,9 @@ class TestReadConfigList:
         result = _read_config_list(configs_file)
         assert result == [real_file.absolute()]
 
-    def test_relative_path_resolved_from_configs_parent(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_relative_path_resolved_from_configs_parent(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
         configs_file = tmp_path / "configs.txt"
         dataset_dir = tmp_path / "datasets"
         dataset_dir.mkdir()
@@ -55,7 +57,9 @@ class TestReadConfigList:
         result = _read_config_list(configs_file)
         assert result == [dataset_file.resolve()]
 
-    def test_relative_path_resolved_from_cwd_first(self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_relative_path_resolved_from_cwd_first(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Se il path relativo esiste sia in CWD che nel parent del batch,
         viene usato quello della CWD."""
         # Setup: crea due file con lo stesso path relativo
@@ -84,7 +88,9 @@ class TestReadConfigList:
         assert result[0] == cwd_file.resolve()
         assert result[0].read_text() == "from_cwd"
 
-    def test_relative_path_fallback_to_batch_parent(self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_relative_path_fallback_to_batch_parent(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Se il path relativo NON esiste in CWD, viene usato il parent del batch."""
         batch_parent = tmp_path / "batches"
         batch_parent.mkdir()

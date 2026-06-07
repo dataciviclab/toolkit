@@ -7,6 +7,7 @@ Functions here are importable by any test file::
 Fixtures belong in ``conftest.py``; pure helpers that take arguments
 and return values belong here.
 """
+
 from __future__ import annotations
 
 import textwrap
@@ -16,21 +17,30 @@ from typing import Any
 
 class NoopLogger:
     """Logger finto che non stampa nulla. Usato nei test che richiedono un logger ma non ne verificano l'output."""
-    def debug(self, *_a, **_kw): return None
-    def info(self, *_a, **_kw): return None
-    def warning(self, *_a, **_kw): return None
-    def error(self, *_a, **_kw): return None
+
+    def debug(self, *_a, **_kw):
+        return None
+
+    def info(self, *_a, **_kw):
+        return None
+
+    def warning(self, *_a, **_kw):
+        return None
+
+    def error(self, *_a, **_kw):
+        return None
 
 
 def write_parquet(path: Path, sql: str, *, table: str = "t") -> None:
     """Crea un parquet da una query SQL DuckDB in memoria.
-    
+
     Args:
         path: Output path per il parquet.
         sql: CREATE TABLE + INSERT (es. ``CREATE TABLE t AS SELECT 1 AS x``).
         table: Nome della tabella temporanea (default ``t``).
     """
     import duckdb
+
     con = duckdb.connect(":memory:")
     con.execute(sql)
     con.execute(f"COPY {table} TO '{path.as_posix()}' (FORMAT 'parquet')")
@@ -67,7 +77,13 @@ def make_config(
     Returns a ``ToolkitConfig`` with real Pydantic models — no dict mocks.
     All attribute access (``cfg.clean.sql``, ``cfg.mart.tables``) works.
     """
-    from toolkit.core.config_models import ToolkitConfigModel, DatasetBlock, RawConfig, CleanConfig, MartConfig
+    from toolkit.core.config_models import (
+        ToolkitConfigModel,
+        DatasetBlock,
+        RawConfig,
+        CleanConfig,
+        MartConfig,
+    )
 
     _root = root or Path("/tmp/toolkit-test-root")
     _base = base_dir or _root
@@ -85,6 +101,7 @@ def make_config(
     )
 
     from toolkit.core.config import ToolkitConfig
+
     return ToolkitConfig(
         base_dir=model.base_dir,
         schema_version=model.schema_version,

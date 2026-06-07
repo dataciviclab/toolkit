@@ -100,7 +100,9 @@ def build_report(root: Path) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate an internal usage matrix for selected files/symbols.")
+    parser = argparse.ArgumentParser(
+        description="Generate an internal usage matrix for selected files/symbols."
+    )
     parser.add_argument(
         "--root",
         type=Path,

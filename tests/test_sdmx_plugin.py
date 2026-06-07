@@ -184,7 +184,10 @@ def test_sdmx_fetch_falls_back_on_metadata_timeout(monkeypatch):
             return _ok(_FakeResponse(200, DATAFLOW_XML, url))
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
             return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
-        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
+        if (
+            url
+            == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99"
+        ):
             return _ok(_FakeResponse(200, DATA_JSON, url))
         raise AssertionError(f"Unexpected URL {url}")
 
@@ -281,7 +284,10 @@ def test_sdmx_fetch_falls_back_on_data_5xx(monkeypatch):
             return _ok(_FakeResponse(500, "boom", url))
         if url == "https://sdmx.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
             return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
-        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
+        if (
+            url
+            == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99"
+        ):
             return _ok(_FakeResponse(500, "boom", url))
         if url == "https://sdmx.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
             return _ok(_FakeResponse(200, DATA_JSON, url))
@@ -317,7 +323,10 @@ def test_sdmx_fetch_does_not_fallback_on_404(monkeypatch):
             return _ok(_FakeResponse(200, DATAFLOW_XML, url))
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
             return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
-        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
+        if (
+            url
+            == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99"
+        ):
             return _ok(_FakeResponse(404, "not found", url))
         raise AssertionError(f"Unexpected URL {url}")
 
@@ -356,7 +365,10 @@ def test_sdmx_fetch_does_not_fallback_on_connection_error(monkeypatch):
             return _ok(_FakeResponse(200, DATAFLOW_XML, url))
         if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all":
             return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
-        if url == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99":
+        if (
+            url
+            == "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99"
+        ):
             return HttpResult(
                 response=None, err=requests.exceptions.ConnectionError("tls handshake failed")
             )

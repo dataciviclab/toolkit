@@ -54,9 +54,7 @@ def _write_run_record(path: Path, run_id: str, started_at: str, status: str) -> 
     )
 
 
-def test_status_uses_same_run_dir_as_writer(
-    tmp_path: Path, runner, chdir_tmp: Path
-) -> None:
+def test_status_uses_same_run_dir_as_writer(tmp_path: Path, runner, chdir_tmp: Path) -> None:
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     config_path = make_dataset_yml(
@@ -67,9 +65,7 @@ def test_status_uses_same_run_dir_as_writer(
     )
     make_standard_sql(project_dir)
 
-    run_result = runner.invoke(
-        app, ["run", "all", "--config", str(config_path), "--dry-run"]
-    )
+    run_result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
     assert run_result.exit_code == 0
 
     run_dir = get_run_dir(project_dir / "out", "demo_ds", 2022)

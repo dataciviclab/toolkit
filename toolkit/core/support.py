@@ -55,7 +55,9 @@ def resolve_support_payloads(
                     "year": year,
                     "dataset": support_cfg.dataset,
                     "config_path": str(config_path),
-                    "mart_dir": str(layer_year_dir(support_cfg.root, "mart", support_cfg.dataset, year)),
+                    "mart_dir": str(
+                        layer_year_dir(support_cfg.root, "mart", support_cfg.dataset, year)
+                    ),
                     "outputs": output_paths,
                     "existing_outputs": existing_paths,
                     "all_outputs_exist": all_outputs_exist,

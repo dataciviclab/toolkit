@@ -91,7 +91,7 @@ def ensure_dict(cfg: Any) -> Any:
     as "validate" (matching the YAML alias). Excludes unset fields to
     keep the dict lean — consumers use .get(key, default) for missing keys.
     """
-    if hasattr(cfg, 'model_dump'):
+    if hasattr(cfg, "model_dump"):
         return cfg.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True)
     if isinstance(cfg, list):
         return [ensure_dict(item) for item in cfg]

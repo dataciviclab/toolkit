@@ -71,6 +71,7 @@ class InspectPathsResult(TypedDict):
 
 # --- review-readiness (MCP only, no CLI) ---
 
+
 class MartOutputCheck(TypedDict):
     name: str
     exists: bool
@@ -96,6 +97,7 @@ class ReviewReadinessResult(TypedDict):
 
 
 # --- schema-diff ---
+
 
 class RawSchemaEntry(TypedDict):
     year: int

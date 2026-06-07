@@ -2,10 +2,12 @@ import io
 import zipfile
 from typing import Callable
 
+
 def _safe_name(name: str) -> str:
     # evita path traversal e sottocartelle dentro gli zip
     name = name.replace("\\", "/").split("/")[-1]
     return name or "file.bin"
+
 
 def extract_identity(payload: bytes, args: dict | None = None) -> dict[str, bytes]:
     return {"file.bin": payload}
@@ -32,6 +34,7 @@ def extract_zip_all(payload: bytes, args: dict | None = None) -> dict[str, bytes
         out[nn] = z.read(n)
     return out
 
+
 def extract_zip_first(payload: bytes, args: dict | None = None) -> dict[str, bytes]:
     z = _open_zip(payload)
     names = [n for n in z.namelist() if not n.endswith("/")]
@@ -39,6 +42,7 @@ def extract_zip_first(payload: bytes, args: dict | None = None) -> dict[str, byt
         return {}
     n = names[0]
     return {_safe_name(n): z.read(n)}
+
 
 def extract_zip_first_csv(payload: bytes, args: dict | None = None) -> dict[str, bytes]:
     z = _open_zip(payload)
@@ -48,12 +52,14 @@ def extract_zip_first_csv(payload: bytes, args: dict | None = None) -> dict[str,
     n = names[0]
     return {_safe_name(n): z.read(n)}
 
+
 _EXTRACTORS: dict[str, Callable[[bytes, dict | None], dict[str, bytes]]] = {
     "identity": extract_identity,
     "unzip_all": extract_zip_all,
     "unzip_first": extract_zip_first,
     "unzip_first_csv": extract_zip_first_csv,
 }
+
 
 def get_extractor(spec: dict | None):
     """

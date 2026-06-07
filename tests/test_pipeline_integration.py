@@ -26,15 +26,15 @@ def _append_output_cfg(config_path: Path, *, artifacts: str) -> None:
 
 def _simplify_sql_project(dst: Path) -> None:
     shutil.rmtree(dst / "_smoke_out", ignore_errors=True)
-    (dst / "sql" / "clean.sql").write_text("SELECT 1 AS ok FROM raw_input LIMIT 1\n", encoding="utf-8")
+    (dst / "sql" / "clean.sql").write_text(
+        "SELECT 1 AS ok FROM raw_input LIMIT 1\n", encoding="utf-8"
+    )
     mart_dir = dst / "sql" / "mart"
     for sql_path in mart_dir.glob("*.sql"):
         sql_path.write_text("SELECT * FROM clean_input\n", encoding="utf-8")
 
 
-def test_artifacts_policy_minimal_behaves_like_standard(
-    project_example: Path, monkeypatch
-) -> None:
+def test_artifacts_policy_minimal_behaves_like_standard(project_example: Path, monkeypatch) -> None:
     """minimal policy no longer suppresses artifacts — same output as standard."""
     _simplify_sql_project(project_example)
     config_path = project_example / "dataset.yml"
@@ -46,14 +46,29 @@ def test_artifacts_policy_minimal_behaves_like_standard(
     logger = NoopLogger()
 
     run_raw(
-        cfg.dataset, year, cfg.root, cfg.raw, logger,
-        base_dir=cfg.base_dir, output_cfg=cfg.output, clean_cfg=cfg.clean,
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.raw,
+        logger,
+        base_dir=cfg.base_dir,
+        output_cfg=cfg.output,
+        clean_cfg=cfg.clean,
     )
     run_profile_fn(cfg, [year], logger)
-    run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger,
-              base_dir=cfg.base_dir, output_cfg=cfg.output)
-    run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger,
-             base_dir=cfg.base_dir, clean_cfg=cfg.clean, output_cfg=cfg.output)
+    run_clean(
+        cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output
+    )
+    run_mart(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.mart,
+        logger,
+        base_dir=cfg.base_dir,
+        clean_cfg=cfg.clean,
+        output_cfg=cfg.output,
+    )
     run_clean_validation(cfg, year, logger)
     run_mart_validation(cfg, year, logger)
 
@@ -82,14 +97,29 @@ def test_artifacts_policy_standard_keeps_expected_artifacts(
     logger = NoopLogger()
 
     run_raw(
-        cfg.dataset, year, cfg.root, cfg.raw, logger,
-        base_dir=cfg.base_dir, output_cfg=cfg.output, clean_cfg=cfg.clean,
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.raw,
+        logger,
+        base_dir=cfg.base_dir,
+        output_cfg=cfg.output,
+        clean_cfg=cfg.clean,
     )
     run_profile_fn(cfg, [year], logger)
-    run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger,
-              base_dir=cfg.base_dir, output_cfg=cfg.output)
-    run_mart(cfg.dataset, year, cfg.root, cfg.mart, logger,
-             base_dir=cfg.base_dir, clean_cfg=cfg.clean, output_cfg=cfg.output)
+    run_clean(
+        cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output
+    )
+    run_mart(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.mart,
+        logger,
+        base_dir=cfg.base_dir,
+        clean_cfg=cfg.clean,
+        output_cfg=cfg.output,
+    )
     run_clean_validation(cfg, year, logger)
     run_mart_validation(cfg, year, logger)
 
@@ -120,9 +150,7 @@ def test_run_mart_supports_root_posix_placeholder(tmp_path: Path) -> None:
 
     lookup_path = root_dir / "lookup" / "mart_lookup_2022.parquet"
     lookup_path.parent.mkdir(parents=True, exist_ok=True)
-    duckdb.execute(
-        f"COPY (SELECT 'ok' AS marker) TO '{lookup_path.as_posix()}' (FORMAT PARQUET)"
-    )
+    duckdb.execute(f"COPY (SELECT 'ok' AS marker) TO '{lookup_path.as_posix()}' (FORMAT PARQUET)")
 
     (sql_dir / "mart_example.sql").write_text(
         "select * from read_parquet('{root_posix}/lookup/mart_lookup_2022.parquet')",
@@ -163,7 +191,9 @@ def test_run_mart_supports_root_posix_placeholder(tmp_path: Path) -> None:
 
     mart_output = root_dir / "data" / "mart" / dataset / str(year) / "mart_example.parquet"
     assert mart_output.exists()
-    assert duckdb.execute(f"SELECT marker FROM read_parquet('{mart_output.as_posix()}')").fetchone() == ("ok",)
+    assert duckdb.execute(
+        f"SELECT marker FROM read_parquet('{mart_output.as_posix()}')"
+    ).fetchone() == ("ok",)
     assert result["output_rows"] == 1
 
 
@@ -250,5 +280,7 @@ def test_run_mart_supports_support_placeholder(tmp_path: Path) -> None:
 
     mart_output = root_dir / "data" / "mart" / dataset / str(year) / "mart_example.parquet"
     assert mart_output.exists()
-    assert duckdb.execute(f"SELECT marker FROM read_parquet('{mart_output.as_posix()}')").fetchone() == ("ok",)
+    assert duckdb.execute(
+        f"SELECT marker FROM read_parquet('{mart_output.as_posix()}')"
+    ).fetchone() == ("ok",)
     assert result["output_rows"] == 1

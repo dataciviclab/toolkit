@@ -31,8 +31,16 @@ def _write_failed_run_record(path: Path, run_id: str) -> None:
                 "finished_at": "2026-03-01T10:01:00+00:00",
                 "status": "FAILED",
                 "layers": {
-                    "raw": {"status": "SUCCESS", "started_at": "2026-03-01T10:00:00+00:00", "finished_at": "2026-03-01T10:00:10+00:00"},
-                    "clean": {"status": "FAILED", "started_at": "2026-03-01T10:00:10+00:00", "finished_at": "2026-03-01T10:00:20+00:00"},
+                    "raw": {
+                        "status": "SUCCESS",
+                        "started_at": "2026-03-01T10:00:00+00:00",
+                        "finished_at": "2026-03-01T10:00:10+00:00",
+                    },
+                    "clean": {
+                        "status": "FAILED",
+                        "started_at": "2026-03-01T10:00:10+00:00",
+                        "finished_at": "2026-03-01T10:00:20+00:00",
+                    },
                     "mart": {"status": "PENDING", "started_at": None, "finished_at": None},
                 },
                 "validations": {"raw": {}, "clean": {}, "mart": {}},
@@ -53,7 +61,13 @@ def test_cli_dry_run_resolves_sql_from_config_dir_not_cwd(tmp_path: Path, monkey
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--dry-run",],
+        [
+            "run",
+            "all",
+            "--config",
+            str(config_path),
+            "--dry-run",
+        ],
     )
 
     assert result.exit_code == 0
@@ -68,18 +82,36 @@ def test_cli_commands_use_dataset_yml_dir_as_path_base(tmp_path: Path, monkeypat
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
 
-    run_result = runner.invoke(app, ["run", "all", "--config", str(config_path),])
+    run_result = runner.invoke(
+        app,
+        [
+            "run",
+            "all",
+            "--config",
+            str(config_path),
+        ],
+    )
     assert run_result.exit_code == 0, run_result.output
 
     validate_result = runner.invoke(
         app,
-        ["validate", "all", "--config", str(config_path),],
+        [
+            "validate",
+            "all",
+            "--config",
+            str(config_path),
+        ],
     )
     assert validate_result.exit_code == 0, validate_result.output
 
     profile_result = runner.invoke(
         app,
-        ["inspect", "profile", "--config", str(config_path),],
+        [
+            "inspect",
+            "profile",
+            "--config",
+            str(config_path),
+        ],
     )
     assert profile_result.exit_code == 0, profile_result.output
 
@@ -111,7 +143,9 @@ def test_cli_commands_use_dataset_yml_dir_as_path_base(tmp_path: Path, monkeypat
     assert (mart_dir / "rd_by_provincia.parquet").exists()
 
 
-def test_cli_resume_from_other_cwd_falls_back_and_reuses_relative_paths(tmp_path: Path, monkeypatch) -> None:
+def test_cli_resume_from_other_cwd_falls_back_and_reuses_relative_paths(
+    tmp_path: Path, monkeypatch
+) -> None:
     project_dir = tmp_path / "project-example"
     config_path = _copy_project_example(project_dir)
     runs_dir = project_dir / "_smoke_out" / "data" / "_runs" / "project_example" / "2022"
@@ -140,8 +174,12 @@ def test_cli_resume_from_other_cwd_falls_back_and_reuses_relative_paths(tmp_path
     assert "starting at raw" in result.output
 
     root = project_dir / "_smoke_out"
-    assert (root / "data" / "raw" / "project_example" / "2022" / "ispra_dettaglio_comunale_2022.csv").exists()
-    assert (root / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet").exists()
+    assert (
+        root / "data" / "raw" / "project_example" / "2022" / "ispra_dettaglio_comunale_2022.csv"
+    ).exists()
+    assert (
+        root / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet"
+    ).exists()
     assert (root / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet").exists()
 
 
@@ -168,7 +206,9 @@ def test_cli_smoke_flag_parses(tmp_path: Path) -> None:
     project_dir = tmp_path / "project-example"
     config_path = _copy_project_example(project_dir)
     runner = CliRunner()
-    result = runner.invoke(app, ["run", "mart", "--config", str(config_path), "--dry-run", "--smoke"])
+    result = runner.invoke(
+        app, ["run", "mart", "--config", str(config_path), "--dry-run", "--smoke"]
+    )
     assert result.exit_code == 0, result.output
     assert "Execution Plan" in result.output
 
@@ -178,7 +218,9 @@ def test_cli_sample_rows_flag_parses(tmp_path: Path) -> None:
     project_dir = tmp_path / "project-example"
     config_path = _copy_project_example(project_dir)
     runner = CliRunner()
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run", "--sample-rows", "500"])
+    result = runner.invoke(
+        app, ["run", "all", "--config", str(config_path), "--dry-run", "--sample-rows", "500"]
+    )
     assert result.exit_code == 0, result.output
     assert "Execution Plan" in result.output
 
@@ -188,7 +230,9 @@ def test_cli_sample_bytes_flag_parses(tmp_path: Path) -> None:
     project_dir = tmp_path / "project-example"
     config_path = _copy_project_example(project_dir)
     runner = CliRunner()
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run", "--sample-bytes", "5000"])
+    result = runner.invoke(
+        app, ["run", "all", "--config", str(config_path), "--dry-run", "--sample-bytes", "5000"]
+    )
     assert result.exit_code == 0, result.output
     assert "Execution Plan" in result.output
 
@@ -201,11 +245,27 @@ def test_cli_root_flag_overrides_output(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--root", str(custom_root),],
+        [
+            "run",
+            "all",
+            "--config",
+            str(config_path),
+            "--root",
+            str(custom_root),
+        ],
     )
     assert result.exit_code == 0, result.output
-    assert (custom_root / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet").exists()
-    assert (custom_root / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet").exists()
+    assert (
+        custom_root
+        / "data"
+        / "clean"
+        / "project_example"
+        / "2022"
+        / "project_example_2022_clean.parquet"
+    ).exists()
+    assert (
+        custom_root / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    ).exists()
 
 
 # ---------------------------------------------------------------------------
@@ -222,15 +282,31 @@ def test_cli_run_smoke_isolates_output(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--smoke",],
+        [
+            "run",
+            "all",
+            "--config",
+            str(config_path),
+            "--smoke",
+        ],
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
 
     # Smoke output DEVE essere in _smoke_out/smoke/data/
-    smoke_clean = root_dir / "smoke" / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet"
+    smoke_clean = (
+        root_dir
+        / "smoke"
+        / "data"
+        / "clean"
+        / "project_example"
+        / "2022"
+        / "project_example_2022_clean.parquet"
+    )
     assert smoke_clean.exists(), f"smoke clean not found: {smoke_clean}"
-    smoke_mart = root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    smoke_mart = (
+        root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    )
     assert smoke_mart.exists(), f"smoke mart not found: {smoke_mart}"
 
     # NO output in _smoke_out/data/ (root normale non contaminata)
@@ -247,15 +323,32 @@ def test_cli_run_sample_rows_isolates_output(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--sample-rows", "500",],
+        [
+            "run",
+            "all",
+            "--config",
+            str(config_path),
+            "--sample-rows",
+            "500",
+        ],
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
 
     # Output in _smoke_out/smoke/data/ (come --smoke)
-    smoke_clean = root_dir / "smoke" / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet"
+    smoke_clean = (
+        root_dir
+        / "smoke"
+        / "data"
+        / "clean"
+        / "project_example"
+        / "2022"
+        / "project_example_2022_clean.parquet"
+    )
     assert smoke_clean.exists(), f"sampled clean not found: {smoke_clean}"
-    smoke_mart = root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    smoke_mart = (
+        root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    )
     assert smoke_mart.exists(), f"sampled mart not found: {smoke_mart}"
 
     # NO output in _smoke_out/data/
@@ -272,15 +365,31 @@ def test_cli_run_full_smoke_isolates_output(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["run", "full", "--config", str(config_path), "--smoke",],
+        [
+            "run",
+            "full",
+            "--config",
+            str(config_path),
+            "--smoke",
+        ],
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
 
     # Smoke output in _smoke_out/smoke/data/
-    smoke_clean = root_dir / "smoke" / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet"
+    smoke_clean = (
+        root_dir
+        / "smoke"
+        / "data"
+        / "clean"
+        / "project_example"
+        / "2022"
+        / "project_example_2022_clean.parquet"
+    )
     assert smoke_clean.exists(), f"smoke clean not found: {smoke_clean}"
-    smoke_mart = root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    smoke_mart = (
+        root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    )
     assert smoke_mart.exists(), f"smoke mart not found: {smoke_mart}"
 
     # NO output in _smoke_out/data/
@@ -297,7 +406,13 @@ def test_cli_run_smoke_run_record_marked(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["run", "all", "--config", str(config_path), "--smoke",],
+        [
+            "run",
+            "all",
+            "--config",
+            str(config_path),
+            "--smoke",
+        ],
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
@@ -309,7 +424,9 @@ def test_cli_run_smoke_run_record_marked(tmp_path: Path) -> None:
     assert len(records) >= 1, "no run record found"
 
     latest = json.loads(records[0].read_text(encoding="utf-8"))
-    assert latest.get("smoke") is True, f"expected smoke=True in run record, got: {latest.get('smoke')}"
+    assert latest.get("smoke") is True, (
+        f"expected smoke=True in run record, got: {latest.get('smoke')}"
+    )
 
 
 def test_cli_run_full_smoke_isolates_support_output(tmp_path: Path) -> None:
@@ -326,9 +443,7 @@ def test_cli_run_full_smoke_isolates_support_output(tmp_path: Path) -> None:
         "SELECT 1 AS ok FROM raw_input\n", encoding="utf-8"
     )
     (support_dir / "data" / "dummy.csv").write_text("a;b\n1;2\n", encoding="utf-8")
-    (support_dir / "sql" / "mart.sql").write_text(
-        "SELECT * FROM clean_input\n", encoding="utf-8"
-    )
+    (support_dir / "sql" / "mart.sql").write_text("SELECT * FROM clean_input\n", encoding="utf-8")
     (support_dir / "dataset.yml").write_text(
         """schema_version: 1
 root: out
@@ -358,7 +473,7 @@ mart:
         + f"""
 support:
   - name: "sup"
-    config: "{support_dir / 'dataset.yml'}"
+    config: "{support_dir / "dataset.yml"}"
     years: [2022]
 """,
         encoding="utf-8",
@@ -373,9 +488,19 @@ support:
     assert result.exit_code == 0, result.output
 
     # Candidate output in _smoke_out/smoke/data/
-    smoke_clean = root_dir / "smoke" / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet"
+    smoke_clean = (
+        root_dir
+        / "smoke"
+        / "data"
+        / "clean"
+        / "project_example"
+        / "2022"
+        / "project_example_2022_clean.parquet"
+    )
     assert smoke_clean.exists(), f"candidate smoke clean not found: {smoke_clean}"
-    smoke_mart = root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    smoke_mart = (
+        root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    )
     assert smoke_mart.exists(), f"candidate smoke mart not found: {smoke_mart}"
 
     # Niente candidate in _smoke_out/data/
@@ -384,7 +509,15 @@ support:
 
     # Support output in support_ds/out/smoke/data/
     sup_root = support_dir / "out"
-    sup_clean = sup_root / "smoke" / "data" / "clean" / "support_ds" / "2022" / "support_ds_2022_clean.parquet"
+    sup_clean = (
+        sup_root
+        / "smoke"
+        / "data"
+        / "clean"
+        / "support_ds"
+        / "2022"
+        / "support_ds_2022_clean.parquet"
+    )
     assert sup_clean.exists(), f"support smoke clean not found: {sup_clean}"
 
     # Niente support in support_ds/out/data/
@@ -406,9 +539,7 @@ def test_cli_run_full_sample_rows_isolates_support_output(tmp_path: Path) -> Non
         "SELECT 1 AS ok FROM raw_input\n", encoding="utf-8"
     )
     (support_dir / "data" / "dummy.csv").write_text("a;b\n1;2\n", encoding="utf-8")
-    (support_dir / "sql" / "mart.sql").write_text(
-        "SELECT * FROM clean_input\n", encoding="utf-8"
-    )
+    (support_dir / "sql" / "mart.sql").write_text("SELECT * FROM clean_input\n", encoding="utf-8")
     (support_dir / "dataset.yml").write_text(
         """schema_version: 1
 root: out
@@ -438,7 +569,7 @@ mart:
         + f"""
 support:
   - name: "sup"
-    config: "{support_dir / 'dataset.yml'}"
+    config: "{support_dir / "dataset.yml"}"
     years: [2022]
 """,
         encoding="utf-8",
@@ -453,9 +584,19 @@ support:
     assert result.exit_code == 0, result.output
 
     # Candidate output in _smoke_out/smoke/data/
-    smoke_clean = root_dir / "smoke" / "data" / "clean" / "project_example" / "2022" / "project_example_2022_clean.parquet"
+    smoke_clean = (
+        root_dir
+        / "smoke"
+        / "data"
+        / "clean"
+        / "project_example"
+        / "2022"
+        / "project_example_2022_clean.parquet"
+    )
     assert smoke_clean.exists(), f"candidate sampled clean not found: {smoke_clean}"
-    smoke_mart = root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    smoke_mart = (
+        root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
+    )
     assert smoke_mart.exists(), f"candidate sampled mart not found: {smoke_mart}"
 
     # Niente candidate in _smoke_out/data/
@@ -464,7 +605,15 @@ support:
 
     # Support output in support_ds/out/smoke/data/
     sup_root = support_dir / "out"
-    sup_clean = sup_root / "smoke" / "data" / "clean" / "support_ds" / "2022" / "support_ds_2022_clean.parquet"
+    sup_clean = (
+        sup_root
+        / "smoke"
+        / "data"
+        / "clean"
+        / "support_ds"
+        / "2022"
+        / "support_ds_2022_clean.parquet"
+    )
     assert sup_clean.exists(), f"support sampled clean not found: {sup_clean}"
 
     # Niente support in support_ds/out/data/
@@ -487,9 +636,7 @@ def test_cli_run_full_support_in_clean_sql_with_sample_rows(tmp_path: Path) -> N
         "SELECT 1 AS id, 'hello' AS msg FROM raw_input\n", encoding="utf-8"
     )
     (sup / "data" / "dummy.csv").write_text("a;b\n1;hello\n2;world\n", encoding="utf-8")
-    (sup / "sql" / "mart.sql").write_text(
-        "SELECT * FROM clean_input\n", encoding="utf-8"
-    )
+    (sup / "sql" / "mart.sql").write_text("SELECT * FROM clean_input\n", encoding="utf-8")
     (sup / "dataset.yml").write_text(
         """schema_version: 1
 root: out
@@ -548,7 +695,7 @@ mart:
       sql: sql/mart.sql
 support:
   - name: "lookup"
-    config: "{sup / 'dataset.yml'}"
+    config: "{sup / "dataset.yml"}"
     years: [2022]
 """,
         encoding="utf-8",
@@ -559,10 +706,14 @@ support:
     result = runner.invoke(
         app,
         [
-            "run", "full",
-            "--config", str(main / "dataset.yml"),
-            "--sample-rows", "10",
-            "--years", "2022",
+            "run",
+            "full",
+            "--config",
+            str(main / "dataset.yml"),
+            "--sample-rows",
+            "10",
+            "--years",
+            "2022",
         ],
         catch_exceptions=False,
     )
@@ -570,7 +721,9 @@ support:
 
     # ── 4. Output del main in smoke/ ──
     root = main / "out"
-    clean_parquet = root / "smoke" / "data" / "clean" / "main_ds" / "2022" / "main_ds_2022_clean.parquet"
+    clean_parquet = (
+        root / "smoke" / "data" / "clean" / "main_ds" / "2022" / "main_ds_2022_clean.parquet"
+    )
     assert clean_parquet.exists(), f"main clean not found: {clean_parquet}"
     mart_parquet = root / "smoke" / "data" / "mart" / "main_ds" / "2022" / "mart_main.parquet"
     assert mart_parquet.exists(), f"main mart not found: {mart_parquet}"
@@ -579,7 +732,15 @@ support:
 
     # ── 5. Output del support in smoke/ ──
     sup_root = sup / "out"
-    sup_clean = sup_root / "smoke" / "data" / "clean" / "lookup_ds" / "2022" / "lookup_ds_2022_clean.parquet"
+    sup_clean = (
+        sup_root
+        / "smoke"
+        / "data"
+        / "clean"
+        / "lookup_ds"
+        / "2022"
+        / "lookup_ds_2022_clean.parquet"
+    )
     assert sup_clean.exists(), f"support clean not found: {sup_clean}"
     sup_mart = sup_root / "smoke" / "data" / "mart" / "lookup_ds" / "2022" / "lookup_mart.parquet"
     assert sup_mart.exists(), f"support mart not found: {sup_mart}"
@@ -595,6 +756,7 @@ support:
 def test_contracts_layer_year_dir() -> None:
     """contract: layer_year_dir restituisce path corretto."""
     from toolkit.contracts import layer_year_dir
+
     path = layer_year_dir("/base", "clean", "mio_dataset", 2024)
     assert str(path) == "/base/data/clean/mio_dataset/2024"
 
@@ -602,6 +764,7 @@ def test_contracts_layer_year_dir() -> None:
 def test_contracts_clean_parquet_path() -> None:
     """contract: clean_parquet_path restituisce path al parquet."""
     from toolkit.contracts import clean_parquet_path
+
     path = clean_parquet_path("/base", "mio_dataset", 2024)
     assert str(path) == "/base/data/clean/mio_dataset/2024/mio_dataset_2024_clean.parquet"
 
@@ -609,6 +772,7 @@ def test_contracts_clean_parquet_path() -> None:
 def test_contracts_mart_table_path() -> None:
     """contract: mart_table_path restituisce path corretto."""
     from toolkit.contracts import mart_table_path
+
     path = mart_table_path("/base", "mio_dataset", 2024, "rd_by_regione")
     assert str(path) == "/base/data/mart/mio_dataset/2024/rd_by_regione.parquet"
 
@@ -616,6 +780,7 @@ def test_contracts_mart_table_path() -> None:
 def test_contracts_run_record_dir() -> None:
     """contract: run_record_dir restituisce path corretto."""
     from toolkit.contracts import run_record_dir
+
     path = run_record_dir("/base", "mio_dataset", 2024)
     assert str(path) == "/base/data/_runs/mio_dataset/2024"
 
@@ -623,12 +788,14 @@ def test_contracts_run_record_dir() -> None:
 def test_contracts_constants() -> None:
     """contract: costante METADATA_JSON esiste."""
     from toolkit.contracts import METADATA_JSON
+
     assert METADATA_JSON == "metadata.json"
 
 
 def test_contracts_clean_parquet_suffix() -> None:
     """contract: CLEAN_PARQUET_SUFFIX costante pubblica."""
     from toolkit.contracts import CLEAN_PARQUET_SUFFIX
+
     assert CLEAN_PARQUET_SUFFIX == "_clean.parquet"
 
 
@@ -636,6 +803,7 @@ def test_contracts_resolve_root() -> None:
     """contract: resolve_root esportato e funzionante."""
     from toolkit.contracts import resolve_root
     from pathlib import Path
+
     result = resolve_root("/some/absolute/path")
     assert isinstance(result, Path)
     assert result.is_absolute()
@@ -644,5 +812,6 @@ def test_contracts_resolve_root() -> None:
 def test_contracts_all_exports_match() -> None:
     """contract: __all__ copre tutte le esportazioni pubbliche."""
     import toolkit.contracts as c
+
     for name in c.__all__:
         assert hasattr(c, name), f"{name} dichiarato in __all__ ma non esportato"

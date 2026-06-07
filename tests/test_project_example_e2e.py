@@ -50,7 +50,9 @@ def test_project_example_golden_path(tmp_path: Path, monkeypatch):
         output_cfg=cfg.output,
         clean_cfg=cfg.clean,
     )
-    run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
+    run_clean(
+        cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output
+    )
     run_mart(
         cfg.dataset,
         year,
@@ -140,7 +142,9 @@ def test_project_example_golden_path(tmp_path: Path, monkeypatch):
         "data/mart/project_example/2022/rd_by_regione.parquet",
         "data/mart/project_example/2022/rd_by_provincia.parquet",
     ]
-    assert mart_meta["clean_input_profile"]["row_count"] == clean_meta["output_profile"]["row_count"]
+    assert (
+        mart_meta["clean_input_profile"]["row_count"] == clean_meta["output_profile"]["row_count"]
+    )
     assert set(mart_meta["table_profiles"].keys()) == {"rd_by_regione", "rd_by_provincia"}
     assert len(mart_meta["transition_profiles"]) == 2
     assert {item["target_name"] for item in mart_meta["transition_profiles"]} == {
@@ -179,9 +183,30 @@ def test_project_example_golden_path(tmp_path: Path, monkeypatch):
     _assert_no_absolute_paths_in_json_payload(mart_metadata_json, root)
 
     con = duckdb.connect(":memory:")
-    assert int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{clean_parquet.as_posix()}')").fetchone()[0]) > 0
-    assert int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{mart_regione.as_posix()}')").fetchone()[0]) > 0
-    assert int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{mart_provincia.as_posix()}')").fetchone()[0]) > 0
+    assert (
+        int(
+            con.execute(
+                f"SELECT COUNT(*) FROM read_parquet('{clean_parquet.as_posix()}')"
+            ).fetchone()[0]
+        )
+        > 0
+    )
+    assert (
+        int(
+            con.execute(
+                f"SELECT COUNT(*) FROM read_parquet('{mart_regione.as_posix()}')"
+            ).fetchone()[0]
+        )
+        > 0
+    )
+    assert (
+        int(
+            con.execute(
+                f"SELECT COUNT(*) FROM read_parquet('{mart_provincia.as_posix()}')"
+            ).fetchone()[0]
+        )
+        > 0
+    )
     con.close()
 
 
@@ -205,7 +230,9 @@ def test_project_example_outputs_can_be_replaced_after_run(tmp_path: Path, monke
         output_cfg=cfg.output,
         clean_cfg=cfg.clean,
     )
-    run_clean(cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output)
+    run_clean(
+        cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output
+    )
     run_mart(
         cfg.dataset,
         year,
@@ -218,7 +245,9 @@ def test_project_example_outputs_can_be_replaced_after_run(tmp_path: Path, monke
     )
 
     root = Path(cfg.root)
-    clean_parquet = root / "data" / "clean" / cfg.dataset / str(year) / f"{cfg.dataset}_{year}_clean.parquet"
+    clean_parquet = (
+        root / "data" / "clean" / cfg.dataset / str(year) / f"{cfg.dataset}_{year}_clean.parquet"
+    )
     mart_regione = root / "data" / "mart" / cfg.dataset / str(year) / "rd_by_regione.parquet"
 
     _assert_file_can_be_replaced(clean_parquet)

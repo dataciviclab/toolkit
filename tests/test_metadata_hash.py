@@ -7,7 +7,9 @@ from toolkit.core.metadata import config_hash_for_year
 pytestmark = pytest.mark.contract
 
 
-def test_config_hash_for_year_is_stable_across_working_directories(tmp_path: Path, monkeypatch) -> None:
+def test_config_hash_for_year_is_stable_across_working_directories(
+    tmp_path: Path, monkeypatch
+) -> None:
     base_dir = tmp_path / "project"
     base_dir.mkdir(parents=True, exist_ok=True)
     (base_dir / "dataset.yml").write_text(

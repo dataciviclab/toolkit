@@ -22,7 +22,13 @@ from toolkit.clean._helpers import _input_files_from_clean_metadata, _profile_ra
 from toolkit.core.config_models import CleanValidationSpec, RangeRuleConfig, TransitionConfig
 from toolkit.core.layer_profile import compare_layer_profiles
 from toolkit.core.metadata import merge_layer_manifest
-from toolkit.core.paths import CLEAN_VALIDATION, METADATA, RAW_PROFILE, layer_year_dir, to_root_relative
+from toolkit.core.paths import (
+    CLEAN_VALIDATION,
+    METADATA,
+    RAW_PROFILE,
+    layer_year_dir,
+    to_root_relative,
+)
 from toolkit.core.validation import (
     ValidationResult,
     build_validation_summary,
@@ -110,9 +116,7 @@ def validate_clean(
         )
 
     with safe_connect() as con:
-        con.execute(
-            f"CREATE VIEW t AS SELECT * FROM read_parquet('{sql_path(p)}')"
-        )
+        con.execute(f"CREATE VIEW t AS SELECT * FROM read_parquet('{sql_path(p)}')")
 
         cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
 
@@ -154,8 +158,7 @@ def validate_clean(
             "primary_key": primary_key,
             "not_null": not_null,
             "ranges": {
-                column: {"min": rule.min, "max": rule.max}
-                for column, rule in ranges.items()
+                column: {"min": rule.min, "max": rule.max} for column, rule in ranges.items()
             },
             "max_null_pct": max_null_pct,
             "min_rows": min_rows,
@@ -296,7 +299,9 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
 
     clean_cols = result.summary.get("columns") or []
     raw_row_count = promotion_result.summary.get("raw_row_count")
-    clean_row_count = promotion_result.summary.get("clean_row_count") or result.summary.get("row_count")
+    clean_row_count = promotion_result.summary.get("clean_row_count") or result.summary.get(
+        "row_count"
+    )
     raw_col_count = promotion_result.summary.get("raw_col_count")
 
     # scaffold check: legge raw_profile.json come source of truth per raw_col_count,
@@ -308,6 +313,7 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     if profile_path.exists():
         raw_profile = read_json_or_none(profile_path)
         if raw_profile is not None:
+
             def _to_snake(n: str) -> str:
                 s = _re.sub(r"([a-z])([A-Z])", r"\1_\2", n.strip())
                 s = _re.sub(r"[^a-zA-Z0-9]+", "_", s)
@@ -399,14 +405,20 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     )
     col_drop_count = (raw_col_count - len(clean_cols)) if raw_col_count is not None else None
 
-    rules = {k: v for k, v in {
-        "required": spec.required_columns or [],
-        "primary_key": spec.validate.primary_key or [],
-        "not_null": spec.validate.not_null or [],
-        "ranges": {c: {"min": r.min, "max": r.max} for c, r in (spec.validate.ranges or {}).items()},
-        "max_null_pct": spec.validate.max_null_pct or {},
-        "min_rows": spec.validate.min_rows,
-    }.items() if v not in ([], {}, None)}
+    rules = {
+        k: v
+        for k, v in {
+            "required": spec.required_columns or [],
+            "primary_key": spec.validate.primary_key or [],
+            "not_null": spec.validate.not_null or [],
+            "ranges": {
+                c: {"min": r.min, "max": r.max} for c, r in (spec.validate.ranges or {}).items()
+            },
+            "max_null_pct": spec.validate.max_null_pct or {},
+            "min_rows": spec.validate.min_rows,
+        }.items()
+        if v not in ([], {}, None)
+    }
 
     merged_summary = {
         "dataset": cfg.dataset,
@@ -418,7 +430,11 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
             "raw_cols": raw_col_count,
             "clean_cols": len(clean_cols),
             "col_drop_count": col_drop_count,
-            **({"actual_raw_cols": actual_raw_col_count} if actual_raw_col_count is not None else {}),
+            **(
+                {"actual_raw_cols": actual_raw_col_count}
+                if actual_raw_col_count is not None
+                else {}
+            ),
             **({"raw_missing_columns": raw_missing_columns} if raw_missing_columns else {}),
             **({"raw_probe_source": raw_probe_source} if raw_probe_source else {}),
         },

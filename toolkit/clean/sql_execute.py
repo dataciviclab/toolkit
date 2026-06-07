@@ -53,7 +53,5 @@ def _run_sql(
         con.execute(f"CREATE TABLE clean_out AS {sql_query}")
         output_profile = profile_relation(con, "clean_out")
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        con.execute(
-            f"COPY clean_out TO '{sql_path(output_path)}' (FORMAT PARQUET);"
-        )
+        con.execute(f"COPY clean_out TO '{sql_path(output_path)}' (FORMAT PARQUET);")
         return read_info.source, read_info.params_used, output_profile

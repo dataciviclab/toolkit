@@ -8,10 +8,26 @@ from lab_connectors.duckdb import safe_connect
 
 from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict
-from toolkit.core.layer_profile import compare_layer_profiles, profile_relation, profile_parquet_files
-from toolkit.core.metadata import config_hash_for_year, file_record, merge_layer_manifest, write_metadata
+from toolkit.core.layer_profile import (
+    compare_layer_profiles,
+    profile_relation,
+    profile_parquet_files,
+)
+from toolkit.core.metadata import (
+    config_hash_for_year,
+    file_record,
+    merge_layer_manifest,
+    write_metadata,
+)
 from toolkit.core.multi_year_source import bind_multi_year_view, collect_multi_year_files
-from toolkit.core.paths import MART_VALIDATION, layer_dataset_dir, layer_year_dir, resolve_root, resolve_sql_path, serialize_metadata_path
+from toolkit.core.paths import (
+    MART_VALIDATION,
+    layer_dataset_dir,
+    layer_year_dir,
+    resolve_root,
+    resolve_sql_path,
+    serialize_metadata_path,
+)
 from toolkit.core.sql_utils import sql_path as _sql_path_quote
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
@@ -54,10 +70,7 @@ def run_mart_multi_year(
     multi_year_dir.mkdir(parents=True, exist_ok=True)
 
     tables = mart_cfg.get("tables") or []
-    multi_year_tables = [
-        t for t in tables
-        if isinstance(t, dict) and t.get("years")
-    ]
+    multi_year_tables = [t for t in tables if isinstance(t, dict) and t.get("years")]
     if not multi_year_tables:
         return {"output_rows": 0, "output_bytes": 0, "tables_count": 0, "col_count": None}
 
@@ -90,7 +103,8 @@ def run_mart_multi_year(
                 raise ValueError("Each mart multi-year table entry must include: name, sql")
 
             files = collect_multi_year_files(
-                root, dataset,
+                root,
+                dataset,
                 years=table.get("years", []),
                 source_layer=table.get("source_layer", "clean"),
                 source_table=table.get("source_table"),
@@ -118,16 +132,18 @@ def run_mart_multi_year(
             con.execute(f"COPY {name} TO '{out}' (FORMAT PARQUET);")
 
             written.append(out)
-            executed.append({
-                "name": name,
-                "sql": serialize_metadata_path(sql_path, base_dir),
-                "sql_rendered": serialize_metadata_path(rendered_sql_path, root_dir),
-                "output": serialize_metadata_path(out, root_dir),
-                "years": table.get("years", []),
-                "source_layer": table.get("source_layer", "clean"),
-                "source_table": table.get("source_table"),
-                "source_inputs": [serialize_metadata_path(p, root_dir) for p in files],
-            })
+            executed.append(
+                {
+                    "name": name,
+                    "sql": serialize_metadata_path(sql_path, base_dir),
+                    "sql_rendered": serialize_metadata_path(rendered_sql_path, root_dir),
+                    "output": serialize_metadata_path(out, root_dir),
+                    "years": table.get("years", []),
+                    "source_layer": table.get("source_layer", "clean"),
+                    "source_table": table.get("source_table"),
+                    "source_inputs": [serialize_metadata_path(p, root_dir) for p in files],
+                }
+            )
 
     outputs = [file_record(p) for p in written]
     metadata_payload: dict[str, Any] = {
@@ -148,12 +164,21 @@ def run_mart_multi_year(
         outputs=outputs,
     )
     total_bytes = sum(p.stat().st_size for p in written if p.exists())
-    col_count = sum(
-        len(t.get("output_profile", {}).get("columns", []))
-        for t in executed if "output_profile" in t
-    ) or None
+    col_count = (
+        sum(
+            len(t.get("output_profile", {}).get("columns", []))
+            for t in executed
+            if "output_profile" in t
+        )
+        or None
+    )
     logger.info("MART multi-year -> %s (%d tables)", multi_year_dir, len(written))
-    return {"output_rows": total_rows, "output_bytes": total_bytes, "tables_count": len(written), "col_count": col_count}
+    return {
+        "output_rows": total_rows,
+        "output_bytes": total_bytes,
+        "tables_count": len(written),
+        "col_count": col_count,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -161,8 +186,15 @@ def run_mart_multi_year(
 # ---------------------------------------------------------------------------
 
 _NUMERIC_TYPES = {
-    "INTEGER", "BIGINT", "HUGEINT", "SMALLINT", "TINYINT",
-    "DOUBLE", "FLOAT", "DECIMAL", "REAL",
+    "INTEGER",
+    "BIGINT",
+    "HUGEINT",
+    "SMALLINT",
+    "TINYINT",
+    "DOUBLE",
+    "FLOAT",
+    "DECIMAL",
+    "REAL",
 }
 
 
@@ -221,7 +253,8 @@ def _run_hierarchy_levels(
         source_profile = profile_relation(con, source_table)
         grain_lower = [g.lower() for g in grain]
         metric_cols = [
-            c["name"] for c in source_profile.get("columns", [])
+            c["name"]
+            for c in source_profile.get("columns", [])
             if any(c["type"].upper().startswith(num_t) for num_t in _NUMERIC_TYPES)
             and c["name"].lower() not in grain_lower
         ]
@@ -241,7 +274,7 @@ def _run_hierarchy_levels(
             sum_metrics = metric_cols[:30]
             sum_expr = ",\n  ".join(f'SUM("{m}") AS "{m}"' for m in sum_metrics)
             sql = (
-                f'-- {level_name}: aggregazione gerarchica\n'
+                f"-- {level_name}: aggregazione gerarchica\n"
                 f"SELECT\n"
                 f"  {grain_expr},\n"
                 f"  {sum_expr}\n"
@@ -251,7 +284,7 @@ def _run_hierarchy_levels(
         else:
             # No metric columns → count records per grain
             sql = (
-                f'-- {level_name}: conteggio record\n'
+                f"-- {level_name}: conteggio record\n"
                 f"SELECT\n"
                 f"  {grain_expr},\n"
                 f"  COUNT(*) AS record_count\n"
@@ -269,14 +302,16 @@ def _run_hierarchy_levels(
         con.execute(f"COPY \"{table_name}\" TO '{out}' (FORMAT PARQUET);")
         written.append(out)
 
-        executed.append({
-            "name": table_name,
-            "level": level_name,
-            "grain": grain,
-            "source": source_table,
-            "metric_columns": metric_cols[:30],
-            "row_count": row_count,
-        })
+        executed.append(
+            {
+                "name": table_name,
+                "level": level_name,
+                "grain": grain,
+                "source": source_table,
+                "metric_columns": metric_cols[:30],
+                "row_count": row_count,
+            }
+        )
 
         logger.info("  hierarchy level '%s' -> %s (%d rows)", level_name, out, row_count)
 
@@ -327,7 +362,9 @@ def run_mart(
         if clean_files:
             # clean_input view
             if len(clean_files) == 1:
-                con.execute(f"CREATE VIEW clean_input AS SELECT * FROM read_parquet('{_sql_path_quote(clean_files[0])}')")
+                con.execute(
+                    f"CREATE VIEW clean_input AS SELECT * FROM read_parquet('{_sql_path_quote(clean_files[0])}')"
+                )
             else:
                 paths = ",".join([f"'{_sql_path_quote(p)}'" for p in clean_files])
                 con.execute(f"CREATE VIEW clean_input AS SELECT * FROM read_parquet([{paths}])")
@@ -425,7 +462,12 @@ def run_mart(
         # Hierarchy levels: generates aggregation tables from clean data
         if has_hierarchy:
             hierarchy_written, hierarchy_executed, hierarchy_rows = _run_hierarchy_levels(
-                con, mart_cfg, dataset, year, mart_dir, logger=logger,
+                con,
+                mart_cfg,
+                dataset,
+                year,
+                mart_dir,
+                logger=logger,
             )
             written.extend(hierarchy_written)
             executed.extend(hierarchy_executed)
@@ -460,6 +502,15 @@ def run_mart(
         outputs=outputs,
     )
     total_bytes = sum(p.stat().st_size for p in written if p.exists())
-    col_count = sum(len(tp.get("columns", [])) for tp in table_profiles.values()) if table_profiles else None
+    col_count = (
+        sum(len(tp.get("columns", [])) for tp in table_profiles.values())
+        if table_profiles
+        else None
+    )
     logger.info(f"MART -> {mart_dir}")
-    return {"output_rows": total_rows, "output_bytes": total_bytes, "tables_count": len(written), "col_count": col_count}
+    return {
+        "output_rows": total_rows,
+        "output_bytes": total_bytes,
+        "tables_count": len(written),
+        "col_count": col_count,
+    }

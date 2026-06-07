@@ -30,7 +30,7 @@ def _write_config(path: Path, *, fail_on_error: bool) -> None:
                 '    - name: "mart_example"',
                 '      sql: "sql/mart/mart_example.sql"',
                 "validation:",
-                f'  fail_on_error: {"true" if fail_on_error else "false"}',
+                f"  fail_on_error: {'true' if fail_on_error else 'false'}",
             ]
         ),
         encoding="utf-8",
@@ -62,7 +62,9 @@ def _failed_summary() -> dict[str, object]:
     }
 
 
-def test_run_stops_after_failed_validation_when_fail_on_error_true(tmp_path: Path, monkeypatch) -> None:
+def test_run_stops_after_failed_validation_when_fail_on_error_true(
+    tmp_path: Path, monkeypatch
+) -> None:
     config_path = tmp_path / "dataset.yml"
     _write_config(config_path, fail_on_error=True)
 
@@ -70,7 +72,9 @@ def test_run_stops_after_failed_validation_when_fail_on_error_true(tmp_path: Pat
 
     monkeypatch.setattr(cmd_run, "run_raw", lambda *args, **kwargs: None)
     monkeypatch.setattr(cmd_run, "run_clean", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1))
+    monkeypatch.setattr(
+        cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1)
+    )
     monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: _ok_summary())
     monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: _failed_summary())
     monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: _ok_summary())
@@ -85,7 +89,9 @@ def test_run_stops_after_failed_validation_when_fail_on_error_true(tmp_path: Pat
     assert record["validations"]["clean"]["passed"] is False
 
 
-def test_run_continues_after_failed_validation_when_fail_on_error_false(tmp_path: Path, monkeypatch) -> None:
+def test_run_continues_after_failed_validation_when_fail_on_error_false(
+    tmp_path: Path, monkeypatch
+) -> None:
     config_path = tmp_path / "dataset.yml"
     _write_config(config_path, fail_on_error=False)
 
@@ -93,7 +99,9 @@ def test_run_continues_after_failed_validation_when_fail_on_error_false(tmp_path
 
     monkeypatch.setattr(cmd_run, "run_raw", lambda *args, **kwargs: None)
     monkeypatch.setattr(cmd_run, "run_clean", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1))
+    monkeypatch.setattr(
+        cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1)
+    )
     monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: _ok_summary())
     monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: _failed_summary())
     monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: _ok_summary())
@@ -107,7 +115,9 @@ def test_run_continues_after_failed_validation_when_fail_on_error_false(tmp_path
     assert record["validations"]["clean"]["passed"] is False
 
 
-def test_run_skips_layer_on_execution_failure_when_fail_on_error_false(tmp_path: Path, monkeypatch) -> None:
+def test_run_skips_layer_on_execution_failure_when_fail_on_error_false(
+    tmp_path: Path, monkeypatch
+) -> None:
     """Con fail_on_error: false, un layer che fallisce (source irraggiungibile)
     viene skippato, non blocca la pipeline."""
     config_path = tmp_path / "dataset.yml"
@@ -120,8 +130,12 @@ def test_run_skips_layer_on_execution_failure_when_fail_on_error_false(tmp_path:
         raise RuntimeError("simulated source unreachable")
 
     monkeypatch.setattr(cmd_run, "run_raw", _failing_raw)
-    monkeypatch.setattr(cmd_run, "run_clean", lambda *args, **kwargs: calls.__setitem__("clean", calls["clean"] + 1))
-    monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1))
+    monkeypatch.setattr(
+        cmd_run, "run_clean", lambda *args, **kwargs: calls.__setitem__("clean", calls["clean"] + 1)
+    )
+    monkeypatch.setattr(
+        cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1)
+    )
     monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: _failed_summary())
     monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: _failed_summary())
     monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: _failed_summary())
@@ -129,18 +143,18 @@ def test_run_skips_layer_on_execution_failure_when_fail_on_error_false(tmp_path:
     # Non deve lanciare eccezione — skip del layer invece di crash
     cmd_run.run(step="all", config=str(config_path))
 
-    assert calls["raw"] == 1   # RAW è stato chiamato (e fallito)
+    assert calls["raw"] == 1  # RAW è stato chiamato (e fallito)
     assert calls["clean"] == 0  # CLEAN NON viene chiamato (RAW fallito)
-    assert calls["mart"] == 0   # MART NON viene chiamato (RAW fallito)
+    assert calls["mart"] == 0  # MART NON viene chiamato (RAW fallito)
 
     record = _read_run_record(tmp_path / "out")
     assert record["layers"]["raw"]["status"] == "FAILED"
     assert record["status"] == "SUCCESS_WITH_WARNINGS"  # non SUCCESS falso
 
 
-
-
-def test_run_skips_mart_after_clean_failure_when_fail_on_error_false(tmp_path: Path, monkeypatch) -> None:
+def test_run_skips_mart_after_clean_failure_when_fail_on_error_false(
+    tmp_path: Path, monkeypatch
+) -> None:
     """Con fail_on_error: false, CLEAN fallito skippa MART (nessun output stale)."""
     config_path = tmp_path / "dataset.yml"
     _write_config(config_path, fail_on_error=False)
@@ -151,18 +165,22 @@ def test_run_skips_mart_after_clean_failure_when_fail_on_error_false(tmp_path: P
         calls["clean"] += 1
         raise RuntimeError("simulated clean failure")
 
-    monkeypatch.setattr(cmd_run, "run_raw", lambda *args, **kwargs: calls.__setitem__("raw", calls["raw"] + 1))
+    monkeypatch.setattr(
+        cmd_run, "run_raw", lambda *args, **kwargs: calls.__setitem__("raw", calls["raw"] + 1)
+    )
     monkeypatch.setattr(cmd_run, "run_clean", _failing_clean)
-    monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1))
+    monkeypatch.setattr(
+        cmd_run, "run_mart", lambda *args, **kwargs: calls.__setitem__("mart", calls["mart"] + 1)
+    )
     monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: _ok_summary())
     monkeypatch.setattr(cmd_run, "run_clean_validation", lambda *args, **kwargs: _failed_summary())
     monkeypatch.setattr(cmd_run, "run_mart_validation", lambda *args, **kwargs: _ok_summary())
 
     cmd_run.run(step="all", config=str(config_path))
 
-    assert calls["raw"] == 1    # RAW ok
-    assert calls["clean"] == 1   # CLEAN chiamato (e fallito)
-    assert calls["mart"] == 0    # MART NON chiamato (CLEAN fallito)
+    assert calls["raw"] == 1  # RAW ok
+    assert calls["clean"] == 1  # CLEAN chiamato (e fallito)
+    assert calls["mart"] == 0  # MART NON chiamato (CLEAN fallito)
 
     record = _read_run_record(tmp_path / "out")
     assert record["layers"]["clean"]["status"] == "FAILED"
@@ -200,7 +218,7 @@ def _write_config_with_min_rows(path: Path, *, min_rows: int) -> None:
                 "      mart_example:",
                 f"        min_rows: {min_rows}",
                 "validation:",
-                '  fail_on_error: false',
+                "  fail_on_error: false",
             ]
         ),
         encoding="utf-8",
@@ -213,17 +231,28 @@ def _render_dummy_clean_dir(clean_dir: Path, rows: int = 5) -> None:
     clean_dir.mkdir(parents=True, exist_ok=True)
     parquet = clean_dir / "test_dataset_2022_clean.parquet"
     import duckdb
+
     con = duckdb.connect()
-    con.execute(f"COPY (SELECT 42 as value, 'a' as label FROM range({rows})) TO '{parquet}' (FORMAT PARQUET)")
+    con.execute(
+        f"COPY (SELECT 42 as value, 'a' as label FROM range({rows})) TO '{parquet}' (FORMAT PARQUET)"
+    )
     con.close()
     # metadata.json con output_profile per validate_promotion
     (clean_dir / "metadata.json").write_text(
-        json.dumps({
-            "dataset": "test_dataset",
-            "year": 2022,
-            "outputs": ["test_dataset_2022_clean.parquet"],
-            "output_profile": {"row_count": rows, "columns": [{"name": "value", "type": "INTEGER"}, {"name": "label", "type": "VARCHAR"}]},
-        }),
+        json.dumps(
+            {
+                "dataset": "test_dataset",
+                "year": 2022,
+                "outputs": ["test_dataset_2022_clean.parquet"],
+                "output_profile": {
+                    "row_count": rows,
+                    "columns": [
+                        {"name": "value", "type": "INTEGER"},
+                        {"name": "label", "type": "VARCHAR"},
+                    ],
+                },
+            }
+        ),
         encoding="utf-8",
     )
     # Raw dir con CSV minimo per validate_promotion
@@ -249,6 +278,7 @@ def _make_full_config(tmp_path: Path, root: str | None = None) -> tuple[Path, ob
     _write_config_with_min_rows(config_path, min_rows=1000)
 
     from toolkit.cli.cmd_run import load_cfg_and_logger
+
     cfg, _ = load_cfg_and_logger(str(config_path))
     return config_path, cfg
 
@@ -262,6 +292,7 @@ def test_clean_validation_skips_min_rows_in_sample_mode(tmp_path: Path) -> None:
     _render_dummy_clean_dir(clean_dir, rows=5)
 
     import logging
+
     logger = logging.getLogger("test")
 
     # sample_mode=True -> min_rows ignorato, passa
@@ -282,8 +313,13 @@ def test_mart_validation_skips_min_rows_in_sample_mode(tmp_path: Path) -> None:
     mart_dir = config_path.parent / "out" / "data" / "mart" / "test_dataset" / "2022"
     mart_dir.mkdir(parents=True, exist_ok=True)
     import duckdb
+
     con = duckdb.connect()
-    con.execute("COPY (SELECT 42 as value, 'a' as label FROM range(5)) TO '" + str(mart_dir / "mart_example.parquet") + "' (FORMAT PARQUET)")
+    con.execute(
+        "COPY (SELECT 42 as value, 'a' as label FROM range(5)) TO '"
+        + str(mart_dir / "mart_example.parquet")
+        + "' (FORMAT PARQUET)"
+    )
     con.close()
     (mart_dir / "metadata.json").write_text(
         '{"dataset": "test_dataset", "year": 2022, "outputs": ["mart_example.parquet"]}',
@@ -291,6 +327,7 @@ def test_mart_validation_skips_min_rows_in_sample_mode(tmp_path: Path) -> None:
     )
 
     import logging
+
     logger = logging.getLogger("test")
 
     # sample_mode=True -> min_rows ignorato, passa
@@ -325,7 +362,17 @@ def test_run_full_second_validation_block_uses_sample_mode(tmp_path: Path, monke
     monkeypatch.setattr(cmd_run, "run_clean_validation", _tracking_clean_validation)
     monkeypatch.setattr(cmd_run, "run_mart_validation", _tracking_mart_validation)
     import toolkit.cli.inspect.readiness_ops as _readiness_ops
-    monkeypatch.setattr(_readiness_ops, "review_readiness", lambda *args, **kwargs: {"readiness": "ready", "check_count": 0, "ok_count": 0, "fail_count": 0})
+
+    monkeypatch.setattr(
+        _readiness_ops,
+        "review_readiness",
+        lambda *args, **kwargs: {
+            "readiness": "ready",
+            "check_count": 0,
+            "ok_count": 0,
+            "fail_count": 0,
+        },
+    )
 
     # Esegue run full COME se chiamato da CI con --sample-rows 1000
     # (tutti i parametri espliciti per bypassare i default Typer che
@@ -341,5 +388,9 @@ def test_run_full_second_validation_block_uses_sample_mode(tmp_path: Path, monke
         dry_run=False,
     )
 
-    assert sample_mode_passed["clean"] is True, "run_full deve passare sample_mode=True alla validazione clean"
-    assert sample_mode_passed["mart"] is True, "run_full deve passare sample_mode=True alla validazione mart"
+    assert sample_mode_passed["clean"] is True, (
+        "run_full deve passare sample_mode=True alla validazione clean"
+    )
+    assert sample_mode_passed["mart"] is True, (
+        "run_full deve passare sample_mode=True alla validazione mart"
+    )

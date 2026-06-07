@@ -91,9 +91,7 @@ def _select_expr(
     return f'TRY_CAST("{raw_col}" AS {sql_type}) AS {out_name}'
 
 
-def _columns_spec(
-    profile: dict[str, Any], year: int
-) -> tuple[list[str], dict[str, str]]:
+def _columns_spec(profile: dict[str, Any], year: int) -> tuple[list[str], dict[str, str]]:
     """Build SELECT expressions and read_csv columns spec from mapping_suggestions."""
     mapping = profile.get("mapping_suggestions", {})
     if not mapping:
@@ -102,7 +100,9 @@ def _columns_spec(
         # to safely handle both text and numeric columns.
         columns_raw = profile.get("columns_raw", [])
         if columns_raw:
-            select_exprs = [f'trim(CAST("{c}" AS VARCHAR)) AS {_snake_case(c)}' for c in columns_raw]
+            select_exprs = [
+                f'trim(CAST("{c}" AS VARCHAR)) AS {_snake_case(c)}' for c in columns_raw
+            ]
             columns_spec = {c: "VARCHAR" for c in columns_raw}
             return select_exprs, columns_spec
         return ["*"], {}
@@ -216,16 +216,12 @@ def generate_clean_sql(
             header_parts.append(f"--   - {w}")
 
     header_parts.append("--")
-    header_parts.append(
-        "-- This is a FIRST DRAFT. Review and adjust before running."
-    )
+    header_parts.append("-- This is a FIRST DRAFT. Review and adjust before running.")
     header_parts.append(
         "-- CSV parsing options (delim, columns, encoding, header, skip) "
         "belong in clean.read in dataset.yml."
     )
-    header_parts.append(
-        "-- Pass --run to execute raw and clean in one step, or run:"
-    )
+    header_parts.append("-- Pass --run to execute raw and clean in one step, or run:")
     header_parts.append("--   toolkit run clean -c dataset.yml")
     header_parts.append("")
 
@@ -243,9 +239,7 @@ def generate_clean_sql(
         anno_raw = _find_anno_raw_column(profile)
         if anno_raw is not None:
             # Use TRY_CAST for safety — some years may be non-integer (e.g. "2024a")
-            sql_lines.append(
-                f"WHERE try_cast(\"{anno_raw}\" AS INTEGER) IS NOT NULL"
-            )
+            sql_lines.append(f'WHERE try_cast("{anno_raw}" AS INTEGER) IS NOT NULL')
 
     sql_lines.append("")
 
@@ -318,7 +312,11 @@ def propose_clean_read(profile: dict[str, Any]) -> dict[str, Any]:
         header_names = _header_names_from_line(header_line, delim)
         keys = list(mapping.keys())
 
-        if header_names and _looks_like_real_header(header_names) and not _names_match(keys, header_names):
+        if (
+            header_names
+            and _looks_like_real_header(header_names)
+            and not _names_match(keys, header_names)
+        ):
             # Header names look real (contain letters) and differ from mapping keys
             # → file has a real header that was misread.
             effective_header = True

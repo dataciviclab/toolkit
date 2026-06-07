@@ -250,12 +250,16 @@ def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Pa
         },
     )
 
-    summary = run_mart_validation(cfg, 2024, logger=SimpleNamespace(info=lambda *args, **kwargs: None))
+    summary = run_mart_validation(
+        cfg, 2024, logger=SimpleNamespace(info=lambda *args, **kwargs: None)
+    )
 
     assert summary["passed"] is True
     assert summary["warnings_count"] == 2
 
-    report = json.loads((mart_dir / "_validate" / "mart_validation.json").read_text(encoding="utf-8"))
+    report = json.loads(
+        (mart_dir / "_validate" / "mart_validation.json").read_text(encoding="utf-8")
+    )
     assert len(report["warnings"]) == 2
     assert any("row drop 30.0%" in warning for warning in report["warnings"])
     assert any("columns removed from clean" in warning for warning in report["warnings"])
@@ -269,11 +273,7 @@ def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Pa
     assert any(item["kind"] == "removed_columns" for item in report["transition"]["warnings"])
 
 
-
 @pytest.mark.policy
-
-
-
 @pytest.mark.policy
 def test_run_clean_validation_uses_columns_raw_from_raw_profile(tmp_path: Path):
     """Regression test for issue #145: raw_col_count must come from columns_raw in
@@ -303,7 +303,10 @@ def test_run_clean_validation_uses_columns_raw_from_raw_profile(tmp_path: Path):
 
     clean_dir = root / "data" / "clean" / dataset / str(year)
     clean_dir.mkdir(parents=True, exist_ok=True)
-    write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet", "CREATE TABLE t AS SELECT 1 AS col_alpha, 2 AS col_beta")
+    write_parquet(
+        clean_dir / f"{dataset}_{year}_clean.parquet",
+        "CREATE TABLE t AS SELECT 1 AS col_alpha, 2 AS col_beta",
+    )
 
     (clean_dir / "metadata.json").write_text(
         json.dumps(
@@ -327,7 +330,9 @@ def test_run_clean_validation_uses_columns_raw_from_raw_profile(tmp_path: Path):
 
     cfg = make_config(root=root, base_dir=root, dataset=dataset)
 
-    summary = run_clean_validation(cfg, year, logger=SimpleNamespace(info=lambda *args, **kwargs: None))
+    summary = run_clean_validation(
+        cfg, year, logger=SimpleNamespace(info=lambda *args, **kwargs: None)
+    )
 
     assert summary["stats"]["raw_cols"] == len(real_columns)
     assert summary["stats"]["col_drop_count"] == len(real_columns) - 2
@@ -351,7 +356,10 @@ def test_run_clean_validation_raw_probe_source_legacy_autodetect(tmp_path: Path)
 
     clean_dir = root / "data" / "clean" / dataset / str(year)
     clean_dir.mkdir(parents=True, exist_ok=True)
-    write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet", "CREATE TABLE t AS SELECT 1 AS col1, 2 AS col2")
+    write_parquet(
+        clean_dir / f"{dataset}_{year}_clean.parquet",
+        "CREATE TABLE t AS SELECT 1 AS col1, 2 AS col2",
+    )
 
     (clean_dir / "metadata.json").write_text(
         json.dumps(
@@ -403,7 +411,9 @@ def test_run_clean_validation_raw_probe_source_unavailable_when_no_raw_file(
 
     clean_dir = root / "data" / "clean" / dataset / str(year)
     clean_dir.mkdir(parents=True, exist_ok=True)
-    write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet", "CREATE TABLE t AS SELECT 1 AS col1")
+    write_parquet(
+        clean_dir / f"{dataset}_{year}_clean.parquet", "CREATE TABLE t AS SELECT 1 AS col1"
+    )
 
     (clean_dir / "metadata.json").write_text(
         json.dumps(

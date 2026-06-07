@@ -17,11 +17,10 @@ pytestmark = pytest.mark.policy
 # --- Helpers ---
 
 
-def _fake_cfg(
-    root: Path, dataset: str, years: list[int], mart: dict[str, Any]
-) -> object:
+def _fake_cfg(root: Path, dataset: str, years: list[int], mart: dict[str, Any]) -> object:
     """Build ToolkitConfig via make_config() for _support_expected_mart_outputs."""
     from tests.helpers import make_config
+
     return make_config(
         base_dir=root.parent,
         root=root,

@@ -50,7 +50,10 @@ def test_normalize_columns_spec_errors(invalid_input, must_contain_all):
 @pytest.mark.policy
 def test_normalize_columns_spec_valid_cases():
     """Valid dict and list inputs pass through unchanged. None returns None."""
-    assert normalize_columns_spec({"a": "VARCHAR", "b": "INTEGER"}) == {"a": "VARCHAR", "b": "INTEGER"}
+    assert normalize_columns_spec({"a": "VARCHAR", "b": "INTEGER"}) == {
+        "a": "VARCHAR",
+        "b": "INTEGER",
+    }
     assert normalize_columns_spec([{"name": "a", "type": "VARCHAR"}]) == {"a": "VARCHAR"}
     assert normalize_columns_spec(None) is None
 

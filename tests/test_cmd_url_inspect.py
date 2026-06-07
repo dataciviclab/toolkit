@@ -19,6 +19,7 @@ from toolkit.scaffold.sources import slugify
 # pure_unit — non-trivial pure logic (kept, not banale)
 # ---------------------------------------------------------------------------
 
+
 class TestIsHtml:
     """pure_unit: content-type classification for HTML detection."""
 
@@ -86,7 +87,11 @@ class TestCandidateLinks:
         [
             ("<html><body><p>No links here</p></body></html>", "https://example.com", 0),
             ('<html><body><a href="data.csv">CSV</a></body></html>', "https://example.com", 1),
-            ('<html><body><a href="/files/data.csv">CSV</a></body></html>', "https://example.com", 1),
+            (
+                '<html><body><a href="/files/data.csv">CSV</a></body></html>',
+                "https://example.com",
+                1,
+            ),
             # relative made absolute
             (
                 '<html><body><a href="/files/data.csv">CSV</a></body></html>',

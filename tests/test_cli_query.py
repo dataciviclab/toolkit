@@ -24,10 +24,13 @@ def runner() -> CliRunner:
 def sample_parquet(tmp_path):
     """Crea un parquet di esempio per i test."""
     pq = tmp_path / "data.parquet"
-    write_parquet(pq, "CREATE TABLE t AS "
-                       "SELECT 'a' AS cat, 10 AS val UNION ALL "
-                       "SELECT 'b', 20 UNION ALL "
-                       "SELECT 'a', 30")
+    write_parquet(
+        pq,
+        "CREATE TABLE t AS "
+        "SELECT 'a' AS cat, 10 AS val UNION ALL "
+        "SELECT 'b', 20 UNION ALL "
+        "SELECT 'a', 30",
+    )
     return pq
 
 
@@ -88,10 +91,15 @@ def test_query_with_sql(runner, sample_parquet):
     """query con --sql: esegue SQL arbitrario."""
     from toolkit.cli.app import app
 
-    result = runner.invoke(app, [
-        "query", str(sample_parquet),
-        "--sql", "SELECT cat, SUM(val) AS total FROM data GROUP BY cat ORDER BY cat",
-    ])
+    result = runner.invoke(
+        app,
+        [
+            "query",
+            str(sample_parquet),
+            "--sql",
+            "SELECT cat, SUM(val) AS total FROM data GROUP BY cat ORDER BY cat",
+        ],
+    )
     assert result.exit_code == 0
     assert "a" in result.stdout
     assert "b" in result.stdout
@@ -105,10 +113,15 @@ def test_query_with_where(runner, sample_parquet):
     """query con WHERE: filtra correttamente."""
     from toolkit.cli.app import app
 
-    result = runner.invoke(app, [
-        "query", str(sample_parquet),
-        "--sql", "SELECT * FROM data WHERE cat = 'a'",
-    ])
+    result = runner.invoke(
+        app,
+        [
+            "query",
+            str(sample_parquet),
+            "--sql",
+            "SELECT * FROM data WHERE cat = 'a'",
+        ],
+    )
     assert result.exit_code == 0
     assert result.stdout.count("a") >= 2  # header + 2 righe
     assert "30" in result.stdout
@@ -155,12 +168,18 @@ def test_query_config_with_artifact(runner, dataset_with_clean_parquet):
     from toolkit.cli.app import app
 
     info = dataset_with_clean_parquet
-    result = runner.invoke(app, [
-        "query",
-        "--config", info["config_path"],
-        "--layer", info["layer"],
-        "--year", str(info["year"]),
-    ])
+    result = runner.invoke(
+        app,
+        [
+            "query",
+            "--config",
+            info["config_path"],
+            "--layer",
+            info["layer"],
+            "--year",
+            str(info["year"]),
+        ],
+    )
     assert result.exit_code == 0
     assert "id" in result.stdout
     assert "val" in result.stdout
@@ -173,12 +192,17 @@ def test_query_config_json_output(runner, dataset_with_clean_parquet):
     from toolkit.cli.app import app
 
     info = dataset_with_clean_parquet
-    result = runner.invoke(app, [
-        "query",
-        "--config", info["config_path"],
-        "--layer", info["layer"],
-        "--json",
-    ])
+    result = runner.invoke(
+        app,
+        [
+            "query",
+            "--config",
+            info["config_path"],
+            "--layer",
+            info["layer"],
+            "--json",
+        ],
+    )
     assert result.exit_code == 0
     data = json.loads(result.stdout)
     assert data["column_count"] == 2
@@ -213,11 +237,17 @@ def test_query_config_missing_artifact(runner, tmp_path):
 
     from toolkit.cli.app import app
 
-    result = runner.invoke(app, [
-        "query",
-        "--config", str(cfg_path),
-        "--layer", "clean",
-        "--year", str(year),
-    ])
+    result = runner.invoke(
+        app,
+        [
+            "query",
+            "--config",
+            str(cfg_path),
+            "--layer",
+            "clean",
+            "--year",
+            str(year),
+        ],
+    )
     assert result.exit_code == 1
     assert "non trovato" in result.stdout or "non trovato" in result.stderr

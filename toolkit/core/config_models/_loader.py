@@ -50,9 +50,7 @@ class ToolkitConfigModel(BaseModel):
         names = [entry.name for entry in self.support]
         duplicates = sorted({name for name in names if names.count(name) > 1})
         if duplicates:
-            raise ValueError(
-                "support[].name values must be unique: " + ", ".join(duplicates)
-            )
+            raise ValueError("support[].name values must be unique: " + ", ".join(duplicates))
         return self
 
 

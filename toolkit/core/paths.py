@@ -5,6 +5,7 @@ import os
 import re
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 
+
 def _to_pure_path(path: str | os.PathLike[str]) -> PurePath:
     raw = os.fspath(path)
     if "\\" in raw or re.match(r"^[A-Za-z]:[\\/]", raw):
@@ -33,7 +34,9 @@ def dataset_dir(root: str | os.PathLike[str] | None, layer: str, dataset: str) -
     return resolve_root(root) / "data" / layer / dataset
 
 
-def layer_year_dir(root: str | os.PathLike[str] | None, layer: str, dataset: str, year: int | str) -> Path:
+def layer_year_dir(
+    root: str | os.PathLike[str] | None, layer: str, dataset: str, year: int | str
+) -> Path:
     return dataset_dir(root, layer, dataset) / str(year)
 
 
@@ -67,8 +70,8 @@ MART_VALIDATION = "_validate/mart_validation.json"
 
 # Profile (raw only)
 RAW_PROFILE_DIR = "_profile"
-RAW_PROFILE = "raw_profile.json"          # sotto _profile/
-RAW_SUGGESTED_READ = "suggested_read.yml" # sotto _profile/
+RAW_PROFILE = "raw_profile.json"  # sotto _profile/
+RAW_SUGGESTED_READ = "suggested_read.yml"  # sotto _profile/
 
 # Metadata
 METADATA = "metadata.json"

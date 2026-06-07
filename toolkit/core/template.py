@@ -38,8 +38,7 @@ def render_template(text: str, ctx: dict[str, Any]) -> str:
     unresolved = sorted(set(_UNRESOLVED_PLACEHOLDER_RE.findall(code_only)))
     if unresolved:
         raise ValueError(
-            "Template contains unresolved placeholders after render: "
-            + ", ".join(unresolved)
+            "Template contains unresolved placeholders after render: " + ", ".join(unresolved)
         )
     return out
 

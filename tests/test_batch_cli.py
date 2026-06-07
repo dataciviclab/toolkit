@@ -121,8 +121,12 @@ def test_batch_runs_configs_in_sequence_and_prints_report(tmp_path: Path) -> Non
     assert "batch_b" in result.output
     assert "SUCCESS" in result.output
 
-    assert (project_a / "out" / "data" / "mart" / "batch_a" / "2022" / "mart_totali.parquet").exists()
-    assert (project_b / "out" / "data" / "mart" / "batch_b" / "2023" / "mart_totali.parquet").exists()
+    assert (
+        project_a / "out" / "data" / "mart" / "batch_a" / "2022" / "mart_totali.parquet"
+    ).exists()
+    assert (
+        project_b / "out" / "data" / "mart" / "batch_b" / "2023" / "mart_totali.parquet"
+    ).exists()
 
 
 def test_batch_smoke_flag(tmp_path: Path) -> None:
@@ -148,9 +152,20 @@ def test_batch_smoke_flag(tmp_path: Path) -> None:
     assert not data_clean.exists(), "smoke must NOT write to out/data/"
 
     # Smoke scrive in out/smoke/data/
-    smoke_clean = project / "out" / "smoke" / "data" / "clean" / "batch_smoke" / "2023" / "batch_smoke_2023_clean.parquet"
+    smoke_clean = (
+        project
+        / "out"
+        / "smoke"
+        / "data"
+        / "clean"
+        / "batch_smoke"
+        / "2023"
+        / "batch_smoke_2023_clean.parquet"
+    )
     assert smoke_clean.exists(), f"smoke clean output not found: {smoke_clean}"
-    smoke_mart = project / "out" / "smoke" / "data" / "mart" / "batch_smoke" / "2023" / "mart_totali.parquet"
+    smoke_mart = (
+        project / "out" / "smoke" / "data" / "mart" / "batch_smoke" / "2023" / "mart_totali.parquet"
+    )
     assert smoke_mart.exists(), f"smoke mart output not found: {smoke_mart}"
 
 

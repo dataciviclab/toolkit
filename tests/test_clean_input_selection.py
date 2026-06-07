@@ -16,9 +16,6 @@ from toolkit.core.io import write_json_atomic
 pytestmark = pytest.mark.contract
 
 
-
-
-
 def _write_csv(path: Path, content: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
@@ -54,6 +51,7 @@ def _run_clean_capture_inputs(
 
 
 # Candidate discovery and selection
+
 
 def test_list_input_files_accepts_csv_gz_and_excludes_php(tmp_path: Path):
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
@@ -121,7 +119,9 @@ ACCEPTED_RAW_FILE_TYPES = [
 
 @pytest.mark.policy
 @pytest.mark.parametrize("filename, file_bytes", ACCEPTED_RAW_FILE_TYPES)
-def test_run_clean_accepts_raw_file_types(tmp_path: Path, monkeypatch, filename: str, file_bytes: bytes):
+def test_run_clean_accepts_raw_file_types(
+    tmp_path: Path, monkeypatch, filename: str, file_bytes: bytes
+):
     """GZ, NT-GZ, XLSX, XLS files are accepted and passed to _run_sql."""
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -277,7 +277,9 @@ def test_run_clean_dirty_csv_needs_auto_detect_false(tmp_path: Path):
     assert out.exists()
 
     con = duckdb.connect(":memory:")
-    assert int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{out.as_posix()}')").fetchone()[0]) > 0
+    assert (
+        int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{out.as_posix()}')").fetchone()[0]) > 0
+    )
     con.close()
 
 
@@ -362,6 +364,7 @@ def test_run_clean_accepts_decimal_read_option(tmp_path: Path):
 
 # Legacy behavior kept for compatibility
 
+
 def test_run_clean_default_mode_selects_latest(tmp_path: Path, monkeypatch, caplog) -> None:
     """Senza clean.read.mode esplicito, il default è 'latest' (file più recente)."""
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
@@ -390,7 +393,9 @@ def test_run_clean_default_mode_selects_latest(tmp_path: Path, monkeypatch, capl
     assert "defaulting to largest file (legacy)" not in caplog.text
 
 
-def test_clean_manifest_missing_warns_and_selects_with_default_mode(tmp_path: Path, monkeypatch, caplog) -> None:
+def test_clean_manifest_missing_warns_and_selects_with_default_mode(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     small_file = _write_csv(raw_dir / "small.csv", "a\n1\n")
     large_file = _write_csv(raw_dir / "large.csv", "a\n" + ("1\n" * 20))
@@ -415,7 +420,9 @@ def test_clean_manifest_missing_warns_and_selects_with_default_mode(tmp_path: Pa
     assert "CLEAN RAW metadata missing, using legacy selection" in caplog.text
 
 
-def test_clean_manifest_points_missing_file_falls_back_and_warns(tmp_path: Path, monkeypatch, caplog) -> None:
+def test_clean_manifest_points_missing_file_falls_back_and_warns(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
     small_file = _write_csv(raw_dir / "small.csv", "a\n1\n")
     large_file = _write_csv(raw_dir / "large.csv", "a\n" + ("1\n" * 20))
@@ -443,10 +450,14 @@ def test_clean_manifest_points_missing_file_falls_back_and_warns(tmp_path: Path,
         )
 
     assert seen["input_files"] == [large_file]
-    assert "primary_output_file is missing or invalid: missing.csv; using legacy selection" in caplog.text
+    assert (
+        "primary_output_file is missing or invalid: missing.csv; using legacy selection"
+        in caplog.text
+    )
 
 
 # ── _metadata_candidates error handling ─────────────────────────────────────────
+
 
 def test_metadata_candidates_raises_on_malformed_json(tmp_path: Path) -> None:
     raw_dir = tmp_path / "raw" / "demo" / "2024"

@@ -105,7 +105,9 @@ def _build_clean_preview(
     for _ in range(25):
         _create_placeholder_raw_input_with_columns(con, columns)
         try:
-            con.execute(f"CREATE OR REPLACE TABLE __dry_run_clean_preview AS SELECT * FROM ({clean_sql}) AS q LIMIT 0")
+            con.execute(
+                f"CREATE OR REPLACE TABLE __dry_run_clean_preview AS SELECT * FROM ({clean_sql}) AS q LIMIT 0"
+            )
             return
         except Exception as exc:
             err_msg = str(exc)
@@ -113,7 +115,9 @@ def _build_clean_preview(
             if dry_run and "No files found that match the pattern" in err_msg:
                 if support_paths and any(sp in err_msg for sp in support_paths):
                     # Crea un placeholder minimo per non bloccare mart validation
-                    con.execute("CREATE OR REPLACE TABLE __dry_run_clean_preview AS SELECT NULL::VARCHAR AS __support_placeholder LIMIT 0")
+                    con.execute(
+                        "CREATE OR REPLACE TABLE __dry_run_clean_preview AS SELECT NULL::VARCHAR AS __support_placeholder LIMIT 0"
+                    )
                     return
 
             missing = _extract_missing_binder_column(exc)
@@ -135,7 +139,9 @@ def _all_support_expected_paths(support_payloads: list[dict[str, Any]]) -> list[
     return paths
 
 
-def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection, dry_run: bool = False) -> None:
+def _validate_mart_sql(
+    cfg, *, year: int, con: duckdb.DuckDBPyConnection, dry_run: bool = False
+) -> None:
     clean_cfg_ = ensure_dict(cfg.clean)
     mart_cfg_ = ensure_dict(cfg.mart)
     if clean_cfg_.get("sql"):
@@ -146,7 +152,9 @@ def _validate_mart_sql(cfg, *, year: int, con: duckdb.DuckDBPyConnection, dry_ru
     # In dry-run: require_exists=False per non bloccare candidate senza support
     # ancora generati. Se DuckDB fallisce su read_parquet (file non esiste),
     # il dry-run lo registra come avviso ma non blocca.
-    support_payloads = resolve_support_payloads(ensure_dict(cfg.support), require_exists=not dry_run)
+    support_payloads = resolve_support_payloads(
+        ensure_dict(cfg.support), require_exists=not dry_run
+    )
     template_ctx = build_runtime_template_ctx(
         dataset=cfg.dataset,
         year=year,
@@ -180,8 +188,8 @@ def validate_sql_dry_run(cfg, *, year: int, layers: list[str], dry_run: bool = F
 
     with safe_connect() as con:
         if cfg.clean.sql:
-            _build_clean_preview(cfg, year=year, con=con,
-                                 support_cfg=ensure_dict(cfg.support),
-                                 dry_run=dry_run)
+            _build_clean_preview(
+                cfg, year=year, con=con, support_cfg=ensure_dict(cfg.support), dry_run=dry_run
+            )
         if "mart" in layers:
             _validate_mart_sql(cfg, year=year, con=con, dry_run=dry_run)

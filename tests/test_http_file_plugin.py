@@ -4,15 +4,24 @@ Tests use ``FakeHttpClient`` from ``lab_connectors.testing`` instead of
 monkeypatching ``HttpClient.get``. Retry, backoff, and SSL fallback
 logic lives in lab-connectors and is tested there.
 """
+
 from __future__ import annotations
+
+import os
+from unittest import mock
 
 import pytest
 
-from lab_connectors.http import HttpResult
+from lab_connectors.http import HttpResult, HttpFallbackError
 from lab_connectors.testing import FakeHttpClient, fake_response
 
 from toolkit.core.exceptions import DownloadError
-from toolkit.plugins.http_file import HttpFileSource
+from toolkit.plugins.http_file import (
+    HttpFileSource,
+    _sanitize_proxy_url,
+    _parse_curl_status,
+    _strip_curl_status,
+)
 
 
 @pytest.mark.contract
@@ -20,7 +29,8 @@ def test_fetch_success() -> None:
     """HttpResult ok → fetch returns bytes."""
     fake = FakeHttpClient()
     fake.responses["https://example.test/data.csv"] = HttpResult(
-        response=fake_response(200, "payload"), err=None,
+        response=fake_response(200, "payload"),
+        err=None,
     )
 
     source = HttpFileSource(timeout=15, retries=2, user_agent="ua-test")
@@ -39,7 +49,8 @@ def test_fetch_http_status_error() -> None:
     """Non-200 HTTP status → DownloadError with status code in message."""
     fake = FakeHttpClient()
     fake.responses["https://example.test/unavailable"] = HttpResult(
-        response=fake_response(503, "service unavailable"), err=None,
+        response=fake_response(503, "service unavailable"),
+        err=None,
     )
 
     source = HttpFileSource(retries=1)
@@ -54,7 +65,8 @@ def test_fetch_connection_error() -> None:
     """HttpResult with err → DownloadError."""
     fake = FakeHttpClient()
     fake.responses["https://example.test/fail"] = HttpResult(
-        response=None, err=ConnectionError("connection refused"),
+        response=None,
+        err=ConnectionError("connection refused"),
     )
 
     source = HttpFileSource(retries=2)
@@ -120,24 +132,28 @@ class TestNonTruncableSampleBytes:
     """
 
     @pytest.mark.contract
-    @pytest.mark.parametrize("url,should_ignore", [
-        ("https://example.test/data.parquet", True),
-        ("https://example.test/data.zip", True),
-        ("https://example.test/data.xlsx", True),
-        ("https://example.test/data.xls", True),
-        ("https://example.test/data.gz", True),
-        ("https://example.test/data.csv", False),
-        ("https://example.test/data.tsv", False),
-        ("https://example.test/data.txt", False),
-        ("https://example.test/data.json", False),
-        ("https://example.test/data", False),  # no extension
-        ("https://example.test/api/v1/download?format=csv", False),  # query params
-    ])
+    @pytest.mark.parametrize(
+        "url,should_ignore",
+        [
+            ("https://example.test/data.parquet", True),
+            ("https://example.test/data.zip", True),
+            ("https://example.test/data.xlsx", True),
+            ("https://example.test/data.xls", True),
+            ("https://example.test/data.gz", True),
+            ("https://example.test/data.csv", False),
+            ("https://example.test/data.tsv", False),
+            ("https://example.test/data.txt", False),
+            ("https://example.test/data.json", False),
+            ("https://example.test/data", False),  # no extension
+            ("https://example.test/api/v1/download?format=csv", False),  # query params
+        ],
+    )
     def test_sample_bytes_respected_for_truncable_only(self, url, should_ignore):
         data = "a" * 10000 + "\n"
         fake = FakeHttpClient()
         fake.responses[url] = HttpResult(
-            response=fake_response(200, data), err=None,
+            response=fake_response(200, data),
+            err=None,
         )
 
         source = HttpFileSource(retries=1)
@@ -152,3 +168,105 @@ class TestNonTruncableSampleBytes:
         else:
             # CSV/JSON: sample_bytes rispettato con troncamento locale
             assert len(payload) <= 5000
+
+
+# --- curl fallback helpers ---
+
+
+class TestSanitizeProxyUrl:
+    @pytest.mark.pure_unit
+    def test_no_credentials(self):
+        assert _sanitize_proxy_url("http://proxy.example:8888") == "http://proxy.example:8888"
+
+    @pytest.mark.pure_unit
+    def test_username_only(self):
+        result = _sanitize_proxy_url("http://user@proxy.example:8888")
+        assert "user@" in result
+        assert "***" not in result
+
+    @pytest.mark.pure_unit
+    def test_username_password(self):
+        result = _sanitize_proxy_url("http://user:pass@proxy.example:8888")
+        assert "user:***@" in result
+        assert "pass" not in result
+
+    @pytest.mark.pure_unit
+    def test_no_port(self):
+        assert _sanitize_proxy_url("http://proxy.example") == "http://proxy.example"
+
+
+class TestParseCurlStatus:
+    @pytest.mark.pure_unit
+    def test_status_at_end(self):
+        assert _parse_curl_status(b"body\n200", b"") == 200
+
+    @pytest.mark.pure_unit
+    def test_status_with_trailing_newline(self):
+        assert _parse_curl_status(b"body\n200\n", b"") == 200
+
+    @pytest.mark.pure_unit
+    def test_no_status_raises(self):
+        with pytest.raises(DownloadError, match="no HTTP status"):
+            _parse_curl_status(b"body\n", b"curl: (7) Failed to connect")
+
+
+@pytest.mark.pure_unit
+class TestStripCurlStatus:
+    @pytest.mark.pure_unit
+    def test_strips_trailing_status(self):
+        assert _strip_curl_status(b"body\n200", 200) == b"body"
+
+    @pytest.mark.pure_unit
+    def test_noop_when_not_suffixed(self):
+        assert _strip_curl_status(b"body", 200) == b"body"
+
+
+class TestCurlFallbackIntegration:
+    """Quando is_ssl_fallback_failed=True e HTTPS_PROXY è impostato,
+    fetch deve chiamare _fetch_via_curl invece di lanciare DownloadError."""
+
+    @pytest.mark.contract
+    def test_fallback_triggered_with_proxy(self):
+        """ssl_fallback_failed + proxy → curl fallback chiamato."""
+        err = HttpFallbackError(
+            primary_error=ConnectionError("SSL err"), fallback_error=ConnectionError("fallback err")
+        )
+        fake = FakeHttpClient()
+        fake.responses["https://example.test/data.csv"] = HttpResult(
+            response=None,
+            err=err,
+            ssl_fallback_used=False,
+        )
+
+        source = HttpFileSource(retries=1)
+        source._client = fake
+
+        with mock.patch.dict(os.environ, {"HTTPS_PROXY": "http://proxy:8888"}):
+            with mock.patch(
+                "toolkit.plugins.http_file._fetch_via_curl",
+                return_value=b"curl-data",
+            ) as mock_curl:
+                payload = source.fetch("https://example.test/data.csv")
+
+        assert payload == b"curl-data"
+        mock_curl.assert_called_once()
+
+    @pytest.mark.contract
+    def test_no_fallback_without_proxy(self):
+        """ssl_fallback_failed ma senza proxy → DownloadError (no curl)."""
+        err = HttpFallbackError(
+            primary_error=ConnectionError("SSL err"), fallback_error=ConnectionError("fallback err")
+        )
+        fake = FakeHttpClient()
+        fake.responses["https://example.test/data.csv"] = HttpResult(
+            response=None,
+            err=err,
+            ssl_fallback_used=False,
+        )
+
+        source = HttpFileSource(retries=1)
+        source._client = fake
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(DownloadError, match="fallback failed"):
+                source.fetch("https://example.test/data.csv")

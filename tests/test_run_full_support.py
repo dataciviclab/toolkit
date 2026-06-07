@@ -11,9 +11,7 @@ from toolkit.cli.app import app
 pytestmark = pytest.mark.regression
 
 
-def test_run_full_dry_run_with_support(
-    project_example: Path, runner, tmp_path: Path
-) -> None:
+def test_run_full_dry_run_with_support(project_example: Path, runner, tmp_path: Path) -> None:
     """run full --dry-run deve funzionare anche se il support non e' mai stato eseguito.
 
     Regressione: resolve_support_payloads in dry-run usa require_exists=False,
@@ -27,9 +25,7 @@ def test_run_full_dry_run_with_support(
         "SELECT 1 AS ok FROM raw_input\n", encoding="utf-8"
     )
     (support_dir / "data" / "dummy.csv").write_text("a;b\n1;2\n", encoding="utf-8")
-    (support_dir / "sql" / "mart.sql").write_text(
-        "SELECT * FROM clean_input\n", encoding="utf-8"
-    )
+    (support_dir / "sql" / "mart.sql").write_text("SELECT * FROM clean_input\n", encoding="utf-8")
     (support_dir / "dataset.yml").write_text(
         """schema_version: 1
 root: out
@@ -60,7 +56,7 @@ mart:
         + f"""
 support:
   - name: "sup"
-    config: "{support_dir / 'dataset.yml'}"
+    config: "{support_dir / "dataset.yml"}"
     years: [2022]
 """,
         encoding="utf-8",
@@ -81,9 +77,7 @@ support:
     assert "support: sup" in result.output
 
 
-def test_run_full_dry_run_support_nonexistent_config_fails(
-    project_example: Path, runner
-) -> None:
+def test_run_full_dry_run_support_nonexistent_config_fails(project_example: Path, runner) -> None:
     """run full --dry-run fallisce se un support ha config inesistente."""
     cand_yml = project_example / "dataset.yml"
     cand_yml.write_text(

@@ -48,12 +48,8 @@ class SdmxSource:
         self.timeout = timeout
         self.retries = retries
         self.user_agent = user_agent or "dataciviclab-toolkit/0.1"
-        self.data_base_url = _normalize_base_url(
-            data_base_url or ISTAT_ESPLORADATI_BASE
-        )
-        self.metadata_base_url = _normalize_base_url(
-            metadata_base_url or ISTAT_SDMX_BASE
-        )
+        self.data_base_url = _normalize_base_url(data_base_url or ISTAT_ESPLORADATI_BASE)
+        self.metadata_base_url = _normalize_base_url(metadata_base_url or ISTAT_SDMX_BASE)
         self._client = HttpClient(
             timeout=timeout,
             max_retries=retries,
@@ -120,9 +116,7 @@ class SdmxSource:
             response = result.response
             if response.status_code != 200:
                 if response.status_code == 404:
-                    raise DownloadError(
-                        f"SDMX query not found (HTTP 404) for {response.url}"
-                    )
+                    raise DownloadError(f"SDMX query not found (HTTP 404) for {response.url}")
                 if 500 <= response.status_code <= 599:
                     raise DownloadError(
                         f"SDMX endpoint error (HTTP {response.status_code}) for {response.url}"
@@ -208,9 +202,7 @@ class SdmxSource:
         filters = filters or {}
         unknown = sorted(set(filters.keys()) - set(dimensions))
         if unknown:
-            raise DownloadError(
-                "Unknown SDMX filter dimensions: " + ", ".join(unknown)
-            )
+            raise DownloadError("Unknown SDMX filter dimensions: " + ", ".join(unknown))
 
         if not dimensions:
             return "all"

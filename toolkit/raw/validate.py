@@ -6,10 +6,15 @@ import json
 
 from toolkit.core.metadata import merge_layer_manifest
 from toolkit.core.paths import METADATA, RAW_VALIDATION, layer_year_dir
-from toolkit.core.validation import ValidationResult, build_validation_summary, write_validation_json
+from toolkit.core.validation import (
+    ValidationResult,
+    build_validation_summary,
+    write_validation_json,
+)
 
 TEXT_EXT = {".csv", ".txt", ".tsv", ".json", ".xml", ".html"}
 CSV_EXT = {".csv", ".tsv"}
+
 
 def _looks_like_text(b: bytes) -> bool:
     # Heuristic: bytes mostly printable or whitespace

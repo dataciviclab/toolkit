@@ -69,21 +69,33 @@ def _print_validation_details(layer_name: str, vpath: Path) -> None:
     if layer_name == "clean":
         required = summary.get("required") or []
         columns = summary.get("columns") or []
-        missing_cols = [c for c in required if c not in set(columns)] if isinstance(required, list) and isinstance(columns, list) else []
+        missing_cols = (
+            [c for c in required if c not in set(columns)]
+            if isinstance(required, list) and isinstance(columns, list)
+            else []
+        )
         if missing_cols:
             details.append(f"missing_columns={','.join(str(c) for c in missing_cols)}")
 
     if layer_name in ("mart",):
         required_tables = summary.get("required_tables") or []
         tables = summary.get("tables") or []
-        missing_tables = [t for t in required_tables if t not in set(tables)] if isinstance(required_tables, list) and isinstance(tables, list) else []
+        missing_tables = (
+            [t for t in required_tables if t not in set(tables)]
+            if isinstance(required_tables, list) and isinstance(tables, list)
+            else []
+        )
         if missing_tables:
             details.append(f"missing_tables={','.join(str(t) for t in missing_tables)}")
 
     # missing outputs
     outputs = content.get("outputs") or content.get("sections", {}).get("outputs") or []
     if isinstance(outputs, list):
-        missing = [o.get("file") for o in outputs if isinstance(o, dict) and not (Path(vpath).parent.parent / o.get("file", "")).exists()]
+        missing = [
+            o.get("file")
+            for o in outputs
+            if isinstance(o, dict) and not (Path(vpath).parent.parent / o.get("file", "")).exists()
+        ]
         if missing:
             details.append(f"missing_outputs={','.join(str(m) for m in missing)}")
 
@@ -169,13 +181,19 @@ def status(
     layers = s.get("layers", {})
 
     if as_json:
-        typer.echo(json.dumps({
-            "dataset": ds_name,
-            "year": yr,
-            "layers": layers,
-            "record": record,
-            "warnings": s.get("warnings", []),
-        }, indent=2, ensure_ascii=False))
+        typer.echo(
+            json.dumps(
+                {
+                    "dataset": ds_name,
+                    "year": yr,
+                    "layers": layers,
+                    "record": record,
+                    "warnings": s.get("warnings", []),
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
         return
 
     # Layer run status: da summary di default, dal record specifico se --run-id

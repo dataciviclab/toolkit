@@ -110,7 +110,9 @@ def resume(
     dataset: str | None = typer.Option(None, "--dataset", help="Dataset name (auto-da-config)"),
     run_id: str | None = typer.Option(None, "--run-id", help="Specific run id"),
     latest: bool = typer.Option(False, "--latest", help="Resume latest run"),
-    from_layer: str | None = typer.Option(None, "--from-layer", help="Force restart from raw | clean | mart"),
+    from_layer: str | None = typer.Option(
+        None, "--from-layer", help="Force restart from raw | clean | mart"
+    ),
 ):
     """
     Riprende un run dal primo layer non SUCCESS.
@@ -127,7 +129,9 @@ def resume(
         raise typer.BadParameter(f"No years configured in {config}")
 
     if dataset is not None and cfg.dataset != dataset:
-        raise typer.BadParameter(f"Config dataset mismatch: expected {dataset}, found {cfg.dataset}")
+        raise typer.BadParameter(
+            f"Config dataset mismatch: expected {dataset}, found {cfg.dataset}"
+        )
 
     run_dir = get_run_dir(cfg.root, ds_name, yr)
     try:

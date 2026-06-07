@@ -53,29 +53,61 @@ CORE_MODULES = [
 # Pattern di bypass da rilevare (patrono → suggerimento)
 BYPASS_PATTERNS: list[tuple[str, str, str]] = [
     # DuckDB connection
-    (r"duckdb\.connect\(", "usa safe_connect() da lab_connectors.duckdb invece di duckdb.connect() diretto",
-     "duckdb.connect diretto"),
+    (
+        r"duckdb\.connect\(",
+        "usa safe_connect() da lab_connectors.duckdb invece di duckdb.connect() diretto",
+        "duckdb.connect diretto",
+    ),
     # JSON I/O
-    (r"(?<!read_json_or_none)json\.loads\(.*\.read_text", "usa read_json_or_none() da core.io invece di json.loads + read_text",
-     "json.loads diretto"),
-    (r"\.write_text\(.*json\.dumps", "usa write_json_atomic() da core.io invece di write_text + json.dumps",
-     "json.dumps diretto"),
+    (
+        r"(?<!read_json_or_none)json\.loads\(.*\.read_text",
+        "usa read_json_or_none() da core.io invece di json.loads + read_text",
+        "json.loads diretto",
+    ),
+    (
+        r"\.write_text\(.*json\.dumps",
+        "usa write_json_atomic() da core.io invece di write_text + json.dumps",
+        "json.dumps diretto",
+    ),
     # Path construction
-    (r'f"[^"]*data/(raw|clean|mart)/[^"]*"', "usa layer_year_dir() / dataset_dir() da core.paths invece di costruire path a mano",
-     "path data/ costruito a mano"),
-    (r'Path\(.*root.*\).*[/]data[/]', "usa layer_year_dir() / dataset_dir() da core.paths",
-     "path root/data/ costruito a mano"),
+    (
+        r'f"[^"]*data/(raw|clean|mart)/[^"]*"',
+        "usa layer_year_dir() / dataset_dir() da core.paths invece di costruire path a mano",
+        "path data/ costruito a mano",
+    ),
+    (
+        r"Path\(.*root.*\).*[/]data[/]",
+        "usa layer_year_dir() / dataset_dir() da core.paths",
+        "path root/data/ costruito a mano",
+    ),
     # DuckDB view creation
-    (r"CREATE OR REPLACE VIEW.*raw_input", "usa read_raw_to_relation() da clean.duckdb_read invece di CREATE VIEW manuale",
-     "CREATE VIEW raw_input manuale"),
+    (
+        r"CREATE OR REPLACE VIEW.*raw_input",
+        "usa read_raw_to_relation() da clean.duckdb_read invece di CREATE VIEW manuale",
+        "CREATE VIEW raw_input manuale",
+    ),
     # SQL path quoting
-    (r"read_parquet\('", "usa parquet_schema/row_count/preview da core.parquet invece di read_parquet diretto",
-     "read_parquet diretto"),
-    (r"read_csv_auto\('", "usa csv_quick_shape da core.parquet o profile_with_read_cfg da profile.raw invece di read_csv_auto diretto",
-     "read_csv_auto diretto"),
+    (
+        r"read_parquet\('",
+        "usa parquet_schema/row_count/preview da core.parquet invece di read_parquet diretto",
+        "read_parquet diretto",
+    ),
+    (
+        r"read_csv_auto\('",
+        "usa csv_quick_shape da core.parquet o profile_with_read_cfg da profile.raw invece di read_csv_auto diretto",
+        "read_csv_auto diretto",
+    ),
 ]
 
-EXCLUDE_DIRS = {"__pycache__", ".ruff_cache", ".mypy_cache", ".pytest_cache", "build", "dist", "egg-info"}
+EXCLUDE_DIRS = {
+    "__pycache__",
+    ".ruff_cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    "build",
+    "dist",
+    "egg-info",
+}
 EXCLUDE_FILES = {"__init__.py"}
 
 
@@ -92,23 +124,27 @@ def scan_imports(filepath: Path) -> list[dict[str, Any]]:
         # import X.Y.Z
         if isinstance(node, ast.Import):
             for alias in node.names:
-                imports.append({
-                    "type": "import",
-                    "module": alias.name,
-                    "name": alias.asname or alias.name,
-                    "line": node.lineno,
-                })
+                imports.append(
+                    {
+                        "type": "import",
+                        "module": alias.name,
+                        "name": alias.asname or alias.name,
+                        "line": node.lineno,
+                    }
+                )
         # from X.Y import Z
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 for alias in node.names:
-                    imports.append({
-                        "type": "from",
-                        "module": node.module,
-                        "name": alias.name,
-                        "asname": alias.asname,
-                        "line": node.lineno,
-                    })
+                    imports.append(
+                        {
+                            "type": "from",
+                            "module": node.module,
+                            "name": alias.name,
+                            "asname": alias.asname,
+                            "line": node.lineno,
+                        }
+                    )
     return imports
 
 
@@ -123,12 +159,14 @@ def scan_bypass_patterns(filepath: Path) -> list[dict[str, Any]]:
     for i, line in enumerate(source.split("\n"), 1):
         for pattern, suggestion, label in BYPASS_PATTERNS:
             if re.search(pattern, line):
-                findings.append({
-                    "line": i,
-                    "pattern": label,
-                    "code": line.strip()[:100],
-                    "suggestion": suggestion,
-                })
+                findings.append(
+                    {
+                        "line": i,
+                        "pattern": label,
+                        "code": line.strip()[:100],
+                        "suggestion": suggestion,
+                    }
+                )
     return findings
 
 
@@ -137,10 +175,12 @@ def module_short(module: str) -> str:
     return module.replace("toolkit.", "").replace(".", "/")
 
 
-def run_audit(consumer_filter: str | None = None,
-              provider_filter: str | None = None,
-              only_bypass: bool = False,
-              output_markdown: bool = False) -> str:
+def run_audit(
+    consumer_filter: str | None = None,
+    provider_filter: str | None = None,
+    only_bypass: bool = False,
+    output_markdown: bool = False,
+) -> str:
     # Raccogli tutti i file Python del toolkit
     py_files: list[Path] = []
     for root, dirs, files in os.walk(TOOLKIT_DIR / "toolkit"):
@@ -165,11 +205,13 @@ def run_audit(consumer_filter: str | None = None,
             # match qualsiasi modulo che inizi con toolkit.core
             for core_mod in CORE_MODULES:
                 if mod == core_mod or mod.startswith(core_mod + "."):
-                    consumer_map[core_mod].append((
-                        filepath,
-                        imp["line"],
-                        imp["name"],
-                    ))
+                    consumer_map[core_mod].append(
+                        (
+                            filepath,
+                            imp["line"],
+                            imp["name"],
+                        )
+                    )
 
     # Bypass per file
     bypass_by_file: dict[str, list[dict[str, Any]]] = {}
@@ -235,9 +277,11 @@ def run_audit(consumer_filter: str | None = None,
             if consumer_filter and consumer_filter not in rel:
                 continue
             imports = file_imports.get(rel, [])
-            imports_core = [i for i in imports if any(
-                i["module"] == m or i["module"].startswith(m + ".") for m in CORE_MODULES
-            )]
+            imports_core = [
+                i
+                for i in imports
+                if any(i["module"] == m or i["module"].startswith(m + ".") for m in CORE_MODULES)
+            ]
             if not imports_core and rel.startswith("toolkit"):
                 non_consumers.append(rel)
 
@@ -280,9 +324,13 @@ def run_audit(consumer_filter: str | None = None,
     total_bypass = sum(len(v) for v in bypass_by_file.values())
 
     if output_markdown:
-        result.append(f"\n---\n**Riepilogo**: {total_imports} import da core, {total_bypass} pattern bypass in {len(bypass_by_file)} file.\n")
+        result.append(
+            f"\n---\n**Riepilogo**: {total_imports} import da core, {total_bypass} pattern bypass in {len(bypass_by_file)} file.\n"
+        )
     else:
-        result.append(f"\n--- Riepilogo: {total_imports} import da core, {total_bypass} bypass in {len(bypass_by_file)} file ---\n")
+        result.append(
+            f"\n--- Riepilogo: {total_imports} import da core, {total_bypass} bypass in {len(bypass_by_file)} file ---\n"
+        )
 
     return "\n".join(result)
 

@@ -36,16 +36,17 @@ class SparqlSource:
         is_json = accept_format == "sparql-results+json"
         headers: dict[str, str] = {
             "Accept": (
-                "application/sparql-results+json"
-                if is_json
-                else "text/csv,text/plain;q=0.5"
+                "application/sparql-results+json" if is_json else "text/csv,text/plain;q=0.5"
             ),
         }
         post_data = {"query": q}
 
         # --- Tentativo 1: POST ---
         result = self._client.post(
-            endpoint, post_data, headers=headers, retries=2,
+            endpoint,
+            post_data,
+            headers=headers,
+            retries=2,
         )
         if result.is_ok:
             return self._parse_response(result.response, is_json)
@@ -63,8 +64,7 @@ class SparqlSource:
             return self._parse_response(result.response, is_json)
 
         raise DownloadError(
-            f"SPARQL request failed for {endpoint}: "
-            f"POST → {result.err or 'unknown'}"
+            f"SPARQL request failed for {endpoint}: POST → {result.err or 'unknown'}"
         )
 
     def _parse_response(self, r: Any, prefer_json: bool) -> bytes:
@@ -73,8 +73,7 @@ class SparqlSource:
 
         if r.status_code != 200:
             raise DownloadError(
-                f"SPARQL endpoint returned HTTP {r.status_code} "
-                f"for {r.url}: {r.text[:200]}"
+                f"SPARQL endpoint returned HTTP {r.status_code} for {r.url}: {r.text[:200]}"
             )
 
         # CSV diretto
@@ -99,10 +98,7 @@ class SparqlSource:
 
         # XML SPARQL Results — non supportato
         if "sparql-results+xml" in content_type:
-            raise DownloadError(
-                "SPARQL endpoint returned XML results. "
-                "Request JSON or CSV format."
-            )
+            raise DownloadError("SPARQL endpoint returned XML results. Request JSON or CSV format.")
 
         raise DownloadError(
             f"Unsupported Content-Type '{content_type}' for SPARQL fetch. "
@@ -172,7 +168,7 @@ class SparqlSource:
                 # Concatena solo i dati (salta l'header)
                 header_end = all_bytes.find(b"\n")
                 if header_end >= 0:
-                    all_bytes = all_bytes + page_bytes[data_start + 1:]
+                    all_bytes = all_bytes + page_bytes[data_start + 1 :]
                 else:
                     all_bytes = all_bytes + page_bytes
             except DownloadError:
@@ -182,7 +178,9 @@ class SparqlSource:
         return all_bytes, endpoint
 
     def _fetch_bindings(
-        self, endpoint: str, query: str,
+        self,
+        endpoint: str,
+        query: str,
     ) -> list[dict[str, Any]]:
         """Esegue query SPARQL e restituisce i bindings JSON (per probe).
 
@@ -192,7 +190,9 @@ class SparqlSource:
         from lab_connectors.http.sparql import execute_sparql
 
         try:
-            return execute_sparql(endpoint, query, timeout=self._client.timeout)
+            t = self._client.timeout
+            timeout_val = t[0] if isinstance(t, tuple) else t
+            return execute_sparql(endpoint, query, timeout=int(timeout_val))
         except RuntimeError as e:
             raise DownloadError(str(e)) from e
 
@@ -259,9 +259,7 @@ class SparqlSource:
         warnings: list[str] = []
         for var in vars_list:
             if null_counts.get(var, 0) > 0:
-                warnings.append(
-                    f"variable '{var}' has {null_counts[var]} null/unbound value(s)"
-                )
+                warnings.append(f"variable '{var}' has {null_counts[var]} null/unbound value(s)")
 
         return {
             "endpoint": endpoint,
@@ -286,18 +284,14 @@ def _sparql_json_to_csv(json_text: str) -> bytes:
     except json.JSONDecodeError as e:
         raise DownloadError(f"Invalid SPARQL JSON response: {e}") from e
 
-    bindings: list[dict[str, Any]] = (
-        (payload.get("results") or {}).get("bindings") or []
-    )
+    bindings: list[dict[str, Any]] = (payload.get("results") or {}).get("bindings") or []
     if not isinstance(bindings, list):
         raise DownloadError("SPARQL JSON payload has unexpected structure")
 
     if not bindings:
         raise DownloadError("SPARQL query returned no results")
 
-    var_names: list[str] = (
-        (payload.get("head") or {}).get("vars") or list(bindings[0].keys())
-    )
+    var_names: list[str] = (payload.get("head") or {}).get("vars") or list(bindings[0].keys())
     rows: list[dict[str, str]] = []
 
     for binding in bindings:

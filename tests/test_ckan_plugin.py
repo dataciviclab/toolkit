@@ -11,7 +11,14 @@ pytestmark = pytest.mark.adapter
 
 
 class _FakeResponse:
-    def __init__(self, status_code: int, *, json_data=None, content: bytes = b"", url: str = "https://example.org"):
+    def __init__(
+        self,
+        status_code: int,
+        *,
+        json_data=None,
+        content: bytes = b"",
+        url: str = "https://example.org",
+    ):
         self.status_code = status_code
         self._json_data = json_data
         self.content = content
@@ -32,19 +39,23 @@ def test_ckan_fetch_resource_show_forces_https(monkeypatch):
     def _fake_get(self, url, **kwargs):
         calls.append((url, kwargs.get("params")))
         if "resource_show" in url:
-            return _ok(_FakeResponse(
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {"url": "http://portal.example.org/export/data.csv"},
+                    },
+                    url=f"{url}?id=abc",
+                )
+            )
+        return _ok(
+            _FakeResponse(
                 200,
-                json_data={
-                    "success": True,
-                    "result": {"url": "http://portal.example.org/export/data.csv"},
-                },
-                url=f"{url}?id=abc",
-            ))
-        return _ok(_FakeResponse(
-            200,
-            content=b"a,b\n1,2\n",
-            url="https://portal.example.org/export/data.csv",
-        ))
+                content=b"a,b\n1,2\n",
+                url="https://portal.example.org/export/data.csv",
+            )
+        )
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
 
@@ -63,28 +74,32 @@ def test_ckan_fetch_falls_back_to_package_show(monkeypatch):
         if "resource_show" in url:
             return _ok(_FakeResponse(404, json_data={}, url=f"{url}?id=33344"))
         if "package_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={
-                    "success": True,
-                    "result": {
-                        "resources": [
-                            {
-                                "id": 33344,
-                                "name": "csv dump",
-                                "format": "CSV",
-                                "url": "http://portal.example.org/api/3/datastore/dump/dataset.csv",
-                            }
-                        ]
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {
+                            "resources": [
+                                {
+                                    "id": 33344,
+                                    "name": "csv dump",
+                                    "format": "CSV",
+                                    "url": "http://portal.example.org/api/3/datastore/dump/dataset.csv",
+                                }
+                            ]
+                        },
                     },
-                },
-                url=f"{url}?id=dataset-id",
-            ))
-        return _ok(_FakeResponse(
-            200,
-            content=b"a,b\n1,2\n",
-            url="https://portal.example.org/api/3/datastore/dump/dataset.csv",
-        ))
+                    url=f"{url}?id=dataset-id",
+                )
+            )
+        return _ok(
+            _FakeResponse(
+                200,
+                content=b"a,b\n1,2\n",
+                url="https://portal.example.org/api/3/datastore/dump/dataset.csv",
+            )
+        )
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
 
@@ -115,29 +130,31 @@ def test_ckan_fetch_falls_back_to_second_resource_when_first_fails(monkeypatch):
     def _fake_get(self, url, **kwargs):
         calls.append((url, kwargs.get("params")))
         if "package_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={
-                    "success": True,
-                    "result": {
-                        "resources": [
-                            {
-                                "id": "first-res",
-                                "name": "first csv",
-                                "format": "CSV",
-                                "url": "http://portal.example.org/export/first.csv",
-                            },
-                            {
-                                "id": "second-res",
-                                "name": "second csv",
-                                "format": "CSV",
-                                "url": "http://portal.example.org/export/second.csv",
-                            },
-                        ]
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {
+                            "resources": [
+                                {
+                                    "id": "first-res",
+                                    "name": "first csv",
+                                    "format": "CSV",
+                                    "url": "http://portal.example.org/export/first.csv",
+                                },
+                                {
+                                    "id": "second-res",
+                                    "name": "second csv",
+                                    "format": "CSV",
+                                    "url": "http://portal.example.org/export/second.csv",
+                                },
+                            ]
+                        },
                     },
-                },
-                url=f"{url}?id=dataset-id",
-            ))
+                    url=f"{url}?id=dataset-id",
+                )
+            )
         # Simulate first URL failing with 404, second succeeding
         if "first.csv" in url:
             return _ok(_FakeResponse(404, content=b"", url=url))
@@ -163,23 +180,25 @@ def test_ckan_fetch_falls_back_to_second_resource_when_first_fails(monkeypatch):
 def test_ckan_fetch_package_show_by_resource_name_raises_when_missing(monkeypatch):
     def _fake_get(self, url, **kwargs):
         if "package_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={
-                    "success": True,
-                    "result": {
-                        "resources": [
-                            {
-                                "id": "other",
-                                "name": "auxiliary export",
-                                "format": "CSV",
-                                "url": "https://portal.example.org/export/aux.csv",
-                            }
-                        ]
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {
+                            "resources": [
+                                {
+                                    "id": "other",
+                                    "name": "auxiliary export",
+                                    "format": "CSV",
+                                    "url": "https://portal.example.org/export/aux.csv",
+                                }
+                            ]
+                        },
                     },
-                },
-                url=f"{url}?id=dataset-id",
-            ))
+                    url=f"{url}?id=dataset-id",
+                )
+            )
         raise AssertionError(f"Unexpected download request to {url}")
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
@@ -201,23 +220,25 @@ def test_ckan_fetch_rejects_package_fallback_when_resource_id_missing(monkeypatc
         if "resource_show" in url:
             return _ok(_FakeResponse(404, json_data={}, url=f"{url}?id=99999"))
         if "package_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={
-                    "success": True,
-                    "result": {
-                        "resources": [
-                            {
-                                "id": 33344,
-                                "name": "csv dump",
-                                "format": "CSV",
-                                "url": "http://portal.example.org/api/3/datastore/dump/dataset.csv",
-                            }
-                        ]
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {
+                            "resources": [
+                                {
+                                    "id": 33344,
+                                    "name": "csv dump",
+                                    "format": "CSV",
+                                    "url": "http://portal.example.org/api/3/datastore/dump/dataset.csv",
+                                }
+                            ]
+                        },
                     },
-                },
-                url=f"{url}?id=dataset-id",
-            ))
+                    url=f"{url}?id=dataset-id",
+                )
+            )
         raise AssertionError(f"Unexpected download request to {url}")
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
@@ -236,16 +257,19 @@ def test_ckan_fetch_rejects_package_fallback_when_resource_id_missing(monkeypatc
 
 def test_ckan_download_bytes_retries_then_succeeds(monkeypatch):
     """Retry behavior is now in HttpClient; test end-to-end success."""
+
     def _fake_get(self, url, **kwargs):
         if "resource_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={
-                    "success": True,
-                    "result": {"url": "https://portal.example.org/export/retry.csv"},
-                },
-                url=f"{url}?id=abc",
-            ))
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {"url": "https://portal.example.org/export/retry.csv"},
+                    },
+                    url=f"{url}?id=abc",
+                )
+            )
         return _ok(_FakeResponse(200, content=b"ok-after-retry", url=url))
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
@@ -261,14 +285,16 @@ def test_ckan_download_bytes_retries_then_succeeds(monkeypatch):
 def test_ckan_download_bytes_raises_on_http_error(monkeypatch):
     def _fake_get(self, url, **kwargs):
         if "resource_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={
-                    "success": True,
-                    "result": {"url": "https://portal.example.org/export/unavailable.csv"},
-                },
-                url=f"{url}?id=abc",
-            ))
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {"url": "https://portal.example.org/export/unavailable.csv"},
+                    },
+                    url=f"{url}?id=abc",
+                )
+            )
         return _ok(_FakeResponse(503, content=b"", url=url))
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
@@ -287,44 +313,48 @@ def test_ckan_fetch_datastore_active_uses_datastore_search(monkeypatch):
     def _fake_get(self, url, **kwargs):
         calls.append((url, kwargs.get("params")))
         if "resource_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={
-                    "success": True,
-                    "result": {
-                        "id": "res-123",
-                        "url": "http://portal.example.org/api/3/dump.csv",
-                        "datastore_active": True,
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {
+                            "id": "res-123",
+                            "url": "http://portal.example.org/api/3/dump.csv",
+                            "datastore_active": True,
+                        },
                     },
-                },
-                url=f"{url}?id=res-123",
-            ))
+                    url=f"{url}?id=res-123",
+                )
+            )
         if "datastore_search" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={
-                    "success": True,
-                    "result": {
-                        "fields": [{"id": "nome"}, {"id": "valore"}],
-                        "records": [
-                            {"nome": "a", "valore": 1},
-                            {"nome": "b", "valore": 2},
-                        ],
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {
+                            "fields": [{"id": "nome"}, {"id": "valore"}],
+                            "records": [
+                                {"nome": "a", "valore": 1},
+                                {"nome": "b", "valore": 2},
+                            ],
+                        },
                     },
-                },
-                url=url,
-            ))
-        return _ok(_FakeResponse(
-            200,
-            content=b"fallback csv content",
-            url="http://portal.example.org/api/3/dump.csv",
-        ))
+                    url=url,
+                )
+            )
+        return _ok(
+            _FakeResponse(
+                200,
+                content=b"fallback csv content",
+                url="http://portal.example.org/api/3/dump.csv",
+            )
+        )
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
 
-    payload, origin = CkanSource().fetch(
-        "https://portal.example.org/api/3", resource_id="res-123"
-    )
+    payload, origin = CkanSource().fetch("https://portal.example.org/api/3", resource_id="res-123")
 
     text = payload.decode("utf-8")
     assert "nome,valore" in text
@@ -339,31 +369,33 @@ def test_ckan_fetch_datastore_fallback_to_url_on_empty_records(monkeypatch):
     def _fake_get(self, url, **kwargs):
         calls.append((url, kwargs.get("params")))
         if "resource_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={
-                    "success": True,
-                    "result": {
-                        "id": "res-456",
-                        "url": "http://portal.example.org/api/3/dump.csv",
-                        "datastore_active": True,
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {
+                            "id": "res-456",
+                            "url": "http://portal.example.org/api/3/dump.csv",
+                            "datastore_active": True,
+                        },
                     },
-                },
-                url=f"{url}?id=res-456",
-            ))
+                    url=f"{url}?id=res-456",
+                )
+            )
         if "datastore_search" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={"success": True, "result": {"fields": [], "records": []}},
-                url=url,
-            ))
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={"success": True, "result": {"fields": [], "records": []}},
+                    url=url,
+                )
+            )
         return _ok(_FakeResponse(200, content=b"csv-from-url", url=url))
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
 
-    payload, origin = CkanSource().fetch(
-        "https://portal.example.org/api/3", resource_id="res-456"
-    )
+    payload, origin = CkanSource().fetch("https://portal.example.org/api/3", resource_id="res-456")
 
     assert payload == b"csv-from-url"
     assert "dump.csv" in origin
@@ -372,23 +404,27 @@ def test_ckan_fetch_datastore_fallback_to_url_on_empty_records(monkeypatch):
 def test_ckan_fetch_resource_no_url_no_datastore_raises(monkeypatch):
     def _fake_get(self, url, **kwargs):
         if "resource_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={
-                    "success": True,
-                    "result": {"id": "no-url-res", "datastore_active": False},
-                },
-                url=f"{url}?id=no-url-res",
-            ))
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {"id": "no-url-res", "datastore_active": False},
+                    },
+                    url=f"{url}?id=no-url-res",
+                )
+            )
         if "package_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={
-                    "success": True,
-                    "result": {"id": "no-url-res", "resources": []},
-                },
-                url=f"{url}?id=no-url-res",
-            ))
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {"id": "no-url-res", "resources": []},
+                    },
+                    url=f"{url}?id=no-url-res",
+                )
+            )
         raise AssertionError(f"Unexpected request to {url}")
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
@@ -407,38 +443,42 @@ def test_ckan_fetch_malformed_json_falls_back_to_package_show(monkeypatch):
     def _fake_get(self, url, **kwargs):
         calls.append((url, kwargs.get("params")))
         if "resource_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data=None,
-                content=b"not json at all",
-                url=f"{url}?id=malformed",
-            ))
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data=None,
+                    content=b"not json at all",
+                    url=f"{url}?id=malformed",
+                )
+            )
         if "package_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={
-                    "success": True,
-                    "result": {
-                        "id": "malformed",
-                        "resources": [
-                            {
-                                "id": "res-xyz",
-                                "name": "data",
-                                "format": "csv",
-                                "url": "http://portal.example.org/data.csv",
-                            }
-                        ],
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {
+                            "id": "malformed",
+                            "resources": [
+                                {
+                                    "id": "res-xyz",
+                                    "name": "data",
+                                    "format": "csv",
+                                    "url": "http://portal.example.org/data.csv",
+                                }
+                            ],
+                        },
                     },
-                },
-                url=f"{url}?id=malformed",
-            ))
-        return _ok(_FakeResponse(200, content=b"a,b\n1,2\n", url="http://portal.example.org/data.csv"))
+                    url=f"{url}?id=malformed",
+                )
+            )
+        return _ok(
+            _FakeResponse(200, content=b"a,b\n1,2\n", url="http://portal.example.org/data.csv")
+        )
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
 
-    payload, origin = CkanSource().fetch(
-        "https://portal.example.org/api/3", dataset_id="malformed"
-    )
+    payload, origin = CkanSource().fetch("https://portal.example.org/api/3", dataset_id="malformed")
 
     assert payload == b"a,b\n1,2\n"
 
@@ -446,11 +486,13 @@ def test_ckan_fetch_malformed_json_falls_back_to_package_show(monkeypatch):
 def test_ckan_fetch_package_no_resources_raises(monkeypatch):
     def _fake_get(self, url, **kwargs):
         if "package_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={"success": True, "result": {"id": "empty-pkg", "resources": []}},
-                url=f"{url}?id=empty-pkg",
-            ))
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={"success": True, "result": {"id": "empty-pkg", "resources": []}},
+                    url=f"{url}?id=empty-pkg",
+                )
+            )
         raise AssertionError(f"Unexpected request to {url}")
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
@@ -469,18 +511,20 @@ def test_ckan_fetch_prefer_datastore_false_skips_datastore(monkeypatch):
     def _fake_get(self, url, **kwargs):
         calls.append((url, kwargs.get("params")))
         if "resource_show" in url:
-            return _ok(_FakeResponse(
-                200,
-                json_data={
-                    "success": True,
-                    "result": {
-                        "id": "ds-res",
-                        "url": "http://portal.example.org/api/3/dump.csv",
-                        "datastore_active": True,
+            return _ok(
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "success": True,
+                        "result": {
+                            "id": "ds-res",
+                            "url": "http://portal.example.org/api/3/dump.csv",
+                            "datastore_active": True,
+                        },
                     },
-                },
-                url=f"{url}?id=ds-res",
-            ))
+                    url=f"{url}?id=ds-res",
+                )
+            )
         return _ok(_FakeResponse(200, content=b"csv-via-url", url=url))
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)

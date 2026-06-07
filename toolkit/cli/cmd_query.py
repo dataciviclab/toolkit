@@ -128,9 +128,13 @@ def _render_human(result: dict[str, Any]) -> None:
 
 def query(
     path_arg: str = typer.Argument("", metavar="PATH", help="Path al file parquet (posizionale)"),
-    config: str = typer.Option(None, "--config", "-c", help="Path a dataset.yml (alternativo a PATH)"),
+    config: str = typer.Option(
+        None, "--config", "-c", help="Path a dataset.yml (alternativo a PATH)"
+    ),
     layer: str = typer.Option("clean", "--layer", "-l", help="Layer: clean o mart (solo con -c)"),
-    year: int = typer.Option(0, "--year", "-y", help="Anno (default: ultimo del config, solo con -c)"),
+    year: int = typer.Option(
+        0, "--year", "-y", help="Anno (default: ultimo del config, solo con -c)"
+    ),
     sql: str = typer.Option(None, "--sql", help="SQL query (default: SELECT * LIMIT N)"),
     limit: int = typer.Option(20, "--limit", help="Max righe in output"),
     json_output: bool = typer.Option(False, "--json", help="Output JSON"),

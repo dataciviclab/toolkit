@@ -23,7 +23,5 @@ class ToolkitClientError(McpError):
               Call sites should use the most specific code available.
     """
 
-    def __init__(
-        self, message: str, code: ErrorCode = ErrorCode.UNEXPECTED
-    ) -> None:
+    def __init__(self, message: str, code: ErrorCode = ErrorCode.UNEXPECTED) -> None:
         super().__init__(code, message)

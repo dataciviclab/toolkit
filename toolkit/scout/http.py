@@ -37,13 +37,13 @@ _PREVIEW_KINDS = frozenset({"csv", "json", "xlsx", "xls", "tsv"})
 
 # Firma HTML per rilevare CKAN
 _CKAN_SIGNATURES = (
-    b"data-view-embed",          # embedded data view
-    b"/api/3/action",            # CKAN API reference
-    b"ckan-",                    # CSS class prefix
-    b'"package_id"',             # JSON package reference
-    b'generator" content="CKAN', # HTML meta generator tag
-    b"powered by CKAN",          # footer text
-    b"data-module=\"dataset",    # CKAN dataset module
+    b"data-view-embed",  # embedded data view
+    b"/api/3/action",  # CKAN API reference
+    b"ckan-",  # CSS class prefix
+    b'"package_id"',  # JSON package reference
+    b'generator" content="CKAN',  # HTML meta generator tag
+    b"powered by CKAN",  # footer text
+    b'data-module="dataset',  # CKAN dataset module
 )
 
 # Namespace SDMX per XML parsing
@@ -82,7 +82,9 @@ class _AnchorParser(HTMLParser):
 # ---------------------------------------------------------------------------
 
 
-def _mk_client(*, timeout: int = DEFAULT_TIMEOUT, user_agent: str = DEFAULT_USER_AGENT) -> HttpClient:
+def _mk_client(
+    *, timeout: int = DEFAULT_TIMEOUT, user_agent: str = DEFAULT_USER_AGENT
+) -> HttpClient:
     return HttpClient(timeout=timeout, user_agent=user_agent)
 
 
@@ -109,7 +111,9 @@ def is_file_like(url: str, content_type: str | None, content_disposition: str | 
     return False
 
 
-def resolve_preview_kind(url: str, content_type: str | None = None, content_disposition: str | None = None) -> str | None:
+def resolve_preview_kind(
+    url: str, content_type: str | None = None, content_disposition: str | None = None
+) -> str | None:
     """Determina il formato preview (csv, json, xlsx, xls, tsv) da URL/headers.
 
     Ordine: estensione URL → Content-Disposition filename → Content-Type.
@@ -176,6 +180,7 @@ def _filename_from_content_disposition(value: str | None) -> str | None:
     m = re.search(r"filename\*=(?:UTF-8''|utf-8'')([^;\s]+)", value)
     if m:
         from urllib.parse import unquote
+
         raw = m.group(1).strip().strip('"')
         return unquote(raw) if raw else None
     m = re.search(r'filename="([^"]+)"', value)
@@ -242,7 +247,11 @@ def probe_url_headers(
     # Tentativo HEAD con retry
     for attempt in range(1 + MAX_RETRIES):
         head_result = client.head(url)
-        if head_result.is_ok and head_result.response is not None and head_result.response.status_code < 500:
+        if (
+            head_result.is_ok
+            and head_result.response is not None
+            and head_result.response.status_code < 500
+        ):
             resp = head_result.response
             return _build_probe_result(
                 requested_url=url,
@@ -498,7 +507,11 @@ def search_ckan_datasets(
     """
     safe_rows = max(1, min(int(rows), 500))
     base = portal_url.rstrip("/")
-    search_url = f"{base}/api/3/action/package_search" if not base.endswith("/api/3/action") else f"{base}/package_search"
+    search_url = (
+        f"{base}/api/3/action/package_search"
+        if not base.endswith("/api/3/action")
+        else f"{base}/package_search"
+    )
     client = _mk_client(timeout=timeout)
 
     result = client.get(search_url, params={"q": query, "rows": safe_rows})
@@ -522,14 +535,16 @@ def search_ckan_datasets(
     datasets: list[dict[str, Any]] = []
     for ds in raw_datasets:
         org = ds.get("organization") or {}
-        datasets.append({
-            "id": ds.get("id") or ds.get("name"),
-            "name": ds.get("name") or ds.get("id"),
-            "title": ds.get("title"),
-            "organization": org.get("title") or org.get("name"),
-            "resources_count": len(ds.get("resources") or []),
-            "metadata_modified": ds.get("metadata_modified"),
-        })
+        datasets.append(
+            {
+                "id": ds.get("id") or ds.get("name"),
+                "name": ds.get("name") or ds.get("id"),
+                "title": ds.get("title"),
+                "organization": org.get("title") or org.get("name"),
+                "resources_count": len(ds.get("resources") or []),
+                "metadata_modified": ds.get("metadata_modified"),
+            }
+        )
 
     return {"count": search_result.get("count", 0), "datasets": datasets}
 
@@ -577,12 +592,14 @@ def list_sdmx_dataflows(
 
     dataflows: list[dict[str, str]] = []
     for flow in flows:
-        dataflows.append({
-            "dataflow_id": flow.get("id"),
-            "name": flow.get("name"),
-            "agency_id": flow.get("agencyID"),
-            "version": flow.get("version"),
-        })
+        dataflows.append(
+            {
+                "dataflow_id": flow.get("id"),
+                "name": flow.get("name"),
+                "agency_id": flow.get("agencyID"),
+                "version": flow.get("version"),
+            }
+        )
     return dataflows
 
 
@@ -594,12 +611,14 @@ def discover_ckan_resources(pkg: dict[str, Any]) -> list[dict[str, Any]]:
         res_url = res.get("url") or ""
         if not res_url or not res_url.startswith("http"):
             continue
-        discovered.append({
-            "id": res.get("id") or "",
-            "name": res.get("name") or res.get("description") or res.get("id") or "",
-            "format": (res.get("format") or "").lower(),
-            "url": res_url,
-        })
+        discovered.append(
+            {
+                "id": res.get("id") or "",
+                "name": res.get("name") or res.get("description") or res.get("id") or "",
+                "format": (res.get("format") or "").lower(),
+                "url": res_url,
+            }
+        )
     return discovered
 
 
@@ -623,7 +642,7 @@ def fetch_sdmx_years(
     try:
         base = base_url.split("?")[0].rstrip("/")
         if "/dataflow/" in base:
-            sdmx_root = base[:base.index("/dataflow/")]
+            sdmx_root = base[: base.index("/dataflow/")]
         elif base.endswith("/dataflow"):
             sdmx_root = base[: -len("/dataflow")]
         else:

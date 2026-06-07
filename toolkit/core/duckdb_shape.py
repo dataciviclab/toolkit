@@ -10,14 +10,14 @@ Rinominato da ``core/parquet.py`` — ora in ``core/duckdb_shape.py``.
 
 from __future__ import annotations
 
-from collections.abc import Generator, Mapping
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import duckdb
 
-from lab_connectors.duckdb import safe_connect
+from lab_connectors.duckdb import gcs_connect
 from toolkit.core.sql_utils import sql_literal
 
 
@@ -33,31 +33,15 @@ def _is_s3_path(path: str | Path) -> bool:
     return s.startswith("s3://") or s.startswith("s3:/")
 
 
-def _s3_config() -> Mapping[str, Any]:
-    """Config DuckDB per leggere bucket GCS pubblici via S3-compatible API."""
-    return {
-        "s3_endpoint": "storage.googleapis.com",
-        "s3_region": "auto",
-        "s3_access_key_id": "",
-        "s3_secret_access_key": "",
-        "s3_use_ssl": "true",
-    }
-
-
 @contextmanager
 def _parquet_connect(path: Path) -> Generator[Any, None, None]:
-    """Context manager DuckDB con supporto S3 se il path e' ``s3://``.
+    """Context manager DuckDB per GCS S3 o path locale.
 
-    Per path locali usa ``safe_connect()`` (backward compat).
-    Per path ``s3://`` usa ``safe_connect(extensions=["httpfs"], config=...)``
-    (via ``lab_connectors.duckdb`` v0.13.0).
+    Delega a ``lab_connectors.duckdb.gcs_connect()`` che decide
+    automaticamente la config in base al path.
     """
-    if _is_s3_path(str(path)):
-        with safe_connect(extensions=["httpfs"], config=_s3_config()) as con:
-            yield con
-    else:
-        with safe_connect() as con:
-            yield con
+    with gcs_connect(path) as con:
+        yield con
 
 
 def _normalize_s3(path_str: str) -> str:
@@ -195,8 +179,15 @@ def parquet_preview(
     if not _is_s3_path(path) and not path.exists():
         if sql is not None:
             raise FileNotFoundError(f"Parquet non trovato: {path}")
-        return {"path": _display_path(path), "column_count": 0, "columns": [],
-                "row_count": None, "preview": [], "truncated": False, "sql": None}
+        return {
+            "path": _display_path(path),
+            "column_count": 0,
+            "columns": [],
+            "row_count": None,
+            "preview": [],
+            "truncated": False,
+            "sql": None,
+        }
 
     try:
         with _parquet_connect(path) as con:
@@ -235,7 +226,13 @@ def parquet_preview(
         if sql is not None:
             # In modalità SQL esplicito, propaga l'errore
             raise
-        base = {"path": _display_path(path), "column_count": 0, "columns": [],
-                "row_count": None, "preview": [], "truncated": False}
+        base = {
+            "path": _display_path(path),
+            "column_count": 0,
+            "columns": [],
+            "row_count": None,
+            "preview": [],
+            "truncated": False,
+        }
         base["sql"] = sql
         return base

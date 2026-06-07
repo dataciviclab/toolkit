@@ -171,18 +171,22 @@ def list_candidates(
             has_clean = clean_dir.exists() and any(clean_dir.iterdir())
             has_mart = mart_dir.exists() and any(mart_dir.iterdir())
 
-            last_run_status = _find_latest_run_status(dataset_name_for_path, runs_root=resolved_root)
+            last_run_status = _find_latest_run_status(
+                dataset_name_for_path, runs_root=resolved_root
+            )
 
-            results.append({
-                "slug": slug,
-                "dataset_name": name,
-                "stage": stage_name,
-                "years": years,
-                "last_run_status": last_run_status,
-                "has_clean": has_clean,
-                "has_mart": has_mart,
-                "config_path": str(dataset_yml),
-            })
+            results.append(
+                {
+                    "slug": slug,
+                    "dataset_name": name,
+                    "stage": stage_name,
+                    "years": years,
+                    "last_run_status": last_run_status,
+                    "has_clean": has_clean,
+                    "has_mart": has_mart,
+                    "config_path": str(dataset_yml),
+                }
+            )
 
     if status_filter is not None:
         valid_statuses = {"SUCCESS", "FAILED", "DRY_RUN", "RUNNING"}

@@ -147,7 +147,18 @@ def _duckdb_type_to_mapping_type(duckdb_type: str) -> str:
     t = duckdb_type.upper()
     if t in ("VARCHAR", "CHAR", "TEXT", "STRING", "UUID"):
         return "str"
-    if t in ("INTEGER", "BIGINT", "SMALLINT", "TINYINT", "UBIGINT", "UINTEGER", "USMALLINT", "UTINYINT", "HUGEINT", "UHUGEINT"):
+    if t in (
+        "INTEGER",
+        "BIGINT",
+        "SMALLINT",
+        "TINYINT",
+        "UBIGINT",
+        "UINTEGER",
+        "USMALLINT",
+        "UTINYINT",
+        "HUGEINT",
+        "UHUGEINT",
+    ):
         return "int"
     if t in ("DOUBLE", "FLOAT", "REAL", "DECIMAL", "NUMERIC", "UHUGGINT"):
         return "float"

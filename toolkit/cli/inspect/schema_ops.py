@@ -77,12 +77,14 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
                 "Sono presenti piu' output mart; lo schema mostrato riguarda solo il primo output."
             )
 
-    payload.update({
-        "dataset": paths.get("dataset"),
-        "year": paths.get("year"),
-        "layer": safe_layer,
-        "config_path": str(config_path),
-    })
+    payload.update(
+        {
+            "dataset": paths.get("dataset"),
+            "year": paths.get("year"),
+            "layer": safe_layer,
+            "config_path": str(config_path),
+        }
+    )
     return payload
 
 
@@ -90,7 +92,9 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
 
 
 def schema(
-    config_path: str = typer.Argument("", metavar="CONFIG", help="Path al dataset.yml (posizionale)"),
+    config_path: str = typer.Argument(
+        "", metavar="CONFIG", help="Path al dataset.yml (posizionale)"
+    ),
     config: str = typer.Option(None, "--config", "-c", help="Path al dataset.yml", hidden=True),
     layer: str = typer.Option("clean", "--layer", "-l", help="Layer: raw, clean, mart"),
     year: int = typer.Option(0, "--year", "-y", help="Anno (default: ultimo)"),

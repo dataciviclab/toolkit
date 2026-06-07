@@ -1,4 +1,5 @@
 """Tests for SparqlSource — mocks HttpClient, not raw requests."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -77,7 +78,8 @@ def test_sparql_fetch_http_error():
     """Non-200 response raises DownloadError."""
     with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
         mock_cls.return_value.post.return_value = _http_ok(
-            status=500, text="Internal Server Error",
+            status=500,
+            text="Internal Server Error",
         )
         source = SparqlSource()
         with pytest.raises(DownloadError, match="HTTP 500"):
@@ -232,9 +234,15 @@ def test_sparql_json_to_csv_binding_types():
 def test_sparql_probe_returns_schema_and_stats():
     """Probe returns schema, stats, and warnings."""
     bindings = [
-        {"name": {"type": "literal", "value": "Alice"}, "value": {"type": "literal", "value": "42"}},
+        {
+            "name": {"type": "literal", "value": "Alice"},
+            "value": {"type": "literal", "value": "42"},
+        },
         {"name": {"type": "literal", "value": "Bob"}, "value": {"type": "literal", "value": None}},
-        {"name": {"type": "literal", "value": "Charlie"}, "value": {"type": "literal", "value": "7"}},
+        {
+            "name": {"type": "literal", "value": "Charlie"},
+            "value": {"type": "literal", "value": "7"},
+        },
     ]
     source = SparqlSource(timeout=30)
     with patch.object(source, "_fetch_bindings", return_value=bindings):
@@ -326,11 +334,13 @@ class TestSparqlPagination:
         """Con pages=1 (default) si fa una sola POST."""
         with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
             mock_cls.return_value.post.return_value = _http_ok(
-                text=self.CSV_P1, headers={"Content-Type": "text/csv"},
+                text=self.CSV_P1,
+                headers={"Content-Type": "text/csv"},
             )
             source = SparqlSource()
             payload, _ = source.fetch(
-                "https://example.test/sparql", "SELECT * WHERE { ?s ?p ?o } LIMIT 10",
+                "https://example.test/sparql",
+                "SELECT * WHERE { ?s ?p ?o } LIMIT 10",
             )
             assert mock_cls.return_value.post.call_count == 1
             assert payload == self.CSV_P1.encode()
@@ -351,26 +361,37 @@ class TestSparqlPagination:
             mock_cls.return_value.post.side_effect = side_effect
             source = SparqlSource()
             payload, _ = source.fetch(
-                "https://example.test/sparql", "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
-                pages=3, step=10,
+                "https://example.test/sparql",
+                "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
+                pages=3,
+                step=10,
             )
             assert mock_cls.return_value.post.call_count == 3
             # Header deve apparire una sola volta
             text = payload.decode()
             assert text.count("name,value") == 1
             # Tutti i dati devono essere presenti
-            assert "foo" in text and "bar" in text and "baz" in text and "qux" in text and "quux" in text
+            assert (
+                "foo" in text
+                and "bar" in text
+                and "baz" in text
+                and "qux" in text
+                and "quux" in text
+            )
 
     def test_pages_without_limit_injects_step(self):
         """Se la query non ha LIMIT e pages>1, deve iniettare LIMIT step."""
         with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
             mock_cls.return_value.post.return_value = _http_ok(
-                text=self.CSV_P1, headers={"Content-Type": "text/csv"},
+                text=self.CSV_P1,
+                headers={"Content-Type": "text/csv"},
             )
             source = SparqlSource()
             source.fetch(
-                "https://example.test/sparql", "SELECT * WHERE { ?s ?p ?o }",
-                pages=2, step=100,
+                "https://example.test/sparql",
+                "SELECT * WHERE { ?s ?p ?o }",
+                pages=2,
+                step=100,
             )
             # La seconda chiamata deve avere LIMIT 100 + OFFSET 100
             second_call = mock_cls.return_value.post.call_args_list[1]
@@ -393,8 +414,10 @@ class TestSparqlPagination:
             mock_cls.return_value.post.side_effect = side_effect
             source = SparqlSource()
             payload, _ = source.fetch(
-                "https://example.test/sparql", "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
-                pages=5, step=10,
+                "https://example.test/sparql",
+                "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
+                pages=5,
+                step=10,
             )
             # Pagina 0 ok, pagina 1 vuota → stop (2 chiamate)
             assert mock_cls.return_value.post.call_count == 2
@@ -402,6 +425,7 @@ class TestSparqlPagination:
     def test_pages_early_stop_on_http_error(self):
         """Se una pagina successiva da HTTP error, ci si ferma senza crash."""
         from toolkit.core.exceptions import DownloadError
+
         call = [0]
 
         def side_effect(*a, **kw):
@@ -414,8 +438,10 @@ class TestSparqlPagination:
             mock_cls.return_value.post.side_effect = side_effect
             source = SparqlSource()
             payload, _ = source.fetch(
-                "https://example.test/sparql", "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
-                pages=3, step=10,
+                "https://example.test/sparql",
+                "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
+                pages=3,
+                step=10,
             )
             # Prima pagina ok, seconda fallisce → stop, ritorna solo pagina 1
             assert payload.decode().count("foo") == 1

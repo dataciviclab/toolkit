@@ -115,7 +115,10 @@ def suggest_years(
 _GRANULARITY_PATTERNS: list[tuple[str, str]] = [
     (r"\bcomun[ei]\b|\bmunicip", "comune"),
     (r"\bprovinc", "provincia"),
-    (r"\bregion[ei]\b|\bregioni\b|piemonte|lombardia|veneto|emilia|toscana|lazio|campania|puglia|sicilia|sardegna|abruzzo|umbria|marche|molise|calabria|basilicata|friuli|trentin|liguria|valle d['\s]aosta", "regione"),
+    (
+        r"\bregion[ei]\b|\bregioni\b|piemonte|lombardia|veneto|emilia|toscana|lazio|campania|puglia|sicilia|sardegna|abruzzo|umbria|marche|molise|calabria|basilicata|friuli|trentin|liguria|valle d['\s]aosta",
+        "regione",
+    ),
     (r"(?<![a-zA-Z])(REG|reg)(?![a-zA-Z])", "regione"),
     (r"\bnazional[ei]\b|\bitali[ae]\b|\bnazione\b|\bnational\b|\bregional\b", "nazionale"),
     (r"\beurope[ao]\b|\bue\b|\beuropa\b|\beuropean\b", "europeo"),
@@ -143,16 +146,61 @@ def infer_granularity_from_name_and_columns(name: str, column_names: list[str]) 
 # ---------------------------------------------------------------------------
 
 _TOPIC_KEYWORDS: list[tuple[list[str], str]] = [
-    (["lavoro", "occupazione", "disoccupazione", "impiego", "stipendio", "salario", "retribuzione"], "lavoro"),
-    (["economia", "pil", "crescita", "inflazione", "debito", "spesa", "bilancio", "finanza"], "economia"),
-    (["sanità", "salute", "ospedale", "medico", "salute", "farmaco", "cura", "assistenza"], "sanita"),
-    (["scuola", "istruzione", "università", "studente", "docente", "formazione", "educazione"], "istruzione"),
+    (
+        [
+            "lavoro",
+            "occupazione",
+            "disoccupazione",
+            "impiego",
+            "stipendio",
+            "salario",
+            "retribuzione",
+        ],
+        "lavoro",
+    ),
+    (
+        ["economia", "pil", "crescita", "inflazione", "debito", "spesa", "bilancio", "finanza"],
+        "economia",
+    ),
+    (
+        ["sanità", "salute", "ospedale", "medico", "salute", "farmaco", "cura", "assistenza"],
+        "sanita",
+    ),
+    (
+        ["scuola", "istruzione", "università", "studente", "docente", "formazione", "educazione"],
+        "istruzione",
+    ),
     (["trasporto", "mobilità", "traffico", "treno", "autobus", "strada", "ferrovia"], "trasporti"),
-    (["ambiente", "ecologia", "rifiuti", "inquinamento", "clima", "energia rinnovabile", "natura"], "ambiente"),
-    (["agricoltura", "coltivazione", "allevamento", "pesca", "forestale", "campagna"], "agricoltura"),
+    (
+        [
+            "ambiente",
+            "ecologia",
+            "rifiuti",
+            "inquinamento",
+            "clima",
+            "energia rinnovabile",
+            "natura",
+        ],
+        "ambiente",
+    ),
+    (
+        ["agricoltura", "coltivazione", "allevamento", "pesca", "forestale", "campagna"],
+        "agricoltura",
+    ),
     (["turismo", "visitatore", "arrivo", "presenza", "albergo", "vacanza"], "turismo"),
     (["giustizia", "tribunale", "reato", "crimine", "penale", "carcere", "detenuto"], "giustizia"),
-    (["demografia", "popolazione", "residente", "nascita", "morte", "immigrazione", "emigrazione"], "demografia"),
+    (
+        [
+            "demografia",
+            "popolazione",
+            "residente",
+            "nascita",
+            "morte",
+            "immigrazione",
+            "emigrazione",
+        ],
+        "demografia",
+    ),
     (["energia", "elettrico", "gas", "petrolio", "rinnovabile", "consumo energetico"], "energia"),
     (["commercio", "vendita", "mercato", "export", "import", "scambio", "fatturato"], "commercio"),
     (["welfare", "assistenza", "sociale", "pensione", "sussidio", "beneficio"], "welfare"),
@@ -185,6 +233,3 @@ def infer_topics(text: str) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Validation rules suggestions
 # ---------------------------------------------------------------------------
-
-
-

@@ -149,13 +149,16 @@ class TestNonTruncableSampleBytes:
     """
 
     @pytest.mark.contract
-    @pytest.mark.parametrize("url,should_ignore", [
-        ("https://example.test/download.parquet", True),
-        ("https://example.test/download.zip", True),
-        ("https://example.test/download.xlsx", True),
-        ("https://example.test/download.csv", False),
-        ("https://example.test/download", False),
-    ])
+    @pytest.mark.parametrize(
+        "url,should_ignore",
+        [
+            ("https://example.test/download.parquet", True),
+            ("https://example.test/download.zip", True),
+            ("https://example.test/download.xlsx", True),
+            ("https://example.test/download.csv", False),
+            ("https://example.test/download", False),
+        ],
+    )
     def test_sample_bytes_ignored_for_binary_post(
         self, url, should_ignore, monkeypatch: pytest.MonkeyPatch
     ):

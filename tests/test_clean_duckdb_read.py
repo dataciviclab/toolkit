@@ -13,7 +13,9 @@ from toolkit.clean.read_config import resolve_clean_read_cfg
 
 
 @pytest.mark.policy
-def test_read_raw_to_relation_fallback_invokes_robust_after_strict_failure(monkeypatch, tmp_path: Path):
+def test_read_raw_to_relation_fallback_invokes_robust_after_strict_failure(
+    monkeypatch, tmp_path: Path
+):
     input_file = tmp_path / "dirty.csv"
     input_file.write_text("a;b\n1;2;3\n", encoding="utf-8")
 
@@ -24,7 +26,10 @@ def test_read_raw_to_relation_fallback_invokes_robust_after_strict_failure(monke
         if len(calls) == 1:
             raise RuntimeError("strict boom")
         con.execute("CREATE OR REPLACE VIEW raw_input AS SELECT 1 AS x")
-        return {"ignore_errors": read_cfg.get("ignore_errors"), "strict_mode": read_cfg.get("strict_mode")}
+        return {
+            "ignore_errors": read_cfg.get("ignore_errors"),
+            "strict_mode": read_cfg.get("strict_mode"),
+        }
 
     monkeypatch.setattr(duckdb_read, "_execute_csv_read", _fake_execute_csv_read)
 
@@ -177,7 +182,9 @@ def test_read_raw_to_relation_handles_no_header_fixed_schema_without_extra_colum
         logger,
     )
 
-    rows = con.execute("SELECT col0, col1, col2, col3, col4 FROM raw_input ORDER BY col0").fetchall()
+    rows = con.execute(
+        "SELECT col0, col1, col2, col3, col4 FROM raw_input ORDER BY col0"
+    ).fetchall()
     assert info.source == "strict"
     assert rows == [("A", "2024", "1", "123", "45.6"), ("B", "2024", "2", "456", "78.9")]
     con.close()
@@ -269,7 +276,9 @@ def test_read_raw_to_relation_reads_xlsx_first_sheet(tmp_path: Path):
         logger,
     )
 
-    rows = con.execute('SELECT "Anno", "Regione", "Domanda" FROM raw_input ORDER BY "Regione"').fetchall()
+    rows = con.execute(
+        'SELECT "Anno", "Regione", "Domanda" FROM raw_input ORDER BY "Regione"'
+    ).fetchall()
     assert info.source == "excel"
     assert info.params_used["sheet_name"] == 0
     assert rows == [(2022, "Lazio", 123.4), (2022, "Umbria", 56.7)]
@@ -341,7 +350,9 @@ def test_read_raw_to_relation_reads_xls_with_xlrd_engine(tmp_path: Path):
         logger,
     )
 
-    rows = con.execute('SELECT "Anno", "Regione", "Domanda" FROM raw_input ORDER BY "Regione"').fetchall()
+    rows = con.execute(
+        'SELECT "Anno", "Regione", "Domanda" FROM raw_input ORDER BY "Regione"'
+    ).fetchall()
     assert info.source == "excel"
     assert info.params_used["sheet_name"] == 0
     assert rows == [(2022, "Lazio", 123.4), (2022, "Umbria", 56.7)]
@@ -483,8 +494,7 @@ def test_read_raw_to_relation_with_thousands_separator(tmp_path: Path):
     info = duckdb_read.read_raw_to_relation(
         con,
         [input_file],
-        {"delim": ";", "encoding": "utf-8", "header": True,
-         "decimal": ",", "thousands": "."},
+        {"delim": ";", "encoding": "utf-8", "header": True, "decimal": ",", "thousands": "."},
         "strict",
         logger,
     )

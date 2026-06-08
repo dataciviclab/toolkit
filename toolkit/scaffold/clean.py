@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -213,7 +214,11 @@ def generate_clean_sql(
         header_parts.append("--")
         header_parts.append("-- Warnings from profiling:")
         for w in warnings[:10]:
-            header_parts.append(f"--   - {w}")
+            # I warning possono essere multi-linea (es. DuckDB error message).
+            # I template placeholder ${...} vengono rimossi.
+            w_clean = re.sub(r"\$\{[^}]+\}", "${?}", w)
+            for line in w_clean.splitlines():
+                header_parts.append(f"--   {line}")
 
     header_parts.append("--")
     header_parts.append("-- This is a FIRST DRAFT. Review and adjust before running.")

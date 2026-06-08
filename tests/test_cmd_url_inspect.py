@@ -231,10 +231,17 @@ class TestSlugify:
         assert a != b
 
     @pytest.mark.contract
-    def test_slugify_strips_special_chars(self) -> None:
-        """Caratteri speciali nell'URL vengono convertiti in underscore."""
-        slug = slugify("https://example.com/data/my-data-file%202023.csv")
-        assert slug.startswith("my_data_file_202023_")
+    def test_slugify_decodes_percent_encoding(self) -> None:
+        """Il percent-encoding nell'URL viene decodificato prima di slugificare.
+        %20  spazio, %2F  /, ecc.  In questo caso %202023  ' 2023'  my_data_file_2023_."""
+        slug = slugify("https://example.com/data/posti%20per%20stabilimento.csv")
+        assert slug.startswith("posti_per_stabilimento_"), f"slug inizio errato: {slug}"
+
+    @pytest.mark.contract
+    def test_slugify_preserves_hyphens_as_underscores(self) -> None:
+        """Trattini nell'URL diventano underscore."""
+        slug = slugify("https://example.com/data/my-data-file.csv")
+        assert slug.startswith("my_data_file_"), f"slug inizio errato: {slug}"
 
     @pytest.mark.contract
     def test_slugify_deterministic_and_unique(self) -> None:

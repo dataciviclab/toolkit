@@ -59,48 +59,52 @@ def infer_years(text: str) -> tuple[int | None, int | None]:
     return min(years), max(years)
 
 
-def infer_years_from_url(url: str) -> tuple[int | None, int | None]:
-    """Inferisce anni da un URL."""
-    return infer_years(url)
-
-
 def infer_years_from_columns(column_names: list[str]) -> tuple[int | None, int | None]:
     """Inferisce anni da nomi di colonna."""
     combined = " ".join(column_names)
     return infer_years(combined)
 
 
+def _expand_column_years(y_min: int, y_max: int) -> set[int]:
+    """Espande un range di anni da nomi colonna (es. '2020','2021','2022')."""
+    if y_min < y_max:
+        return set(range(y_min, y_max + 1))
+    return {y_min}
+
+
 def suggest_years(
     *,
-    url: str = "",
     column_names: list[str] | None = None,
     profile: dict[str, Any] | None = None,
+    year_values: set[int] | None = None,
 ) -> list[int]:
     """Suggerisce una lista di anni per il dataset.yml.
 
-    Combina inferenze da URL, colonne e profilo.
-    Fallback: [2024] se nessuna inferenza.
+    Priorità:
+    1. ``year_values``: anni letti dalla colonna Anno del CSV (più affidabile).
+    2. Colonne + profilo: nomi colonna che sembrano anni.
+    3. Fallback: [2024].
+
+    L'URL non viene mai usato — contiene date di pubblicazione
+    che non corrispondono agli anni del dato.
     """
     candidates: set[int] = set()
 
-    if url:
-        y_min, y_max = infer_years_from_url(url)
-        if y_min is not None and y_max is not None:
-            candidates.update(range(y_min, y_max + 1))
-        elif y_min is not None:
-            candidates.add(y_min)
+    # Priorità 1: valori letti dal CSV
+    if year_values:
+        return sorted(year_values)
 
     if column_names:
         y_min, y_max = infer_years_from_columns(column_names)
         if y_min is not None and y_max is not None:
-            candidates.update(range(y_min, y_max + 1))
+            candidates.update(_expand_column_years(y_min, y_max))
 
     # Da profilo: colonne che sembrano anni
     if profile:
         norm_cols = profile.get("columns_norm") or profile.get("columns_raw") or []
         y_min, y_max = infer_years_from_columns(norm_cols)
         if y_min is not None and y_max is not None:
-            candidates.update(range(y_min, y_max + 1))
+            candidates.update(_expand_column_years(y_min, y_max))
 
     if not candidates:
         return [2024]

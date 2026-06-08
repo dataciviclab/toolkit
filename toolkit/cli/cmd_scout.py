@@ -65,6 +65,7 @@ def scout_url(
     scaffold: bool = False,
     run_raw: bool = False,
     json_output: bool = False,
+    slug: str | None = None,
 ) -> dict[str, Any] | None:
     """Probe arricchito + profiling + inferenze + scaffold opzionale.
 
@@ -74,6 +75,7 @@ def scout_url(
         scaffold: Se True, genera anche i file candidate.
         run_raw: Se True, esegue run raw dopo scaffold.
         json_output: Se True, restituisce dict invece di stamapare.
+        slug: Slug personalizzato (auto-generato da URL se None).
 
     Returns:
         dict con risultato probe se json_output=True, None altrimenti.
@@ -113,7 +115,7 @@ def scout_url(
                 _echo(f"    ... and {len(resources) - 3} more")
         if scaffold and not json_output:
             if resources:
-                _scaffold_ckan(url, probe, run_raw=run_raw)
+                _scaffold_ckan(url, probe, run_raw=run_raw, slug=slug)
 
     elif source_type == "html":
         candidates = probe.get("candidate_links") or []
@@ -126,7 +128,7 @@ def scout_url(
         if len(candidates) > 5:
             _echo(f"    ... and {len(candidates) - 5} more")
         if scaffold and not json_output:
-            _scaffold_html(url, probe, run_raw=run_raw)
+            _scaffold_html(url, probe, run_raw=run_raw, slug=slug)
 
     elif source_type == "sparql":
         sparql_info = probe.get("sparql_info") or {}
@@ -139,7 +141,7 @@ def scout_url(
             if ds_count > 5:
                 _echo(f"    ... e altri {ds_count - 5}")
         if scaffold and not json_output:
-            _scaffold_sparql(url, probe, run_raw=run_raw)
+            _scaffold_sparql(url, probe, run_raw=run_raw, slug=slug)
 
     elif source_type == "sdmx":
         _echo(f"  SDMX flow: {probe.get('sdmx_info', {}).get('flow_id', '?')}")
@@ -147,14 +149,14 @@ def scout_url(
         if sdmx_info.get("year_min"):
             _echo(f"  Year range: {sdmx_info['year_min']}-{sdmx_info.get('year_max', '?')}")
         if scaffold and not json_output:
-            _scaffold_sdmx(url, probe, run_raw=run_raw)
+            _scaffold_sdmx(url, probe, run_raw=run_raw, slug=slug)
 
     elif source_type == "file":
         resolved_format = probe.get("resolved_format")
         if resolved_format:
             _echo(f"  Detected format: {resolved_format}")
         if scaffold and not json_output:
-            _scaffold_file(url, probe, run_raw=run_raw)
+            _scaffold_file(url, probe, run_raw=run_raw, slug=slug)
 
     elif source_type == "opaque":
         _echo("error: URL returned opaque content", err=True)
@@ -185,9 +187,22 @@ def scout_url(
 # ---------------------------------------------------------------------------
 
 
-def _scaffold_file(url: str, probe_result: dict[str, Any], *, run_raw: bool = False) -> None:
-    """Scarica sample, profila, inferisce, genera scaffold."""
-    slug = slugify(url)
+def _scaffold_file(
+    url: str,
+    probe_result: dict[str, Any],
+    *,
+    run_raw: bool = False,
+    slug: str | None = None,
+) -> None:
+    """Scarica sample, profila, inferisce, genera scaffold.
+
+    Args:
+        url: URL del file da scaricare.
+        probe_result: Risultato del probe (dict).
+        run_raw: Se True, esegue raw run dopo scaffold.
+        slug: Slug personalizzato. Se None, auto-generato da url.
+    """
+    slug = slug or slugify(url)
     tmp_dir = Path(tempfile.gettempdir())
     tmp_name = f"scout_{slug}_{uuid.uuid4().hex[:8]}"
 
@@ -243,7 +258,13 @@ def _scaffold_file(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
             read_cfg["skip"] = retry_skip
             profile = profile_with_read_cfg(sample_path, sniff_hints, read_cfg)
 
-    # 4. Clean read via scaffold canonico
+    # 4. Propaga robust_read_suggested a profile per generate_full_scaffold
+    # Il flag puo' venire da sniff_hints (sniff_source_file) o da profile
+    # (profile_with_read_cfg, specie dopo retry con robust_preset).
+    if sniff_hints.get("robust_read_suggested") or profile.get("robust_read_suggested"):
+        profile["_robust_read_suggested"] = True
+
+    # 5. Clean read via scaffold canonico
     from toolkit.scaffold.clean import propose_clean_read
 
     enriched = dict(profile)
@@ -261,13 +282,18 @@ def _scaffold_file(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
 
     clean_read = propose_clean_read(enriched)
 
-    # 5. Inferenze
+    # 5. Legge i valori anno dal sample (se colonna Anno presente)
+    year_values = _read_year_values_from_sample(sample_path, sniff_hints, profile)
+    if year_values:
+        typer.echo(f"  Year values in data: {sorted(year_values)}")
+
+    # 6. Inferenze
     norm_cols = (
         profile.get("columns_norm") or profile.get("columns_raw") or profile.get("columns") or []
     )
     col_names = [str(c) for c in norm_cols]
 
-    inferred_years = suggest_years(url=url, column_names=col_names, profile=profile)
+    inferred_years = suggest_years(column_names=col_names, profile=profile, year_values=year_values)
     typer.echo(f"  Suggested years: {inferred_years}")
 
     granularity = infer_granularity_from_name_and_columns(slug, col_names)
@@ -313,21 +339,27 @@ def _scaffold_file(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
     typer.echo(f"  years: {inferred_years}")
     typer.echo(f"  source_type: {probe_result.get('source_type', 'file')}")
     typer.echo("  sql/clean.sql:      generated (with type casts)")
-    typer.echo("  sql/mart.sql:       generated (with aggregation)")
+    typer.echo("  sql/mart.sql:       generated (skeleton)")
     typer.echo("  README.md, notes.md, notebooks/: created")
 
     # 7. Opzionalmente raw run
     if run_raw:
         _run_bootstrap(str(out_dir / "dataset.yml"))
 
-    # 8. Cleanup
+    # 9. Cleanup
     sample_path.unlink(missing_ok=True)
 
     if not run_raw:
         typer.echo(f"\nNext: toolkit run all --config {out_dir / 'dataset.yml'}")
 
 
-def _scaffold_ckan(url: str, probe_result: dict[str, Any], *, run_raw: bool = False) -> None:
+def _scaffold_ckan(
+    url: str,
+    probe_result: dict[str, Any],
+    *,
+    run_raw: bool = False,
+    slug: str | None = None,
+) -> None:
     """Scaffold per risorsa CKAN."""
     resources = probe_result.get("ckan_resources") or []
     if not resources:
@@ -336,11 +368,11 @@ def _scaffold_ckan(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
 
     first_url = resources[0]["url"]
     try:
-        _scaffold_file(first_url, probe_result, run_raw=run_raw)
+        _scaffold_file(first_url, probe_result, run_raw=run_raw, slug=slug)
         return
     except (typer.Exit, Exception):
         typer.echo("  Warning: profiling failed for resource, generating minimal scaffold")
-        _scaffold_minimal_ckan(url, probe_result, resources, run_raw=run_raw)
+        _scaffold_minimal_ckan(url, probe_result, resources, run_raw=run_raw, slug=slug)
 
 
 def _scaffold_minimal_ckan(
@@ -349,11 +381,12 @@ def _scaffold_minimal_ckan(
     resources: list[dict[str, Any]],
     *,
     run_raw: bool = False,
+    slug: str | None = None,
 ) -> None:
     """Genera scaffold minimale CKAN quando il profiling fallisce."""
-    from toolkit.scaffold.sources import block_ckan, slugify
+    from toolkit.scaffold.sources import block_ckan
 
-    slug = slugify(url)
+    slug = slug or slugify(url)
     parsed = urlparse(url)
     portal_base = f"{parsed.scheme}://{parsed.netloc}"
     source_lines = block_ckan(resources, portal_base)
@@ -408,7 +441,13 @@ def _scaffold_minimal_ckan(
     typer.echo("  clean.read, clean.sql, mart.sql: manual editing required")
 
 
-def _scaffold_html(url: str, probe_result: dict[str, Any], *, run_raw: bool = False) -> None:
+def _scaffold_html(
+    url: str,
+    probe_result: dict[str, Any],
+    *,
+    run_raw: bool = False,
+    slug: str | None = None,
+) -> None:
     """Scaffold per pagina HTML con link."""
     candidates = probe_result.get("candidate_links") or []
     if not candidates:
@@ -416,15 +455,21 @@ def _scaffold_html(url: str, probe_result: dict[str, Any], *, run_raw: bool = Fa
         raise typer.Exit(code=1)
 
     if len(candidates) == 1:
-        _scaffold_file(candidates[0], probe_result, run_raw=run_raw)
+        _scaffold_file(candidates[0], probe_result, run_raw=run_raw, slug=slug)
     else:
-        _scaffold_file(candidates[0], probe_result, run_raw=run_raw)
+        _scaffold_file(candidates[0], probe_result, run_raw=run_raw, slug=slug)
         typer.echo("  (using first link — run scout again with a direct URL for a different one)")
 
 
-def _scaffold_sparql(url: str, probe_result: dict[str, Any], *, run_raw: bool = False) -> None:
+def _scaffold_sparql(
+    url: str,
+    probe_result: dict[str, Any],
+    *,
+    run_raw: bool = False,
+    slug: str | None = None,
+) -> None:
     """Scaffold per endpoint SPARQL."""
-    slug = slugify(url)
+    slug = slug or slugify(url)
     from toolkit.scaffold.sources import block_sparql as _generate_raw_sources_block_sparql
 
     sparql_info = probe_result.get("sparql_info") or {}
@@ -495,9 +540,15 @@ def _scaffold_sparql(url: str, probe_result: dict[str, Any], *, run_raw: bool = 
     # run_raw non supportato per SPARQL — usa: toolkit run all -c dataset.yml
 
 
-def _scaffold_sdmx(url: str, probe_result: dict[str, Any], *, run_raw: bool = False) -> None:
+def _scaffold_sdmx(
+    url: str,
+    probe_result: dict[str, Any],
+    *,
+    run_raw: bool = False,
+    slug: str | None = None,
+) -> None:
     """Scaffold per endpoint SDMX."""
-    slug = slugify(url)
+    slug = slug or slugify(url)
     from toolkit.scaffold.sources import block_sdmx as _generate_raw_sources_block_sdmx
 
     sdmx_info = probe_result.get("sdmx_info") or {}
@@ -609,6 +660,54 @@ def _resolve_columns(profile, sniff_hints, read_cfg, sample_path) -> int | None:
     return None
 
 
+def _read_year_values_from_sample(
+    sample_path: Path,
+    sniff_hints: dict[str, Any],
+    profile: dict[str, Any],
+) -> set[int]:
+    """Legge i valori della colonna Anno dal sample CSV scaricato.
+
+    Usa ``csv.DictReader`` con le stesse opzioni dello sniff per
+    leggere le prime righe e trovare la colonna che sembra "anno"
+    (normalizzata via ``_find_anno_raw_column``).
+    Restituisce un set di anni interi (vuoto se non trovata).
+    """
+    from toolkit.scaffold.clean import _find_anno_raw_column
+
+    anno_col = _find_anno_raw_column(profile)
+    if not anno_col:
+        return set()
+
+    import csv
+
+    delim = sniff_hints.get("delim_suggested", ",")
+    encoding = sniff_hints.get("encoding_suggested", "utf-8")
+    skip = sniff_hints.get("skip_suggested", 0)
+
+    years: set[int] = set()
+    try:
+        with open(sample_path, encoding=encoding) as f:
+            for _ in range(skip):
+                next(f)
+            reader = csv.DictReader(f, delimiter=delim)
+            if anno_col not in (reader.fieldnames or []):
+                return set()
+            for i, row in enumerate(reader):
+                if i >= 100:
+                    break
+                val = row.get(anno_col, "").strip()
+                try:
+                    # Gestisce "2023" e "2023.0" ma NON "2023.5" (non intero)
+                    year_float = float(val)
+                    if year_float.is_integer():
+                        years.add(int(year_float))
+                except (ValueError, TypeError):
+                    pass
+    except Exception:
+        return set()
+    return years
+
+
 def _run_bootstrap(config_path: str) -> None:
     """Esegue run raw dopo scaffold (scaffold clean.sql se mancante)."""
     typer.echo("")
@@ -644,6 +743,9 @@ def scout(
     ),
     run: bool = typer.Option(False, "--run", "-r", help="Scaffold + raw run (implies --scaffold)"),
     json_output: bool = typer.Option(False, "--json", help="Output in formato JSON"),
+    slug: str | None = typer.Option(
+        None, "--slug", help="Slug personalizzato per il candidate dataset (default: auto da URL)"
+    ),
     timeout: int = typer.Option(
         DEFAULT_TIMEOUT, "--timeout", min=1, help="Timeout HTTP in secondi"
     ),
@@ -657,10 +759,22 @@ def scout(
     Con --scaffold (alias -s): genera anche i file candidate (dataset.yml,
     sql/clean.sql, sql/mart.sql, README.md, notes.md).
 
+    Con --slug <nome>: fissa lo slug invece di usare l'auto-generazione dall'URL.
+
     Con --run (alias -r): dopo lo scaffold esegue anche il run raw.
     """
     if run:
         scaffold = True
+
+    if slug is not None:
+        import re
+
+        if not re.match(r"^[a-z0-9-]+$", slug):
+            typer.echo(
+                "error: --slug deve contenere solo lettere minuscole, numeri e trattini",
+                err=True,
+            )
+            raise typer.Exit(code=1)
 
     result = scout_url(
         url,
@@ -668,6 +782,7 @@ def scout(
         scaffold=scaffold,
         run_raw=run,
         json_output=json_output,
+        slug=slug,
     )
 
     if json_output and result is not None:

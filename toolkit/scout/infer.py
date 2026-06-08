@@ -136,7 +136,39 @@ def infer_granularity(text: str) -> str:
 
 
 def infer_granularity_from_name_and_columns(name: str, column_names: list[str]) -> str:
-    """Inferisce granularità da nome dataset + colonne."""
+    """Inferisce granularità da nome dataset + colonne.
+
+    Strategia:
+    1. Controllo esatto su nomi colonna individuali (più preciso —
+       cattura ``CODICE_COMUNE``, ``Provincia``, ``REGIONE``).
+    2. Fallback su regex su nome + colonne combinate (cattura
+       ``Bilancio regionale`` nel nome, ``dati provinciali`` nei tag).
+    """
+    # ── Passo 1: controllo esatto su nomi colonna individuali ──────────────
+    cleaned = set()
+    for c in column_names:
+        if not isinstance(c, str):
+            continue
+        c = c.strip().lower().replace("_", " ")
+        # rimuovi colonne troppo corte (sigle) o numeriche
+        if len(c) > 2 and not c.replace(" ", "").isdigit():
+            cleaned.add(c)
+
+    # comune > provincia > regione > nazionale (più granulare vince)
+    for c in cleaned:
+        if c in ("comune", "codice comune", "codice istat comune", "pro com"):
+            return "comune"
+    for c in cleaned:
+        if c in ("provincia", "sigla provincia", "codice provincia", "prov", "cod prov"):
+            return "provincia"
+    for c in cleaned:
+        if c in ("regione", "codice regione", "codice istat regione", "codreg", "cod reg"):
+            return "regione"
+    for c in cleaned:
+        if c in ("nazionale", "italia", "paese", "stato"):
+            return "nazionale"
+
+    # ── Passo 2: fallback su regex combinata ──────────────────────────────
     combined = f"{name} {' '.join(column_names)}"
     return infer_granularity(combined)
 

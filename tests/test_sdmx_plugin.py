@@ -13,9 +13,12 @@ pytestmark = pytest.mark.adapter
 
 @pytest.fixture(autouse=True)
 def _clear_sdmx_cache():
-    """Reset SdmxSource cache tra i test per evitare contaminazione."""
-    SdmxSource._dataflow_cache.clear()
-    SdmxSource._constraints_cache.clear()
+    """Reset SdmxSource cache tra i test per evitare contaminazione.
+
+    Cache ora è per istanza (non più condivisa tra classi), ma la fixture
+    resta come safety net per eventuali cache residue in tests che
+    riusano lo stesso SdmxSource.
+    """
 
 
 class _FakeResponse:
@@ -475,3 +478,82 @@ def test_sdmx_fetch_does_not_fallback_on_connection_error(monkeypatch):
         "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/all",
         "https://esploradati.istat.it/SDMXWS/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99",
     ]
+
+
+def test_sdmx_cache_is_per_instance(monkeypatch):
+    """Cache di struttura NON deve contaminare istanze con base URL diversi."""
+    calls = []
+
+    def _fake_get(self, url, **kwargs):
+        calls.append(url)
+        if url == "https://one.test/rest/dataflow/IT1/22_289":
+            return _ok(
+                _FakeResponse(200, DATAFLOW_XML.replace('version="1.5"', 'version="1.0"'), url)
+            )
+        if url == "https://two.test/rest/dataflow/IT1/22_289":
+            return _ok(_FakeResponse(200, DATAFLOW_XML, url))  # version 1.5
+        if url == "https://one.test/rest/data/IT1,22_289,1.0/all":
+            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
+        if url == "https://two.test/rest/data/IT1,22_289,1.5/all":
+            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
+        if url.endswith("/data/IT1,22_289,1.0/A.001001.JAN.9.TOTAL.99"):
+            return _ok(_FakeResponse(200, DATA_JSON, url))
+        if url.endswith("/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99"):
+            return _ok(_FakeResponse(200, DATA_JSON, url))
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
+
+    # Istanza 1: endpoint one.test, version 1.0
+    src1 = SdmxSource(
+        timeout=5,
+        retries=0,
+        data_base_url="https://one.test/rest",
+        metadata_base_url="https://one.test/rest",
+    )
+    src1.fetch(
+        "IT1",
+        "22_289",
+        "1.0",
+        {
+            "FREQ": "A",
+            "REF_AREA": "001001",
+            "DATA_TYPE": "JAN",
+            "SEX": "9",
+            "AGE": "TOTAL",
+            "MARITAL_STATUS": "99",
+        },
+    )
+
+    # Istanza 2: endpoint two.test, version 1.5
+    src2 = SdmxSource(
+        timeout=5,
+        retries=0,
+        data_base_url="https://two.test/rest",
+        metadata_base_url="https://two.test/rest",
+    )
+    src2.fetch(
+        "IT1",
+        "22_289",
+        "1.5",
+        {
+            "FREQ": "A",
+            "REF_AREA": "001001",
+            "DATA_TYPE": "JAN",
+            "SEX": "9",
+            "AGE": "TOTAL",
+            "MARITAL_STATUS": "99",
+        },
+    )
+
+    # Verifica: src1 non deve aver contaminato src2
+    # src2 deve aver chiamato il proprio dataflow endpoint (non usato cache di src1)
+    expected_calls = [
+        "https://one.test/rest/dataflow/IT1/22_289",
+        "https://one.test/rest/data/IT1,22_289,1.0/all",
+        "https://one.test/rest/data/IT1,22_289,1.0/A.001001.JAN.9.TOTAL.99",
+        "https://two.test/rest/dataflow/IT1/22_289",  # ← NON in cache, chiamata reale
+        "https://two.test/rest/data/IT1,22_289,1.5/all",
+        "https://two.test/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99",
+    ]
+    assert calls == expected_calls, f"Cache contamination! calls={calls}"

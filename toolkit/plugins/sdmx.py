@@ -37,12 +37,11 @@ ISTAT_ESPLORADATI_BASE = "https://esploradati.istat.it/SDMXWS/rest"
 class SdmxSource:
     """Fetch SDMX data as a normalized CSV payload."""
 
-    # Cache di struttura per flow: evita richieste HTTP duplicate
-    # tra anni e run diversi dello stesso dataflow.
+    # Cache di struttura per flow (per istanza): evita richieste HTTP duplicate
+    # quando la pipeline esegue più fetch consecutivi sullo stesso SdmxSource.
+    # NON condivisa tra istanze per evitare contaminazione tra endpoint diversi.
     # Formato: _dataflow_cache[agency/flow] = ET.Element
     #         _constraints_cache[agency/flow/version] = dict[str, list[str]]
-    _dataflow_cache: dict[str, ET.Element] = {}
-    _constraints_cache: dict[str, dict[str, list[str]]] = {}
 
     def __init__(
         self,
@@ -62,6 +61,8 @@ class SdmxSource:
             max_retries=retries,
             user_agent=self.user_agent,
         )
+        self._dataflow_cache: dict[str, ET.Element] = {}
+        self._constraints_cache: dict[str, dict[str, list[str]]] = {}
 
     def _candidate_base_urls(self, agency: str, primary: str, alternate: str) -> list[str]:
         normalized_primary = _normalize_base_url(primary)

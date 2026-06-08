@@ -12,6 +12,7 @@ import pytest
 
 from toolkit.scout.infer import (
     infer_granularity,
+    infer_granularity_from_name_and_columns,
     infer_topics,
     infer_years,
     suggest_years,
@@ -105,6 +106,48 @@ class TestInferGranularity:
     )
     def test_granularity(self, text: str, expected: str) -> None:
         assert infer_granularity(text) == expected
+
+
+class TestInferGranularityFromNameAndColumns:
+    """pure_unit: infer_granularity_from_name_and_columns."""
+
+    @pytest.mark.pure_unit
+    def test_comune_from_codice_comune_column(self) -> None:
+        """CODICE_COMUNE come colonna → granularità comune."""
+        result = infer_granularity_from_name_and_columns("", ["CODICE_COMUNE"])
+        assert result == "comune"
+
+    @pytest.mark.pure_unit
+    def test_comune_from_column_name(self) -> None:
+        """Colonna 'Comune' → granularità comune."""
+        result = infer_granularity_from_name_and_columns("", ["Comune", "Anno"])
+        assert result == "comune"
+
+    @pytest.mark.pure_unit
+    def test_provincia_from_column(self) -> None:
+        """Colonna 'Provincia' → granularità provincia."""
+        result = infer_granularity_from_name_and_columns("", ["Provincia", "Importo"])
+        assert result == "provincia"
+
+    @pytest.mark.pure_unit
+    def test_regione_from_column(self) -> None:
+        """Colonna 'REGIONE' → granularità regione."""
+        result = infer_granularity_from_name_and_columns("", ["REGIONE", "Anno"])
+        assert result == "regione"
+
+    @pytest.mark.pure_unit
+    def test_fallback_on_name_when_no_geo_columns(self) -> None:
+        """Senza colonne geografiche, usa il nome per inferire."""
+        result = infer_granularity_from_name_and_columns(
+            "Popolazione residente nei comuni", ["Reddito", "Anno"]
+        )
+        assert result == "comune"
+
+    @pytest.mark.pure_unit
+    def test_non_determinato_without_geo_hints(self) -> None:
+        """Senza colonne geografiche né nome appropriato → non_determinato."""
+        result = infer_granularity_from_name_and_columns("Dati generici", ["Nome", "Valore"])
+        assert result == "non_determinato"
 
 
 # ---------------------------------------------------------------------------

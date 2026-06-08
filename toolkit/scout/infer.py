@@ -141,8 +141,8 @@ def infer_granularity_from_name_and_columns(name: str, column_names: list[str]) 
     Strategia:
     1. Controllo esatto su nomi colonna individuali (più preciso —
        cattura ``CODICE_COMUNE``, ``Provincia``, ``REGIONE``).
-    2. Fallback su regex su nome + colonne combinate (cattura
-       ``Bilancio regionale`` nel nome, ``dati provinciali`` nei tag).
+    2. Fallback su regex su nome + colonne combinate (es.
+       ``dati provinciali``, ``popolazione nei comuni``).
     """
     # ── Passo 1: controllo esatto su nomi colonna individuali ──────────────
     cleaned = set()

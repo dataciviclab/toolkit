@@ -227,7 +227,8 @@ def test_scout_scaffold_with_slug_creates_custom_dir(tmp_path: Path, monkeypatch
         yml_path = slug_dir / "dataset.yml"
         assert yml_path.exists()
         data = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
-        assert data["dataset"]["name"] == "posti-letto-test"
+        # dataset.name usa underscore (SQL-safe), directory usa slug (-)
+        assert data["dataset"]["name"] == "posti_letto_test"
     finally:
         server.shutdown()
         server.server_close()

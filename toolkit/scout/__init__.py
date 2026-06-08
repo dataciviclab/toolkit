@@ -17,6 +17,7 @@ Scaffold non e' piu' in scout. Usa toolkit.scaffold.full e toolkit.scaffold.sour
 
 from toolkit.scout.sparql import (  # noqa: F401
     discover_named_graphs,
+    fetch_sparql_count,
     infer_graph_schema,
 )
 

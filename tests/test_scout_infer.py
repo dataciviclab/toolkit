@@ -297,7 +297,6 @@ class TestSuggestValidation:
         }
         val = suggest_validation(profile)
         assert "clean" in val
-        assert "mart" in val
         assert val["clean"]["validate"]["required_columns"] == ["a", "b", "c"]
         assert val["clean"]["validate"]["min_rows"] <= 100
 

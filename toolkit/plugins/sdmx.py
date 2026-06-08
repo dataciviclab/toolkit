@@ -179,13 +179,22 @@ class SdmxSource:
 
         Useful to validate filters before calling fetch(), or to understand
         which values are available without downloading data.
+
+        Falls back to empty constraints (all wildcard) when the SDMX endpoint
+        does not support JSON for this dataflow.
         """
         flow_ref = _flow_ref(agency, flow, version)
-        payload, _origin = self._get_json(
-            self._data_base_urls(agency),
-            f"data/{flow_ref}/all",
-            params={"firstNObservations": "0"},
-        )
+        try:
+            payload, _origin = self._get_json(
+                self._data_base_urls(agency),
+                f"data/{flow_ref}/all",
+                params={"firstNObservations": "0"},
+            )
+        except DownloadError:
+            # JSON not available for this dataflow (e.g. ISTAT XML-only).
+            # Return empty constraints: fetch() will use wildcard key and
+            # fall back to CSV for the actual data.
+            return {}
         structure = payload.get("structure") or {}
         dimensions = structure.get("dimensions") or {}
         result: dict[str, list[str]] = {}
@@ -337,7 +346,18 @@ class SdmxSource:
                     f"Invalid value(s) for SDMX dimension {dim}: {invalid} — "
                     f"allowed: {allowed[:10]}{ellipsis}"
                 )
-        payload, origin = self._get_json(self._data_base_urls(agency), f"data/{flow_ref}/{key}")
+        # Try JSON first (provides _label columns via structure metadata).
+        # Fall back to CSV for SDMX endpoints that do not support JSON data.
+        try:
+            payload, origin = self._get_json(self._data_base_urls(agency), f"data/{flow_ref}/{key}")
+        except DownloadError:
+            csv_text, origin = self._get_text_from_candidates(
+                self._data_base_urls(agency),
+                f"data/{flow_ref}/{key}",
+                accept="text/csv",
+            )
+            return csv_text.encode("utf-8"), origin
+
         header, rows = self._normalize_rows(payload)
         if not rows:
             raise DownloadError(f"SDMX data returned no rows for {agency}/{flow} and key={key}")

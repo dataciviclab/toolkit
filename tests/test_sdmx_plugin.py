@@ -138,6 +138,70 @@ def test_sdmx_fetch_normalizes_csv(monkeypatch):
     assert any(call[1] == {"firstNObservations": "0"} for call in calls)
 
 
+CSV_RESPONSE = "FREQ,REF_AREA,DATA_TYPE_AGGR,VALUATION,TIME_PERIOD,OBS_VALUE\nA,ITC1,B1GQ_B_W2_S1,V,2023,156210.8\nA,ITC4,B1GQ_B_W2_S1,V,2023,489864.2\n"
+
+XML_RESPONSE = """<?xml version="1.0" encoding="utf-8"?>
+<message:GenericData xmlns:message="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/message"
+  xmlns:generic="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/data/generic">
+  <message:DataSet>
+    <generic:Obs>
+      <generic:ObsDimension value="2023"/>
+      <generic:ObsValue value="156210.8"/>
+    </generic:Obs>
+  </message:DataSet>
+</message:GenericData>
+"""
+
+
+def test_sdmx_fetch_falls_back_on_nonjson_response(monkeypatch):
+    """SDMX endpoint returns 200 with XML body → JSON parse fails → CSV fallback."""
+    calls = []
+
+    def _fake_get(self, url, **kwargs):
+        headers = kwargs.get("headers", {})
+        accept = headers.get("Accept") if headers else None
+        calls.append((url, accept))
+        if url.endswith("/dataflow/IT1/22_289"):
+            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
+        if url.endswith("/data/IT1,22_289,1.5/all"):
+            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
+        if url.endswith("/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99"):
+            # Prima chiamata con Accept: application/json → restituisce XML
+            if accept == "application/json":
+                return _ok(_FakeResponse(200, XML_RESPONSE, url))
+            # Seconda chiamata con Accept: text/csv → restituisce CSV
+            if accept == "text/csv":
+                return _ok(_FakeResponse(200, CSV_RESPONSE, url))
+        raise AssertionError(f"Unexpected URL {url} accept={accept}")
+
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
+
+    payload, origin = SdmxSource(retries=1).fetch(
+        "IT1",
+        "22_289",
+        "1.5",
+        {
+            "FREQ": "A",
+            "REF_AREA": "001001",
+            "DATA_TYPE": "JAN",
+            "SEX": "9",
+            "AGE": "TOTAL",
+            "MARITAL_STATUS": "99",
+        },
+    )
+
+    text = payload.decode("utf-8")
+    assert origin.endswith("/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99")
+    # Deve restituire i dati CSV crudi, non JSON normalizzato con _label
+    assert "FREQ,REF_AREA,DATA_TYPE_AGGR" in text
+    assert "ITC1,B1GQ_B_W2_S1" in text
+    # Verifica che JSON sia stato tentato e CSV sia stato usato come fallback
+    json_calls = [c for c in calls if c[1] == "application/json" and "/data/IT1" in str(c[0])]
+    csv_calls = [c for c in calls if c[1] == "text/csv"]
+    assert len(json_calls) >= 1
+    assert len(csv_calls) >= 1
+
+
 def test_sdmx_fetch_blocks_version_mismatch(monkeypatch):
     def _fake_get(self, url, **kwargs):
         if url.endswith("/dataflow/IT1/22_289"):

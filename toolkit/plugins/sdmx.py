@@ -37,6 +37,12 @@ ISTAT_ESPLORADATI_BASE = "https://esploradati.istat.it/SDMXWS/rest"
 class SdmxSource:
     """Fetch SDMX data as a normalized CSV payload."""
 
+    # Cache di struttura per flow (per istanza): evita richieste HTTP duplicate
+    # quando la pipeline esegue più fetch consecutivi sullo stesso SdmxSource.
+    # NON condivisa tra istanze per evitare contaminazione tra endpoint diversi.
+    # Formato: _dataflow_cache[agency/flow] = ET.Element
+    #         _constraints_cache[agency/flow/version] = dict[str, list[str]]
+
     def __init__(
         self,
         timeout: int = 60,
@@ -55,6 +61,8 @@ class SdmxSource:
             max_retries=retries,
             user_agent=self.user_agent,
         )
+        self._dataflow_cache: dict[str, ET.Element] = {}
+        self._constraints_cache: dict[str, dict[str, list[str]]] = {}
 
     def _candidate_base_urls(self, agency: str, primary: str, alternate: str) -> list[str]:
         normalized_primary = _normalize_base_url(primary)
@@ -153,14 +161,19 @@ class SdmxSource:
             raise DownloadError(f"Invalid SDMX JSON payload from {origin}") from exc
 
     def _get_dataflow(self, agency: str, flow: str) -> ET.Element:
+        cache_key = f"{agency}/{flow}"
+        if cache_key in self._dataflow_cache:
+            return self._dataflow_cache[cache_key]
         xml_text, _origin = self._get_text_from_candidates(
             self._metadata_base_urls(agency),
             f"dataflow/{agency}/{flow}",
         )
         try:
-            return ET.fromstring(xml_text)
+            root = ET.fromstring(xml_text)
         except ET.ParseError as exc:
             raise DownloadError(f"Invalid SDMX XML metadata for flow={flow}") from exc
+        self._dataflow_cache[cache_key] = root
+        return root
 
     def _current_version(self, root: ET.Element) -> str:
         dataflow = root.find(".//str:Dataflow", SDMX_NS)
@@ -179,13 +192,26 @@ class SdmxSource:
 
         Useful to validate filters before calling fetch(), or to understand
         which values are available without downloading data.
+
+        Falls back to empty constraints (all wildcard) when the SDMX endpoint
+        does not support JSON for this dataflow.
         """
+        cache_key = f"{agency}/{flow}/{version}"
+        if cache_key in self._constraints_cache:
+            return self._constraints_cache[cache_key]
         flow_ref = _flow_ref(agency, flow, version)
-        payload, _origin = self._get_json(
-            self._data_base_urls(agency),
-            f"data/{flow_ref}/all",
-            params={"firstNObservations": "0"},
-        )
+        try:
+            payload, _origin = self._get_json(
+                self._data_base_urls(agency),
+                f"data/{flow_ref}/all",
+                params={"firstNObservations": "0"},
+            )
+        except DownloadError:
+            # JSON not available for this dataflow (e.g. ISTAT XML-only).
+            # Return empty constraints: fetch() will use wildcard key and
+            # fall back to CSV for the actual data.
+            self._constraints_cache[cache_key] = {}
+            return {}
         structure = payload.get("structure") or {}
         dimensions = structure.get("dimensions") or {}
         result: dict[str, list[str]] = {}
@@ -196,6 +222,7 @@ class SdmxSource:
                     continue
                 values: list[dict] = dim.get("values") or []
                 result[dim_id] = [str(v.get("id") or "") for v in values if v.get("id")]
+        self._constraints_cache[cache_key] = result
         return result
 
     def _build_key(self, dimensions: list[str], filters: dict | None) -> str:
@@ -337,7 +364,26 @@ class SdmxSource:
                     f"Invalid value(s) for SDMX dimension {dim}: {invalid} — "
                     f"allowed: {allowed[:10]}{ellipsis}"
                 )
-        payload, origin = self._get_json(self._data_base_urls(agency), f"data/{flow_ref}/{key}")
+        # Try JSON first (provides _label columns via structure metadata).
+        # Fall back to CSV for SDMX endpoints that return non-JSON (e.g. XML).
+        # Transport errors (connection, 404, 5xx) are NOT silently fallback —
+        # only content-type mismatches where the server returns 200 but not JSON.
+        fetch_text, origin = self._get_text_from_candidates(
+            self._data_base_urls(agency),
+            f"data/{flow_ref}/{key}",
+            accept="application/json",
+        )
+        try:
+            payload = json.loads(fetch_text)
+        except json.JSONDecodeError:
+            # Response is not JSON (e.g. ISTAT XML). Try CSV instead.
+            csv_text, origin = self._get_text_from_candidates(
+                self._data_base_urls(agency),
+                f"data/{flow_ref}/{key}",
+                accept="text/csv",
+            )
+            return csv_text.encode("utf-8"), origin
+
         header, rows = self._normalize_rows(payload)
         if not rows:
             raise DownloadError(f"SDMX data returned no rows for {agency}/{flow} and key={key}")

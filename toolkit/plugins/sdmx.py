@@ -347,10 +347,18 @@ class SdmxSource:
                     f"allowed: {allowed[:10]}{ellipsis}"
                 )
         # Try JSON first (provides _label columns via structure metadata).
-        # Fall back to CSV for SDMX endpoints that do not support JSON data.
+        # Fall back to CSV for SDMX endpoints that return non-JSON (e.g. XML).
+        # Transport errors (connection, 404, 5xx) are NOT silently fallback —
+        # only content-type mismatches where the server returns 200 but not JSON.
+        fetch_text, origin = self._get_text_from_candidates(
+            self._data_base_urls(agency),
+            f"data/{flow_ref}/{key}",
+            accept="application/json",
+        )
         try:
-            payload, origin = self._get_json(self._data_base_urls(agency), f"data/{flow_ref}/{key}")
-        except DownloadError:
+            payload = json.loads(fetch_text)
+        except json.JSONDecodeError:
+            # Response is not JSON (e.g. ISTAT XML). Try CSV instead.
             csv_text, origin = self._get_text_from_candidates(
                 self._data_base_urls(agency),
                 f"data/{flow_ref}/{key}",

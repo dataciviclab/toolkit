@@ -112,11 +112,6 @@ def suggest_validation(profile: dict[str, Any]) -> dict[str, Any]:
         clean_val["required_columns"] = [_snake_case(c) for c in norm_cols[:5]]
     if clean_val:
         validation["clean"] = {"validate": clean_val}
-    mart_val: dict[str, Any] = {}
-    if row_count:
-        mart_val["min_rows"] = max(1, int(row_count * 0.5))
-    if mart_val:
-        validation["mart"] = {"validate": mart_val}
     return validation
 
 

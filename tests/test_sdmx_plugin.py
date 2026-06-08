@@ -11,6 +11,13 @@ from toolkit.plugins.sdmx import SdmxSource
 pytestmark = pytest.mark.adapter
 
 
+@pytest.fixture(autouse=True)
+def _clear_sdmx_cache():
+    """Reset SdmxSource cache tra i test per evitare contaminazione."""
+    SdmxSource._dataflow_cache.clear()
+    SdmxSource._constraints_cache.clear()
+
+
 class _FakeResponse:
     def __init__(self, status_code: int, text: str, url: str):
         self.status_code = status_code

@@ -37,6 +37,13 @@ ISTAT_ESPLORADATI_BASE = "https://esploradati.istat.it/SDMXWS/rest"
 class SdmxSource:
     """Fetch SDMX data as a normalized CSV payload."""
 
+    # Cache di struttura per flow: evita richieste HTTP duplicate
+    # tra anni e run diversi dello stesso dataflow.
+    # Formato: _dataflow_cache[agency/flow] = ET.Element
+    #         _constraints_cache[agency/flow/version] = dict[str, list[str]]
+    _dataflow_cache: dict[str, ET.Element] = {}
+    _constraints_cache: dict[str, dict[str, list[str]]] = {}
+
     def __init__(
         self,
         timeout: int = 60,
@@ -153,14 +160,19 @@ class SdmxSource:
             raise DownloadError(f"Invalid SDMX JSON payload from {origin}") from exc
 
     def _get_dataflow(self, agency: str, flow: str) -> ET.Element:
+        cache_key = f"{agency}/{flow}"
+        if cache_key in self._dataflow_cache:
+            return self._dataflow_cache[cache_key]
         xml_text, _origin = self._get_text_from_candidates(
             self._metadata_base_urls(agency),
             f"dataflow/{agency}/{flow}",
         )
         try:
-            return ET.fromstring(xml_text)
+            root = ET.fromstring(xml_text)
         except ET.ParseError as exc:
             raise DownloadError(f"Invalid SDMX XML metadata for flow={flow}") from exc
+        self._dataflow_cache[cache_key] = root
+        return root
 
     def _current_version(self, root: ET.Element) -> str:
         dataflow = root.find(".//str:Dataflow", SDMX_NS)
@@ -183,6 +195,9 @@ class SdmxSource:
         Falls back to empty constraints (all wildcard) when the SDMX endpoint
         does not support JSON for this dataflow.
         """
+        cache_key = f"{agency}/{flow}/{version}"
+        if cache_key in self._constraints_cache:
+            return self._constraints_cache[cache_key]
         flow_ref = _flow_ref(agency, flow, version)
         try:
             payload, _origin = self._get_json(
@@ -194,6 +209,7 @@ class SdmxSource:
             # JSON not available for this dataflow (e.g. ISTAT XML-only).
             # Return empty constraints: fetch() will use wildcard key and
             # fall back to CSV for the actual data.
+            self._constraints_cache[cache_key] = {}
             return {}
         structure = payload.get("structure") or {}
         dimensions = structure.get("dimensions") or {}
@@ -205,6 +221,7 @@ class SdmxSource:
                     continue
                 values: list[dict] = dim.get("values") or []
                 result[dim_id] = [str(v.get("id") or "") for v in values if v.get("id")]
+        self._constraints_cache[cache_key] = result
         return result
 
     def _build_key(self, dimensions: list[str], filters: dict | None) -> str:

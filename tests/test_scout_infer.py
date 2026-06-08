@@ -60,12 +60,7 @@ class TestInferYears:
 
 
 class TestSuggestYears:
-    """pure_unit: suggest_years combina URL + colonne + profilo."""
-
-    @pytest.mark.pure_unit
-    def test_from_url(self) -> None:
-        years = suggest_years(url="https://example.com/data-2020-2022.csv")
-        assert years == [2020, 2021, 2022], f"got {years}"
+    """pure_unit: suggest_years da colonne e profilo (NON da URL)."""
 
     @pytest.mark.pure_unit
     def test_from_columns(self) -> None:
@@ -230,11 +225,11 @@ class TestSuggestCleanSql:
 
 @pytest.mark.pure_unit
 class TestSuggestMartSql:
-    """pure_unit: mart.sql con GROUP BY basato su colonne e tipi."""
+    """pure_unit: mart.sql come scheletro commentato (niente aggregazioni automatiche)."""
 
     @pytest.mark.pure_unit
-    def test_with_year_and_numeric(self) -> None:
-        """Con anno + colonna numerica: GROUP BY anno, SUM(numerico)."""
+    def test_skeleton_with_columns(self) -> None:
+        """Con colonne: produce scheletro commentato con tipi."""
         cols = ["anno", "categoria", "valore"]
         profile: dict[str, Any] = {
             "mapping_suggestions": {
@@ -244,61 +239,46 @@ class TestSuggestMartSql:
             },
         }
         sql = suggest_mart_sql(cols, profile)
-        assert "GROUP BY" in sql
-        assert 'SUM("valore")' in sql
-        assert '"anno"' in sql
-        assert '"categoria"' in sql
+        assert "Sostituisci con la tua aggregazione" in sql
+        assert "SELECT * FROM clean_input" in sql
+        assert "GROUP BY" not in sql
+        assert "anno: int" in sql
+        assert "valore: float" in sql
 
     @pytest.mark.pure_unit
-    def test_year_only_with_numeric_columns(self) -> None:
-        """Con anno + altre colonne non numeriche: SUM(anno) (fallback)."""
-        cols = ["anno", "categoria"]
+    def test_skeleton_no_mapping(self) -> None:
+        """Senza mapping: produce scheletro con tipi '?'."""
+        cols = ["a", "b"]
+        profile: dict[str, Any] = {"mapping_suggestions": {}}
+        sql = suggest_mart_sql(cols, profile)
+        assert "Sostituisci con la tua aggregazione" in sql
+        assert "SELECT * FROM clean_input" in sql
+        assert "a: ?" in sql
+        assert "b: ?" in sql
+
+    @pytest.mark.pure_unit
+    def test_empty_fallback(self) -> None:
+        """Senza colonne: placeholder."""
+        cols: list[str] = []
+        profile: dict[str, Any] = {"mapping_suggestions": {}}
+        sql = suggest_mart_sql(cols, profile)
+        assert "Sostituisci" in sql
+        assert "SELECT * FROM clean_input" in sql
+
+    @pytest.mark.pure_unit
+    def test_shorthand_types_in_skeleton(self) -> None:
+        """Tipi shorthand (int, float) appaiono nel commento."""
+        cols = ["anno", "valore"]
         profile: dict[str, Any] = {
             "mapping_suggestions": {
                 "anno": {"type": "int"},
-                "categoria": {"type": "str"},
-            },
-        }
-        sql = suggest_mart_sql(cols, profile)
-        assert "GROUP BY" in sql
-        # "anno" e' l'unica colonna numerica, viene aggregata
-        assert 'SUM("anno")' in sql
-
-    @pytest.mark.pure_unit
-    def test_no_numeric_column_with_year(self) -> None:
-        """Colonna anno + nessuna colonna numerica: COUNT per anno."""
-        cols = ["anno", "categoria"]
-        profile: dict[str, Any] = {
-            "mapping_suggestions": {
-                "anno": {"type": "str"},
-                "categoria": {"type": "str"},
-            },
-        }
-        sql = suggest_mart_sql(cols, profile)
-        # "anno" word triggers year-based count aggregation
-        assert "COUNT" in sql
-        assert '"anno"' in sql
-
-    @pytest.mark.pure_unit
-    def test_region_without_year(self) -> None:
-        """Colonna regione senza anno: COUNT per regione."""
-        cols = ["regione", "valore"]
-        profile: dict[str, Any] = {
-            "mapping_suggestions": {
-                "regione": {"type": "str"},
                 "valore": {"type": "float"},
             },
         }
         sql = suggest_mart_sql(cols, profile)
-        assert "regione" in sql
-
-    @pytest.mark.pure_unit
-    def test_empty_fallback(self) -> None:
-        """Senza colonne riconoscibili: SELECT * FROM clean."""
-        cols = ["a", "b"]
-        profile: dict[str, Any] = {"mapping_suggestions": {}}
-        sql = suggest_mart_sql(cols, profile)
-        assert "SELECT * FROM clean" in sql
+        assert "anno: int" in sql
+        assert "valore: float" in sql
+        assert "SELECT * FROM clean_input" in sql
 
 
 # ---------------------------------------------------------------------------
@@ -348,19 +328,6 @@ class TestShorthandTypes:
         sql = suggest_clean_sql(cols, profile)
         assert 'TRY_CAST("eta" AS BIGINT)' in sql, f"int type not recognized: {sql}"
         assert 'TRY_CAST("reddito" AS DOUBLE)' in sql
-
-    @pytest.mark.pure_unit
-    def test_mart_sql_with_shorthand_types(self) -> None:
-        """suggest_mart_sql riconosce int/float come tipi numerici."""
-        cols = ["anno", "valore"]
-        profile: dict[str, Any] = {
-            "mapping_suggestions": {
-                "anno": {"type": "int"},
-                "valore": {"type": "float"},
-            },
-        }
-        sql = suggest_mart_sql(cols, profile)
-        assert 'SUM("valore")' in sql
 
 
 # ── Routing SPARQL in probe_url_routed ───────────────────────────────────────

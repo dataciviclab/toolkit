@@ -200,6 +200,58 @@ def test_scout_scaffold_has_type_casts_in_clean_sql(tmp_path: Path, monkeypatch)
 
 
 # ---------------------------------------------------------------------------
+# policy: --slug flag
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.policy
+def test_scout_scaffold_with_slug_creates_custom_dir(tmp_path: Path, monkeypatch) -> None:
+    """toolkit scout --scaffold --slug <nome> usa lo slug personalizzato."""
+    server, base_url = _serve()
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+    try:
+        result = runner.invoke(
+            app,
+            [
+                "scout",
+                "--scaffold",
+                "--slug",
+                "posti-letto-test",
+                f"{base_url}/files/multi_col.csv",
+            ],
+        )
+        assert result.exit_code == 0, f"scout --slug failed: {result.output}"
+        slug_dir = tmp_path / "posti-letto-test"
+        assert slug_dir.is_dir(), f"slug directory not found: {slug_dir}"
+        yml_path = slug_dir / "dataset.yml"
+        assert yml_path.exists()
+        data = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
+        assert data["dataset"]["name"] == "posti-letto-test"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.policy
+def test_scout_scaffold_with_invalid_slug_fails(tmp_path: Path, monkeypatch) -> None:
+    """toolkit scout --scaffold --slug con caratteri non validi fallisce."""
+    server, base_url = _serve()
+    runner = CliRunner()
+    monkeypatch.chdir(tmp_path)
+    try:
+        result = runner.invoke(
+            app,
+            ["scout", "--scaffold", "--slug", "Posti Letto!", f"{base_url}/files/multi_col.csv"],
+        )
+        assert result.exit_code != 0
+        assert "error: --slug" in result.output.lower()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+# ---------------------------------------------------------------------------
 # policy: error cases
 # ---------------------------------------------------------------------------
 

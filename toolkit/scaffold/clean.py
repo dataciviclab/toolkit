@@ -323,9 +323,17 @@ def propose_clean_read(profile: dict[str, Any]) -> dict[str, Any]:
             columns: dict[str, str] | None = None
             # skip stays as-is (no bump needed, header line is now real)
             effective_skip = profile.get("skip_suggested", 0)
+        elif (
+            header_names
+            and _looks_like_real_header(header_names)
+            and _names_match(keys, header_names)
+        ):
+            # Header names match mapping keys → header: true, skip auto-rilevato
+            effective_header = True
+            columns = None
+            effective_skip = profile.get("skip_suggested", 0)
         else:
-            # Mapping keys match header names (or header doesn't look real)
-            # → use the explicit columns mapping as before.
+            # No real header (es. prima riga numerica) → columns esplicite
             effective_header = False
             columns = {}
             for raw_col, spec in mapping.items():

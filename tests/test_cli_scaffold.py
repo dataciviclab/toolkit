@@ -179,9 +179,9 @@ class TestProposeCleanRead:
         assert result["delim"] == ";"
         assert result["encoding"] == "utf-8"
         assert result["decimal"] == ","
-        assert result["columns"] == {"col1": "VARCHAR", "col2": "BIGINT"}
-        assert result["header"] is False  # columns present + header_line
-        assert result["skip"] == 1  # header bumped because columns present + header_line
+        assert "columns" not in result  # header: true → no columns needed
+        assert result["header"] is True  # mapping matches header → header: true
+        assert result.get("skip", 0) == 0  # no skip needed with header: true
 
     def test_no_mapping_no_columns(self):
         profile = {
@@ -196,8 +196,8 @@ class TestProposeCleanRead:
         assert result["header"] is True  # no explicit columns
         assert result["delim"] == ","
 
-    def test_skip_bumped_with_header(self):
-        """When header_line present and mapping keys match, skip is bumped by 1."""
+    def test_skip_with_header_and_preamble(self):
+        """When header_line present and mapping keys match: header:true, skip preserved."""
         profile = {
             "delim_suggested": ";",
             "header_line": "col1;col2",
@@ -208,9 +208,9 @@ class TestProposeCleanRead:
             },
         }
         result = propose_clean_read(profile)
-        # header names match mapping keys → header=false, skip bumped
-        assert result["header"] is False
-        assert result["skip"] == 2  # 1 + 1
+        # header names match mapping keys → header:true, skip stays as-is
+        assert result["header"] is True
+        assert result.get("skip", 0) == 1  # skip_suggested preserved
 
     def test_skip_preserved_without_header(self):
         """When no header_line but skip_suggested > 0, skip is preserved."""
@@ -258,7 +258,9 @@ class TestProposeCleanRead:
         config = CleanReadConfig(**proposed)
         assert config.delim == ","
         assert config.decimal == ","
-        assert config.columns == {"col1": "VARCHAR", "col2": "BIGINT", "col3": "DOUBLE"}
+        # header:true perché mapping matcha header_line → columns auto-detected
+        assert config.header is True
+        assert config.columns is None
 
     def test_maps_duckdb_types_correctly(self):
         profile = {

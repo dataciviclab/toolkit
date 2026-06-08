@@ -10,13 +10,19 @@ import re
 import uuid
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 
 def slugify(url: str) -> str:
-    """Genera uno slug stabile e univoco per un URL (uuid5 namespace URL)."""
+    """Genera uno slug stabile e univoco per un URL (uuid5 namespace URL).
+
+    Decodifica il percent-encoding dell'URL prima di slugificare,
+    in modo che ``posti%20per%20stabilimento.csv`` produca
+    ``posti_per_stabilimento_<hash>`` invece di ``posti_20letto_...``.
+    """
     parsed = urlparse(url)
     stem = Path(parsed.path).stem or "dataset"
+    stem = unquote(stem)  # decodifica %20, %2F, ecc.
     slug = re.sub(r"[^a-z0-9_]", "_", stem.lower())
     slug = re.sub(r"_+", "_", slug).strip("_")
     if not slug:

@@ -27,7 +27,13 @@ def _format_years(years: list[int]) -> str:
 
 
 def _serialize_clean_read(clean_read: dict[str, Any]) -> list[str]:
-    """Serializza clean.read come righe YAML (senza intestazione clean:)."""
+    """Serializza clean.read come righe YAML (senza intestazione clean:).
+
+    Opzioni emesse solo se esplicitamente presenti in ``clean_read``:
+    delim, encoding, decimal, header, skip, columns.
+    Opzioni robuste (strict_mode, null_padding, ignore_errors) sono emesse
+    solo se il profilo le richiede — NON per default.
+    """
     lines: list[str] = []
     lines.append("  read:")
     if "delim" in clean_read:
@@ -40,6 +46,7 @@ def _serialize_clean_read(clean_read: dict[str, Any]) -> list[str]:
         lines.append(f"    header: {str(clean_read['header']).lower()}")
     if clean_read.get("skip", 0) > 0:
         lines.append(f"    skip: {clean_read['skip']}")
+    # Opzioni robuste: emesse solo se esplicitamente richieste dal profilo
     if clean_read.get("strict_mode") is False:
         lines.append("    strict_mode: false")
     if clean_read.get("null_padding") is True:
@@ -190,105 +197,28 @@ def _find_matching_column(col_names: list[str], keywords: list[str]) -> str | No
 
 
 def suggest_mart_sql(columns: list[dict[str, Any]] | list[str], profile: dict[str, Any]) -> str:
-    """Genera mart.sql con aggregazione di base."""
+    """Genera mart.sql come scheletro commentato.
+
+    Non tenta aggregazioni automatiche — produrrebbero GROUP BY rumorosi
+    o SUM su chiavi.  Lascia all'utente la decisione su come aggregare.
+    """
     if columns and isinstance(columns[0], dict):
         col_names = [c.get("name", f"col{i}") for i, c in enumerate(columns)]
     else:
         col_names = list(columns) if columns else []
     if not col_names:
-        return "-- Default mart: SELECT * FROM clean_input.\nSELECT * FROM clean_input\n"
-    has_year = _has_year_column(col_names)
-    has_region = _has_region_column(col_names)
-    has_numeric = _has_numeric_column(col_names, profile)
-    if has_year and has_numeric:
-        year_keywords = ["anno", "year", "periodo", "period"]
-        measure_keywords = [
-            "importo",
-            "ammontare",
-            "valore",
-            "costo",
-            "spesa",
-            "gettito",
-            "reddito",
-            "canone",
-            "prezzo",
-            "tariffa",
-        ]
-        mapping = profile.get("mapping_suggestions") or {}
-        numeric_col = None
-
-        # 1. Cerca colonna con keyword misura (evita ID)
-        for name in col_names:
-            is_year_col = any(kw in name.lower() for kw in year_keywords)
-            spec = mapping.get(name) or {}
-            if is_year_col:
-                continue
-            if spec.get("type") in ("integer", "float", "double", "bigint", "decimal", "int"):
-                if any(kw in name.lower() for kw in measure_keywords):
-                    numeric_col = name
-                    break
-
-        # 2. Fallback: primo numerico non-anno
-        if numeric_col is None:
-            for name in col_names:
-                is_year_col = any(kw in name.lower() for kw in year_keywords)
-                spec = mapping.get(name) or {}
-                if is_year_col:
-                    continue
-                if spec.get("type") in ("integer", "float", "double", "bigint", "decimal", "int"):
-                    numeric_col = name
-                    break
-
-        # 3. Fallback estremo: primo numerico
-        if numeric_col is None:
-            for name in col_names:
-                spec = mapping.get(name) or {}
-                if spec.get("type") in ("integer", "float", "double", "bigint", "decimal", "int"):
-                    numeric_col = name
-                    break
-        if numeric_col:
-            group_cols = [c for c in col_names if c != numeric_col]
-            group_expr = ", ".join(f'"{c}"' for c in group_cols) if group_cols else ""
-            if group_expr:
-                group_list = ", ".join(group_cols)
-                return (
-                    f"-- Aggregazione su {group_list}\n"
-                    f"SELECT\n"
-                    f"  {group_expr},\n"
-                    f'  SUM("{numeric_col}") AS totale_{numeric_col}\n'
-                    f"FROM clean_input\n"
-                    f"GROUP BY {group_expr}\n"
-                    f"ORDER BY {group_expr}\n"
-                )
-    if has_year:
-        year_col = _find_matching_column(col_names, ["anno", "year", "periodo", "period"])
-        if year_col is None:
-            year_col = "anno"
         return (
-            f"-- Conteggio record per anno\n"
-            f"SELECT\n"
-            f'  "{year_col}" AS year,\n'
-            f"  COUNT(*) AS record_count\n"
-            f"FROM clean_input\n"
-            f'GROUP BY "{year_col}"\n'
-            f'ORDER BY "{year_col}"\n'
+            "-- mart placeholder. Sostituisci con la tua aggregazione.\nSELECT * FROM clean_input\n"
         )
-    if has_region:
-        region_col = _find_matching_column(
-            col_names, ["regione", "region", "provincia", "province", "comune"]
-        )
-        if region_col is None:
-            region_col = "regione"
-        return (
-            f"-- Conteggio record per regione\n"
-            f"SELECT\n"
-            f'  "{region_col}" AS {region_col},\n'
-            f"  COUNT(*) AS record_count\n"
-            f"FROM clean_input\n"
-            f'GROUP BY "{region_col}"\n'
-            f'ORDER BY "{region_col}"\n'
-        )
-    return "-- Default mart: SELECT * FROM clean_input.\n-- Personalizza per aggregazioni.\nSELECT * FROM clean_input\n"
+
+    mapping = profile.get("mapping_suggestions") or {}
+    type_hints = {name: (mapping.get(name) or {}).get("type", "?") for name in col_names}
+    hint = ", ".join(f"{n}: {t}" for n, t in type_hints.items())
+    return (
+        f"-- Colonne clean_input: {hint}\n"
+        f"-- Sostituisci con la tua aggregazione (es. SUM, COUNT, AVG).\n"
+        f"SELECT * FROM clean_input\n"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -347,6 +277,12 @@ def generate_full_scaffold(
     yml_lines.append("clean:")
     if clean_read:
         yml_lines.extend(_serialize_clean_read(clean_read))
+    # read_mode: robust top-level (fuori da clean.read) se il profilo lo richiede.
+    # Controlla entrambi i nomi: _robust_read_suggested (propagato dal wrapper
+    # CLI) e robust_read_suggested (direct profile), cosi' il contratto sta
+    # nel generatore e non solo nel chiamante.
+    if profile and (profile.get("_robust_read_suggested") or profile.get("robust_read_suggested")):
+        yml_lines.append("  read_mode: robust")
     yml_lines.append('  sql: "sql/clean.sql"')
 
     if validation_suggestions:
@@ -396,7 +332,7 @@ def generate_full_scaffold(
         )
         mart_sql = suggest_mart_sql(norm_cols, profile)
     else:
-        mart_sql = "-- Default mart: SELECT * FROM clean_input.\nSELECT * FROM clean_input\n"
+        mart_sql = "-- Nessuna colonna rilevata dal profiling. Sostituisci con la tua aggregazione.\nSELECT * FROM clean_input\n"
         clean_sql = "-- ATTENZIONE: profiling non ha rilevato colonne.\nSELECT 1 AS placeholder FROM raw_input\n"
 
     if profile:

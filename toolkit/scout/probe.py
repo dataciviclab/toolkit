@@ -24,6 +24,7 @@ from toolkit.scout.http import (
     extract_ckan_dataset_id,
     fetch_ckan_package,
     fetch_html_body,
+    fetch_sdmx_structure,
     fetch_sdmx_years,
     is_file_like,
     is_html_content,
@@ -224,12 +225,14 @@ def _route_html(
 def _route_sdmx(final_url: str, result: dict[str, Any], *, timeout: int) -> dict[str, Any]:
     """Route per URL SDMX."""
     flow_id = None
+    agency = "IT1"
     parsed_url = urlparse(final_url)
     path = parsed_url.path
     if "/dataflow/" in path:
         parts = path.split("/dataflow/", 1)[1].split("/")
-        if len(parts) >= 2:
-            flow_id = parts[1]
+        if parts:
+            agency = parts[0] if len(parts[0]) <= 15 else "IT1"  # evita slug lunghi
+            flow_id = parts[1] if len(parts) >= 2 else None
     elif parsed_url.query:
         from urllib.parse import parse_qs
 
@@ -238,11 +241,28 @@ def _route_sdmx(final_url: str, result: dict[str, Any], *, timeout: int) -> dict
 
     if flow_id:
         year_min, year_max = fetch_sdmx_years(final_url, flow_id, timeout=timeout)
+        structure = fetch_sdmx_structure(final_url, flow_id, agency=agency, timeout=timeout)
         result["source_type"] = "sdmx"
-        result["sdmx_info"] = {"flow_id": flow_id, "year_min": year_min, "year_max": year_max}
+        result["sdmx_info"] = {
+            "flow_id": flow_id,
+            "agency": structure.get("agency") or agency,
+            "version": structure.get("version"),
+            "dimensions": structure.get("dimensions") or [],
+            "dimension_values": structure.get("dimension_values") or {},
+            "year_min": year_min,
+            "year_max": year_max,
+        }
     else:
         result["source_type"] = "sdmx"
-        result["sdmx_info"] = {"flow_id": None, "year_min": None, "year_max": None}
+        result["sdmx_info"] = {
+            "flow_id": None,
+            "agency": None,
+            "version": None,
+            "dimensions": [],
+            "dimension_values": {},
+            "year_min": None,
+            "year_max": None,
+        }
 
     result["ckan_resources"] = None
     result["candidate_links"] = []

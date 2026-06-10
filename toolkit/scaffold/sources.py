@@ -122,18 +122,69 @@ def block_links(links: list[str]) -> list[str]:
     return lines
 
 
+def _sdmx_base_url(url: str) -> str:
+    """Estrae la base URL SDMX (senza /dataflow/...)."""
+    base = url.split("?")[0].rstrip("/")
+    if "/dataflow/" in base:
+        return base[: base.index("/dataflow/")]
+    if base.endswith("/dataflow"):
+        return base[: -len("/dataflow")]
+    return base
+
+
 def block_sdmx(sdmx_info: dict[str, Any] | None, url: str) -> list[str]:
-    """Blocchi raw.sources per endpoint SDMX."""
-    if sdmx_info and sdmx_info.get("flow_id"):
-        return [
-            f'    - name: "sdmx_{sdmx_info["flow_id"]}"',
-            '      type: "sdmx"',
-            "      args:",
-            f'        endpoint: "{url}"',
-            f'        flow: "{sdmx_info["flow_id"]}"',
-            "      primary: true",
-        ]
-    return block_http_file(url, "sdmx")
+    """Blocchi raw.sources per endpoint SDMX (formato V2).
+
+    Genera configurazione funzionante per il plugin ``SdmxSource``:
+    - ``client.data_base_url`` e ``metadata_base_url``
+    - ``args.agency``, ``args.flow``, ``args.version``
+    - suggerimenti per ``args.filters`` commentati
+    - ``args.filename`` con estensione ``.csv``
+    """
+    if not sdmx_info or not sdmx_info.get("flow_id"):
+        return block_http_file(url, "sdmx")
+
+    flow = sdmx_info["flow_id"]
+    agency = sdmx_info.get("agency") or "IT1"
+    version = sdmx_info.get("version") or ""
+    data_base = _sdmx_base_url(url)
+    dimensions = sdmx_info.get("dimensions") or []
+    dim_values = sdmx_info.get("dimension_values") or {}
+
+    lines = [
+        f'    - name: "sdmx_{flow}"',
+        '      type: "sdmx"',
+        "      client:",
+        f'        data_base_url: "{data_base}"',
+        f'        metadata_base_url: "{data_base}"',
+        "        timeout: 120",
+        "        retries: 3",
+        "      args:",
+        f'        agency: "{agency}"',
+        f'        flow: "{flow}"',
+    ]
+    if version:
+        lines.append(f'        version: "{version}"')
+    else:
+        lines.append('        # version: "1.0"  # scoperta automatica fallita')
+    lines.append(f'        filename: "{flow}_series.csv"')
+
+    # Suggerimenti per filtri (commentati)
+    if dim_values:
+        lines.append("        # Filtri disponibili — sblocca e personalizza:")
+        for dim_id in dimensions:
+            vals = dim_values.get(dim_id, [])
+            if dim_id == "TIME_PERIOD":
+                continue  # TIME_PERIOD si filtra in clean.sql
+            if len(vals) <= 3:
+                # Pochi valori: suggerisci lista
+                quoted = [f'"{v}"' for v in vals]
+                lines.append(f"        # {dim_id}: [{', '.join(quoted)}]")
+            else:
+                # Tanti valori: suggerisci singolo
+                lines.append(f"        # {dim_id}: {vals[0]}  # o {vals[-1]}")
+    lines.append("      primary: true")
+    return lines
 
 
 def block_sparql(endpoint: str, query_hint: str = "") -> list[str]:

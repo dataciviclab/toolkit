@@ -640,13 +640,7 @@ def fetch_sdmx_years(
         client: HttpClient opzionale. Se fornito, lo usa invece di crearne uno.
     """
     try:
-        base = base_url.split("?")[0].rstrip("/")
-        if "/dataflow/" in base:
-            sdmx_root = base[: base.index("/dataflow/")]
-        elif base.endswith("/dataflow"):
-            sdmx_root = base[: -len("/dataflow")]
-        else:
-            sdmx_root = base
+        sdmx_root = _sdmx_root_url(base_url)
         url = f"{sdmx_root}/data/{flow_id}?lastNObservations=1"
         client = client or _mk_client(timeout=timeout)
         result = client.get(url, headers={"Accept": "application/xml"})
@@ -673,3 +667,92 @@ def fetch_sdmx_years(
         return min(years), max(years)
     except Exception:
         return None, None
+
+
+def _sdmx_root_url(base_url: str) -> str:
+    """Estrae la root URL SDMX da un URL che può contenere /dataflow/."""
+    base = base_url.split("?")[0].rstrip("/")
+    if "/dataflow/" in base:
+        return base[: base.index("/dataflow/")]
+    if base.endswith("/dataflow"):
+        return base[: -len("/dataflow")]
+    return base
+
+
+def fetch_sdmx_structure(
+    base_url: str,
+    flow_id: str,
+    agency: str = "IT1",
+    *,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> dict[str, Any]:
+    """Scopre versione e dimensioni di un dataflow SDMX.
+
+    Chiama l'endpoint REST SDMX per ottenere:
+    - versione corrente del dataflow
+    - lista delle dimensioni (con codici disponibili)
+
+    Args:
+        base_url: URL base dell'endpoint SDMX (può contenere /dataflow/).
+        flow_id: ID del dataflow (es. ``32_221``).
+        agency: Agency ID (default ``IT1`` per ISTAT).
+
+    Returns:
+        Dict con ``agency``, ``flow``, ``version``, ``dimensions``
+        (lista nomi) e ``dimension_values`` (dict nome → lista codici).
+        I campi mancanti sono ``None`` o ``[]`` in caso di errore.
+    """
+    import json
+    import xml.etree.ElementTree as ET
+
+    sdmx_root = _sdmx_root_url(base_url)
+    client = _mk_client(timeout=timeout)
+    result: dict[str, Any] = {
+        "agency": agency,
+        "flow": flow_id,
+        "version": None,
+        "dimensions": [],
+        "dimension_values": {},
+    }
+
+    # 1. Scopri versione dal metadata dataflow
+    try:
+        meta_url = f"{sdmx_root}/dataflow/{agency}/{flow_id}"
+        meta_resp = client.get(meta_url)
+        if meta_resp.is_ok and meta_resp.response and meta_resp.response.status_code == 200:
+            root = ET.fromstring(meta_resp.response.text)
+            dataflow = root.find(".//structure:Dataflow", _SDMX_NS)
+            if dataflow is not None:
+                struct_ref = dataflow.find(".//structure:Structure/Ref", _SDMX_NS)
+                if struct_ref is not None:
+                    result["version"] = (struct_ref.attrib.get("version") or "").strip() or None
+    except Exception:
+        pass  # graceful degradation
+
+    # 2. Scopri dimensioni dal data endpoint (JSON)
+    flow_ref = f"{agency},{flow_id},{result.get('version') or '*'}"
+    try:
+        dim_url = f"{sdmx_root}/data/{flow_ref}/all"
+        dim_resp = client.get(dim_url, params={"firstNObservations": "0"})
+        if dim_resp.is_ok and dim_resp.response and dim_resp.response.status_code == 200:
+            payload = json.loads(dim_resp.response.text)
+            structure = payload.get("structure") or {}
+            dimensions = structure.get("dimensions") or {}
+            all_dims: list[str] = []
+            all_values: dict[str, list[str]] = {}
+            for section in ("series", "observation"):
+                for dim in dimensions.get(section) or []:
+                    dim_id = str(dim.get("id") or "")
+                    if dim_id and dim_id not in all_dims:
+                        all_dims.append(dim_id)
+                        vals = [
+                            str(v.get("id") or "") for v in (dim.get("values") or []) if v.get("id")
+                        ]
+                        if vals:
+                            all_values[dim_id] = vals
+            result["dimensions"] = all_dims
+            result["dimension_values"] = all_values
+    except Exception:
+        pass  # graceful degradation: solo nomi dimensioni
+
+    return result

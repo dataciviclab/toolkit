@@ -55,6 +55,11 @@ class RawSourceConfig(BaseModel):
     args: dict[str, Any] = Field(default_factory=dict)
     extractor: ExtractorConfig | None = None
     primary: bool = False
+    inject_column: dict[str, str] | None = Field(
+        default=None,
+        description="Fixed columns to inject: {column_name: value}. "
+        "E.g. {cod_regione: '13', desc_regione: 'Abruzzo'}",
+    )
 
     @field_validator("primary", mode="before")
     @classmethod

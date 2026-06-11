@@ -38,7 +38,11 @@ def _run_clean_capture_inputs(
     seen: dict[str, object] = {}
 
     def _fake_run_sql(input_files, sql_query, output_path, read_cfg=None, **_kwargs):
-        seen["input_files"] = input_files
+        # Extracts plain paths from RawInputFile for test compatibility
+        if input_files and hasattr(input_files[0], "path"):
+            seen["input_files"] = [f.path for f in input_files]
+        else:
+            seen["input_files"] = input_files
         seen["sql_query"] = sql_query
         seen["output_path"] = output_path
         output_path.parent.mkdir(parents=True, exist_ok=True)

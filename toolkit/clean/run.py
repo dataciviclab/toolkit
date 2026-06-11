@@ -8,6 +8,7 @@ from toolkit.clean.read_config import resolve_clean_read_cfg
 from toolkit.clean.input_selection import select_raw_input
 from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict
+from toolkit.core.input_file import RawInputFile, enrich_input_files
 from toolkit.core.metadata import (
     config_hash_for_year,
     file_record,
@@ -160,9 +161,15 @@ def _clean_metadata_payload(
     read_params_source: list[str],
     read_source_used: str,
     read_params_used: dict[str, Any],
-    input_files: list[Path],
+    input_files: list[Path] | list[RawInputFile],
     outputs: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    # Estrai i path effettivi, supportando sia RawInputFile che Path
+    if input_files and hasattr(input_files[0], "path"):
+        file_paths: list[Path] = [f.path for f in input_files]  # type: ignore
+    else:
+        file_paths = input_files  # type: ignore
+
     metadata_payload: dict[str, Any] = {
         "layer": "clean",
         "dataset": dataset,
@@ -176,9 +183,9 @@ def _clean_metadata_payload(
         "read_source_used": read_source_used,
         "read_params_used": read_params_used,
         "config_hash": config_hash_for_year(base_dir, year),
-        "inputs": [file_record(p) for p in input_files],
+        "inputs": [file_record(p) for p in file_paths],
         "outputs": outputs,
-        "input_files": [p.name for p in input_files],
+        "input_files": [p.name for p in file_paths],
     }
     if source_id:
         metadata_payload["source_id"] = source_id
@@ -198,6 +205,7 @@ def run_clean(
     source_id: str | None = None,
     support_cfg: list[dict[str, Any]] | None = None,
     smoke: bool = False,
+    raw_sources: list[dict[str, Any]] | None = None,
 ):
     clean_cfg = ensure_dict(clean_cfg)
     output_cfg = ensure_dict(output_cfg)
@@ -246,9 +254,12 @@ def run_clean(
         allow_ambiguous=allow_ambiguous,
     )
 
+    # Arricchisci gli input con metadata delle source (inject_column)
+    rich_inputs = enrich_input_files(input_files, raw_sources, year)
+
     output_path = out_dir / f"{dataset}_{year}_clean.parquet"
     read_source_used, read_params_used, output_profile = _run_sql(
-        input_files,
+        rich_inputs,
         sql,
         output_path,
         read_cfg=relation_read_cfg,
@@ -274,7 +285,7 @@ def run_clean(
         read_params_source=read_params_source,
         read_source_used=read_source_used,
         read_params_used=read_params_used,
-        input_files=input_files,
+        input_files=rich_inputs,
         outputs=outputs,
     )
     metadata_payload["output_profile"] = output_profile

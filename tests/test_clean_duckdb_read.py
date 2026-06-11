@@ -504,3 +504,92 @@ def test_read_raw_to_relation_with_thousands_separator(tmp_path: Path):
     rows = con.execute("SELECT id, val FROM raw_input ORDER BY id").fetchall()
     assert rows == [(1, 1234.56), (2, 7890.12)], f"got {rows}"
     con.close()
+
+
+@pytest.mark.contract
+def test_read_raw_to_relation_injects_column_from_multiple_sources(tmp_path: Path):
+    """inject_column aggiunge colonna fissa per ogni source prima dell'unione."""
+    file_a = tmp_path / "reg_a.csv"
+    file_a.write_text("id,nome,valore\n1,Sanità,1500\n2,Istruzione,2200\n", encoding="utf-8")
+    file_b = tmp_path / "reg_b.csv"
+    file_b.write_text("id,nome,valore\n1,Sanità,900\n3,Trasporti,700\n", encoding="utf-8")
+
+    from toolkit.core.input_file import RawInputFile
+
+    inputs = [
+        RawInputFile(path=file_a, inject_column={"cod_regione": "13"}),
+        RawInputFile(path=file_b, inject_column={"cod_regione": "14"}),
+    ]
+
+    logger = logging.getLogger("tests.clean.duckdb_read.inject")
+    con = duckdb.connect(":memory:")
+    try:
+        info = duckdb_read.read_raw_to_relation(
+            con, inputs, {"delim": ",", "encoding": "utf-8"}, "fallback", logger
+        )
+        rows = con.execute(
+            "SELECT cod_regione, nome FROM raw_input ORDER BY cod_regione, nome"
+        ).fetchall()
+        assert rows == [
+            ("13", "Istruzione"),
+            ("13", "Sanità"),
+            ("14", "Sanità"),
+            ("14", "Trasporti"),
+        ], f"Unexpected rows: {rows}"
+        assert "inject_column" in info.params_used
+        assert info.params_used["inject_column"]["cod_regione"]["reg_a.csv"] == "13"
+        assert info.params_used["inject_column"]["cod_regione"]["reg_b.csv"] == "14"
+    finally:
+        con.close()
+
+
+@pytest.mark.contract
+def test_read_raw_to_relation_inject_column_without_columns_cfg(tmp_path: Path):
+    """inject_column funziona anche senza clean.read.columns configurato."""
+    file_a = tmp_path / "data_a.csv"
+    file_a.write_text("x,y\n1,2\n3,4\n", encoding="utf-8")
+    file_b = tmp_path / "data_b.csv"
+    file_b.write_text("x,y\n5,6\n", encoding="utf-8")
+
+    from toolkit.core.input_file import RawInputFile
+
+    inputs = [
+        RawInputFile(path=file_a, inject_column={"fonte": "A"}),
+        RawInputFile(path=file_b, inject_column={"fonte": "B"}),
+    ]
+
+    logger = logging.getLogger("tests.clean.duckdb_read.inject")
+    con = duckdb.connect(":memory:")
+    try:
+        duckdb_read.read_raw_to_relation(
+            con, inputs, {"delim": ",", "encoding": "utf-8"}, "fallback", logger
+        )
+        rows = con.execute(
+            "SELECT fonte, x, y FROM raw_input ORDER BY fonte, x"
+        ).fetchall()
+        assert rows == [
+            ("A", 1, 2),
+            ("A", 3, 4),
+            ("B", 5, 6),
+        ], f"Unexpected rows: {rows}"
+    finally:
+        con.close()
+
+
+@pytest.mark.policy
+def test_read_raw_to_relation_plain_path_no_inject_still_works(tmp_path: Path):
+    """Senza inject_column, list[Path] funziona ancora (backward compat)."""
+    input_file = tmp_path / "simple.csv"
+    input_file.write_text("a,b\n1,2\n3,4\n", encoding="utf-8")
+
+    logger = logging.getLogger("tests.clean.duckdb_read.backward")
+    con = duckdb.connect(":memory:")
+    try:
+        info = duckdb_read.read_raw_to_relation(
+            con, [input_file], {"delim": ",", "encoding": "utf-8"}, "fallback", logger
+        )
+        rows = con.execute("SELECT * FROM raw_input ORDER BY a").fetchall()
+        assert rows == [(1, 2), (3, 4)]
+        assert "inject_column" not in info.params_used
+    finally:
+        con.close()

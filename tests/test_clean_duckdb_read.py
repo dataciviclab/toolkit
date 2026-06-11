@@ -667,12 +667,20 @@ def test_enrich_input_files():
 @pytest.mark.contract
 def test_parquet_inject_column_escapes_apostrophe(tmp_path: Path):
     """inject_column su parquet: valori con apostrofo non rompono la query."""
-    import pandas as pd
-
-    file_a = tmp_path / "reg_a.parquet"
-    pd.DataFrame({"id": [1, 2], "val": [10, 20]}).to_parquet(file_a)
-    file_b = tmp_path / "reg_b.parquet"
-    pd.DataFrame({"id": [3], "val": [30]}).to_parquet(file_b)
+    con = duckdb.connect(":memory:")
+    try:
+        file_a = tmp_path / "reg_a.parquet"
+        con.execute(
+            "COPY (SELECT 1 AS id, 10 AS val UNION ALL SELECT 2, 20) TO ? (FORMAT PARQUET)",
+            [str(file_a)],
+        )
+        file_b = tmp_path / "reg_b.parquet"
+        con.execute(
+            "COPY (SELECT 3 AS id, 30 AS val) TO ? (FORMAT PARQUET)",
+            [str(file_b)],
+        )
+    finally:
+        con.close()
 
     from toolkit.core.input_file import RawInputFile
 

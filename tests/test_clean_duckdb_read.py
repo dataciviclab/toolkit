@@ -564,9 +564,7 @@ def test_read_raw_to_relation_inject_column_without_columns_cfg(tmp_path: Path):
         duckdb_read.read_raw_to_relation(
             con, inputs, {"delim": ",", "encoding": "utf-8"}, "fallback", logger
         )
-        rows = con.execute(
-            "SELECT fonte, x, y FROM raw_input ORDER BY fonte, x"
-        ).fetchall()
+        rows = con.execute("SELECT fonte, x, y FROM raw_input ORDER BY fonte, x").fetchall()
         assert rows == [
             ("A", 1, 2),
             ("A", 3, 4),
@@ -593,3 +591,74 @@ def test_read_raw_to_relation_plain_path_no_inject_still_works(tmp_path: Path):
         assert "inject_column" not in info.params_used
     finally:
         con.close()
+
+
+@pytest.mark.pure_unit
+def test_build_raw_input_map_with_inject():
+    """build_raw_input_map costruisce la mappa filename→inject_column da dict config."""
+    from toolkit.core.input_file import build_raw_input_map
+
+    sources = [
+        {"name": "src_a", "args": {"filename": "data_a.csv"}, "inject_column": {"regione": "13"}},
+        {
+            "name": "src_b",
+            "args": {"filename": "data_b.csv"},
+            "inject_column": {"regione": "14", "fonte": "B"},
+        },
+        {"name": "src_c", "args": {"filename": "data_c.csv"}},  # senza inject
+    ]
+    result = build_raw_input_map(sources, 2026)
+    assert result == {
+        "data_a.csv": {"regione": "13"},
+        "data_b.csv": {"regione": "14", "fonte": "B"},
+        "data_c.csv": None,
+    }
+
+
+@pytest.mark.pure_unit
+def test_build_raw_input_map_empty():
+    """build_raw_input_map con lista vuota o None restituisce {}."""
+    from toolkit.core.input_file import build_raw_input_map
+
+    assert build_raw_input_map(None, 2026) == {}
+    assert build_raw_input_map([], 2026) == {}
+
+
+@pytest.mark.pure_unit
+def test_build_raw_input_map_year_placeholder():
+    """build_raw_input_map risolve {year} nel filename."""
+    from toolkit.core.input_file import build_raw_input_map
+
+    sources = [
+        {"name": "src", "args": {"filename": "data_{year}.csv"}, "inject_column": {"regione": "01"}}
+    ]
+    result = build_raw_input_map(sources, 2026)
+    assert "data_2026.csv" in result
+    assert "data_{year}.csv" not in result
+
+
+@pytest.mark.pure_unit
+def test_enrich_input_files():
+    """enrich_input_files abbina path a inject_column tramite filename."""
+    from toolkit.core.input_file import enrich_input_files
+    from pathlib import Path
+
+    sources = [
+        {"name": "src_a", "args": {"filename": "alfa.csv"}, "inject_column": {"fonte": "A"}},
+        {"name": "src_b", "args": {"filename": "beta.csv"}, "inject_column": {"fonte": "B"}},
+        {"name": "src_c", "args": {"filename": "gamma.csv"}},
+    ]
+    paths = [
+        Path("/data/alfa.csv"),
+        Path("/data/beta.csv"),
+        Path("/data/gamma.csv"),
+        Path("/data/delta.csv"),
+    ]
+    enriched = enrich_input_files(paths, sources, 2026)
+
+    assert len(enriched) == 4
+    assert enriched[0].inject_column == {"fonte": "A"}
+    assert enriched[1].inject_column == {"fonte": "B"}
+    assert enriched[2].inject_column is None  # src_c senza inject
+    assert enriched[3].inject_column is None  # delta.csv non in sources
+    assert enriched[0].path.name == "alfa.csv"

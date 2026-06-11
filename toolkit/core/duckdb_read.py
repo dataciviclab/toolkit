@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -405,7 +406,7 @@ def _read_csv_relation(
 
 def read_raw_to_relation(
     con: duckdb.DuckDBPyConnection,
-    input_files: list[Path | RawInputFile],
+    input_files: Sequence[Path | RawInputFile],
     params: dict[str, Any] | None,
     mode: str,
     logger,
@@ -426,21 +427,20 @@ def read_raw_to_relation(
             normalized.append(RawInputFile(path=f))
         else:
             raise TypeError(f"Expected Path or RawInputFile, got {type(f)}")
-    input_files = normalized
 
-    exts = {f.path.suffix.lower() for f in input_files}
+    exts = {f.path.suffix.lower() for f in normalized}
     if exts <= {".parquet"}:
-        info = _execute_parquet_read(con, input_files)
+        info = _execute_parquet_read(con, normalized)
         logger.info("read_csv params used: source=parquet params={}")
         return info
     if exts <= {".xlsx", ".xls"}:
-        result = _execute_excel_read(con, [f.path for f in input_files], read_cfg, logger=logger)
+        result = _execute_excel_read(con, [f.path for f in normalized], read_cfg, logger=logger)
         return ReadInfo(source=result["source"], params_used=result["params_used"])
 
     normalized_mode = _validate_read_mode(mode)
     return _read_csv_relation(
         con,
-        input_files,
+        normalized,
         read_cfg,
         mode=normalized_mode,
         logger=logger,

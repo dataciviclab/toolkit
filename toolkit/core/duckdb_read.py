@@ -255,7 +255,7 @@ def _execute_parquet_read(
         path_sql = sql_path(f.path)
         # Columns injected by this specific source
         local_inject = ", ".join(
-            f"'{v}' AS {q_ident(k)}" for k, v in (f.inject_column or {}).items()
+            f"'{_sql_escape(v)}' AS {q_ident(k)}" for k, v in (f.inject_column or {}).items()
         )
         # NULL columns for inject columns this source doesn't have
         null_inject = ", ".join(

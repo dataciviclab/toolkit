@@ -662,3 +662,37 @@ def test_enrich_input_files():
     assert enriched[2].inject_column is None  # src_c senza inject
     assert enriched[3].inject_column is None  # delta.csv non in sources
     assert enriched[0].path.name == "alfa.csv"
+
+
+@pytest.mark.contract
+def test_parquet_inject_column_escapes_apostrophe(tmp_path: Path):
+    """inject_column su parquet: valori con apostrofo non rompono la query."""
+    import pandas as pd
+
+    file_a = tmp_path / "reg_a.parquet"
+    pd.DataFrame({"id": [1, 2], "val": [10, 20]}).to_parquet(file_a)
+    file_b = tmp_path / "reg_b.parquet"
+    pd.DataFrame({"id": [3], "val": [30]}).to_parquet(file_b)
+
+    from toolkit.core.input_file import RawInputFile
+
+    inputs = [
+        RawInputFile(path=file_a, inject_column={"nome": "L'Aquila", "regione": "Abruzzo"}),
+        RawInputFile(
+            path=file_b, inject_column={"nome": "Valle d'Aosta", "regione": "Valle d'Aosta"}
+        ),
+    ]
+
+    logger = logging.getLogger("tests.clean.duckdb_read.inject_parquet")
+    con = duckdb.connect(":memory:")
+    try:
+        info = duckdb_read.read_raw_to_relation(con, inputs, None, "fallback", logger)
+        rows = con.execute("SELECT nome, regione, id FROM raw_input ORDER BY nome, id").fetchall()
+        assert rows == [
+            ("L'Aquila", "Abruzzo", 1),
+            ("L'Aquila", "Abruzzo", 2),
+            ("Valle d'Aosta", "Valle d'Aosta", 3),
+        ], f"Unexpected rows: {rows}"
+        assert "inject_column" in info.params_used
+    finally:
+        con.close()

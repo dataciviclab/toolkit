@@ -263,11 +263,13 @@ def probe_url_headers(
             and head_result.response.status_code < 500
         ):
             resp = head_result.response
+            ct_len = resp.headers.get("Content-Length")
             return _build_probe_result(
                 requested_url=url,
                 status_code=resp.status_code,
                 content_type=resp.headers.get("Content-Type"),
                 content_disposition=resp.headers.get("Content-Disposition"),
+                content_length=int(ct_len) if ct_len and ct_len.isdigit() else None,
                 final_url=resp.url,
                 method="head",
             )
@@ -289,12 +291,15 @@ def probe_url_headers(
         range_result = client.get(url, headers={"Range": "bytes=0-0"})
         if range_result.is_ok and range_result.response is not None:
             resp = range_result.response
+            ct_len = resp.headers.get("Content-Length")
+            parsed_ct_len = int(ct_len) if ct_len and ct_len.isdigit() else None
             if resp.status_code < 400:
                 return _build_probe_result(
                     requested_url=url,
                     status_code=resp.status_code,
                     content_type=resp.headers.get("Content-Type"),
                     content_disposition=resp.headers.get("Content-Disposition"),
+                    content_length=parsed_ct_len,
                     final_url=resp.url,
                     method="get_range",
                 )
@@ -307,6 +312,7 @@ def probe_url_headers(
                 status_code=resp.status_code,
                 content_type=resp.headers.get("Content-Type"),
                 content_disposition=resp.headers.get("Content-Disposition"),
+                content_length=parsed_ct_len,
                 final_url=resp.url,
                 method="get_range",
             )
@@ -328,6 +334,7 @@ def _build_probe_result(
     status_code: int,
     content_type: str | None,
     content_disposition: str | None,
+    content_length: int | None = None,
     final_url: str,
     method: str,
 ) -> dict[str, Any]:
@@ -337,6 +344,7 @@ def _build_probe_result(
         "status_code": status_code,
         "content_type": content_type,
         "content_disposition": content_disposition,
+        "content_length": content_length,
         "method": method,
     }
 
@@ -354,16 +362,19 @@ def fetch_content(
     user_agent: str = DEFAULT_USER_AGENT,
     client: HttpClient | None = None,
 ) -> dict[str, Any]:
-    """GET con Range header, fallback a GET intero se Range non supportato.
+    """GET con Range header, fallback a GET streaming bounded se Range non supportato.
 
     Args:
         url: URL da scaricare.
-        max_bytes: Dimensione massima in bytes.
+        max_bytes: Dimensione massima in bytes — letto al massimo questo.
         timeout: Timeout HTTP (ignorato se client è fornito).
         user_agent: User-Agent (ignorato se client è fornito).
         client: HttpClient opzionale.
 
     Returns dict: content (bytes), content_type, status_code, final_url, method.
+
+    Raises:
+        RuntimeError: se la GET fallisce o non ritorna contenuto.
     """
     client = client or _mk_client(timeout=timeout, user_agent=user_agent)
 
@@ -381,12 +392,22 @@ def fetch_content(
                 "method": "range" if resp.status_code == 206 else "full",
             }
 
-    # Range fallito → GET intero
-    full_result = client.get(url)
+    # Range fallito → GET streaming bounded: non scarica mai oltre max_bytes.
+    # Usa stream=True + iter_content per evitare che requests carichi tutto in memoria.
+    full_result = client.get(url, stream=True)
     if full_result.is_ok and full_result.response is not None:
         resp = full_result.response
         if resp.status_code < 400:
-            content = resp.content[:max_bytes]
+            chunks: list[bytes] = []
+            total = 0
+            for chunk in resp.iter_content(chunk_size=65536):
+                if chunk:
+                    remaining = max_bytes - total
+                    if remaining <= 0:
+                        break
+                    chunks.append(chunk[:remaining])
+                    total += len(chunks[-1])
+            content = b"".join(chunks)
             return {
                 "content": content,
                 "content_type": resp.headers.get("Content-Type"),

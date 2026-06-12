@@ -9,20 +9,21 @@ def _build_excel_params(read_cfg: dict[str, Any]) -> str:
     """Build DuckDB ``read_xlsx`` named parameter string from ``read_cfg``."""
     parts: list[str] = []
 
-    # sheet_name
+    # sheet_name — read_xlsx accetta solo stringhe, non indici
     sheet = read_cfg.get("sheet_name")
     if sheet is not None:
         if isinstance(sheet, int):
-            # read_xlsx vuole VARCHAR — convertiamo in nome default Sheet{N}
-            parts.append(f"sheet='Sheet{sheet}'")
-        else:
-            parts.append(f"sheet='{sheet}'")
+            raise ValueError(
+                "DuckDB read_xlsx does not support integer sheet indexes. "
+                "Use the sheet name (string) instead, e.g. sheet_name='Sheet1'."
+                f" Got: {sheet!r}"
+            )
+        parts.append(f"sheet='{sheet}'")
 
     # header
     header = bool(read_cfg.get("header", True))
     parts.append(f"header={'true' if header else 'false'}")
 
-    # skip — gestito via SQL OFFSET, non nativo in read_xlsx
     return ", ".join(parts)
 
 
@@ -39,21 +40,23 @@ def _build_select_expr(
         trim: Se True, applica ``TRIM`` a colonne VARCHAR.
 
     Returns:
-        Stringa ``CAST(a AS tipo) AS nuovo, TRIM(b) AS b, ...``
+        Stringa ``CAST("a" AS tipo) AS nuovo_nome, TRIM("b") AS "b", ...``
+        con identificatori quotati per gestire spazi e caratteri speciali.
     """
     selects: list[str] = []
     for row in describe:
         name = str(row[0])
+        qname = f'"{name}"'
         dtype = str(row[1])
 
         if columns:
             new_name = list(columns.keys())[len(selects)]
             target_type = columns[new_name]
-            expr = f"CAST({name} AS {target_type}) AS {new_name}"
+            expr = f"CAST({qname} AS {target_type}) AS {new_name}"
         elif trim and "VARCHAR" in dtype.upper():
-            expr = f"TRIM({name}) AS {name}"
+            expr = f"TRIM({qname}) AS {qname}"
         else:
-            expr = name
+            expr = qname
         selects.append(expr)
 
     return ", ".join(selects)
@@ -108,11 +111,16 @@ def _execute_excel_read(
         source = " UNION ALL ".join(subqueries)
 
     # Vista base: lettura dal file
-    con.execute(f"CREATE OR REPLACE VIEW _raw_base AS {source}")
+    # Usiamo una sequenza di viste con nomi distinti per evitare ricorsione DuckDB
+    # quando applichiamo skip / columns / trim
+    con.execute(f"CREATE OR REPLACE VIEW _raw_excel AS {source}")
 
     # Skip rows via SQL OFFSET (read_xlsx non ha skip nativo)
     if skip > 0:
-        con.execute(f"CREATE OR REPLACE VIEW _raw_base AS SELECT * FROM _raw_base OFFSET {skip}")
+        con.execute(f"CREATE OR REPLACE VIEW _raw_skip AS SELECT * FROM _raw_excel OFFSET {skip}")
+        source_view = "_raw_skip"
+    else:
+        source_view = "_raw_excel"
 
     # Parametri usati (per logging e ReadInfo)
     params_used: dict[str, Any] = {
@@ -122,12 +130,12 @@ def _execute_excel_read(
         "trim_whitespace": bool(read_cfg.get("trim_whitespace", True)),
     }
 
-    # Applica mapping colonne e/o trim in un unico passo (evita ricorsione viste)
+    # Applica mapping colonne e/o trim in un unico passo
     columns_cfg = read_cfg.get("columns")
     trim_enabled = read_cfg.get("trim_whitespace", True)
 
     if columns_cfg or trim_enabled:
-        describe = con.execute("DESCRIBE _raw_base").fetchall()
+        describe = con.execute(f"DESCRIBE {source_view}").fetchall()
         if columns_cfg:
             new_names = list(columns_cfg.keys())
             if len(new_names) != len(describe):
@@ -136,9 +144,9 @@ def _execute_excel_read(
                     f"Configured={len(new_names)} detected={len(describe)}"
                 )
         select_expr = _build_select_expr(describe, columns=columns_cfg, trim=trim_enabled)
-        con.execute(f"CREATE OR REPLACE VIEW raw_input AS SELECT {select_expr} FROM _raw_base")
+        con.execute(f"CREATE OR REPLACE VIEW raw_input AS SELECT {select_expr} FROM {source_view}")
     else:
-        con.execute("CREATE OR REPLACE VIEW raw_input AS SELECT * FROM _raw_base")
+        con.execute(f"CREATE OR REPLACE VIEW raw_input AS SELECT * FROM {source_view}")
 
     # Log parametri
     if columns_cfg:

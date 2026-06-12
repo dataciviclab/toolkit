@@ -304,21 +304,33 @@ def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[s
             f"CREATE OR REPLACE VIEW xl_base AS SELECT * FROM read_xlsx('{file0}', {params})"
         )
 
-        # Applica columns mapping se configurato (stessa logica di _execute_excel_read,
-        # usando vista intermedia per evitare ricorsione DuckDB)
-        columns_cfg = cfg.get("columns")
-        if columns_cfg:
-            describe = con.execute("DESCRIBE xl_base").fetchall()
-            new_names = list(columns_cfg.keys())
-            if len(new_names) != len(describe):
-                raise ValueError(
-                    f"Excel input columns mismatch. "
-                    f"Configured={len(new_names)} detected={len(describe)}"
-                )
-            select_expr = _build_select_expr(describe, columns=columns_cfg)
-            con.execute(f"CREATE OR REPLACE VIEW xl AS SELECT {select_expr} FROM xl_base")
+        # Skip rows (stessa logica di _execute_excel_read)
+        skip_rows = int(cfg.get("skip", 0))
+        if skip_rows > 0:
+            con.execute(
+                f"CREATE OR REPLACE VIEW xl_skip AS SELECT * FROM xl_base OFFSET {skip_rows}"
+            )
+            xl_src = "xl_skip"
         else:
-            con.execute("CREATE OR REPLACE VIEW xl AS SELECT * FROM xl_base")
+            xl_src = "xl_base"
+
+        # Applica columns mapping e/o trim (stessa logica di _execute_excel_read)
+        columns_cfg = cfg.get("columns")
+        trim_enabled = cfg.get("trim_whitespace", True)
+
+        if columns_cfg or trim_enabled:
+            describe = con.execute(f"DESCRIBE {xl_src}").fetchall()
+            if columns_cfg:
+                new_names = list(columns_cfg.keys())
+                if len(new_names) != len(describe):
+                    raise ValueError(
+                        f"Excel input columns mismatch. "
+                        f"Configured={len(new_names)} detected={len(describe)}"
+                    )
+            select_expr = _build_select_expr(describe, columns=columns_cfg, trim=trim_enabled)
+            con.execute(f"CREATE OR REPLACE VIEW xl AS SELECT {select_expr} FROM {xl_src}")
+        else:
+            con.execute(f"CREATE OR REPLACE VIEW xl AS SELECT * FROM {xl_src}")
 
         # Schema
         describe = con.execute("DESCRIBE xl").fetchall()
@@ -337,13 +349,13 @@ def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[s
                 d[str(k)] = "" if v is None else v
             sample_rows.append(d)
 
-        # Missingness
+        # Missingness — quoting colonne per gestire spazi nei nomi
         count_row = con.execute("SELECT COUNT(*) FROM xl").fetchone()
         n = count_row[0] if count_row else 0
         missingness_top: list[dict[str, Any]] = []
         if n > 0:
             for col in columns_raw:
-                miss_row = con.execute(f"SELECT COUNT(*) FROM xl WHERE {col} IS NULL").fetchone()
+                miss_row = con.execute(f'SELECT COUNT(*) FROM xl WHERE "{col}" IS NULL').fetchone()
                 nmiss = miss_row[0] if miss_row else 0
                 if nmiss > 0:
                     missingness_top.append(

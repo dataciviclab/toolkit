@@ -799,6 +799,9 @@ def preview(
         None, "--encoding", help="Encoding noto (salta sniff)"
     ),
     known_delim: str | None = typer.Option(None, "--delim", help="Delimiter noto (salta sniff)"),
+    known_skip: int | None = typer.Option(
+        None, "--skip", min=0, help="Righe da saltare in testa (metadati prima dell'header)"
+    ),
 ):
     """
     Preview remoto di un URL CSV/TSV: scarica un chunk, profila con DuckDB,
@@ -810,7 +813,12 @@ def preview(
 
     from toolkit.profile.preview import preview_url as _preview_url
 
-    result = _preview_url(url, known_encoding=known_encoding, known_delim=known_delim)
+    result = _preview_url(
+        url,
+        known_encoding=known_encoding,
+        known_delim=known_delim,
+        known_skip=known_skip,
+    )
 
     if json_output:
         typer.echo(json.dumps(asdict(result), indent=2, ensure_ascii=False, default=str))

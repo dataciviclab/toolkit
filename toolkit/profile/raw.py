@@ -391,11 +391,21 @@ def profile_with_read_cfg(
                     file0,
                     effective_read_cfg=effective_read_cfg,
                 )
+                # Forza eager evaluation: DuckDB crea la vista in modo
+                # lazy, l'eccezione di parsing scoppia solo al primo
+                # SELECT effettivo (e.g. CSV con numero colonne errato).
+                con.execute("SELECT COUNT(*) FROM v")
             except Exception as e:
                 warnings.append(f"profile_read_retry: {type(e).__name__}: {e}")
                 robust_read_suggested = True
                 fallback_cfg = robust_preset(effective_read_cfg)
-                fallback_cfg.setdefault("auto_detect", False)
+                # auto_detect=True riedelegge a DuckDB la rilevazione della
+                # struttura — necessario per CSV con righe irregolari o
+                # decimali con virgola (es. Farmacie, DAIT).
+                fallback_cfg["auto_detect"] = True
+                # Parallel=false necessario quando null_padding è attivo
+                # e il CSV ha quoted new lines (DuckDB incompatibilità nota).
+                fallback_cfg["parallel"] = False
                 _profile_view(
                     con,
                     file0,
@@ -420,8 +430,9 @@ def profile_with_read_cfg(
                     )
                     robust_read_suggested = True
                     fallback_cfg = robust_preset(effective_read_cfg)
-                    fallback_cfg.setdefault("auto_detect", False)
-                    fallback_cfg.setdefault("null_padding", True)
+                    fallback_cfg["auto_detect"] = True
+                    fallback_cfg["null_padding"] = True
+                    fallback_cfg["parallel"] = False
                     _profile_view(
                         con,
                         file0,

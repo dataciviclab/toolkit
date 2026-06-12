@@ -427,6 +427,91 @@ def test_sniff_source_file_detects_xlsx_as_binary(tmp_path: Path):
     assert "binary_file_detected: xlsx" in hints["warnings"]
 
 
+@pytest.mark.regression
+def test_profile_with_read_cfg_fallback_eager_auto_detect_parallel(tmp_path: Path):
+    """Regressione: CSV con riga irregolare e quoted newline non deve lasciare 0 colonne.
+
+    DuckDB `CREATE VIEW` è lazy — l'errore di parsing scoppia al primo SELECT,
+    non al CREATE. Prima del fix, l'eccezione cadeva fuori dal try/except interno,
+    il fallback non veniva mai attivato e il profilo restituiva 0 colonne.
+
+    Il fallback ora forza auto_detect=True e parallel=False, necessari per
+    superare rispettivamente righe irregolari e quoted new lines con null_padding.
+    """
+
+    csv = tmp_path / "regression.csv"
+    csv.write_text(
+        "col1;col2;col3\n"
+        '"value with\n'
+        'newline";2;3\n'
+        "4;5;6\n"
+        "7;8\n",  # riga irregolare: 2 colonne invece di 3
+        encoding="utf-8",
+    )
+
+    sniff = sniff_source_file(csv)
+    cfg = {"delim": ";", "encoding": "utf-8", "header": True}
+
+    result = profile_with_read_cfg(csv, sniff, cfg)
+
+    # Deve produrre colonne (fallback eager + auto_detect + parallel ha funzionato)
+    assert len(result["columns_raw"]) == 3, (
+        f"Expected 3 columns from fallback, got {result['columns_raw']}"
+    )
+    assert result["columns_raw"] == ["col1", "col2", "col3"]
+    assert result["robust_read_suggested"] is True
+
+
+@pytest.mark.regression
+def test_profile_with_read_cfg_preamble_with_skip_resets_true_header_line(tmp_path: Path):
+    """Preamble + known_skip non deve produrre header_data_cols_mismatch falso.
+
+    `sniff_source_file` cattura `true_header_line` dalla riga 0 (preambolo).
+    Se `known_skip` sovrascrive `skip`, il confronto tra i token di
+    true_header_line (1 colonna, dal preambolo) e le colonne reali (3)
+    produceva falsamente `header_data_cols_mismatch` → `robust_read_suggested=True`.
+
+    Il fix in preview.py resetta true_header_line/header_line a None quando
+    known_skip sovrascrive lo sniff. Il test verifica che anche chiamando
+    direttamente preview_url con known_skip non ci siano falsi positivi.
+    """
+    # Crea CSV con 2 righe preambolo + header + 1 dato
+    csv_content = (
+        '"Amministratori Comunali - elenco completo Italia"\n'
+        '"Aggiornato al 01/01/2026"\n'
+        "codice_regione;codice_provincia;codice_comune\n"
+        "01;002;0010\n"
+    )
+    csv_path = tmp_path / "preamble.csv"
+    csv_path.write_text(csv_content, encoding="utf-8")
+
+    # Simula sniff che cattura true_header_line dalla riga 0
+    from toolkit.profile.raw import sniff_source_file, profile_with_read_cfg
+
+    sniff = sniff_source_file(csv_path)
+    assert sniff.get("true_header_line") is not None, (
+        "Lo sniff deve catturare true_header_line dal preambolo"
+    )
+
+    # Sovrascrivi come fa preview_url con known_skip
+    sniff["skip_suggested"] = 2
+    sniff["true_header_line"] = None
+    sniff["header_line"] = None
+
+    cfg = {"delim": ";", "encoding": "utf-8", "header": True, "skip": 2}
+    profile = profile_with_read_cfg(csv_path, sniff, cfg)
+
+    assert len(profile["columns_raw"]) == 3, f"Expected 3 columns, got {profile['columns_raw']}"
+    assert profile["robust_read_suggested"] is False, (
+        "robust_read_suggested deve essere False (nessun falso mismatch)"
+    )
+    # Nessun warning su header_data_cols_mismatch
+    mismatch_warnings = [w for w in profile.get("warnings", []) if "header_data_cols_mismatch" in w]
+    assert len(mismatch_warnings) == 0, (
+        f"Falsi positivi header_data_cols_mismatch: {mismatch_warnings}"
+    )
+
+
 @pytest.mark.policy
 def test_sniff_source_file_detects_xls_as_binary(tmp_path: Path):
     """sniff_source_file must detect XLS (OLE2) via magic bytes and return is_binary_file."""

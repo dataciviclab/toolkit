@@ -231,6 +231,14 @@ def preview_url(
             delim = sniff.get("delim_suggested")
             dec = sniff.get("decimal_suggested")
             skip = sniff.get("skip_suggested", 0)
+            # known_skip sovrascrive sempre lo sniff, se fornito
+            if known_skip is not None:
+                skip = known_skip
+                # true_header_line e header_line riferiti alla prima riga del
+                # file sniffata, non all'header reale dopo lo skip — resettare
+                # per evitare header_data_cols_mismatch falso positivo.
+                sniff["true_header_line"] = None
+                sniff["header_line"] = None
 
             # ── 5. DuckDB profile ───────────────────────────────────────────
             effective_read_cfg: dict[str, Any] = {}

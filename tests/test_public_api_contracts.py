@@ -7,7 +7,6 @@ import toolkit.raw as raw_pkg
 from toolkit.clean import run_clean, run_clean_validation, validate_clean
 from toolkit.plugins import CkanSource, HttpFileSource, LocalFileSource, SdmxSource, SparqlSource
 from toolkit.profile import (
-    PreviewResult,
     RawProfile,
     build_suggested_read_cfg,
     profile_excel,

@@ -77,7 +77,6 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     opt_sql = f"union_by_name=true, {', '.join(read_opts)}"
 
     with safe_connect() as conn:
-        conn.execute("PRAGMA disable_progress_bar")
         conn.execute(
             f"CREATE VIEW csv_preview AS SELECT * FROM read_csv('{sql_str(str(path))}', {opt_sql})"
         )

@@ -282,7 +282,7 @@ def _sample_profile_rows(
 
                 missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
 
-    return sample_rows, missingness_top
+    return sample_rows, missingness_top  # type: ignore[return-value]
 
 
 def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[str, Any]:
@@ -314,17 +314,19 @@ def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[s
         sample = con.execute("SELECT * FROM xl LIMIT 5").fetchall()
         sample_rows: list[dict[str, Any]] = []
         for row in sample:
-            d = {}
+            d: dict[str, Any] = {}
             for k, v in zip(columns_raw, row):
-                d[k] = "" if v is None else v
+                d[str(k)] = "" if v is None else v
             sample_rows.append(d)
 
         # Missingness
-        n = con.execute("SELECT COUNT(*) FROM xl").fetchone()[0] or 0
+        count_row = con.execute("SELECT COUNT(*) FROM xl").fetchone()
+        n = count_row[0] if count_row else 0
         missingness_top: list[dict[str, Any]] = []
         if n > 0:
             for col in columns_raw:
-                nmiss = con.execute(f"SELECT COUNT(*) FROM xl WHERE {col} IS NULL").fetchone()[0]
+                miss_row = con.execute(f"SELECT COUNT(*) FROM xl WHERE {col} IS NULL").fetchone()
+                nmiss = miss_row[0] if miss_row else 0
                 if nmiss > 0:
                     missingness_top.append(
                         {"column": col, "missing_pct": float(nmiss) / float(n) * 100.0}

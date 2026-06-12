@@ -133,7 +133,7 @@ def probe_url_routed(
     if is_sparql_endpoint(final_url, content_type):
         return _route_sparql(final_url, result, timeout=timeout)
     elif is_html_content(content_type):
-        return _route_html(url, final_url, result, timeout=timeout, user_agent=user_agent)
+        return _route_html(url, final_url, result, timeout=timeout)
     elif is_sdmx_url(final_url):
         return _route_sdmx(final_url, result, timeout=timeout)
     elif is_file_like(final_url, content_type, content_disposition):
@@ -175,7 +175,6 @@ def _route_html(
     result: dict[str, Any],
     *,
     timeout: int,
-    user_agent: str,  # noqa: ARG001
 ) -> dict[str, Any]:
     """Route per URL HTML: cerca CKAN o link candidati."""
     try:

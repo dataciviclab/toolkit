@@ -132,7 +132,7 @@ def _clean_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
     }
 
 
-def _mart_output_paths(root: Path, year_dir: Path, tables: list[Any]) -> list[Path]:  # noqa: ARG001
+def _mart_output_paths(year_dir: Path, tables: list[Any]) -> list[Path]:
     result: list[Path] = []
     for table in tables:
         if isinstance(table, dict):
@@ -152,7 +152,7 @@ def _mart_paths(
     mart_dir = layer_year_dir(root, "mart", dataset, year)
     return {
         "dir": str(mart_dir),
-        "outputs": [str(path) for path in _mart_output_paths(root, mart_dir, tables)],
+        "outputs": [str(path) for path in _mart_output_paths(mart_dir, tables)],
         "metadata": str(mart_dir / METADATA),
         "validation": str(mart_dir / MART_VALIDATION),
     }

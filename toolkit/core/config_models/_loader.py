@@ -107,7 +107,7 @@ def load_config_model(
         raise _err("dataset.years deve essere una lista non vuota, es: [2022, 2023].", path=p)
 
     strict_mode = strict_config or _read_strict_config(data, path=p)
-    normalized = _normalize_legacy_payload(data, path=p, strict_config=strict_mode)
+    normalized = _normalize_legacy_payload(data)
     normalized = _warn_or_reject_unknown_keys(normalized, path=p, strict_config=strict_mode)
     root_path, root_source = _resolve_root(normalized.get("root"), base_dir=base_dir)
     if repo_root is not None:

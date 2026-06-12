@@ -24,7 +24,7 @@ from toolkit.core.csv_read import (
 from toolkit.core.paths import RAW_PROFILE_DIR, RAW_SUGGESTED_READ
 
 
-def _read_source_mode(clean_cfg: dict[str, Any], logger=None) -> tuple[str, dict[str, Any]]:  # noqa: ARG001
+def _read_source_mode(clean_cfg: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     raw_read_cfg = clean_cfg.get("read")
     read_source = clean_cfg.get("read_source")
     explicit_cfg: dict[str, Any] = {}
@@ -83,7 +83,7 @@ def resolve_clean_read_cfg(
     clean_cfg: dict[str, Any],
     logger=None,
 ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
-    normalized_source, explicit_cfg = _read_source_mode(clean_cfg, logger)
+    normalized_source, explicit_cfg = _read_source_mode(clean_cfg)
     selection_cfg, relation_overrides = _split_read_cfg(explicit_cfg)
 
     suggested_cfg = load_suggested_read(raw_year_dir)

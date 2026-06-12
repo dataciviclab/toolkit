@@ -92,7 +92,7 @@ def _select_expr(
     return f'TRY_CAST("{raw_col}" AS {sql_type}) AS {out_name}'
 
 
-def _columns_spec(profile: dict[str, Any], year: int) -> tuple[list[str], dict[str, str]]:  # noqa: ARG001
+def _columns_spec(profile: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
     """Build SELECT expressions and read_csv columns spec from mapping_suggestions."""
     mapping = profile.get("mapping_suggestions", {})
     if not mapping:
@@ -181,7 +181,7 @@ def generate_clean_sql(
     file_used = profile.get("file_used", "")
 
     # Build SELECT expressions
-    select_exprs, _ = _columns_spec(profile, year)
+    select_exprs, _ = _columns_spec(profile)
 
     # If the CSV doesn't have a column named "anno" (after normalization),
     # inject {year}::INTEGER AS anno so the clean layer has it without requiring

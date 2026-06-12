@@ -201,8 +201,6 @@ _NUMERIC_TYPES = {
 def _run_hierarchy_levels(
     con,
     mart_cfg: dict[str, Any],
-    dataset: str,  # noqa: ARG001
-    year: int,  # noqa: ARG001
     mart_dir: Path,
     *,
     logger,
@@ -464,8 +462,6 @@ def run_mart(
             hierarchy_written, hierarchy_executed, hierarchy_rows = _run_hierarchy_levels(
                 con,
                 mart_cfg,
-                dataset,
-                year,
                 mart_dir,
                 logger=logger,
             )

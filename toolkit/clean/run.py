@@ -86,7 +86,7 @@ def _write_rendered_sql(
     return rendered_sql_path
 
 
-def _selection_params(read_cfg: dict[str, Any], logger) -> tuple[str, str, bool, bool]:  # noqa: ARG001
+def _selection_params(read_cfg: dict[str, Any]) -> tuple[str, str, bool, bool]:
     selection_mode = read_cfg.get("mode")
     glob_pattern = read_cfg.get("glob", "*")
     prefer_from_raw_run = bool(read_cfg.get("prefer_from_raw_run", True))
@@ -225,7 +225,6 @@ def run_clean(
     )
     selection_mode, glob_pattern, prefer_from_raw_run, allow_ambiguous = _selection_params(
         read_cfg,
-        logger,
     )
     sql_path_obj, sql, template_ctx = load_clean_sql(
         clean_cfg,

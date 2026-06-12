@@ -74,9 +74,6 @@ def _emit_unknown_keys_notice(
 
 def _normalize_legacy_payload(
     data: dict[str, Any],
-    *,
-    path: Path,  # noqa: ARG001
-    strict_config: bool,  # noqa: ARG001
 ) -> dict[str, Any]:
     normalized = dict(data)
 

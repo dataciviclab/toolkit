@@ -128,7 +128,7 @@ def scout_url(
         if len(candidates) > 5:
             _echo(f"    ... and {len(candidates) - 5} more")
         if scaffold and not json_output:
-            _scaffold_html(url, probe, run_raw=run_raw, slug=slug)
+            _scaffold_html(probe, run_raw=run_raw, slug=slug)
 
     elif source_type == "sparql":
         sparql_info = probe.get("sparql_info") or {}
@@ -141,7 +141,7 @@ def scout_url(
             if ds_count > 5:
                 _echo(f"    ... e altri {ds_count - 5}")
         if scaffold and not json_output:
-            _scaffold_sparql(url, probe, run_raw=run_raw, slug=slug)
+            _scaffold_sparql(url, probe, slug=slug)
 
     elif source_type == "sdmx":
         _echo(f"  SDMX flow: {probe.get('sdmx_info', {}).get('flow_id', '?')}")
@@ -372,15 +372,13 @@ def _scaffold_ckan(
         return
     except (typer.Exit, Exception):
         typer.echo("  Warning: profiling failed for resource, generating minimal scaffold")
-        _scaffold_minimal_ckan(url, probe_result, resources, run_raw=run_raw, slug=slug)
+        _scaffold_minimal_ckan(url, resources, slug=slug)
 
 
 def _scaffold_minimal_ckan(
     url: str,
-    probe_result: dict[str, Any],  # noqa: ARG001
     resources: list[dict[str, Any]],
     *,
-    run_raw: bool = False,  # noqa: ARG001
     slug: str | None = None,
 ) -> None:
     """Genera scaffold minimale CKAN quando il profiling fallisce."""
@@ -442,10 +440,9 @@ def _scaffold_minimal_ckan(
 
 
 def _scaffold_html(
-    url: str,  # noqa: ARG001
-    probe_result: dict[str, Any],  # noqa: ARG001
+    probe_result: dict[str, Any],
     *,
-    run_raw: bool = False,  # noqa: ARG001
+    run_raw: bool = False,
     slug: str | None = None,
 ) -> None:
     """Scaffold per pagina HTML con link."""
@@ -465,7 +462,6 @@ def _scaffold_sparql(
     url: str,
     probe_result: dict[str, Any],
     *,
-    run_raw: bool = False,  # noqa: ARG001
     slug: str | None = None,
 ) -> None:
     """Scaffold per endpoint SPARQL."""

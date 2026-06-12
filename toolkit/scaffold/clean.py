@@ -92,7 +92,7 @@ def _select_expr(
     return f'TRY_CAST("{raw_col}" AS {sql_type}) AS {out_name}'
 
 
-def _columns_spec(profile: dict[str, Any], year: int) -> tuple[list[str], dict[str, str]]:
+def _columns_spec(profile: dict[str, Any], year: int) -> tuple[list[str], dict[str, str]]:  # noqa: ARG001
     """Build SELECT expressions and read_csv columns spec from mapping_suggestions."""
     mapping = profile.get("mapping_suggestions", {})
     if not mapping:

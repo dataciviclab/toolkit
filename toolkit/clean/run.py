@@ -86,7 +86,7 @@ def _write_rendered_sql(
     return rendered_sql_path
 
 
-def _selection_params(read_cfg: dict[str, Any], logger) -> tuple[str, str, bool, bool]:
+def _selection_params(read_cfg: dict[str, Any], logger) -> tuple[str, str, bool, bool]:  # noqa: ARG001
     selection_mode = read_cfg.get("mode")
     glob_pattern = read_cfg.get("glob", "*")
     prefer_from_raw_run = bool(read_cfg.get("prefer_from_raw_run", True))

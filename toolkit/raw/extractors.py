@@ -9,7 +9,7 @@ def _safe_name(name: str) -> str:
     return name or "file.bin"
 
 
-def extract_identity(payload: bytes, args: dict | None = None) -> dict[str, bytes]:
+def extract_identity(payload: bytes, args: dict | None = None) -> dict[str, bytes]:  # noqa: ARG001
     return {"file.bin": payload}
 
 
@@ -35,7 +35,7 @@ def extract_zip_all(payload: bytes, args: dict | None = None) -> dict[str, bytes
     return out
 
 
-def extract_zip_first(payload: bytes, args: dict | None = None) -> dict[str, bytes]:
+def extract_zip_first(payload: bytes, args: dict | None = None) -> dict[str, bytes]:  # noqa: ARG001
     z = _open_zip(payload)
     names = [n for n in z.namelist() if not n.endswith("/")]
     if not names:
@@ -44,7 +44,7 @@ def extract_zip_first(payload: bytes, args: dict | None = None) -> dict[str, byt
     return {_safe_name(n): z.read(n)}
 
 
-def extract_zip_first_csv(payload: bytes, args: dict | None = None) -> dict[str, bytes]:
+def extract_zip_first_csv(payload: bytes, args: dict | None = None) -> dict[str, bytes]:  # noqa: ARG001
     z = _open_zip(payload)
     names = [n for n in z.namelist() if (not n.endswith("/")) and n.lower().endswith(".csv")]
     if not names:

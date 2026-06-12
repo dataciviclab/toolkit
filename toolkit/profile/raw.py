@@ -282,7 +282,7 @@ def _sample_profile_rows(
 
                 missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
 
-    return sample_rows, missingness_top  # type: ignore[return-value]
+    return sample_rows, missingness_top
 
 
 def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[str, Any]:

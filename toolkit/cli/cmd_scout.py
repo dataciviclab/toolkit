@@ -377,10 +377,10 @@ def _scaffold_ckan(
 
 def _scaffold_minimal_ckan(
     url: str,
-    probe_result: dict[str, Any],
+    probe_result: dict[str, Any],  # noqa: ARG001
     resources: list[dict[str, Any]],
     *,
-    run_raw: bool = False,
+    run_raw: bool = False,  # noqa: ARG001
     slug: str | None = None,
 ) -> None:
     """Genera scaffold minimale CKAN quando il profiling fallisce."""
@@ -442,10 +442,10 @@ def _scaffold_minimal_ckan(
 
 
 def _scaffold_html(
-    url: str,
-    probe_result: dict[str, Any],
+    url: str,  # noqa: ARG001
+    probe_result: dict[str, Any],  # noqa: ARG001
     *,
-    run_raw: bool = False,
+    run_raw: bool = False,  # noqa: ARG001
     slug: str | None = None,
 ) -> None:
     """Scaffold per pagina HTML con link."""
@@ -465,7 +465,7 @@ def _scaffold_sparql(
     url: str,
     probe_result: dict[str, Any],
     *,
-    run_raw: bool = False,
+    run_raw: bool = False,  # noqa: ARG001
     slug: str | None = None,
 ) -> None:
     """Scaffold per endpoint SPARQL."""

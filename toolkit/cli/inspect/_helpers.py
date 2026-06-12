@@ -132,7 +132,7 @@ def _clean_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
     }
 
 
-def _mart_output_paths(root: Path, year_dir: Path, tables: list[Any]) -> list[Path]:
+def _mart_output_paths(root: Path, year_dir: Path, tables: list[Any]) -> list[Path]:  # noqa: ARG001
     result: list[Path] = []
     for table in tables:
         if isinstance(table, dict):

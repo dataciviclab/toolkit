@@ -24,7 +24,7 @@ from toolkit.core.csv_read import (
 from toolkit.core.paths import RAW_PROFILE_DIR, RAW_SUGGESTED_READ
 
 
-def _read_source_mode(clean_cfg: dict[str, Any], logger=None) -> tuple[str, dict[str, Any]]:
+def _read_source_mode(clean_cfg: dict[str, Any], logger=None) -> tuple[str, dict[str, Any]]:  # noqa: ARG001
     raw_read_cfg = clean_cfg.get("read")
     read_source = clean_cfg.get("read_source")
     explicit_cfg: dict[str, Any] = {}

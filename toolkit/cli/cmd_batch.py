@@ -24,7 +24,7 @@ def _silence_typer_echo() -> Any:
     typer.echo e lo sostituiamo con un no-op.
     """
     original_echo = typer.echo
-    typer.echo = lambda *args, **kwargs: None
+    typer.echo = lambda *_, **__: None
     try:
         yield
     finally:
@@ -192,7 +192,9 @@ def batch(
                         # Quando --json è attivo, silenzia typer.echo durante
                         # run_year per evitare che execution plan (dry-run)
                         # o altri echo contaminino stdout JSON
-                        _run_ctx = _silence_typer_echo() if json_output else contextlib.nullcontext()
+                        _run_ctx = (
+                            _silence_typer_echo() if json_output else contextlib.nullcontext()
+                        )
                         with _run_ctx:
                             context = run_year(
                                 cfg,

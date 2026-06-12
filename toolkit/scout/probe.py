@@ -170,7 +170,12 @@ def _base_result(
 
 
 def _route_html(
-    url: str, final_url: str, result: dict[str, Any], *, timeout: int, user_agent: str
+    url: str,
+    final_url: str,
+    result: dict[str, Any],
+    *,
+    timeout: int,
+    user_agent: str,  # noqa: ARG001
 ) -> dict[str, Any]:
     """Route per URL HTML: cerca CKAN o link candidati."""
     try:

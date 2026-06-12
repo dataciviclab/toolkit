@@ -515,7 +515,7 @@ def test_probe_calls_probe_url_headers_for_http_source(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(
         "toolkit.scout.http.probe_url_headers",
-        lambda url, timeout=5: (
+        lambda url, timeout=5, client=None: (
             calls.append(url) or {"status_code": 200, "content_type": "text/csv"}
         ),
     )
@@ -557,7 +557,7 @@ def test_probe_does_not_block_on_error(monkeypatch) -> None:
     """Probe step logs warning but does NOT raise on unreachable source."""
     monkeypatch.setattr(
         "toolkit.scout.http.probe_url_headers",
-        lambda url, timeout=5: (_ for _ in ()).throw(RuntimeError("ConnectionError")),
+        lambda url, timeout=5, client=None: (_ for _ in ()).throw(RuntimeError("ConnectionError")),
     )
     from toolkit.cli.cmd_run import _run_probe
 
@@ -576,7 +576,7 @@ def test_probe_logs_ckan_portal(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(
         "toolkit.scout.http.probe_url_headers",
-        lambda url, timeout=5: calls.append(url) or {"status_code": 200},
+        lambda url, timeout=5, client=None: calls.append(url) or {"status_code": 200},
     )
     from toolkit.cli.cmd_run import _run_probe
 
@@ -609,7 +609,7 @@ def test_probe_parallel_execution(monkeypatch) -> None:
     """
     DELAY = 0.5
 
-    def _delayed_probe(url, timeout=5):
+    def _delayed_probe(url, timeout=5, client=None):
         time.sleep(DELAY)
         return {"status_code": 200, "content_type": "text/csv"}
 

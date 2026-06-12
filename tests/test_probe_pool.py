@@ -34,8 +34,8 @@ class TestProbePool:
         pool.close()
 
     @pytest.mark.contract
-    def test_submit_timeout_override(self, monkeypatch) -> None:
-        """timeout override funziona."""
+    def test_default_timeout_applied(self, monkeypatch) -> None:
+        """Il default_timeout del pool viene passato a probe_url_headers."""
         calls = []
 
         def _probe(url, timeout=5, client=None):
@@ -44,29 +44,9 @@ class TestProbePool:
 
         monkeypatch.setattr("toolkit.scout.http.probe_url_headers", _probe)
 
-        pool = ProbePool(workers=2, default_timeout=5)
-        pool.submit("https://example.test/", dataset="ds", timeout=10).result(timeout=5)
+        pool = ProbePool(workers=2, default_timeout=10)
+        pool.submit("https://example.test/", dataset="ds").result(timeout=5)
         assert calls == [10], f"Expected timeout=10, got {calls}"
-        pool.close()
-
-    @pytest.mark.contract
-    def test_get_timeout_callback(self, monkeypatch) -> None:
-        """get_timeout callback fornisce timeout per fonte."""
-        calls = []
-
-        def _timeout_resolver(url, dataset):
-            calls.append((url, dataset))
-            return 15
-
-        def _probe(url, timeout=5, client=None):
-            calls.append(timeout)
-            return {"status_code": 200}
-
-        monkeypatch.setattr("toolkit.scout.http.probe_url_headers", _probe)
-
-        pool = ProbePool(workers=2, default_timeout=5, get_timeout=_timeout_resolver)
-        pool.submit("https://ex.test/", dataset="ds1").result(timeout=5)
-        assert 15 in calls, f"Expected timeout=15 from callback, got {calls}"
         pool.close()
 
     @pytest.mark.contract

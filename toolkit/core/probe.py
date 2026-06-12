@@ -25,7 +25,7 @@ import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from lab_connectors.http import CircuitOpenError, HttpClient
 
@@ -65,23 +65,18 @@ class ProbePool:
     opzionale) e ``probe_url_headers`` (format detection).  Ogni probe
     viene eseguita in un thread separato.
 
+    Il timeout HTTP e' unico per tutte le probe del pool (definito
+    all'avvio).  Tutte le probe condividono lo stesso ``HttpClient``
+    (e quindi lo stesso stato del circuit breaker per host).
+
     Args:
         workers: Numero massimo di worker thread (default 8).
         circuit_threshold: Soglia circuit breaker per-host.
             0 = disabilitato (default).
-        default_timeout: Timeout HTTP predefinito in secondi (default 5).
+        default_timeout: Timeout HTTP in secondi per tutte le probe
+            del pool (default 5).
         client: ``HttpClient`` opzionale.  Se non fornito, ne crea uno
             con ``circuit_threshold`` e ``default_timeout``.
-        get_timeout: Callable opzionale ``(url, dataset) -> int`` per
-            timeout personalizzato per fonte (da config dataset.yml).
-            Default: restituisce ``default_timeout``.
-
-    Note:
-        Il client HTTP è condiviso tra tutte le probe (per circuit breaker).
-        Se ``get_timeout`` restituisce un timeout diverso da ``default_timeout``,
-        la probe usa lo stesso client (quindi lo stesso timeout di connessione),
-        ma la chiamata a ``probe_url_headers`` non riceve override esplicito.
-        Per timeout diversi, crea un ``ProbePool`` separato.
 
     """
 
@@ -91,27 +86,25 @@ class ProbePool:
         circuit_threshold: int = 0,
         default_timeout: int = 5,
         client: HttpClient | None = None,
-        get_timeout: Callable[[str, str], int] | None = None,
     ) -> None:
         self._default_timeout = default_timeout
-        self._get_timeout = get_timeout or (lambda url, ds: default_timeout)
         self._lock = threading.Lock()
         self._client = client
         self._owns_client = client is None
         self._circuit_threshold = circuit_threshold
         self._pool = ThreadPoolExecutor(max_workers=workers)
 
-    def _get_client(self, timeout: int) -> HttpClient:
+    def _get_client(self) -> HttpClient:
         """Restituisce (e crea se necessario) il client HTTP.
 
-        Thread-safe: la creazione del client è protetta da lock.
+        Thread-safe: la creazione del client e' protetta da lock.
         """
         if self._client is not None:
             return self._client
         with self._lock:
             if self._client is None:
                 self._client = HttpClient(
-                    timeout=timeout,
+                    timeout=self._default_timeout,
                     circuit_threshold=self._circuit_threshold,
                 )
         return self._client
@@ -121,15 +114,12 @@ class ProbePool:
         url: str,
         *,
         dataset: str = "",
-        timeout: int | None = None,
     ) -> Future:
         """Invia una probe HTTP al pool.
 
         Args:
             url: URL da probe.
             dataset: Nome del dataset (per report).
-            timeout: Timeout HTTP in secondi.  Se None, usa
-                ``get_timeout(url, dataset)`` o ``default_timeout``.
 
         Returns:
             ``concurrent.futures.Future`` il cui ``.result()`` restituisce
@@ -138,13 +128,11 @@ class ProbePool:
         """
         from toolkit.scout.http import probe_url_headers
 
-        effective_timeout = timeout if timeout is not None else self._get_timeout(url, dataset)
-
         def _run() -> ProbeResult:
             start = time.perf_counter()
             try:
-                client = self._get_client(effective_timeout)
-                probe = probe_url_headers(url, timeout=effective_timeout, client=client)
+                client = self._get_client()
+                probe = probe_url_headers(url, timeout=self._default_timeout, client=client)
                 elapsed = time.perf_counter() - start
                 sc = probe.get("status_code", 0)
                 reachable = 200 <= sc < 400

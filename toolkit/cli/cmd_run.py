@@ -141,7 +141,7 @@ def _probe_fmt(content_type: str | None) -> str:
     return _PROBE_FORMATS.get(base, base)
 
 
-def _run_probe(cfg, year: int, logger) -> None:
+def _run_probe(cfg, year: int, logger, pool=None) -> None:
     """Passo probe della pipeline: verifica raggiungibilita' fonti remote.
 
     Riutilizza probe_url_routed dello scout (routing automatico,
@@ -150,6 +150,14 @@ def _run_probe(cfg, year: int, logger) -> None:
     Salta local_file, sdmx, sparql (non timeoutano).
     Le probe sono eseguite in parallelo con ProbePool
     (ThreadPoolExecutor + HttpClient con circuit breaker opzionale).
+
+    Args:
+        cfg: Config del dataset.
+        year: Anno da processare.
+        logger: Logger.
+        pool: ProbePool opzionale. Se fornito, riutilizza lo stesso
+            pool tra anni/config (utile per batch — il circuit breaker
+            mantiene lo stato tra le probe). Se None, ne crea uno nuovo.
     """
     sources = cfg.raw.sources
     if not sources:
@@ -158,33 +166,38 @@ def _run_probe(cfg, year: int, logger) -> None:
 
     from toolkit.core.probe import ProbePool
 
-    futures = []
+    _own_pool = pool is None
+    pool = pool or ProbePool(workers=8, circuit_threshold=3)
 
-    def _parse_and_submit(src) -> None:
-        stype = (
-            getattr(src, "type", None) or src.get("type", "http_file")
-            if isinstance(src, dict)
-            else src.type
-        )
-        args = (
-            getattr(src, "args", None) or src.get("args", {}) if isinstance(src, dict) else src.args
-        )
-        name = (
-            getattr(src, "name", None) or src.get("name", stype)
-            if isinstance(src, dict)
-            else (src.name or stype)
-        )
+    try:
+        futures = []
 
-        if stype in ("http_file", "http_post_file"):
-            url = (args.get("url") or "").replace("{year}", str(year))
-            if url:
-                futures.append(pool.submit(url, dataset=name, timeout=5))
-        elif stype == "ckan":
-            portal = (args.get("portal_url") or "").replace("{year}", str(year))
-            if portal:
-                futures.append(pool.submit(portal, dataset=name, timeout=5))
+        def _parse_and_submit(src) -> None:
+            stype = (
+                getattr(src, "type", None) or src.get("type", "http_file")
+                if isinstance(src, dict)
+                else src.type
+            )
+            args = (
+                getattr(src, "args", None) or src.get("args", {})
+                if isinstance(src, dict)
+                else src.args
+            )
+            name = (
+                getattr(src, "name", None) or src.get("name", stype)
+                if isinstance(src, dict)
+                else (src.name or stype)
+            )
 
-    with ProbePool(workers=8, circuit_threshold=3) as pool:
+            if stype in ("http_file", "http_post_file"):
+                url = (args.get("url") or "").replace("{year}", str(year))
+                if url:
+                    futures.append(pool.submit(url, dataset=name))
+            elif stype == "ckan":
+                portal = (args.get("portal_url") or "").replace("{year}", str(year))
+                if portal:
+                    futures.append(pool.submit(portal, dataset=name))
+
         for src in sources:
             _parse_and_submit(src)
 
@@ -215,6 +228,9 @@ def _run_probe(cfg, year: int, logger) -> None:
                     result.status_code,
                     result.url,
                 )
+    finally:
+        if _own_pool:
+            pool.close()
 
 
 def run_year(
@@ -229,6 +245,7 @@ def run_year(
     sample_rows: int | None = None,
     sample_bytes: int | None = None,
     smoke: bool = False,
+    probe_pool=None,
 ) -> RunContext:
     if logger is None:
         logger = get_logger()
@@ -315,7 +332,7 @@ def run_year(
     source_id = cfg.source_id
 
     if "probe" in layers_to_run and not dry_run:
-        _run_probe(cfg, year, base_logger)
+        _run_probe(cfg, year, base_logger, pool=probe_pool)
 
     if "raw" in layers_to_run:
         if not _execute_layer(

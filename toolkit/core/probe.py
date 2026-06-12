@@ -21,6 +21,7 @@ Uso::
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -70,10 +71,17 @@ class ProbePool:
             0 = disabilitato (default).
         default_timeout: Timeout HTTP predefinito in secondi (default 5).
         client: ``HttpClient`` opzionale.  Se non fornito, ne crea uno
-            con ``circuit_threshold`` e timeout dal primo submit.
+            con ``circuit_threshold`` e ``default_timeout``.
         get_timeout: Callable opzionale ``(url, dataset) -> int`` per
             timeout personalizzato per fonte (da config dataset.yml).
             Default: restituisce ``default_timeout``.
+
+    Note:
+        Il client HTTP è condiviso tra tutte le probe (per circuit breaker).
+        Se ``get_timeout`` restituisce un timeout diverso da ``default_timeout``,
+        la probe usa lo stesso client (quindi lo stesso timeout di connessione),
+        ma la chiamata a ``probe_url_headers`` non riceve override esplicito.
+        Per timeout diversi, crea un ``ProbePool`` separato.
 
     """
 
@@ -87,15 +95,25 @@ class ProbePool:
     ) -> None:
         self._default_timeout = default_timeout
         self._get_timeout = get_timeout or (lambda url, ds: default_timeout)
+        self._lock = threading.Lock()
         self._client = client
         self._owns_client = client is None
         self._circuit_threshold = circuit_threshold
         self._pool = ThreadPoolExecutor(max_workers=workers)
 
     def _get_client(self, timeout: int) -> HttpClient:
-        """Restituisce (e crea se necessario) il client HTTP."""
-        if self._client is None:
-            self._client = HttpClient(timeout=timeout, circuit_threshold=self._circuit_threshold)
+        """Restituisce (e crea se necessario) il client HTTP.
+
+        Thread-safe: la creazione del client è protetta da lock.
+        """
+        if self._client is not None:
+            return self._client
+        with self._lock:
+            if self._client is None:
+                self._client = HttpClient(
+                    timeout=timeout,
+                    circuit_threshold=self._circuit_threshold,
+                )
         return self._client
 
     def submit(
@@ -126,24 +144,6 @@ class ProbePool:
             start = time.perf_counter()
             try:
                 client = self._get_client(effective_timeout)
-
-                # Check circuit breaker before calling probe_url_headers.
-                # Se il circuito e' aperto, probe_url_headers wrapperebbe
-                # CircuitOpenError in RuntimeError ("CircuitOpenError") —
-                # lo rileviamo qui per un report piu' preciso.
-                if client._circuit_should_block(url):
-                    elapsed = time.perf_counter() - start
-                    host = client._netloc(url)
-                    return ProbeResult(
-                        url=url,
-                        dataset=dataset,
-                        status_code=0,
-                        reachable=False,
-                        error=f"Circuit open for host {host}",
-                        duration_seconds=elapsed,
-                        circuit_open=True,
-                    )
-
                 probe = probe_url_headers(url, timeout=effective_timeout, client=client)
                 elapsed = time.perf_counter() - start
                 sc = probe.get("status_code", 0)
@@ -169,16 +169,13 @@ class ProbePool:
                 )
             except RuntimeError as exc:
                 elapsed = time.perf_counter() - start
-                err_msg = str(exc)
-                is_circuit = "circuit" in err_msg.lower() or "CircuitOpenError" in err_msg
                 return ProbeResult(
                     url=url,
                     dataset=dataset,
                     status_code=0,
                     reachable=False,
-                    error=err_msg,
+                    error=str(exc),
                     duration_seconds=elapsed,
-                    circuit_open=is_circuit,
                 )
 
         return self._pool.submit(_run)

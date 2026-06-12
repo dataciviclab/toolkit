@@ -15,7 +15,7 @@ from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
-from lab_connectors.http import HttpClient
+from lab_connectors.http import CircuitOpenError, HttpClient
 
 logger = logging.getLogger("toolkit.scout.http")
 
@@ -264,6 +264,8 @@ def probe_url_headers(
         if head_result.response is not None and head_result.response.status_code >= 500:
             last_error = f"server_error_{head_result.response.status_code}"
         elif head_result.err is not None:
+            if isinstance(head_result.err, CircuitOpenError):
+                raise head_result.err
             last_error = type(head_result.err).__name__
         else:
             last_error = "head_failed"
@@ -299,6 +301,8 @@ def probe_url_headers(
                 method="get_range",
             )
         if range_result.err is not None:
+            if isinstance(range_result.err, CircuitOpenError):
+                raise range_result.err
             last_error = type(range_result.err).__name__
         if attempt < MAX_RETRIES:
             time.sleep(RETRY_BACKOFF * (attempt + 1))

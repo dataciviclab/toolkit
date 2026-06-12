@@ -286,9 +286,10 @@ def probe_url_headers(
             continue
         break
 
-    # HEAD fallito → GET con Range: bytes=0-0
+    # HEAD fallito → GET con Range: bytes=0-0 (stream=True: se server ignora
+    # Range, non scarica l'intero file solo per leggere gli header).
     for attempt in range(1 + MAX_RETRIES):
-        range_result = client.get(url, headers={"Range": "bytes=0-0"})
+        range_result = client.get(url, headers={"Range": "bytes=0-0"}, stream=True)
         if range_result.is_ok and range_result.response is not None:
             resp = range_result.response
             ct_len = resp.headers.get("Content-Length")

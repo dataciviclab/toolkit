@@ -292,15 +292,26 @@ def probe_url_headers(
         range_result = client.get(url, headers={"Range": "bytes=0-0"}, stream=True)
         if range_result.is_ok and range_result.response is not None:
             resp = range_result.response
-            ct_len = resp.headers.get("Content-Length")
-            parsed_ct_len = int(ct_len) if ct_len and ct_len.isdigit() else None
+            # Su 206, Content-Length vale 1 (un byte) — la dimensione reale
+            # del file e' in Content-Range: "bytes 0-0/TOTALE".
+            if resp.status_code == 206:
+                cr = resp.headers.get("Content-Range", "")
+                if cr and "/" in cr:
+                    total_str = cr.split("/")[-1].strip()
+                    file_size = int(total_str) if total_str.isdigit() else None
+                else:
+                    file_size = None
+            else:
+                ct_len = resp.headers.get("Content-Length")
+                file_size = int(ct_len) if ct_len and ct_len.isdigit() else None
+            getattr(resp, "close", lambda: None)()
             if resp.status_code < 400:
                 return _build_probe_result(
                     requested_url=url,
                     status_code=resp.status_code,
                     content_type=resp.headers.get("Content-Type"),
                     content_disposition=resp.headers.get("Content-Disposition"),
-                    content_length=parsed_ct_len,
+                    content_length=file_size,
                     final_url=resp.url,
                     method="get_range",
                 )
@@ -313,7 +324,7 @@ def probe_url_headers(
                 status_code=resp.status_code,
                 content_type=resp.headers.get("Content-Type"),
                 content_disposition=resp.headers.get("Content-Disposition"),
-                content_length=parsed_ct_len,
+                content_length=file_size,
                 final_url=resp.url,
                 method="get_range",
             )
@@ -406,41 +417,45 @@ def fetch_content(
                 return int(total_str)
         return None
 
-    # Tentativo con Range — usa stream=True, cosi' anche se il server ignora
-    # il Range e risponde 200, leggiamo solo max_bytes.
+    # Tentativo con Range — stream=True: se il server ignora Range e risponde
+    # 200, leggiamo solo max_bytes e chiudiamo.
     range_result = client.get(url, headers={"Range": f"bytes=0-{max_bytes - 1}"}, stream=True)
     if range_result.is_ok and range_result.response is not None:
         resp = range_result.response
-        if resp.status_code in (206, 200):
-            content = _read_bounded(resp, max_bytes)
-            if content:
-                # Su 206 il Content-Length e' la dimensione del chunk.
-                # La dimensione reale del file arriva da Content-Range.
-                file_size = _parse_content_range(resp) if resp.status_code == 206 else None
-                return {
-                    "content": content,
-                    "content_type": resp.headers.get("Content-Type"),
-                    "status_code": resp.status_code,
-                    "final_url": resp.url,
-                    "method": "range" if resp.status_code == 206 else "full",
-                    "content_length": file_size,
-                }
+        try:
+            if resp.status_code in (206, 200):
+                content = _read_bounded(resp, max_bytes)
+                if content:
+                    file_size = _parse_content_range(resp) if resp.status_code == 206 else None
+                    return {
+                        "content": content,
+                        "content_type": resp.headers.get("Content-Type"),
+                        "status_code": resp.status_code,
+                        "final_url": resp.url,
+                        "method": "range" if resp.status_code == 206 else "full",
+                        "content_length": file_size,
+                    }
+        finally:
+            getattr(resp, "close", lambda: None)()
 
     # Range fallito → GET streaming bounded
     full_result = client.get(url, stream=True)
     if full_result.is_ok and full_result.response is not None:
         resp = full_result.response
-        if resp.status_code < 400:
-            content = _read_bounded(resp, max_bytes)
-            if content:
-                return {
-                    "content": content,
-                    "content_type": resp.headers.get("Content-Type"),
-                    "status_code": resp.status_code,
-                    "final_url": resp.url,
-                    "method": "full",
-                    "content_length": None,
-                }
+        try:
+            if resp.status_code < 400:
+                content = _read_bounded(resp, max_bytes)
+                if content:
+                    return {
+                        "content": content,
+                        "content_type": resp.headers.get("Content-Type"),
+                        "status_code": resp.status_code,
+                        "final_url": resp.url,
+                        "method": "full",
+                        "content_length": None,
+                    }
+        finally:
+            resp.close()
 
     raise RuntimeError(f"GET failed for {url}")
 

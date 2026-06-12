@@ -147,7 +147,7 @@ class TestColumnsSpec:
                 "Valore": {"type": "float"},
             },
         }
-        exprs, spec = _columns_spec(profile, 2024)
+        exprs, spec = _columns_spec(profile)
         assert 'trim("Nome") AS nome' in exprs
         assert 'TRY_CAST("Anno" AS BIGINT) AS anno' in exprs
         assert 'TRY_CAST("Valore" AS DOUBLE) AS valore' in exprs
@@ -166,7 +166,7 @@ class TestColumnsSpec:
                 "Importo": {"type": "float"},
             },
         }
-        exprs, _ = _columns_spec(profile, 2024)
+        exprs, _ = _columns_spec(profile)
         joined = "\n".join(exprs)
         assert 'trim("Nome") AS nome' in joined
         assert 'TRY_CAST("Importo" AS DOUBLE)' in joined
@@ -179,7 +179,7 @@ class TestColumnsSpec:
             "mapping_suggestions": {},
             "columns_raw": ["Col1", "Col2"],
         }
-        exprs, spec = _columns_spec(profile, 2024)
+        exprs, spec = _columns_spec(profile)
         assert 'trim(CAST("Col1" AS VARCHAR)) AS col1' in exprs
         assert 'trim(CAST("Col2" AS VARCHAR)) AS col2' in exprs
         assert spec == {"Col1": "VARCHAR", "Col2": "VARCHAR"}
@@ -188,7 +188,7 @@ class TestColumnsSpec:
     def test_no_mapping_no_columns(self) -> None:
         """Senza mapping né columns_raw: wildcard."""
         profile: dict[str, Any] = {}
-        exprs, _ = _columns_spec(profile, 2024)
+        exprs, _ = _columns_spec(profile)
         assert exprs == ["*"]
 
 

@@ -51,8 +51,6 @@ def test_hierarchy_generates_aggregation(tmp_path: Path) -> None:
                 ],
             }
         },
-        "test",
-        2024,
         mart_dir,
         logger=_null_logger,
     )
@@ -85,8 +83,6 @@ def test_hierarchy_generates_aggregation(tmp_path: Path) -> None:
                 ],
             }
         },
-        "test",
-        2024,
         mart_dir,
         logger=_null_logger,
     )
@@ -115,8 +111,6 @@ def test_hierarchy_count_fallback(tmp_path: Path) -> None:
                 "levels": [{"level": "c", "table": "h_c", "grain": ["comune"]}],
             }
         },
-        "test",
-        2024,
         mart_dir,
         logger=_null_logger,
     )
@@ -156,8 +150,6 @@ def test_hierarchy_exclude_metrics(tmp_path: Path) -> None:
                 ],
             }
         },
-        "test",
-        2024,
         mart_dir,
         logger=_null_logger,
     )
@@ -191,7 +183,7 @@ def test_hierarchy_edge_cases(tmp_path: Path) -> None:
     d.mkdir()
 
     # Empty hierarchy → empty result
-    w, e, r = _run_hierarchy_levels(con, {}, "t", 2024, d, logger=_null_logger)
+    w, e, r = _run_hierarchy_levels(con, {}, d, logger=_null_logger)
     assert (w, e, r) == ([], [], 0)
 
     # Numeric grain column (valore=INTEGER) must NOT appear as SUM metric
@@ -204,8 +196,6 @@ def test_hierarchy_edge_cases(tmp_path: Path) -> None:
                 "levels": [{"level": "x", "table": "h_test", "grain": ["valore"]}],
             }
         },
-        "t",
-        2024,
         d,
         logger=_null_logger,
     )
@@ -232,8 +222,6 @@ def test_hierarchy_edge_cases(tmp_path: Path) -> None:
                     "levels": [{"level": "x", "table": "x", "grain": ["comune"]}],
                 }
             },
-            "t",
-            2024,
             d2,
             logger=_null_logger,
         )

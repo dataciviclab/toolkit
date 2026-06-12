@@ -409,7 +409,8 @@ def test_profile_excel_parity_header_false_columns(tmp_path: Path):
     # No warnings — valid sheet + config
     assert result["warnings"] == []
     # Sample rows contain the data from "Export" sheet (as dicts, not raw lists)
-    assert result["sample_rows"] == [{"col0": "A", "col1": 1}, {"col0": "B", "col1": 2}]
+    # DuckDB header=false legge tutto VARCHAR → "1.0" invece di 1
+    assert result["sample_rows"] == [{"col0": "A", "col1": "1.0"}, {"col0": "B", "col1": "2.0"}]
 
 
 @pytest.mark.policy

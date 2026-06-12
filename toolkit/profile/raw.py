@@ -290,7 +290,7 @@ def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[s
 
     Returns the same dict shape as ``profile_with_read_cfg``.
     """
-    from toolkit.core.read_excel import _build_excel_params
+    from toolkit.core.read_excel import _build_excel_params, _build_select_expr
 
     cfg = read_cfg or {}
     try:
@@ -300,7 +300,25 @@ def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[s
         con.execute("INSTALL excel; LOAD excel;")
 
         params = _build_excel_params(cfg)
-        con.execute(f"CREATE OR REPLACE VIEW xl AS SELECT * FROM read_xlsx('{file0}', {params})")
+        con.execute(
+            f"CREATE OR REPLACE VIEW xl_base AS SELECT * FROM read_xlsx('{file0}', {params})"
+        )
+
+        # Applica columns mapping se configurato (stessa logica di _execute_excel_read,
+        # usando vista intermedia per evitare ricorsione DuckDB)
+        columns_cfg = cfg.get("columns")
+        if columns_cfg:
+            describe = con.execute("DESCRIBE xl_base").fetchall()
+            new_names = list(columns_cfg.keys())
+            if len(new_names) != len(describe):
+                raise ValueError(
+                    f"Excel input columns mismatch. "
+                    f"Configured={len(new_names)} detected={len(describe)}"
+                )
+            select_expr = _build_select_expr(describe, columns=columns_cfg)
+            con.execute(f"CREATE OR REPLACE VIEW xl AS SELECT {select_expr} FROM xl_base")
+        else:
+            con.execute("CREATE OR REPLACE VIEW xl AS SELECT * FROM xl_base")
 
         # Schema
         describe = con.execute("DESCRIBE xl").fetchall()

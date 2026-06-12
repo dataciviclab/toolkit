@@ -97,15 +97,18 @@ def _execute_excel_read(
     skip = int(read_cfg.get("skip", 0))
 
     # Lettura con DuckDB read_xlsx
+    # Nota: read_xlsx non accetta array di path — usiamo UNION ALL per multi-file
     if len(input_files) == 1:
         path_str = f"'{input_files[0]}'"
-        source = f"read_xlsx({path_str}, {params_str})"
+        source = f"SELECT * FROM read_xlsx({path_str}, {params_str})"
     else:
-        paths = ", ".join(f"'{p}'" for p in input_files)
-        source = f"read_xlsx([{paths}], {params_str})"
+        subqueries = []
+        for i, p in enumerate(input_files):
+            subqueries.append(f"(SELECT * FROM read_xlsx('{p}', {params_str}))")
+        source = " UNION ALL ".join(subqueries)
 
     # Vista base: lettura dal file
-    con.execute(f"CREATE OR REPLACE VIEW _raw_base AS SELECT * FROM {source}")
+    con.execute(f"CREATE OR REPLACE VIEW _raw_base AS {source}")
 
     # Skip rows via SQL OFFSET (read_xlsx non ha skip nativo)
     if skip > 0:

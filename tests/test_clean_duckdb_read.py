@@ -316,46 +316,34 @@ def test_read_raw_to_relation_reads_xlsx_with_explicit_sheet_and_columns(tmp_pat
     assert info.source == "excel"
     assert info.params_used["sheet_name"] == "Export"
     assert info.params_used["columns"] == {"col0": "VARCHAR", "col1": "VARCHAR"}
-    assert rows == [("A", 1), ("B", 2)]
+    # DuckDB header=false legge tutto VARCHAR (numeric come "1.0")
+    assert rows == [("A", "1.0"), ("B", "2.0")]
     con.close()
 
 
 @pytest.mark.policy
-def test_read_raw_to_relation_reads_xls_with_xlrd_engine(tmp_path: Path):
-    """Test that .xls files use the xlrd engine."""
+def test_read_raw_to_relation_rejects_xls(tmp_path: Path):
+    """DuckDB excel extension non supporta .xls, deve sollevare ValueError."""
     import xlwt
 
     input_file = tmp_path / "ok.xls"
     wb = xlwt.Workbook()
     ws = wb.add_sheet("Sheet1")
     ws.write(0, 0, "Anno")
-    ws.write(0, 1, "Regione")
-    ws.write(0, 2, "Domanda")
     ws.write(1, 0, 2022)
-    ws.write(1, 1, "Lazio")
-    ws.write(1, 2, 123.4)
-    ws.write(2, 0, 2022)
-    ws.write(2, 1, "Umbria")
-    ws.write(2, 2, 56.7)
     wb.save(input_file)
 
     con = duckdb.connect(":memory:")
     logger = logging.getLogger("tests.clean.duckdb_read.xls")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {"header": True},
-        "fallback",
-        logger,
-    )
-
-    rows = con.execute(
-        'SELECT "Anno", "Regione", "Domanda" FROM raw_input ORDER BY "Regione"'
-    ).fetchall()
-    assert info.source == "excel"
-    assert info.params_used["sheet_name"] == 0
-    assert rows == [(2022, "Lazio", 123.4), (2022, "Umbria", 56.7)]
+    with pytest.raises(ValueError, match="does not support .xls"):
+        duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {"header": True},
+            "fallback",
+            logger,
+        )
     con.close()
 
 

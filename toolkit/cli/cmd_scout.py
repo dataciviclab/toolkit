@@ -229,7 +229,7 @@ def _scaffold_file(
     typer.echo(f"  Delimiter: {sniff_hints.get('delim_suggested')}")
     typer.echo(f"  Columns: {sniff_hints.get('columns_preview')}")
 
-    # XLSX → profiling via openpyxl (stesso reader del runtime clean)
+    # XLSX → profiling via DuckDB read_xlsx (stesso reader del runtime clean)
     binary_fmt = sniff_hints.get("is_binary_file")
     if binary_fmt in ("xlsx", "xls"):
         from toolkit.profile.raw import profile_excel

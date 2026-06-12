@@ -286,19 +286,52 @@ def _sample_profile_rows(
 
 
 def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    """Profile an Excel file using the same pandas reader as ``clean.read_excel``.
-
-    Reuses ``_load_excel_frame`` from ``clean.read_excel`` to stay in sync
-    with the clean runtime's Excel handling (sheet_name, header, skip, columns,
-    trim_whitespace, mismatch detection).
+    """Profile an Excel file using DuckDB native reader (``excel`` extension).
 
     Returns the same dict shape as ``profile_with_read_cfg``.
     """
-    from toolkit.core.read_excel import _load_excel_frame
+    from toolkit.core.read_excel import _build_excel_params
 
     cfg = read_cfg or {}
     try:
-        df, _ = _load_excel_frame(file0, cfg)
+        import duckdb
+
+        con = duckdb.connect(":memory:")
+        con.execute("INSTALL excel; LOAD excel;")
+
+        params = _build_excel_params(cfg)
+        con.execute(f"CREATE OR REPLACE VIEW xl AS SELECT * FROM read_xlsx('{file0}', {params})")
+
+        # Schema
+        describe = con.execute("DESCRIBE xl").fetchall()
+        columns_raw = [str(r[0]) for r in describe]
+        duckdb_types = [str(r[1]) for r in describe]
+
+        # Normalize column names
+        columns_norm = [_normalize_colname(c) for c in columns_raw]
+
+        # Sample rows (None → "" per coerenza col vecchio pandas fillna)
+        sample = con.execute("SELECT * FROM xl LIMIT 5").fetchall()
+        sample_rows: list[dict[str, Any]] = []
+        for row in sample:
+            d = {}
+            for k, v in zip(columns_raw, row):
+                d[k] = "" if v is None else v
+            sample_rows.append(d)
+
+        # Missingness
+        n = con.execute("SELECT COUNT(*) FROM xl").fetchone()[0] or 0
+        missingness_top: list[dict[str, Any]] = []
+        if n > 0:
+            for col in columns_raw:
+                nmiss = con.execute(f"SELECT COUNT(*) FROM xl WHERE {col} IS NULL").fetchone()[0]
+                if nmiss > 0:
+                    missingness_top.append(
+                        {"column": col, "missing_pct": float(nmiss) / float(n) * 100.0}
+                    )
+        missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
+
+        con.close()
     except Exception as exc:
         return {
             "columns_raw": [],
@@ -311,36 +344,13 @@ def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[s
             "robust_read_suggested": True,
         }
 
-    # Normalize column names
-    columns_raw = list(df.columns)
-    columns_norm = [_normalize_colname(str(c)) for c in columns_raw]
-
-    # Sample rows
-    sample_rows = df.head(5).fillna("").to_dict(orient="records")
-
-    # Missingness
-    n = len(df)
-    missingness_top: list[dict[str, Any]] = []
-    if n > 0:
-        for col in columns_raw:
-            nmiss = int(df[col].isna().sum())
-            if nmiss > 0:
-                missingness_top.append(
-                    {"column": str(col), "missing_pct": float(nmiss) / float(n) * 100.0}
-                )
-    missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
-
-    # Mapping suggestions — no DuckDB types for Excel, use empty
-    mapping_suggestions: Dict[str, Any] = {}
-    duckdb_types: List[str] = []
-
     return {
         "columns_raw": columns_raw,
         "columns_norm": columns_norm,
         "duckdb_types": duckdb_types,
         "sample_rows": sample_rows,
         "missingness_top": missingness_top,
-        "mapping_suggestions": mapping_suggestions,
+        "mapping_suggestions": {},
         "warnings": [],
         "robust_read_suggested": False,
     }

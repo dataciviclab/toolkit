@@ -155,7 +155,7 @@ def batch(
     failures: list[dict[str, str]] = []
 
     _shared_probe_pool = None
-    if step == "probe":
+    if step in ("probe", "raw", "all"):
         from toolkit.core.probe import ProbePool
 
         _shared_probe_pool = ProbePool(workers=8, circuit_threshold=3)
@@ -202,6 +202,7 @@ def batch(
                                 logger=logger,
                                 sample_rows=sample_rows_final,
                                 sample_bytes=sample_bytes_final,
+                                probe_pool=_shared_probe_pool,
                             )
                         status = context.status
                     except Exception as exc:

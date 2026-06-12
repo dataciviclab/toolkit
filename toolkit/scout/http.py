@@ -83,9 +83,16 @@ class _AnchorParser(HTMLParser):
 
 
 def _mk_client(
-    *, timeout: int = DEFAULT_TIMEOUT, user_agent: str = DEFAULT_USER_AGENT
+    *,
+    timeout: int = DEFAULT_TIMEOUT,
+    user_agent: str = DEFAULT_USER_AGENT,
+    circuit_threshold: int = 0,
 ) -> HttpClient:
-    return HttpClient(timeout=timeout, user_agent=user_agent)
+    return HttpClient(
+        timeout=timeout,
+        user_agent=user_agent,
+        circuit_threshold=circuit_threshold,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -229,6 +236,7 @@ def probe_url_headers(
     timeout: int = DEFAULT_TIMEOUT,
     user_agent: str = DEFAULT_USER_AGENT,
     client: HttpClient | None = None,
+    circuit_threshold: int = 0,
 ) -> dict[str, Any]:
     """HEAD con retry, GET+Range fallback. Ritorna header info + reachability.
 
@@ -241,7 +249,9 @@ def probe_url_headers(
     Returns dict: requested_url, final_url, status_code, content_type,
                   content_disposition, method.
     """
-    client = client or _mk_client(timeout=timeout, user_agent=user_agent)
+    client = client or _mk_client(
+        timeout=timeout, user_agent=user_agent, circuit_threshold=circuit_threshold
+    )
     last_error: str | None = None
 
     # Tentativo HEAD con retry

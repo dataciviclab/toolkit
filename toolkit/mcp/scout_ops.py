@@ -51,6 +51,55 @@ def mcp_probe_url_headers(url: str, timeout: int = 15) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Preview URL (HEAD + Range GET + sniff + DuckDB profile + infer)
+# ---------------------------------------------------------------------------
+
+
+def mcp_preview_url(
+    url: str,
+    *,
+    known_encoding: str | None = None,
+    known_delim: str | None = None,
+    known_decimal: str | None = None,
+    known_skip: int | None = None,
+) -> dict[str, Any]:
+    """Preview remoto di un URL dati: reachability, colonne, tipi, anni, granularità.
+
+    Chiama ``toolkit.profile.preview.preview_url()`` che fa HEAD + Range GET
+    + sniff + DuckDB profile + infer in un colpo solo.
+
+    Args:
+        url: URL del file dati remoto.
+        known_encoding: Se già nota, salta sniff encoding.
+        known_delim: Se già noto, salta sniff delim.
+        known_decimal: Se già noto, salta sniff decimal.
+        known_skip: Se già noto, salta sniff skip.
+
+    Returns:
+        Dict con reachable, http_status, file_size, resource_format,
+        encoding_suggested, delim_suggested, decimal_suggested, skip_suggested,
+        columns, col_types, preview_row_count, mapping_suggestions,
+        robust_read_suggested, granularity, year_min, year_max.
+    """
+    from toolkit.profile.preview import preview_url as _preview_url
+
+    try:
+        return _preview_url(
+            url,
+            known_encoding=known_encoding,
+            known_delim=known_delim,
+            known_decimal=known_decimal,
+            known_skip=known_skip,
+        )
+    except Exception as exc:
+        return {
+            "url": url,
+            "reachable": False,
+            "error": f"preview failed: {type(exc).__name__}: {exc}",
+        }
+
+
+# ---------------------------------------------------------------------------
 # Topic inference
 # ---------------------------------------------------------------------------
 

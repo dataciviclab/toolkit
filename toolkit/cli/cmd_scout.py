@@ -789,5 +789,52 @@ def scout(
         typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
 
 
+# ── preview subcommand ──────────────────────────────────────────────────────
+
+
+def preview(
+    url: str = typer.Argument(..., help="URL del file dati remoto da profilare"),
+    json_output: bool = typer.Option(False, "--json", help="Output in formato JSON"),
+    known_encoding: str | None = typer.Option(
+        None, "--encoding", help="Encoding noto (salta sniff)"
+    ),
+    known_delim: str | None = typer.Option(None, "--delim", help="Delimiter noto (salta sniff)"),
+):
+    """
+    Preview remoto di un URL dati: scarica un chunk, profila con DuckDB,
+    e restituisce colonne, tipi, granularità e intervallo anni.
+
+    A differenza di ``toolkit scout`` (che fa probe + routing + scaffold),
+    questo comando fa HEAD + Range GET + sniff + DuckDB profile + infer
+    in un colpo solo. Utile per quality assessment pre-intake.
+    """
+    from toolkit.profile.preview import preview_url as _preview_url
+
+    result = _preview_url(url, known_encoding=known_encoding, known_delim=known_delim)
+
+    if json_output:
+        typer.echo(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        return
+
+    typer.echo(f"URL: {url}")
+    typer.echo(f"  Reachable:       {result.get('reachable')}")
+    typer.echo(f"  HTTP status:     {result.get('http_status')}")
+    typer.echo(f"  File size:       {result.get('file_size')}")
+    typer.echo(f"  Format:          {result.get('resource_format')}")
+    typer.echo(f"  Encoding:        {result.get('encoding_suggested')}")
+    typer.echo(f"  Delimiter:       {result.get('delim_suggested')}")
+    typer.echo(f"  Skip rows:       {result.get('skip_suggested')}")
+    typer.echo(f"  Granularity:     {result.get('granularity')}")
+    typer.echo(f"  Year range:      {result.get('year_min')} - {result.get('year_max')}")
+    typer.echo(f"  Row count:       {result.get('preview_row_count')}")
+    columns = result.get("columns")
+    if columns:
+        typer.echo(f"  Columns ({len(columns)}): {', '.join(str(c) for c in columns[:20])}")
+        if len(columns) > 20:
+            typer.echo(f"    ... and {len(columns) - 20} more")
+    typer.echo(f"  Enrich method:   {result.get('enrich_method')}")
+
+
 def register(app: typer.Typer) -> None:
     app.command("scout")(scout)
+    app.command("preview")(preview)

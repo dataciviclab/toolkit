@@ -37,6 +37,7 @@ from .toolkit_client import (
     mcp_infer_topic as infer_topic_impl,
     mcp_list_ckan_datasets as list_ckan_datasets_impl,
     mcp_list_sdmx_dataflows as list_sdmx_dataflows_impl,
+    mcp_preview_url as preview_url_impl,
     mcp_probe_url as probe_url_impl,
     mcp_probe_url_routed as probe_url_routed_impl,
     mcp_sparql_query as sparql_query_impl,
@@ -282,6 +283,30 @@ def toolkit_validate_config(config_path: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Scout tools
 # ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description="Preview remoto di un URL dati: reachability, colonne, tipi, anni, granularità. "
+    "FAST: HEAD + Range GET + sniff + DuckDB profile + infer in un colpo solo. "
+    "Rispetto a probe_url, scarica un chunk preview e lo profila con DuckDB.",
+    structured_output=True,
+)
+def toolkit_preview_url(
+    url: str,
+    known_encoding: str | None = None,
+    known_delim: str | None = None,
+    known_decimal: str | None = None,
+    known_skip: int | None = None,
+) -> dict[str, Any]:
+    return guard_timed(
+        preview_url_impl,
+        "toolkit_preview_url",
+        url,
+        known_encoding=known_encoding,
+        known_delim=known_delim,
+        known_decimal=known_decimal,
+        known_skip=known_skip,
+    )
 
 
 @mcp.tool(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -148,6 +149,8 @@ def _run_probe(cfg, year: int, logger) -> None:
     format detection) per output ricco come lo scout CLI.
     Non blocca mai — il vero errore arrivera' da raw.
     Salta local_file, sdmx, sparql (non timeoutano).
+    Le probe sono eseguite in parallelo con ThreadPoolExecutor
+    per evitare che timeout su fonti lente blocchino l'intero batch.
     """
     sources = cfg.raw.sources
     if not sources:
@@ -156,7 +159,7 @@ def _run_probe(cfg, year: int, logger) -> None:
 
     from toolkit.scout.http import probe_url_headers
 
-    for src in sources:
+    def _probe_one(src) -> None:
         stype = (
             getattr(src, "type", None) or src.get("type", "http_file")
             if isinstance(src, dict)
@@ -175,7 +178,7 @@ def _run_probe(cfg, year: int, logger) -> None:
         try:
             if stype in ("http_file", "http_post_file"):
                 if not url:
-                    continue
+                    return
                 probe = probe_url_headers(url, timeout=5)
                 sc = probe.get("status_code", 0)
                 if 200 <= sc < 400:
@@ -207,6 +210,11 @@ def _run_probe(cfg, year: int, logger) -> None:
 
         except RuntimeError as exc:
             logger.warning("PROBE | %s -> unreachable: %s", name, exc)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(_probe_one, src): src for src in sources}
+        for future in as_completed(futures):
+            future.result()  # ripropaga eccezioni inaspettate (RuntimeError gia' catturate)
 
 
 def run_year(

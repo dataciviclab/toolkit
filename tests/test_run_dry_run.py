@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 
 import duckdb
@@ -596,4 +597,40 @@ def test_probe_logs_ckan_portal(monkeypatch) -> None:
     assert len(calls) == 1
     assert "ckan.test/api/3/action" in calls[0], (
         "should probe the full portal_url, not just scheme://host"
+    )
+
+
+@pytest.mark.policy
+def test_probe_parallel_execution(monkeypatch) -> None:
+    """Probe step esegue fonti multiple in parallelo, non in serie.
+
+    Con 3 fonti che impiegano 0.5s ciascuna, il tempo totale deve
+    essere minore di 3 * 0.5 = 1.5s (prova di parallelismo).
+    """
+    DELAY = 0.5
+
+    def _delayed_probe(url, timeout=5):
+        time.sleep(DELAY)
+        return {"status_code": 200, "content_type": "text/csv"}
+
+    monkeypatch.setattr(
+        "toolkit.scout.http.probe_url_headers",
+        _delayed_probe,
+    )
+    from toolkit.cli.cmd_run import _run_probe
+
+    sources = [
+        {"name": "s1", "type": "http_file", "args": {"url": f"https://src{i}.test/data.csv"}}
+        for i in range(3)
+    ]
+
+    start = time.perf_counter()
+    _run_probe(_FakeCfg(sources), 2024, logging.getLogger("t"))
+    elapsed = time.perf_counter() - start
+
+    # Se fosse seriale: 3 * 0.5 = 1.5s + overhead
+    # Con parallelismo: ~0.5s + overhead
+    assert elapsed < 1.2, (
+        f"Troppo lento ({elapsed:.2f}s): le probe sembrano sequenziali. "
+        f"Atteso < 1.2s per 3 fonti da {DELAY}s ciascuna."
     )

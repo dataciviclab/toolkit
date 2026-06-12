@@ -789,5 +789,52 @@ def scout(
         typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
 
 
+# ── preview subcommand ──────────────────────────────────────────────────────
+
+
+def preview(
+    url: str = typer.Argument(..., help="URL del file dati remoto da profilare"),
+    json_output: bool = typer.Option(False, "--json", help="Output in formato JSON"),
+    known_encoding: str | None = typer.Option(
+        None, "--encoding", help="Encoding noto (salta sniff)"
+    ),
+    known_delim: str | None = typer.Option(None, "--delim", help="Delimiter noto (salta sniff)"),
+):
+    """
+    Preview remoto di un URL CSV/TSV: scarica un chunk, profila con DuckDB,
+    e restituisce colonne, tipi, granularità e intervallo anni.
+
+    Solo CSV/TSV per ora. Usa ``toolkit scout <URL>`` per probe generico.
+    """
+    from dataclasses import asdict
+
+    from toolkit.profile.preview import preview_url as _preview_url
+
+    result = _preview_url(url, known_encoding=known_encoding, known_delim=known_delim)
+
+    if json_output:
+        typer.echo(json.dumps(asdict(result), indent=2, ensure_ascii=False, default=str))
+        return
+
+    typer.echo(f"URL: {url}")
+    typer.echo(f"  Status:          {result.status}")
+    typer.echo(f"  Reachable:       {result.reachable}")
+    typer.echo(f"  HTTP status:     {result.http_status}")
+    typer.echo(f"  File size:       {result.file_size}")
+    typer.echo(f"  Format:          {result.resource_format}")
+    typer.echo(f"  Encoding:        {result.encoding_suggested}")
+    typer.echo(f"  Delimiter:       {result.delim_suggested}")
+    typer.echo(f"  Skip rows:       {result.skip_suggested}")
+    typer.echo(f"  Granularity:     {result.granularity}")
+    typer.echo(f"  Year range:      {result.year_min} - {result.year_max}")
+    typer.echo(f"  Row count:       {result.preview_row_count}")
+    if result.columns:
+        cols = result.columns
+        typer.echo(f"  Columns ({len(cols)}): {', '.join(str(c) for c in cols[:20])}")
+        if len(cols) > 20:
+            typer.echo(f"    ... and {len(cols) - 20} more")
+
+
 def register(app: typer.Typer) -> None:
     app.command("scout")(scout)
+    app.command("preview")(preview)

@@ -59,8 +59,10 @@ def test_plugins_exports() -> None:
 
 def test_profile_exports() -> None:
     assert profile_pkg.__all__ == [
+        "PreviewResult",
         "RawProfile",
         "build_suggested_read_cfg",
+        "preview_url",
         "profile_excel",
         "profile_raw",
         "profile_with_read_cfg",
@@ -69,6 +71,8 @@ def test_profile_exports() -> None:
         "write_suggested_read_yml",
     ]
     assert RawProfile.__name__ == "RawProfile"
+    assert profile_pkg.PreviewResult.__name__ == "PreviewResult"
+    assert callable(profile_pkg.preview_url)
     assert callable(profile_raw)
     assert callable(profile_with_read_cfg)
     assert callable(profile_excel)

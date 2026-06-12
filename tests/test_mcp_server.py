@@ -38,6 +38,7 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_list_ckan_datasets",
         "toolkit_list_sdmx_dataflows",
         "toolkit_sparql_query",
+        "toolkit_preview_url",
         "toolkit_validate_config",
     }
 

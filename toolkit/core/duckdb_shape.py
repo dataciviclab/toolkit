@@ -15,9 +15,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-import duckdb
-
-from lab_connectors.duckdb import gcs_connect
+from lab_connectors.duckdb import gcs_connect, safe_connect
 from toolkit.core.sql_utils import sql_literal
 
 
@@ -88,8 +86,7 @@ def csv_quick_shape(csv_path: str | Path) -> dict[str, Any]:
     if not path.exists():
         return {}
     try:
-        with duckdb.connect(database=":memory:") as conn:
-            conn.execute("PRAGMA disable_progress_bar")
+        with safe_connect() as conn:
             rel = f"read_csv_auto('{sql_literal(str(path))}', auto_detect=true)"
             describe = conn.execute(f"DESCRIBE SELECT * FROM {rel}").fetchall()
             col_count = len(describe)
@@ -118,7 +115,6 @@ def parquet_schema(path: Path) -> list[dict[str, str]]:
         return []
     try:
         with _parquet_connect(path) as con:
-            con.execute("PRAGMA disable_progress_bar")
             rows = con.execute(f"DESCRIBE SELECT * FROM {_rel(path)}").fetchall()
             return [{"name": str(r[0]), "type": str(r[1])} for r in rows]
     except Exception:
@@ -137,7 +133,6 @@ def parquet_row_count(path: Path) -> int | None:
         return None
     try:
         with _parquet_connect(path) as con:
-            con.execute("PRAGMA disable_progress_bar")
             result = con.execute(f"SELECT COUNT(*) FROM {_rel(path)}").fetchone()
             return int(result[0]) if result else None
     except Exception:
@@ -191,8 +186,6 @@ def parquet_preview(
 
     try:
         with _parquet_connect(path) as con:
-            con.execute("PRAGMA disable_progress_bar")
-
             if sql is not None:
                 # Registra il parquet come vista 'data' per query naturali
                 con.execute(f"CREATE OR REPLACE VIEW data AS SELECT * FROM {_rel(path)}")

@@ -333,6 +333,7 @@ def run_year(
     sampling_active = smoke or sample_rows is not None or sample_bytes is not None
 
     if "clean" in layers_to_run and not _is_mart_only_cfg(cfg):
+        raw_sources = dump_cfg_section(cfg.raw).get("sources", [])
         if not _execute_layer(
             "clean",
             run_clean,
@@ -346,6 +347,7 @@ def run_year(
             source_id=source_id,
             support_cfg=dump_cfg_section(cfg.support),
             smoke=sampling_active,
+            raw_sources=raw_sources,
         ):
             # CLEAN fallito: skip mart per evitare output stale
             layers_to_run = [layer for layer in layers_to_run if layer != "mart"]

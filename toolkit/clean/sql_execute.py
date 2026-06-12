@@ -13,6 +13,7 @@ from typing import Any
 from lab_connectors.duckdb import safe_connect
 
 from toolkit.core.duckdb_read import read_raw_to_relation
+from toolkit.core.input_file import RawInputFile
 from toolkit.core.layer_profile import profile_relation
 from toolkit.core.sql_utils import sql_path
 
@@ -27,7 +28,7 @@ def _normalize_output_profile(output_profile: dict[str, Any] | int) -> dict[str,
 
 
 def _run_sql(
-    input_files: list[Path],
+    input_files: list[RawInputFile],
     sql_query: str,
     output_path: Path,
     *,

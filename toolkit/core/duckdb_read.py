@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import duckdb
+from toolkit.core.input_file import RawInputFile
 from toolkit.core.read_csv_normalized import _execute_normalized_csv_read
 from toolkit.core.read_excel import _execute_excel_read
 from toolkit.core.read_sql_utils import (
@@ -116,18 +118,56 @@ def _csv_read_options(
     return opts, params_used, source_columns
 
 
+def _sql_escape(val: str) -> str:
+    """Escape a string literal for safe embedding in SQL."""
+    return val.replace("'", "''")
+
+
+def _build_inject_expressions(
+    input_files: list[RawInputFile],
+    all_inject_cols: dict[str, dict[str, str]] | None = None,
+) -> tuple[list[str], set[str]]:
+    """Build CASE expressions for inject_column and return (expressions, column_names)."""
+    if all_inject_cols is None:
+        all_inject_cols = _collect_inject_columns(input_files)
+    if not all_inject_cols:
+        return [], set()
+
+    inject_exprs: list[str] = []
+    for col_name, file_values in all_inject_cols.items():
+        whens = " ".join(
+            f"WHEN filename LIKE '%{fname}' THEN '{_sql_escape(val)}'"
+            for fname, val in file_values.items()
+        )
+        inject_exprs.append(f"CASE {whens} END AS {q_ident(col_name)}")
+    return inject_exprs, set(all_inject_cols.keys())
+
+
+def _collect_inject_columns(input_files: list[RawInputFile]) -> dict[str, dict[str, str]]:
+    """Collect all inject_column configs: {col_name: {filename: value}}."""
+    all_inject_cols: dict[str, dict[str, str]] = {}
+    for f in input_files:
+        if f.inject_column:
+            for col_name, col_value in f.inject_column.items():
+                all_inject_cols.setdefault(col_name, {})[f.path.name] = col_value
+    return all_inject_cols
+
+
 def _execute_csv_read(
     con: duckdb.DuckDBPyConnection,
-    input_files: list[Path],
+    input_files: list[RawInputFile],
     read_cfg: dict[str, Any],
 ) -> dict[str, Any]:
     if read_cfg.get("normalize_rows_to_columns"):
-        return _execute_normalized_csv_read(con, input_files, read_cfg)
+        return _execute_normalized_csv_read(con, [f.path for f in input_files], read_cfg)
 
     if read_cfg.get("align_by_header"):
         raise ValueError("align_by_header=true requires normalize_rows_to_columns=true")
 
-    paths = quote_list(input_files)
+    has_inject = any(f.inject_column for f in input_files)
+    all_inject_cols = _collect_inject_columns(input_files) if has_inject else {}
+    raw_paths = [f.path for f in input_files]
+    paths = quote_list(raw_paths)
     trim_whitespace = read_cfg.get("trim_whitespace", True)
     sample_size = read_cfg.get("sample_size")
 
@@ -141,20 +181,22 @@ def _execute_csv_read(
         opts.append(f"sample_size={int(sample_size)}")
         params_used["sample_size"] = int(sample_size)
 
+    # Build inject CASE expressions if needed
+    inject_exprs, inject_names = _build_inject_expressions(input_files, all_inject_cols)
+    if inject_exprs:
+        opts.append("filename=true")
+
     opt_sql = ", ".join(opts)
+    inject_sql = ", " + ", ".join(inject_exprs) if inject_exprs else ""
+
     if source_columns:
         con.execute(
             f"CREATE OR REPLACE VIEW raw_input_source AS "
-            f"SELECT * FROM read_csv([{paths}], {opt_sql});"
+            f"SELECT *{inject_sql} FROM read_csv([{paths}], {opt_sql});"
         )
         if trim_whitespace:
-            # original_columns may be None if no columns key; in that case
-            # use source_columns (the already-parsed dict with types only).
             projection = csv_trim_projection(original_columns or source_columns)
         else:
-            # Even without trim, we must apply the clean-name rename from
-            # compact format (original_columns). Build "raw_name AS clean_name"
-            # for each column that has a rename.
             parts = []
             for raw_name in source_columns:
                 value = original_columns.get(raw_name) if original_columns else None
@@ -167,29 +209,80 @@ def _execute_csv_read(
                 else:
                     parts.append(q_ident(raw_name))
             projection = ", ".join(parts)
+        # Add inject column names to the projection
+        inject_projection = ", ".join(q_ident(name) for name in inject_names)
+        full_projection = projection
+        if inject_projection:
+            full_projection = f"{projection}, {inject_projection}"
         con.execute(
-            f"CREATE OR REPLACE VIEW raw_input AS SELECT {projection} FROM raw_input_source;"
+            f"CREATE OR REPLACE VIEW raw_input AS SELECT {full_projection} FROM raw_input_source;"
         )
     else:
         con.execute(
-            f"CREATE OR REPLACE VIEW raw_input AS SELECT * FROM read_csv([{paths}], {opt_sql});"
+            f"CREATE OR REPLACE VIEW raw_input AS SELECT *{inject_sql} FROM read_csv([{paths}], {opt_sql});"
         )
     params_used["trim_whitespace"] = bool(trim_whitespace)
+    if inject_exprs:
+        params_used["inject_column"] = {name: dict(vals) for name, vals in all_inject_cols.items()}
     return params_used
 
 
 def _execute_parquet_read(
     con: duckdb.DuckDBPyConnection,
-    input_files: list[Path],
+    input_files: list[RawInputFile],
 ) -> ReadInfo:
-    if len(input_files) == 1:
-        con.execute(
-            f"CREATE VIEW raw_input AS SELECT * FROM read_parquet('{sql_path(input_files[0])}');"
+    has_inject = any(f.inject_column for f in input_files)
+    raw_paths = [f.path for f in input_files]
+
+    if not has_inject:
+        if len(raw_paths) == 1:
+            con.execute(
+                f"CREATE VIEW raw_input AS SELECT * FROM read_parquet('{sql_path(raw_paths[0])}');"
+            )
+        else:
+            paths_sql = quote_list(raw_paths)
+            con.execute(f"CREATE VIEW raw_input AS SELECT * FROM read_parquet([{paths_sql}]);")
+        return ReadInfo(source="parquet", params_used={})
+
+    # Build UNION ALL subqueries with inject_column
+    all_inject_names: set[str] = set()
+    for f in input_files:
+        if f.inject_column:
+            all_inject_names.update(f.inject_column.keys())
+
+    parts: list[str] = []
+    for f in input_files:
+        path_sql = sql_path(f.path)
+        # Columns injected by this specific source
+        local_inject = ", ".join(
+            f"'{_sql_escape(v)}' AS {q_ident(k)}" for k, v in (f.inject_column or {}).items()
         )
-    else:
-        paths = quote_list(input_files)
-        con.execute(f"CREATE VIEW raw_input AS SELECT * FROM read_parquet([{paths}]);")
-    return ReadInfo(source="parquet", params_used={})
+        # NULL columns for inject columns this source doesn't have
+        null_inject = ", ".join(
+            f"NULL::VARCHAR AS {q_ident(name)}"
+            for name in sorted(all_inject_names)
+            if not f.inject_column or name not in f.inject_column
+        )
+        extra = ", ".join(filter(None, [local_inject, null_inject]))
+        if extra:
+            parts.append(f"SELECT *, {extra} FROM read_parquet('{path_sql}')")
+        else:
+            parts.append(f"SELECT * FROM read_parquet('{path_sql}')")
+
+    union_sql = " UNION ALL ".join(parts)
+    con.execute(f"CREATE VIEW raw_input AS {union_sql};")
+
+    params: dict[str, Any] = {
+        "inject_column": {
+            name: {
+                f.path.name: f.inject_column[name]
+                for f in input_files
+                if f.inject_column and name in f.inject_column
+            }
+            for name in sorted(all_inject_names)
+        }
+    }
+    return ReadInfo(source="parquet", params_used=params)
 
 
 def _validate_read_mode(mode: str) -> str:
@@ -215,7 +308,7 @@ def _read_failure_message(
 
 def _execute_csv_mode(
     con: duckdb.DuckDBPyConnection,
-    input_files: list[Path],
+    input_files: list[RawInputFile],
     read_cfg: dict[str, Any],
     *,
     source: str,
@@ -232,7 +325,7 @@ def _execute_csv_mode(
 
 def _read_csv_relation(
     con: duckdb.DuckDBPyConnection,
-    input_files: list[Path],
+    input_files: list[RawInputFile],
     read_cfg: dict[str, Any],
     *,
     mode: str,
@@ -258,7 +351,7 @@ def _read_csv_relation(
     except Exception as exc:
         if mode == "strict":
             raise ValueError(
-                _read_failure_message(input_file=input_files[0], read_cfg=read_cfg)
+                _read_failure_message(input_file=input_files[0].path, read_cfg=read_cfg)
             ) from exc
 
         short_msg = f"{type(exc).__name__}: {exc}"
@@ -295,25 +388,25 @@ def _read_csv_relation(
                     robust_ignore_errors,
                     strict_null_padding,
                     strict_ignore_errors,
-                    input_files[0],
+                    input_files[0].path,
                     short_msg,
                 )
             else:
                 logger.info(
                     "strict read failed, robust succeeded | input=%s exc=%s",
-                    input_files[0],
+                    input_files[0].path,
                     short_msg,
                 )
             return result
         except Exception as robust_exc:
             raise ValueError(
-                _read_failure_message(input_file=input_files[0], read_cfg=robust_cfg)
+                _read_failure_message(input_file=input_files[0].path, read_cfg=robust_cfg)
             ) from robust_exc
 
 
 def read_raw_to_relation(
     con: duckdb.DuckDBPyConnection,
-    input_files: list[Path],
+    input_files: Sequence[Path | RawInputFile],
     params: dict[str, Any] | None,
     mode: str,
     logger,
@@ -325,19 +418,29 @@ def read_raw_to_relation(
             f"(expected one of: {sorted(SUPPORTED_INPUT_EXTS)})."
         )
 
-    exts = {p.suffix.lower() for p in input_files}
+    # Normalize: convert plain Path to RawInputFile for backward compat
+    normalized: list[RawInputFile] = []
+    for f in input_files:
+        if isinstance(f, RawInputFile):
+            normalized.append(f)
+        elif isinstance(f, Path):
+            normalized.append(RawInputFile(path=f))
+        else:
+            raise TypeError(f"Expected Path or RawInputFile, got {type(f)}")
+
+    exts = {f.path.suffix.lower() for f in normalized}
     if exts <= {".parquet"}:
-        info = _execute_parquet_read(con, input_files)
+        info = _execute_parquet_read(con, normalized)
         logger.info("read_csv params used: source=parquet params={}")
         return info
     if exts <= {".xlsx", ".xls"}:
-        result = _execute_excel_read(con, input_files, read_cfg, logger=logger)
+        result = _execute_excel_read(con, [f.path for f in normalized], read_cfg, logger=logger)
         return ReadInfo(source=result["source"], params_used=result["params_used"])
 
     normalized_mode = _validate_read_mode(mode)
     return _read_csv_relation(
         con,
-        input_files,
+        normalized,
         read_cfg,
         mode=normalized_mode,
         logger=logger,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -142,79 +141,96 @@ def _probe_fmt(content_type: str | None) -> str:
     return _PROBE_FORMATS.get(base, base)
 
 
-def _run_probe(cfg, year: int, logger) -> None:
+def _run_probe(cfg, year: int, logger, pool=None) -> None:
     """Passo probe della pipeline: verifica raggiungibilita' fonti remote.
 
     Riutilizza probe_url_routed dello scout (routing automatico,
     format detection) per output ricco come lo scout CLI.
     Non blocca mai — il vero errore arrivera' da raw.
     Salta local_file, sdmx, sparql (non timeoutano).
-    Le probe sono eseguite in parallelo con ThreadPoolExecutor
-    per evitare che timeout su fonti lente blocchino l'intero batch.
+    Le probe sono eseguite in parallelo con ProbePool
+    (ThreadPoolExecutor + HttpClient con circuit breaker opzionale).
+
+    Args:
+        cfg: Config del dataset.
+        year: Anno da processare.
+        logger: Logger.
+        pool: ProbePool opzionale. Se fornito, riutilizza lo stesso
+            pool tra anni/config (utile per batch — il circuit breaker
+            mantiene lo stato tra le probe). Se None, ne crea uno nuovo.
     """
     sources = cfg.raw.sources
     if not sources:
         logger.info("PROBE | nessuna fonte remota da verificare")
         return
 
-    from toolkit.scout.http import probe_url_headers
+    from toolkit.core.probe import ProbePool
 
-    def _probe_one(src) -> None:
-        stype = (
-            getattr(src, "type", None) or src.get("type", "http_file")
-            if isinstance(src, dict)
-            else src.type
-        )
-        args = (
-            getattr(src, "args", None) or src.get("args", {}) if isinstance(src, dict) else src.args
-        )
-        name = (
-            getattr(src, "name", None) or src.get("name", stype)
-            if isinstance(src, dict)
-            else (src.name or stype)
-        )
-        url = (args.get("url") or "").replace("{year}", str(year))
+    _own_pool = pool is None
+    pool = pool or ProbePool(workers=8, circuit_threshold=3)
 
-        try:
+    try:
+        futures = []
+
+        def _parse_and_submit(src) -> None:
+            stype = (
+                getattr(src, "type", None) or src.get("type", "http_file")
+                if isinstance(src, dict)
+                else src.type
+            )
+            args = (
+                getattr(src, "args", None) or src.get("args", {})
+                if isinstance(src, dict)
+                else src.args
+            )
+            name = (
+                getattr(src, "name", None) or src.get("name", stype)
+                if isinstance(src, dict)
+                else (src.name or stype)
+            )
+
             if stype in ("http_file", "http_post_file"):
-                if not url:
-                    return
-                probe = probe_url_headers(url, timeout=5)
-                sc = probe.get("status_code", 0)
-                if 200 <= sc < 400:
-                    logger.info(
-                        "PROBE | %s -> HTTP %s (%s)",
-                        name,
-                        sc,
-                        _probe_fmt(probe.get("content_type")),
-                    )
-                else:
-                    logger.warning("PROBE | %s -> HTTP %s %s", name, sc or "ERR", url)
-
+                url = (args.get("url") or "").replace("{year}", str(year))
+                if url:
+                    futures.append(pool.submit(url, dataset=name))
             elif stype == "ckan":
                 portal = (args.get("portal_url") or "").replace("{year}", str(year))
                 if portal:
-                    probe = probe_url_headers(portal, timeout=5)
-                    sc = probe.get("status_code", 0)
-                    if 200 <= sc < 400:
-                        logger.info(
-                            "PROBE | %s CKAN -> HTTP %s (%s)",
-                            name,
-                            sc,
-                            probe.get("final_url", portal),
-                        )
-                    else:
-                        logger.warning(
-                            "PROBE | %s CKAN -> HTTP %s at %s", name, sc or "ERR", portal
-                        )
+                    futures.append(pool.submit(portal, dataset=name))
 
-        except RuntimeError as exc:
-            logger.warning("PROBE | %s -> unreachable: %s", name, exc)
+        for src in sources:
+            _parse_and_submit(src)
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        futures = {pool.submit(_probe_one, src): src for src in sources}
-        for future in as_completed(futures):
-            future.result()  # ripropaga eccezioni inaspettate (RuntimeError gia' catturate)
+        for result in pool.as_completed(futures):
+            if result.reachable:
+                logger.info(
+                    "PROBE | %s -> HTTP %s (%s)",
+                    result.dataset,
+                    result.status_code,
+                    _probe_fmt(result.content_type),
+                )
+            elif result.circuit_open:
+                logger.warning(
+                    "PROBE | %s -> CIRCUIT OPEN (%s)",
+                    result.dataset,
+                    result.error,
+                )
+            elif result.error:
+                logger.warning(
+                    "PROBE | %s -> unreachable: %s",
+                    result.dataset,
+                    result.error,
+                )
+            elif not result.reachable and result.status_code:
+                logger.warning(
+                    "PROBE | %s -> HTTP %s %s",
+                    result.dataset,
+                    result.status_code,
+                    result.url,
+                )
+    finally:
+        if _own_pool:
+            pool.close()
 
 
 def run_year(
@@ -229,6 +245,7 @@ def run_year(
     sample_rows: int | None = None,
     sample_bytes: int | None = None,
     smoke: bool = False,
+    probe_pool=None,
 ) -> RunContext:
     if logger is None:
         logger = get_logger()
@@ -315,7 +332,7 @@ def run_year(
     source_id = cfg.source_id
 
     if "probe" in layers_to_run and not dry_run:
-        _run_probe(cfg, year, base_logger)
+        _run_probe(cfg, year, base_logger, pool=probe_pool)
 
     if "raw" in layers_to_run:
         if not _execute_layer(

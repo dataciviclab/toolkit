@@ -286,9 +286,9 @@ def toolkit_validate_config(config_path: str) -> dict[str, Any]:
 
 
 @mcp.tool(
-    description="Preview remoto di un URL dati: reachability, colonne, tipi, anni, granularità. "
-    "FAST: HEAD + Range GET + sniff + DuckDB profile + infer in un colpo solo. "
-    "Rispetto a probe_url, scarica un chunk preview e lo profila con DuckDB.",
+    description="Preview remoto di un URL CSV/TSV: colonne, tipi, granularità, anni. "
+    "HEAD + Range GET + sniff + DuckDB profile + infer in un colpo solo. "
+    "Solo CSV/TSV. Usa toolkit_probe_url per probe generico.",
     structured_output=True,
 )
 def toolkit_preview_url(

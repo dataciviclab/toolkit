@@ -801,38 +801,38 @@ def preview(
     known_delim: str | None = typer.Option(None, "--delim", help="Delimiter noto (salta sniff)"),
 ):
     """
-    Preview remoto di un URL dati: scarica un chunk, profila con DuckDB,
+    Preview remoto di un URL CSV/TSV: scarica un chunk, profila con DuckDB,
     e restituisce colonne, tipi, granularità e intervallo anni.
 
-    A differenza di ``toolkit scout`` (che fa probe + routing + scaffold),
-    questo comando fa HEAD + Range GET + sniff + DuckDB profile + infer
-    in un colpo solo. Utile per quality assessment pre-intake.
+    Solo CSV/TSV per ora. Usa ``toolkit scout <URL>`` per probe generico.
     """
+    from dataclasses import asdict
+
     from toolkit.profile.preview import preview_url as _preview_url
 
     result = _preview_url(url, known_encoding=known_encoding, known_delim=known_delim)
 
     if json_output:
-        typer.echo(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        typer.echo(json.dumps(asdict(result), indent=2, ensure_ascii=False, default=str))
         return
 
     typer.echo(f"URL: {url}")
-    typer.echo(f"  Reachable:       {result.get('reachable')}")
-    typer.echo(f"  HTTP status:     {result.get('http_status')}")
-    typer.echo(f"  File size:       {result.get('file_size')}")
-    typer.echo(f"  Format:          {result.get('resource_format')}")
-    typer.echo(f"  Encoding:        {result.get('encoding_suggested')}")
-    typer.echo(f"  Delimiter:       {result.get('delim_suggested')}")
-    typer.echo(f"  Skip rows:       {result.get('skip_suggested')}")
-    typer.echo(f"  Granularity:     {result.get('granularity')}")
-    typer.echo(f"  Year range:      {result.get('year_min')} - {result.get('year_max')}")
-    typer.echo(f"  Row count:       {result.get('preview_row_count')}")
-    columns = result.get("columns")
-    if columns:
-        typer.echo(f"  Columns ({len(columns)}): {', '.join(str(c) for c in columns[:20])}")
-        if len(columns) > 20:
-            typer.echo(f"    ... and {len(columns) - 20} more")
-    typer.echo(f"  Enrich method:   {result.get('enrich_method')}")
+    typer.echo(f"  Status:          {result.status}")
+    typer.echo(f"  Reachable:       {result.reachable}")
+    typer.echo(f"  HTTP status:     {result.http_status}")
+    typer.echo(f"  File size:       {result.file_size}")
+    typer.echo(f"  Format:          {result.resource_format}")
+    typer.echo(f"  Encoding:        {result.encoding_suggested}")
+    typer.echo(f"  Delimiter:       {result.delim_suggested}")
+    typer.echo(f"  Skip rows:       {result.skip_suggested}")
+    typer.echo(f"  Granularity:     {result.granularity}")
+    typer.echo(f"  Year range:      {result.year_min} - {result.year_max}")
+    typer.echo(f"  Row count:       {result.preview_row_count}")
+    if result.columns:
+        cols = result.columns
+        typer.echo(f"  Columns ({len(cols)}): {', '.join(str(c) for c in cols[:20])}")
+        if len(cols) > 20:
+            typer.echo(f"    ... and {len(cols) - 20} more")
 
 
 def register(app: typer.Typer) -> None:

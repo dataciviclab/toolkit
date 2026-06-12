@@ -362,59 +362,84 @@ def fetch_content(
     user_agent: str = DEFAULT_USER_AGENT,
     client: HttpClient | None = None,
 ) -> dict[str, Any]:
-    """GET con Range header, fallback a GET streaming bounded se Range non supportato.
+    """GET bounded: Range header + fallback streaming, mai oltre ``max_bytes``.
+
+    Tutti i GET usano ``stream=True``: se il server ignora ``Range`` e risponde
+    con ``200`` (full body), ``iter_content`` legge solo ``max_bytes`` e chiude.
+    Nessun rischio di caricare file interi in memoria.
 
     Args:
         url: URL da scaricare.
-        max_bytes: Dimensione massima in bytes — letto al massimo questo.
+        max_bytes: Dimensione massima in bytes.
         timeout: Timeout HTTP (ignorato se client è fornito).
         user_agent: User-Agent (ignorato se client è fornito).
         client: HttpClient opzionale.
 
-    Returns dict: content (bytes), content_type, status_code, final_url, method.
+    Returns dict: content (bytes), content_type, status_code, final_url, method,
+                  content_length (int | None su 206 da Content-Range).
 
     Raises:
         RuntimeError: se la GET fallisce o non ritorna contenuto.
     """
     client = client or _mk_client(timeout=timeout, user_agent=user_agent)
 
-    # Tentativo con Range
-    range_result = client.get(url, headers={"Range": f"bytes=0-{max_bytes - 1}"})
+    def _read_bounded(resp: Any, max_b: int) -> bytes:
+        """Legge al massimo max_b bytes da una risposta streaming."""
+        chunks: list[bytes] = []
+        total = 0
+        for chunk in resp.iter_content(chunk_size=65536):
+            if chunk:
+                remaining = max_b - total
+                if remaining <= 0:
+                    break
+                chunks.append(chunk[:remaining])
+                total += len(chunks[-1])
+        return b"".join(chunks)
+
+    def _parse_content_range(resp: Any) -> int | None:
+        """Estrae la dimensione totale del file da Content-Range (es. ``bytes 0-0/123456``)."""
+        cr = resp.headers.get("Content-Range", "")
+        if cr and "/" in cr:
+            total_str = cr.split("/")[-1].strip()
+            if total_str.isdigit():
+                return int(total_str)
+        return None
+
+    # Tentativo con Range — usa stream=True, cosi' anche se il server ignora
+    # il Range e risponde 200, leggiamo solo max_bytes.
+    range_result = client.get(url, headers={"Range": f"bytes=0-{max_bytes - 1}"}, stream=True)
     if range_result.is_ok and range_result.response is not None:
         resp = range_result.response
-        if resp.status_code in (206, 200) and resp.content:
-            content = resp.content[:max_bytes]
-            return {
-                "content": content,
-                "content_type": resp.headers.get("Content-Type"),
-                "status_code": resp.status_code,
-                "final_url": resp.url,
-                "method": "range" if resp.status_code == 206 else "full",
-            }
+        if resp.status_code in (206, 200):
+            content = _read_bounded(resp, max_bytes)
+            if content:
+                # Su 206 il Content-Length e' la dimensione del chunk.
+                # La dimensione reale del file arriva da Content-Range.
+                file_size = _parse_content_range(resp) if resp.status_code == 206 else None
+                return {
+                    "content": content,
+                    "content_type": resp.headers.get("Content-Type"),
+                    "status_code": resp.status_code,
+                    "final_url": resp.url,
+                    "method": "range" if resp.status_code == 206 else "full",
+                    "content_length": file_size,
+                }
 
-    # Range fallito → GET streaming bounded: non scarica mai oltre max_bytes.
-    # Usa stream=True + iter_content per evitare che requests carichi tutto in memoria.
+    # Range fallito → GET streaming bounded
     full_result = client.get(url, stream=True)
     if full_result.is_ok and full_result.response is not None:
         resp = full_result.response
         if resp.status_code < 400:
-            chunks: list[bytes] = []
-            total = 0
-            for chunk in resp.iter_content(chunk_size=65536):
-                if chunk:
-                    remaining = max_bytes - total
-                    if remaining <= 0:
-                        break
-                    chunks.append(chunk[:remaining])
-                    total += len(chunks[-1])
-            content = b"".join(chunks)
-            return {
-                "content": content,
-                "content_type": resp.headers.get("Content-Type"),
-                "status_code": resp.status_code,
-                "final_url": resp.url,
-                "method": "full",
-            }
+            content = _read_bounded(resp, max_bytes)
+            if content:
+                return {
+                    "content": content,
+                    "content_type": resp.headers.get("Content-Type"),
+                    "status_code": resp.status_code,
+                    "final_url": resp.url,
+                    "method": "full",
+                    "content_length": None,
+                }
 
     raise RuntimeError(f"GET failed for {url}")
 

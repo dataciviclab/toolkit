@@ -94,9 +94,7 @@ def _extract_years_from_columns(columns: list[str]) -> tuple[int | None, int | N
     return (min(vals), max(vals)) if vals else (None, None)
 
 
-def extract_year_values_from_sample(
-    sample: list[dict], columns: list[str]
-) -> list[int]:
+def extract_year_values_from_sample(sample: list[dict], columns: list[str]) -> list[int]:
     """Estrae anni da sample rows (valori 1900-2100 in colonne numeriche)."""
     if not sample:
         return []
@@ -191,14 +189,17 @@ def preview_url(
             fetched = fetch_content(url, client=client, max_bytes=1024 * 1024)
         except RuntimeError:
             return PreviewResult(
-                url=url, status="download_failed", reachable=reachable,
-                http_status=http_status, resource_format=fmt.upper(),
+                url=url,
+                status="download_failed",
+                reachable=reachable,
+                http_status=http_status,
+                resource_format=fmt.upper(),
             )
 
         content: bytes = fetched["content"]
-        content_file_size = len(content)
-
-        # Content-Length incerto su Range — usiamo la lunghezza reale
+        # Content-Length da fetch_content: su 206 con Content-Range e' la
+        # dimensione reale del file; altrimenti la lunghezza del chunk.
+        content_file_size = fetched.get("content_length") or len(content)
         if not file_size:
             file_size = content_file_size
 
@@ -248,11 +249,16 @@ def preview_url(
             except Exception as exc:
                 logger.warning("DuckDB profile failed for %s: %s", url, exc)
                 return PreviewResult(
-                    url=url, status="profile_failed", reachable=reachable,
-                    http_status=http_status, file_size=file_size,
+                    url=url,
+                    status="profile_failed",
+                    reachable=reachable,
+                    http_status=http_status,
+                    file_size=file_size,
                     resource_format=fmt.upper(),
-                    encoding_suggested=enc, delim_suggested=delim,
-                    decimal_suggested=dec, skip_suggested=skip,
+                    encoding_suggested=enc,
+                    delim_suggested=delim,
+                    decimal_suggested=dec,
+                    skip_suggested=skip,
                 )
 
             columns_raw = profile.get("columns_raw", [])
@@ -265,9 +271,9 @@ def preview_url(
             robust_read_suggested = profile.get("robust_read_suggested", False)
 
             # ── 6. Infer ─────────────────────────────────────────────────────
-            combined = " ".join(
-                c.lower().replace("_", " ") for c in columns_raw
-            ) if columns_raw else ""
+            combined = (
+                " ".join(c.lower().replace("_", " ") for c in columns_raw) if columns_raw else ""
+            )
             granularity = infer_granularity(combined)
 
             year_min, year_max = _extract_years_from_columns(columns_raw)

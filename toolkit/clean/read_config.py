@@ -142,23 +142,43 @@ def resolve_clean_read_cfg(
     if "overrides" in explicit_cfg:
         raw_overrides = dict(explicit_cfg.pop("overrides", {}) or {})
 
-    # Validate STRUCTURE of ALL override entries (not just the executed year).
-    # Checks that every year's keys are known DuckDB params (parsing only,
-    # no selection keys).  Dependency validation (e.g. align_by_header needs
-    # normalize_rows_to_columns) happens later at merge time per-year.
+    # Validate STRUCTURE and TYPES of ALL override entries (not just the
+    # executed year).  Only field-DEPENDENCY checks (e.g. align_by_header
+    # needs normalize_rows_to_columns) are deferred to merge-time because
+    # they need the base config context.
     known_override_keys = ALLOWED_READ_CSV_KEYS - READ_SELECTION_KEYS
     for override_key, year_cfg in raw_overrides.items():
+        # Year key must be a valid integer
+        try:
+            int(str(override_key))
+        except (ValueError, TypeError):
+            raise ValueError(
+                f"clean.read.overrides: key must be a year (integer), got {override_key!r}"
+            )
         if not isinstance(year_cfg, dict):
             raise ValueError(
                 f"clean.read.overrides.{override_key}: must be a mapping (dict), "
                 f"got {type(year_cfg).__name__}"
             )
+        # Unknown keys → error
         unknown = [k for k in year_cfg if k not in known_override_keys]
         if unknown:
             raise ValueError(
                 f"clean.read.overrides.{override_key}: unknown parameter(s): "
                 f"{unknown}. Allowed: {sorted(known_override_keys)}"
             )
+        # Type validation via CleanReadConfig (catches e.g. skip="abc",
+        # columns=["bad"]).  Dependency errors (type="value_error") are
+        # deferred to merge-time because they need the base config.
+        from pydantic import ValidationError
+        from toolkit.core.config_models.clean import CleanReadConfig
+
+        try:
+            CleanReadConfig.model_validate(year_cfg)
+        except ValidationError as e:
+            type_errors = [err for err in e.errors() if err["type"] != "value_error"]
+            if type_errors:
+                raise ValueError(f"clean.read.overrides.{override_key}: {e}")
 
     selection_cfg, relation_overrides = _split_read_cfg(explicit_cfg)
     # Belt and suspenders: ensure overrides doesn't leak

@@ -586,6 +586,30 @@ class TestCleanReadOverrides:
             )
 
     @pytest.mark.policy
+    def test_override_unused_year_bad_type_raises(self, tmp_path: Path):
+        """Override anno non eseguito con tipo errato (skip='abc') solleva ValueError."""
+        raw_dir = tmp_path / "raw" / "demo" / "2024"
+        raw_dir.mkdir(parents=True)
+        with pytest.raises(ValueError, match="clean.read.overrides.2025"):
+            resolve_clean_read_cfg(
+                raw_dir,
+                {"read": {"overrides": {2025: {"skip": "abc"}}}},
+                logging.getLogger("tests.clean.duckdb_read.override"),
+            )
+
+    @pytest.mark.policy
+    def test_override_non_year_key_raises(self, tmp_path: Path):
+        """Chiave non numerica ('not-a-year') negli override solleva ValueError."""
+        raw_dir = tmp_path / "raw" / "demo" / "2024"
+        raw_dir.mkdir(parents=True)
+        with pytest.raises(ValueError, match="clean.read.overrides"):
+            resolve_clean_read_cfg(
+                raw_dir,
+                {"read": {"overrides": {"not-a-year": {"skip": 1}}}},
+                logging.getLogger("tests.clean.duckdb_read.override"),
+            )
+
+    @pytest.mark.policy
     def test_override_with_interdependent_fields(self, tmp_path: Path):
         """Override con campo che dipende dalla base non viene rifiutato in isolamento."""
         raw_dir = tmp_path / "raw" / "demo" / "2024"

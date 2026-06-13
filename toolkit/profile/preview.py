@@ -26,6 +26,7 @@ from typing import Any, Literal
 from lab_connectors.http import HttpClient
 
 from toolkit.profile.raw import profile_with_read_cfg, sniff_source_file
+from toolkit.quality.pa_csv_quality import assess_quality
 from toolkit.scout.http import fetch_content, probe_url_headers, resolve_preview_kind
 from toolkit.scout.infer import infer_granularity
 
@@ -74,6 +75,12 @@ class PreviewResult:
     granularity: str = "non_determinato"
     year_min: int | None = None
     year_max: int | None = None
+
+    # Qualità PA (opzionale, solo se CSV)
+    quality_score: int | None = None
+    quality_verdict: str | None = None
+    quality_flags: list[str] | None = None
+    quality_ontologies: dict[str, list[str]] | None = None
 
 
 # ── Year extraction helpers ───────────────────────────────────────────────────
@@ -293,10 +300,30 @@ def preview_url(
                     year_min = min(year_vals)
                     year_max = max(year_vals)
 
+            # ── 7. Qualità PA (solo CSV) ──────────────────────────────────────
+            quality_score: int | None = None
+            quality_verdict: str | None = None
+            quality_flags: list[str] | None = None
+            quality_ontologies: dict[str, list[str]] | None = None
+            try:
+                # Decodifica il contenuto per l'analisi qualità
+                csv_text = content.decode(enc or "utf-8", errors="replace")
+                qr = assess_quality(csv_text)
+                quality_score = qr.score
+                quality_verdict = qr.verdict
+                quality_flags = qr.flags or None
+                quality_ontologies = qr.ontologies or None
+            except Exception as exc:
+                logger.debug("Quality check skipped for %s: %s", url, exc)
+
         finally:
             tmp_path.unlink(missing_ok=True)
 
         return PreviewResult(
+            quality_score=quality_score,
+            quality_verdict=quality_verdict,
+            quality_flags=quality_flags,
+            quality_ontologies=quality_ontologies,
             url=url,
             status="success",
             reachable=reachable,

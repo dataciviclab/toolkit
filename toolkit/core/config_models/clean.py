@@ -48,6 +48,7 @@ class CleanReadConfig(BaseModel):
     prefer_from_raw_run: bool = True
     allow_ambiguous: bool = False
     include: list[str] | None = None
+    overrides: dict[str | int, dict[str, Any]] | None = None
 
     @field_validator("columns", mode="before")
     @classmethod

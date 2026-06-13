@@ -86,6 +86,13 @@ def resolve_clean_read_cfg(
     normalized_source, explicit_cfg = _read_source_mode(clean_cfg, logger)
     selection_cfg, relation_overrides = _split_read_cfg(explicit_cfg)
 
+    # Extract per-year overrides from clean.read BEFORE they pollute merge
+    raw_overrides: dict[str | int, dict[str, Any]] = {}
+    if "overrides" in explicit_cfg:
+        raw_overrides = dict(explicit_cfg.pop("overrides", {}) or {})
+    elif "overrides" in relation_overrides:
+        raw_overrides = dict(relation_overrides.pop("overrides", {}) or {})
+
     suggested_cfg = load_suggested_read(raw_year_dir)
     filtered_suggested = filter_suggested_read(suggested_cfg)
     if normalized_source == "auto" and filtered_suggested and logger is not None:
@@ -99,5 +106,18 @@ def resolve_clean_read_cfg(
         suggested=suggested_cfg,
         overrides=relation_overrides,
     )
+
+    # Apply per-year override if one exists
+    year = int(raw_year_dir.name)
+    if year in raw_overrides or str(year) in raw_overrides:
+        key = year if year in raw_overrides else str(year)
+        year_cfg = dict(raw_overrides[key])
+        # Filter to valid read CSV keys (exclude non-DuckDB keys like overrides)
+        from toolkit.core.csv_read import ALLOWED_READ_CSV_KEYS
+
+        year_cfg = {k: v for k, v in year_cfg.items() if k in ALLOWED_READ_CSV_KEYS}
+        if year_cfg:
+            merged_relation_cfg.update(year_cfg)
+            params_source.append(f"year_override_{year}")
 
     return selection_cfg, merged_relation_cfg, params_source

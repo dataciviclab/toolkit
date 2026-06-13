@@ -78,6 +78,8 @@ class PreviewResult:
 
     # Qualità PA (opzionale, solo se CSV)
     quality_score: int | None = None
+    quality_structural_score: int | None = None
+    quality_semantic_score: int | None = None
     quality_verdict: str | None = None
     quality_flags: list[str] | None = None
     quality_ontologies: dict[str, list[str]] | None = None
@@ -303,6 +305,8 @@ def preview_url(
 
             # ── 7. Qualità PA (solo CSV) ──────────────────────────────────────
             quality_score: int | None = None
+            quality_structural_score: int | None = None
+            quality_semantic_score: int | None = None
             quality_verdict: str | None = None
             quality_flags: list[str] | None = None
             quality_ontologies: dict[str, list[str]] | None = None
@@ -310,11 +314,21 @@ def preview_url(
             try:
                 # Decodifica il contenuto per l'analisi qualità
                 csv_text = content.decode(enc or "utf-8", errors="replace")
-                # Se il file è più grande del chunk scaricato, il preview
-                # lavora su campione — flag sampled per evitare falsi S6
-                truncated = file_size is not None and file_size > len(content)
-                qr = assess_quality(csv_text, sampled=truncated)
+                # Rileva troncamento: Content-Length > chunk, o chunk
+                # stesso (1MB) senza Content-Length noto.
+                truncated = (file_size is not None and file_size > len(content)) or (
+                    file_size is None and len(content) >= 1024 * 1024
+                )
+                qr = assess_quality(
+                    csv_text,
+                    sampled=truncated,
+                    known_sep=delim,
+                    known_encoding=enc,
+                    known_skip=skip,
+                )
                 quality_score = qr.score
+                quality_structural_score = qr.structural_score
+                quality_semantic_score = qr.semantic_score
                 quality_verdict = qr.verdict
                 quality_flags = qr.flags or None
                 quality_ontologies = qr.ontologies or None
@@ -327,6 +341,8 @@ def preview_url(
 
         return PreviewResult(
             quality_score=quality_score,
+            quality_structural_score=quality_structural_score,
+            quality_semantic_score=quality_semantic_score,
             quality_verdict=quality_verdict,
             quality_flags=quality_flags,
             quality_ontologies=quality_ontologies,

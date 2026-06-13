@@ -291,36 +291,44 @@ class TestScore:
     def test_disclaimer_in_report(self):
         """Il report contiene disclaimer sui check semantici."""
         r = assess_quality("a,b\n1,2")
-        assert "indicativi" in r.note
+        assert "indicativo" in r.note
 
 
 # ── PreviewResult contract ────────────────────────────────────────────────────
 
 
+@pytest.mark.contract
 class TestPreviewResultContract:
-    """I 4 campi quality_* in PreviewResult sono popolati dopo preview_url."""
+    """I 7 campi quality_* in PreviewResult sono popolati dopo preview_url."""
 
-    def test_preview_url_returns_quality_fields(self):
-        """preview_url su CSV popola quality_score e quality_verdict."""
+    def test_preview_url_has_quality_fields(self) -> None:
+        """PreviewResult ha tutti i campi quality_* attesi (su CSV)."""
         from toolkit.profile.preview import preview_url
 
         r = preview_url("https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv")
-        assert hasattr(r, "quality_score"), "manca quality_score"
-        assert hasattr(r, "quality_verdict"), "manca quality_verdict"
-        assert hasattr(r, "quality_flags"), "manca quality_flags"
-        assert hasattr(r, "quality_ontologies"), "manca quality_ontologies"
-        assert hasattr(r, "quality_note"), "manca quality_note"
+        expected = [
+            "quality_score",
+            "quality_structural_score",
+            "quality_semantic_score",
+            "quality_verdict",
+            "quality_flags",
+            "quality_ontologies",
+            "quality_note",
+        ]
+        for field in expected:
+            assert hasattr(r, field), f"PreviewResult manca: {field}"
 
-    def test_preview_url_csv_pops_quality(self):
-        """Su CSV, quality_score è valorizzato (non None)."""
+    @pytest.mark.smoke
+    def test_preview_url_csv_pops_quality(self) -> None:
+        """Su CSV, quality_structural_score è valorizzato."""
         from toolkit.profile.preview import preview_url
 
         r = preview_url("https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv")
         if r.status == "success":
-            assert r.quality_score is not None, f"quality_score non valorizzato (status={r.status})"
+            assert r.quality_structural_score is not None
 
-    def test_preview_url_on_non_csv(self):
-        """Su HTML/non-CSV, quality_* restano None."""
+    def test_preview_url_on_non_csv(self) -> None:
+        """Su HTML, quality_* restano None."""
         from toolkit.profile.preview import preview_url
 
         r = preview_url("https://www.mimit.gov.it")

@@ -185,6 +185,13 @@ def _mock_preview_url(monkeypatch):
             granularity="comune",
             year_min=None,
             year_max=None,
+            quality_score=None,
+            quality_structural_score=None,
+            quality_semantic_score=None,
+            quality_verdict=None,
+            quality_flags=None,
+            quality_ontologies=None,
+            quality_note=None,
         )
 
     monkeypatch.setattr(preview_mod, "preview_url", _mock)

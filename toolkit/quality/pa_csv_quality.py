@@ -18,6 +18,7 @@ import io
 import re
 import statistics
 from dataclasses import dataclass, field
+from typing import Any
 
 # ─── Ontologia PA: mapping colonna → ontologia schema.gov.it ─────────────────
 
@@ -131,18 +132,24 @@ class CheckResult:
 class QualityReport:
     """Report qualità CSV PA — diagnostico, non certificativo.
 
-    I check sono divisi in due categorie:
-    - **Strutturali** (S, C): affidabili, basati su pattern deterministici.
-    - **Semantici** (O, L): euristici, basati su naming convenzioni e keywords
-      — non costituiscono certificazione di qualità open data.
+    I check sono divisi in due categorie con score separati:
+
+    - **Strutturale** (check S + C): encoding, header, separatore, date, tipi
+      — pattern deterministici, affidabili. Il **verdict** si basa solo su
+      questi.
+    - **Semantico** (check O + L): naming colonne, geo/tempo, ontologie,
+      5-star — euristici, basati su convenzioni di naming e keyword. Non
+      costituiscono certificazione di qualità open data.
     """
 
-    score: int  # 0-100
-    verdict: str  # buona | accettabile | scarsa
+    score: int = 0  # 0-100 (combinato, solo informativo)
+    structural_score: int = 0  # 0-100 (S + C, base del verdict)
+    semantic_score: int | None = None  # 0-100 (O + L, solo indicativo)
+    verdict: str = ""  # buona | accettabile | scarsa — basato su structural_score
     critical_fail: bool = False
     sampled: bool = False
     note: str = ""
-    summary: dict[str, int] = field(default_factory=dict)
+    summary: dict[str, Any] = field(default_factory=dict)
     checks: dict[str, list[CheckResult]] = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)
     ontologies: dict[str, list[str]] = field(default_factory=dict)
@@ -681,11 +688,35 @@ def _build_flags(all_checks: list[CheckResult]) -> list[str]:
 # ─── Entry point principale ───────────────────────────────────────────────────
 
 
+def _looks_sampled(csv_text: str, sep: str) -> bool:
+    """Stima se il testo è un troncamento guardando l'ultima riga.
+
+    Se l'ultima riga non termina con ``\\n``, il contenuto potrebbe essere
+    stato troncato.  Non sostituisce un ``Content-Length`` ma copre il caso
+    in cui sia assente.
+    """
+    if not csv_text.endswith("\n"):
+        return True
+    # Se l'ultima riga è una riga dati (non vuota) che sembra incompleta
+    # (meno campi dell'header), potrebbe essere troncata.
+    rows = _parse_csv(csv_text, sep)
+    if len(rows) < 2:
+        return True
+    headers = rows[0]
+    last = rows[-1]
+    if len(headers) > 0 and len(last) != len(headers):
+        return True
+    return False
+
+
 def assess_quality(
     csv_text: str,
     *,
     title: str = "",
     sampled: bool = False,
+    known_sep: str | None = None,
+    known_encoding: str | None = None,
+    known_skip: int | None = None,
 ) -> QualityReport:
     """Valuta la qualità di un CSV secondo criteri PA.
 
@@ -694,9 +725,15 @@ def assess_quality(
         title: Titolo opzionale del dataset (per ontology detection
                context-aware — riservato per estensione futura).
         sampled: Se True, il testo è un campione (es. primi 1MB).
-                 Disabilita check strutturali che richiedono il file
-                 completo (S6 righe inconsistenti, S12 righe vuote)
-                 e annota il report come ``sampled``.
+                 Disabilita check che richiedono il file completo
+                 (S6 righe inconsistenti, S12 righe vuote).
+        known_sep: Separatore già noto (da preview sniff). Salva
+                   ``_detect_sep``.
+        known_encoding: Encoding già noto (da preview sniff). Usato
+                        solo per diagnostica.
+        known_skip: Righe da saltare in testa (da preview sniff).
+                    Se > 0, la prima riga dati non è l'header e il
+                    check S3 viene aggiustato.
 
     Returns:
         QualityReport con score, verdetto, check per categoria, flags,
@@ -705,45 +742,63 @@ def assess_quality(
     Nota:
         I check semantici (O, L) sono euristici basati su naming colonne
         e keywords — non costituiscono certificazione di qualità.
+        Usare ``structural_score`` per valutazioni oggettive,
+        ``semantic_score`` come spunto esplorativo.
     """
-    sep = _detect_sep(csv_text)
+    sep = known_sep or _detect_sep(csv_text)
     rows = _parse_csv(csv_text, sep)
     headers = rows[0] if rows else []
 
+    # Se skip > 0, l'header reale è dopo le righe di preambolo.
+    # I check strutturali lavorano sul CSV come viene, ma segnaliamo
+    # che l'header potrebbe non essere la prima riga del file.
+    effective_skip = known_skip or 0
+    _preamble_note = f" ({effective_skip} righe di preambolo ignorate)" if effective_skip else ""
+
     str_checks = _checks_struttura(csv_text, rows, sep, headers)
     # Se sampled: S6 (righe inconsistenti) e S12 (righe vuote) danno falsi
-    # positivi su taglio a metà record. Li forziamo a info/skip.
+    # positivi su taglio a metà record. Li forziamo a skip.
     if sampled:
         for c in str_checks:
             if c.id in ("S6", "S12"):
                 object.__setattr__(c, "status", "skip")
+
     con_checks = _checks_contenuto(rows, headers)
     od_checks = _checks_opendata(rows, headers, csv_text)
     ld_checks, matched_ontos = _checks_linkeddata(rows, headers)
 
-    all_checks = str_checks + con_checks + od_checks + ld_checks
-    score = _compute_score(all_checks)
-    # Score arrotondato per difetto su campione
+    # Score separati: strutturale (S+C), semantico (O+L)
+    str_con_checks = str_checks + con_checks
+    semantic_checks = od_checks + ld_checks
+
+    structural_score = _compute_score(str_con_checks)
+    semantic_score = _compute_score(semantic_checks)
+    # Combinato (informativo, non usato per verdict)
+    all_checks = str_con_checks + semantic_checks
+    combined_score = _compute_score(all_checks)
+
     if sampled:
-        score = min(score, 95)
-    crit_fail = _is_critical_fail(all_checks)
-    flags = _build_flags(all_checks)
+        combined_score = min(combined_score, 95)
 
-    fail_count = sum(1 for c in all_checks if c.status == "fail")
-    warn_count = sum(1 for c in all_checks if c.status == "warn")
-    pass_count = sum(1 for c in all_checks if c.status == "pass")
+    # Verdict basato SOLO su structural_score e critical_fail strutturale
+    str_fail_count = sum(1 for c in str_con_checks if c.status == "fail")
+    str_warn_count = sum(1 for c in str_con_checks if c.status == "warn")
+    str_pass_count = sum(1 for c in str_con_checks if c.status == "pass")
+    critical_fail = _is_critical_fail(str_con_checks)
 
-    if crit_fail or fail_count > 3:
+    if critical_fail or str_fail_count > 3:
         verdict = "scarsa"
-    elif fail_count > 0 or warn_count > 5:
+    elif str_fail_count > 0 or str_warn_count > 5:
         verdict = "accettabile"
     else:
         verdict = "buona"
 
+    flags = _build_flags(all_checks)
+
     note_parts: list[str] = []
     if sampled:
-        note_parts.append("valutazione su campione (max 1MB)")
-    note_parts.append("check semantici basati su convenzioni di naming — solo indicativi")
+        note_parts.append("valutazione su campione — controlli strutturali su file incompleto")
+    note_parts.append("score semantico basato su convenzioni di naming — solo indicativo")
     note = " — ".join(note_parts)
 
     # Ontologie aggregate
@@ -757,15 +812,21 @@ def assess_quality(
                 ontologies[family].append(onto)
 
     return QualityReport(
-        score=score,
+        score=combined_score,
+        structural_score=structural_score,
+        semantic_score=semantic_score,
         verdict=verdict,
-        critical_fail=crit_fail,
+        critical_fail=critical_fail,
         sampled=sampled,
         note=note,
         summary={
-            "pass": pass_count,
-            "warn": warn_count,
-            "fail": fail_count,
+            "structural": {
+                "score": structural_score,
+                "pass": str_pass_count,
+                "warn": str_warn_count,
+                "fail": str_fail_count,
+            },
+            "semantic": {"score": semantic_score},
             "rows": len(rows) - 1 if rows else 0,
             "columns": len(headers),
         },

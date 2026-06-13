@@ -483,106 +483,95 @@ def test_filter_suggested_read_excludes_robustness_keys(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.policy
-def test_clean_read_overrides_int_year(tmp_path: Path):
-    """Override per anno int: raw_year_dir.name='2023', overrides:{2023:{skip:2}} → skip=2."""
-    raw_dir = tmp_path / "raw" / "demo" / "2023"
-    raw_dir.mkdir(parents=True)
+class TestCleanReadOverrides:
+    """clean.read.overrides: merge per anno, validazione, no leakage."""
 
-    _, relation_cfg, params_source = resolve_clean_read_cfg(
-        raw_dir,
-        {"read": {"overrides": {2023: {"skip": 2}}}},
-        logging.getLogger("tests.clean.duckdb_read.override_int"),
-    )
+    @pytest.fixture
+    def override_dir(self, tmp_path: Path, request: pytest.FixtureRequest) -> Path:
+        """Crea raw_dir con anno parametrizzato via marker o default 2024."""
+        year = getattr(request, "param", 2024)
+        raw_dir = tmp_path / "raw" / "demo" / str(year)
+        raw_dir.mkdir(parents=True)
+        return raw_dir
 
-    assert relation_cfg.get("skip") == 2
-    assert "year_override_2023" in params_source
-
-
-@pytest.mark.policy
-def test_clean_read_overrides_str_year(tmp_path: Path):
-    """Override per anno str: overrides:{'2024':{...}} → applicato quando year=2024."""
-    raw_dir = tmp_path / "raw" / "demo" / "2024"
-    raw_dir.mkdir(parents=True)
-
-    _, relation_cfg, params_source = resolve_clean_read_cfg(
-        raw_dir,
-        {"read": {"overrides": {"2024": {"encoding": "latin-1", "skip": 1}}}},
-        logging.getLogger("tests.clean.duckdb_read.override_str"),
-    )
-
-    assert relation_cfg.get("encoding") == "latin-1"
-    assert relation_cfg.get("skip") == 1
-    assert "year_override_2024" in params_source
-
-
-@pytest.mark.policy
-def test_clean_read_overrides_wins_over_base(tmp_path: Path):
-    """Override per anno vince sulla config base."""
-    raw_dir = tmp_path / "raw" / "demo" / "2025"
-    raw_dir.mkdir(parents=True)
-
-    _, relation_cfg, params_source = resolve_clean_read_cfg(
-        raw_dir,
-        {
-            "read": {
-                "delim": ";",
-                "encoding": "utf-8",
-                "overrides": {2025: {"encoding": "latin-1", "skip": 2}},
-            }
-        },
-        logging.getLogger("tests.clean.duckdb_read.override_win"),
-    )
-
-    assert relation_cfg["delim"] == ";"  # dalla base
-    assert relation_cfg["encoding"] == "latin-1"  # override vince
-    assert relation_cfg["skip"] == 2  # solo nell'override
-    assert "year_override_2025" in params_source
-
-
-@pytest.mark.policy
-def test_clean_read_overrides_no_leakage(tmp_path: Path):
-    """overrides NON deve comparire in relation_cfg (non e' parametro DuckDB)."""
-    raw_dir = tmp_path / "raw" / "demo" / "2024"
-    raw_dir.mkdir(parents=True)
-
-    _, relation_cfg, _ = resolve_clean_read_cfg(
-        raw_dir,
-        {"read": {"overrides": {2024: {"skip": 1}}}},
-        logging.getLogger("tests.clean.duckdb_read.override_leak"),
-    )
-
-    assert "overrides" not in relation_cfg
-
-
-@pytest.mark.policy
-def test_clean_read_overrides_no_match_year(tmp_path: Path):
-    """Override per anno diverso da quello corrente non viene applicato."""
-    raw_dir = tmp_path / "raw" / "demo" / "2023"
-    raw_dir.mkdir(parents=True)
-
-    _, relation_cfg, params_source = resolve_clean_read_cfg(
-        raw_dir,
-        {"read": {"overrides": {2024: {"skip": 1}}}},
-        logging.getLogger("tests.clean.duckdb_read.override_nomatch"),
-    )
-
-    assert relation_cfg.get("skip") is None
-    assert not any("year_override" in s for s in params_source)
-
-
-@pytest.mark.policy
-def test_clean_read_overrides_invalid_key_raises(tmp_path: Path):
-    """Override con chiave inesistente ('delmi' invece di 'delim') solleva ValueError."""
-    raw_dir = tmp_path / "raw" / "demo" / "2024"
-    raw_dir.mkdir(parents=True)
-
-    with pytest.raises(ValueError, match="clean.read.overrides.2024"):
-        resolve_clean_read_cfg(
-            raw_dir,
-            {"read": {"overrides": {2024: {"delmi": ";"}}}},
-            logging.getLogger("tests.clean.duckdb_read.override_invalid"),
+    @pytest.mark.policy
+    @pytest.mark.parametrize("override_dir", [2023], indirect=True)
+    def test_int_year(self, override_dir: Path):
+        """Override per anno int: {2023: {skip: 2}} → skip=2."""
+        _, cfg, src = resolve_clean_read_cfg(
+            override_dir,
+            {"read": {"overrides": {2023: {"skip": 2}}}},
+            logging.getLogger("tests.clean.duckdb_read.override"),
         )
+        assert cfg.get("skip") == 2
+        assert "year_override_2023" in src
+
+    @pytest.mark.policy
+    @pytest.mark.parametrize("override_dir", [2024], indirect=True)
+    def test_str_year(self, override_dir: Path):
+        """Override per anno str: {'2024': {...}}."""
+        _, cfg, src = resolve_clean_read_cfg(
+            override_dir,
+            {"read": {"overrides": {"2024": {"encoding": "latin-1"}}}},
+            logging.getLogger("tests.clean.duckdb_read.override"),
+        )
+        assert cfg.get("encoding") == "latin-1"
+        assert "year_override_2024" in src
+
+    @pytest.mark.policy
+    @pytest.mark.parametrize("override_dir", [2025], indirect=True)
+    def test_wins_over_base(self, override_dir: Path):
+        """Override vince sulla config base."""
+        _, cfg, src = resolve_clean_read_cfg(
+            override_dir,
+            {
+                "read": {
+                    "delim": ";",
+                    "encoding": "utf-8",
+                    "overrides": {2025: {"encoding": "latin-1", "skip": 2}},
+                }
+            },
+            logging.getLogger("tests.clean.duckdb_read.override"),
+        )
+        assert cfg["delim"] == ";"  # dalla base
+        assert cfg["encoding"] == "latin-1"  # override vince
+        assert cfg["skip"] == 2  # solo nell'override
+        assert "year_override_2025" in src
+
+    @pytest.mark.policy
+    @pytest.mark.parametrize("override_dir", [2024], indirect=True)
+    def test_no_leakage(self, override_dir: Path):
+        """overrides NON compare in relation_cfg."""
+        _, cfg, _ = resolve_clean_read_cfg(
+            override_dir,
+            {"read": {"overrides": {2024: {"skip": 1}}}},
+            logging.getLogger("tests.clean.duckdb_read.override"),
+        )
+        assert "overrides" not in cfg
+
+    @pytest.mark.policy
+    @pytest.mark.parametrize("override_dir", [2023], indirect=True)
+    def test_no_match_year(self, override_dir: Path):
+        """Override per anno diverso non viene applicato."""
+        _, cfg, src = resolve_clean_read_cfg(
+            override_dir,
+            {"read": {"overrides": {2024: {"skip": 1}}}},
+            logging.getLogger("tests.clean.duckdb_read.override"),
+        )
+        assert cfg.get("skip") is None
+        assert not any("year_override" in s for s in src)
+
+    @pytest.mark.policy
+    def test_invalid_key_raises(self, tmp_path: Path):
+        """Chiave inesistente ('delmi') solleva ValueError."""
+        raw_dir = tmp_path / "raw" / "demo" / "2024"
+        raw_dir.mkdir(parents=True)
+        with pytest.raises(ValueError, match="clean.read.overrides.2024"):
+            resolve_clean_read_cfg(
+                raw_dir,
+                {"read": {"overrides": {2024: {"delmi": ";"}}}},
+                logging.getLogger("tests.clean.duckdb_read.override"),
+            )
 
 
 def test_read_raw_to_relation_with_thousands_separator(tmp_path: Path):

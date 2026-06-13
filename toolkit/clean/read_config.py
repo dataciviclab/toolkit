@@ -84,14 +84,20 @@ def resolve_clean_read_cfg(
     logger=None,
 ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
     normalized_source, explicit_cfg = _read_source_mode(clean_cfg, logger)
-    selection_cfg, relation_overrides = _split_read_cfg(explicit_cfg)
 
-    # Extract per-year overrides from clean.read BEFORE they pollute merge
+    # Extract per-year overrides BEFORE _split_read_cfg, so they NEVER
+    # enter relation_overrides (overrides is NOT a DuckDB read_csv parameter)
     raw_overrides: dict[str | int, dict[str, Any]] = {}
     if "overrides" in explicit_cfg:
         raw_overrides = dict(explicit_cfg.pop("overrides", {}) or {})
-    elif "overrides" in relation_overrides:
-        raw_overrides = dict(relation_overrides.pop("overrides", {}) or {})
+
+    selection_cfg, relation_overrides = _split_read_cfg(explicit_cfg)
+
+    # Belt and suspenders: ensure overrides doesn't leak into relation config
+    relation_overrides.pop("overrides", None)
+
+    # Validate each year's override dict against CleanReadConfig
+    _validate_overrides(raw_overrides, logger)
 
     suggested_cfg = load_suggested_read(raw_year_dir)
     filtered_suggested = filter_suggested_read(suggested_cfg)
@@ -107,17 +113,36 @@ def resolve_clean_read_cfg(
         overrides=relation_overrides,
     )
 
-    # Apply per-year override if one exists
+    # Apply per-year override if one exists for this year
     year = int(raw_year_dir.name)
-    if year in raw_overrides or str(year) in raw_overrides:
-        key = year if year in raw_overrides else str(year)
-        year_cfg = dict(raw_overrides[key])
-        # Filter to valid read CSV keys (exclude non-DuckDB keys like overrides)
+    year_override = raw_overrides.get(year) or raw_overrides.get(str(year))
+    if year_override:
+        # Filter to valid DuckDB read_csv keys only
         from toolkit.core.csv_read import ALLOWED_READ_CSV_KEYS
 
-        year_cfg = {k: v for k, v in year_cfg.items() if k in ALLOWED_READ_CSV_KEYS}
-        if year_cfg:
-            merged_relation_cfg.update(year_cfg)
+        filtered = {k: v for k, v in year_override.items() if k in ALLOWED_READ_CSV_KEYS}
+        if filtered:
+            merged_relation_cfg.update(filtered)
             params_source.append(f"year_override_{year}")
 
     return selection_cfg, merged_relation_cfg, params_source
+
+
+def _validate_overrides(
+    raw_overrides: dict[str | int, dict[str, Any]],
+    logger=None,
+) -> None:
+    """Validate per-year override configs against ``CleanReadConfig``.
+
+    Raises ``ValueError`` with the offending year key if any override
+    contains invalid or unknown fields (catches typos like ``delmi``).
+    """
+    if not raw_overrides:
+        return
+    from toolkit.core.config_models.clean import CleanReadConfig
+
+    for year, cfg in raw_overrides.items():
+        try:
+            CleanReadConfig(**cfg)
+        except Exception as exc:
+            raise ValueError(f"clean.read.overrides.{year}: invalid config: {exc}") from exc

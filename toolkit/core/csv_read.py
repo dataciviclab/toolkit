@@ -35,7 +35,6 @@ ALLOWED_READ_CSV_KEYS = {
     "sheet_name",
     "dateformat",
     "timestampformat",
-    "overrides",
 }
 FORMAT_HINT_KEYS = {
     "delim",

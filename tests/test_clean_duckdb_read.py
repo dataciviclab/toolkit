@@ -478,7 +478,113 @@ def test_filter_suggested_read_excludes_robustness_keys(tmp_path: Path):
     assert "sample_size" not in relation_cfg
 
 
+# ---------------------------------------------------------------------------
+# tests: clean.read.overrides per anno
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.policy
+def test_clean_read_overrides_int_year(tmp_path: Path):
+    """Override per anno int: raw_year_dir.name='2023', overrides:{2023:{skip:2}} → skip=2."""
+    raw_dir = tmp_path / "raw" / "demo" / "2023"
+    raw_dir.mkdir(parents=True)
+
+    _, relation_cfg, params_source = resolve_clean_read_cfg(
+        raw_dir,
+        {"read": {"overrides": {2023: {"skip": 2}}}},
+        logging.getLogger("tests.clean.duckdb_read.override_int"),
+    )
+
+    assert relation_cfg.get("skip") == 2
+    assert "year_override_2023" in params_source
+
+
+@pytest.mark.policy
+def test_clean_read_overrides_str_year(tmp_path: Path):
+    """Override per anno str: overrides:{'2024':{...}} → applicato quando year=2024."""
+    raw_dir = tmp_path / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True)
+
+    _, relation_cfg, params_source = resolve_clean_read_cfg(
+        raw_dir,
+        {"read": {"overrides": {"2024": {"encoding": "latin-1", "skip": 1}}}},
+        logging.getLogger("tests.clean.duckdb_read.override_str"),
+    )
+
+    assert relation_cfg.get("encoding") == "latin-1"
+    assert relation_cfg.get("skip") == 1
+    assert "year_override_2024" in params_source
+
+
+@pytest.mark.policy
+def test_clean_read_overrides_wins_over_base(tmp_path: Path):
+    """Override per anno vince sulla config base."""
+    raw_dir = tmp_path / "raw" / "demo" / "2025"
+    raw_dir.mkdir(parents=True)
+
+    _, relation_cfg, params_source = resolve_clean_read_cfg(
+        raw_dir,
+        {
+            "read": {
+                "delim": ";",
+                "encoding": "utf-8",
+                "overrides": {2025: {"encoding": "latin-1", "skip": 2}},
+            }
+        },
+        logging.getLogger("tests.clean.duckdb_read.override_win"),
+    )
+
+    assert relation_cfg["delim"] == ";"  # dalla base
+    assert relation_cfg["encoding"] == "latin-1"  # override vince
+    assert relation_cfg["skip"] == 2  # solo nell'override
+    assert "year_override_2025" in params_source
+
+
+@pytest.mark.policy
+def test_clean_read_overrides_no_leakage(tmp_path: Path):
+    """overrides NON deve comparire in relation_cfg (non e' parametro DuckDB)."""
+    raw_dir = tmp_path / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True)
+
+    _, relation_cfg, _ = resolve_clean_read_cfg(
+        raw_dir,
+        {"read": {"overrides": {2024: {"skip": 1}}}},
+        logging.getLogger("tests.clean.duckdb_read.override_leak"),
+    )
+
+    assert "overrides" not in relation_cfg
+
+
+@pytest.mark.policy
+def test_clean_read_overrides_no_match_year(tmp_path: Path):
+    """Override per anno diverso da quello corrente non viene applicato."""
+    raw_dir = tmp_path / "raw" / "demo" / "2023"
+    raw_dir.mkdir(parents=True)
+
+    _, relation_cfg, params_source = resolve_clean_read_cfg(
+        raw_dir,
+        {"read": {"overrides": {2024: {"skip": 1}}}},
+        logging.getLogger("tests.clean.duckdb_read.override_nomatch"),
+    )
+
+    assert relation_cfg.get("skip") is None
+    assert not any("year_override" in s for s in params_source)
+
+
+@pytest.mark.policy
+def test_clean_read_overrides_invalid_key_raises(tmp_path: Path):
+    """Override con chiave inesistente ('delmi' invece di 'delim') solleva ValueError."""
+    raw_dir = tmp_path / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True)
+
+    with pytest.raises(ValueError, match="clean.read.overrides.2024"):
+        resolve_clean_read_cfg(
+            raw_dir,
+            {"read": {"overrides": {2024: {"delmi": ";"}}}},
+            logging.getLogger("tests.clean.duckdb_read.override_invalid"),
+        )
+
+
 def test_read_raw_to_relation_with_thousands_separator(tmp_path: Path):
     """DuckDB read_csv respects decimal=',' + thousands='.'.
 

@@ -301,6 +301,7 @@ class TestScore:
 class TestPreviewResultContract:
     """I 7 campi quality_* in PreviewResult sono popolati dopo preview_url."""
 
+    @pytest.mark.smoke
     def test_preview_url_has_quality_fields(self) -> None:
         """PreviewResult ha tutti i campi quality_* attesi (su CSV)."""
         from toolkit.profile.preview import preview_url

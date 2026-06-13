@@ -80,6 +80,7 @@ class PreviewResult:
     quality_score: int | None = None
     quality_structural_score: int | None = None
     quality_semantic_score: int | None = None
+    quality_combined_score: int | None = None
     quality_verdict: str | None = None
     quality_flags: list[str] | None = None
     quality_ontologies: dict[str, list[str]] | None = None
@@ -210,6 +211,8 @@ def preview_url(
         # Content-Length da fetch_content: su 206 con Content-Range e' la
         # dimensione reale del file; altrimenti la lunghezza del chunk.
         content_file_size = fetched.get("content_length") or len(content)
+        # Salva se la dimensione era nota prima di sovrascrivere
+        file_size_was_known = file_size is not None
         if not file_size:
             file_size = content_file_size
 
@@ -307,6 +310,7 @@ def preview_url(
             quality_score: int | None = None
             quality_structural_score: int | None = None
             quality_semantic_score: int | None = None
+            quality_combined_score: int | None = None
             quality_verdict: str | None = None
             quality_flags: list[str] | None = None
             quality_ontologies: dict[str, list[str]] | None = None
@@ -314,10 +318,11 @@ def preview_url(
             try:
                 # Decodifica il contenuto per l'analisi qualità
                 csv_text = content.decode(enc or "utf-8", errors="replace")
-                # Rileva troncamento: Content-Length > chunk, o chunk
-                # stesso (1MB) senza Content-Length noto.
+                # Rileva troncamento:
+                # - Content-Length noto e > chunk scaricato
+                # - Content-Length ignoto e chunk >= 1MB (soglia preview)
                 truncated = (file_size is not None and file_size > len(content)) or (
-                    file_size is None and len(content) >= 1024 * 1024
+                    not file_size_was_known and len(content) >= 1024 * 1024
                 )
                 qr = assess_quality(
                     csv_text,
@@ -329,6 +334,7 @@ def preview_url(
                 quality_score = qr.score
                 quality_structural_score = qr.structural_score
                 quality_semantic_score = qr.semantic_score
+                quality_combined_score = qr.combined_score
                 quality_verdict = qr.verdict
                 quality_flags = qr.flags or None
                 quality_ontologies = qr.ontologies or None
@@ -343,6 +349,7 @@ def preview_url(
             quality_score=quality_score,
             quality_structural_score=quality_structural_score,
             quality_semantic_score=quality_semantic_score,
+            quality_combined_score=quality_combined_score,
             quality_verdict=quality_verdict,
             quality_flags=quality_flags,
             quality_ontologies=quality_ontologies,

@@ -846,6 +846,8 @@ def preview(
             typer.echo(f"  Structural:      {result.quality_structural_score}/100")
         if result.quality_semantic_score is not None:
             typer.echo(f"  Semantic:        {result.quality_semantic_score}/100 (indicativo)")
+        if result.quality_combined_score is not None:
+            typer.echo(f"  Combined:        {result.quality_combined_score}/100 (informativo)")
         if result.quality_flags:
             typer.echo(f"  Quality flags:   {', '.join(result.quality_flags)}")
         if result.quality_ontologies:

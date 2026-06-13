@@ -135,16 +135,17 @@ class QualityReport:
     I check sono divisi in due categorie con score separati:
 
     - **Strutturale** (check S + C): encoding, header, separatore, date, tipi
-      — pattern deterministici, affidabili. Il **verdict** si basa solo su
-      questi.
+      — pattern deterministici, affidabili. Il **verdict** e ``score`` si
+      basano solo su questi.
     - **Semantico** (check O + L): naming colonne, geo/tempo, ontologie,
       5-star — euristici, basati su convenzioni di naming e keyword. Non
       costituiscono certificazione di qualità open data.
     """
 
-    score: int = 0  # 0-100 (combinato, solo informativo)
-    structural_score: int = 0  # 0-100 (S + C, base del verdict)
+    score: int = 0  # 0-100 (strutturale = S + C, base del verdict)
+    structural_score: int = 0  # 0-100 (alias di score)
     semantic_score: int | None = None  # 0-100 (O + L, solo indicativo)
+    combined_score: int | None = None  # 0-100 (tutti i check, solo informativo)
     verdict: str = ""  # buona | accettabile | scarsa — basato su structural_score
     critical_fail: bool = False
     sampled: bool = False
@@ -688,27 +689,6 @@ def _build_flags(all_checks: list[CheckResult]) -> list[str]:
 # ─── Entry point principale ───────────────────────────────────────────────────
 
 
-def _looks_sampled(csv_text: str, sep: str) -> bool:
-    """Stima se il testo è un troncamento guardando l'ultima riga.
-
-    Se l'ultima riga non termina con ``\\n``, il contenuto potrebbe essere
-    stato troncato.  Non sostituisce un ``Content-Length`` ma copre il caso
-    in cui sia assente.
-    """
-    if not csv_text.endswith("\n"):
-        return True
-    # Se l'ultima riga è una riga dati (non vuota) che sembra incompleta
-    # (meno campi dell'header), potrebbe essere troncata.
-    rows = _parse_csv(csv_text, sep)
-    if len(rows) < 2:
-        return True
-    headers = rows[0]
-    last = rows[-1]
-    if len(headers) > 0 and len(last) != len(headers):
-        return True
-    return False
-
-
 def assess_quality(
     csv_text: str,
     *,
@@ -747,13 +727,13 @@ def assess_quality(
     """
     sep = known_sep or _detect_sep(csv_text)
     rows = _parse_csv(csv_text, sep)
-    headers = rows[0] if rows else []
 
-    # Se skip > 0, l'header reale è dopo le righe di preambolo.
-    # I check strutturali lavorano sul CSV come viene, ma segnaliamo
-    # che l'header potrebbe non essere la prima riga del file.
+    # Applica known_skip: salta le righe di preambolo prima dell'header
     effective_skip = known_skip or 0
-    _preamble_note = f" ({effective_skip} righe di preambolo ignorate)" if effective_skip else ""
+    if effective_skip > 0 and len(rows) > effective_skip:
+        rows = rows[effective_skip:]
+
+    headers = rows[0] if rows else []
 
     str_checks = _checks_struttura(csv_text, rows, sep, headers)
     # Se sampled: S6 (righe inconsistenti) e S12 (righe vuote) danno falsi
@@ -775,10 +755,13 @@ def assess_quality(
     semantic_score = _compute_score(semantic_checks)
     # Combinato (informativo, non usato per verdict)
     all_checks = str_con_checks + semantic_checks
-    combined_score = _compute_score(all_checks)
+    combined_score_val = _compute_score(all_checks)
 
+    # `score` = strutturale (quello che guida il verdict)
+    score_val = structural_score
     if sampled:
-        combined_score = min(combined_score, 95)
+        score_val = min(score_val, 95)
+        combined_score_val = min(combined_score_val, 95)
 
     # Verdict basato SOLO su structural_score e critical_fail strutturale
     str_fail_count = sum(1 for c in str_con_checks if c.status == "fail")
@@ -812,9 +795,10 @@ def assess_quality(
                 ontologies[family].append(onto)
 
     return QualityReport(
-        score=combined_score,
+        score=score_val,
         structural_score=structural_score,
         semantic_score=semantic_score,
+        combined_score=combined_score_val,
         verdict=verdict,
         critical_fail=critical_fail,
         sampled=sampled,
@@ -827,6 +811,7 @@ def assess_quality(
                 "fail": str_fail_count,
             },
             "semantic": {"score": semantic_score},
+            "combined": {"score": combined_score_val},
             "rows": len(rows) - 1 if rows else 0,
             "columns": len(headers),
         },

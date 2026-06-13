@@ -181,6 +181,26 @@ class TestSuggestDateformat:
         assert _suggest_dateformat({}) is None
         assert _suggest_dateformat({"date_raw_values": {}}) is None
 
+    @pytest.mark.policy
+    def test_date_raw_values_capped_at_30_rows(self, tmp_path: Path) -> None:
+        """date_raw_values contiene al massimo 30 valori per colonna."""
+        from dataclasses import asdict
+        from toolkit.profile.raw import profile_raw
+
+        csv_file = tmp_path / "large.csv"
+        lines = ["data;valore"]
+        for i in range(1, 101):
+            day = (i % 28) + 1
+            month = ((i // 28) % 12) + 1
+            lines.append(f"{day:02d}/{month:02d}/2024;{i}")
+        csv_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        profile = profile_raw(tmp_path, "test", 2024, primary_file=csv_file)
+        d = asdict(profile)
+        raw_vals = d.get("date_raw_values", {})
+        for col, vals in raw_vals.items():
+            assert len(vals) <= 30, f"Colonna {col} ha {len(vals)} valori, atteso max 30"
+
 
 # ---------------------------------------------------------------------------
 # pure_unit: _find_anno_raw_column / _has_anno_column

@@ -515,10 +515,12 @@ def _extract_date_raw_values(
     if effective_read_cfg.get("escape"):
         dialect_kwargs["escapechar"] = effective_read_cfg["escape"]
 
-    # Single pass: read raw rows, sample first 30 for detection,
-    # then extract values for date-like columns from ALL read rows
+    # Single pass: read first 30 data rows, sample values per column.
+    # Both detection and extraction use the SAME 30-row sample — keeps
+    # profile size bounded (date_raw_values has at most 30 items/column).
+    MAX_SAMPLE = 30
     raw_samples: dict[int, list[str]] = {}
-    all_rows: list[list[str]] = []
+    rows_read = 0
 
     try:
         with open(file0, encoding=enc, newline="") as f:
@@ -532,13 +534,13 @@ def _extract_date_raw_values(
             for row in reader:
                 if not row:
                     continue
-                all_rows.append(row)
-                # Keep first 30 rows as detection sample
-                if len(all_rows) <= 30:
-                    for i, val in enumerate(row):
-                        trimmed = val.strip()
-                        if trimmed:
-                            raw_samples.setdefault(i, []).append(trimmed)
+                if rows_read >= MAX_SAMPLE:
+                    break
+                rows_read += 1
+                for i, val in enumerate(row):
+                    trimmed = val.strip()
+                    if trimmed:
+                        raw_samples.setdefault(i, []).append(trimmed)
     except Exception:
         pass
 
@@ -548,22 +550,20 @@ def _extract_date_raw_values(
     # Find columns where >= 60% of sample values look like dates
     date_col_indices: set[int] = set()
     for col_idx, values in raw_samples.items():
-        non_empty = [v for v in values if v]
-        if not non_empty:
+        if not values:
             continue
-        date_like = sum(1 for v in non_empty if _DATE_LIKE_RE.match(v))
-        if date_like >= len(non_empty) * 0.6 and col_idx < len(columns_raw):
+        date_like = sum(1 for v in values if _DATE_LIKE_RE.match(v))
+        if date_like >= len(values) * 0.6 and col_idx < len(columns_raw):
             date_col_indices.add(col_idx)
 
     if not date_col_indices:
         return {}
 
+    # Build result from the same 30-row sample
     result: dict[str, list[str]] = {}
     for col_idx in sorted(date_col_indices):
         col_name = columns_raw[col_idx]
-        vals = [
-            row[col_idx].strip() for row in all_rows if col_idx < len(row) and row[col_idx].strip()
-        ]
+        vals = raw_samples.get(col_idx, [])
         if vals:
             result[col_name] = vals
 

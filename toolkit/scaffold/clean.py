@@ -81,13 +81,13 @@ def _select_expr(
 ) -> str:
     """Build a SELECT expression for one column with smart transformations.
 
-    - VARCHAR columns: TRIM instead of TRY_CAST (avoids unnecessary type coercion)
+    - VARCHAR columns: TRIM with CAST AS VARCHAR (safe for columns sniffed as BIGINT)
       Comma-decimal numbers are handled by clean.read.decimal in dataset.yml
       (see propose_clean_read()), not by REPLACE in SQL — DuckDB's read_csv
       native decimal support is more reliable and avoids DOUBLE→STRING round-trips.
     """
     if sql_type == "VARCHAR":
-        return f'trim("{raw_col}") AS {out_name}'
+        return f'trim(CAST("{raw_col}" AS VARCHAR)) AS {out_name}'
 
     return f'TRY_CAST("{raw_col}" AS {sql_type}) AS {out_name}'
 

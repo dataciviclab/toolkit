@@ -30,7 +30,7 @@ class TestSelectExpr:
     def test_varchar_gets_trim(self) -> None:
         """VARCHAR columns use TRIM instead of unnecessary TRY_CAST."""
         result = _select_expr("Nome", "VARCHAR", "nome")
-        assert result == 'trim("Nome") AS nome'
+        assert result == 'trim(CAST("Nome" AS VARCHAR)) AS nome'
 
     @pytest.mark.pure_unit
     def test_integer_gets_try_cast(self) -> None:
@@ -148,7 +148,7 @@ class TestColumnsSpec:
             },
         }
         exprs, spec = _columns_spec(profile, 2024)
-        assert 'trim("Nome") AS nome' in exprs
+        assert 'trim(CAST("Nome" AS VARCHAR)) AS nome' in exprs
         assert 'TRY_CAST("Anno" AS BIGINT) AS anno' in exprs
         assert 'TRY_CAST("Valore" AS DOUBLE) AS valore' in exprs
         assert spec["Nome"] == "VARCHAR"
@@ -168,7 +168,7 @@ class TestColumnsSpec:
         }
         exprs, _ = _columns_spec(profile, 2024)
         joined = "\n".join(exprs)
-        assert 'trim("Nome") AS nome' in joined
+        assert 'trim(CAST("Nome" AS VARCHAR)) AS nome' in joined
         assert 'TRY_CAST("Importo" AS DOUBLE)' in joined
         assert "REPLACE" not in joined
 
@@ -213,7 +213,7 @@ class TestGenerateCleanSql:
         assert "{year}::INTEGER AS anno" in sql
         assert "FROM raw_input" in sql
         assert "WHERE" not in sql
-        assert 'trim("Nome")' in sql
+        assert 'trim(CAST("Nome" AS VARCHAR))' in sql
         assert 'TRY_CAST("Valore"' in sql
 
     @pytest.mark.pure_unit
@@ -231,7 +231,7 @@ class TestGenerateCleanSql:
         assert "{year}::INTEGER" not in sql  # non injectato
         assert 'TRY_CAST("Anno" AS BIGINT) AS anno' in sql
         assert 'WHERE try_cast("Anno" AS INTEGER) IS NOT NULL' in sql
-        assert 'trim("Regione")' in sql
+        assert 'trim(CAST("Regione" AS VARCHAR))' in sql
 
     @pytest.mark.pure_unit
     def test_with_anno_di_imposta_adds_where(self) -> None:
@@ -341,6 +341,6 @@ class TestSuggestCleanSqlIntegration:
             },
         }
         sql = suggest_clean_sql(cols, profile)
-        assert 'trim("nome")' in sql
-        assert 'trim("categoria")' in sql
+        assert 'trim(CAST("nome" AS VARCHAR))' in sql
+        assert 'trim(CAST("categoria" AS VARCHAR))' in sql
         assert 'TRY_CAST("valore" AS DOUBLE)' in sql

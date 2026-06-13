@@ -574,6 +574,36 @@ class TestCleanReadOverrides:
             )
 
 
+@pytest.mark.policy
+def test_apply_year_overrides_merge(tmp_path: Path):
+    """apply_year_overrides fonde override per anno e rimuove overrides."""
+    from toolkit.clean.read_config import apply_year_overrides
+
+    base = {
+        "delim": ";",
+        "encoding": "utf-8",
+        "overrides": {2024: {"encoding": "latin-1", "skip": 2}},
+    }
+    result = apply_year_overrides(base, 2024)
+    assert result["delim"] == ";"  # dalla base
+    assert result["encoding"] == "latin-1"  # override vince
+    assert result["skip"] == 2  # solo nell'override
+    assert "overrides" not in result  # rimosso
+
+
+@pytest.mark.policy
+def test_apply_year_overrides_no_match(tmp_path: Path):
+    """apply_year_overrides con anno senza override non modifica."""
+    from toolkit.clean.read_config import apply_year_overrides
+
+    base = {"delim": ";", "overrides": {2025: {"skip": 1}}}
+    result = apply_year_overrides(base, 2024)
+    assert result["delim"] == ";"
+    assert result.get("skip") is None
+    assert "overrides" not in result
+
+
+@pytest.mark.policy
 def test_read_raw_to_relation_with_thousands_separator(tmp_path: Path):
     """DuckDB read_csv respects decimal=',' + thousands='.'.
 

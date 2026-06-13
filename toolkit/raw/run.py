@@ -20,6 +20,7 @@ from toolkit.profile.raw import (
     write_raw_profile,
     write_suggested_read_yml,
 )
+from toolkit.clean.read_config import apply_year_overrides
 from toolkit.scaffold.clean import scaffold_clean_if_missing
 from toolkit.raw._fetch_utils import (
     _choose_primary_output,
@@ -179,7 +180,7 @@ def run_raw(
                     out_dir,
                     dataset,
                     year,
-                    read_cfg=(clean_cfg or {}).get("read", {}),
+                    read_cfg=apply_year_overrides((clean_cfg or {}).get("read", {}), year),
                     primary_file=primary_output_path,
                 )
                 profile_dir = out_dir / "_profile"

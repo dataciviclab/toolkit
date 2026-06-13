@@ -16,6 +16,7 @@ from typing import Any
 
 from toolkit.core.io import read_yaml
 from toolkit.core.csv_read import (
+    ALLOWED_READ_CSV_KEYS,
     READ_SELECTION_KEYS,
     READ_SOURCE_MODES,
     filter_suggested_format_keys,
@@ -78,6 +79,28 @@ def filter_suggested_read(cfg: dict[str, Any] | None) -> dict[str, Any]:
     return filter_suggested_format_keys(cfg)
 
 
+def apply_year_overrides(read_cfg: dict[str, Any], year: int) -> dict[str, Any]:
+    """Return ``read_cfg`` with per-year overrides merged in for the given ``year``.
+
+    Extracts ``overrides`` from the config (if present), looks up the year,
+    and merges matching keys into the result.  The ``overrides`` key itself
+    is removed — it is not a DuckDB ``read_csv`` parameter.
+
+    This is the single shared resolution used by both the **clean runtime**
+    (via ``resolve_clean_read_cfg``) and the **RAW profiling** (via
+    ``profile_raw``) to guarantee profile and runtime never diverge.
+    """
+    if not read_cfg:
+        return {}
+    result = dict(read_cfg)
+    raw_overrides = result.pop("overrides", None) or {}
+    year_override = raw_overrides.get(year) or raw_overrides.get(str(year))
+    if year_override:
+        filtered = {k: v for k, v in year_override.items() if k in ALLOWED_READ_CSV_KEYS}
+        result.update(filtered)
+    return result
+
+
 def resolve_clean_read_cfg(
     raw_year_dir: Path,
     clean_cfg: dict[str, Any],
@@ -92,8 +115,7 @@ def resolve_clean_read_cfg(
         raw_overrides = dict(explicit_cfg.pop("overrides", {}) or {})
 
     selection_cfg, relation_overrides = _split_read_cfg(explicit_cfg)
-
-    # Belt and suspenders: ensure overrides doesn't leak into relation config
+    # Belt and suspenders: ensure overrides doesn't leak
     relation_overrides.pop("overrides", None)
 
     # Validate each year's override dict against CleanReadConfig
@@ -113,17 +135,15 @@ def resolve_clean_read_cfg(
         overrides=relation_overrides,
     )
 
-    # Apply per-year override if one exists for this year
+    # Apply per-year override via the shared resolver (same as profile_raw uses)
     year = int(raw_year_dir.name)
-    year_override = raw_overrides.get(year) or raw_overrides.get(str(year))
-    if year_override:
-        # Filter to valid DuckDB read_csv keys only
-        from toolkit.core.csv_read import ALLOWED_READ_CSV_KEYS
-
-        filtered = {k: v for k, v in year_override.items() if k in ALLOWED_READ_CSV_KEYS}
-        if filtered:
-            merged_relation_cfg.update(filtered)
-            params_source.append(f"year_override_{year}")
+    year_override_cfg = apply_year_overrides(
+        {"overrides": dict(raw_overrides)} if raw_overrides else {},
+        year,
+    )
+    if year_override_cfg:
+        merged_relation_cfg.update(year_override_cfg)
+        params_source.append(f"year_override_{year}")
 
     return selection_cfg, merged_relation_cfg, params_source
 

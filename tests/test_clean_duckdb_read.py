@@ -574,6 +574,18 @@ class TestCleanReadOverrides:
             )
 
     @pytest.mark.policy
+    def test_invalid_override_key_in_unused_year_raises(self, tmp_path: Path):
+        """Override per anno non eseguito con chiave invalida solleva ValueError."""
+        raw_dir = tmp_path / "raw" / "demo" / "2024"
+        raw_dir.mkdir(parents=True)
+        with pytest.raises(ValueError, match="clean.read.overrides.2025"):
+            resolve_clean_read_cfg(
+                raw_dir,
+                {"read": {"overrides": {2025: {"delmi": ";"}}}},
+                logging.getLogger("tests.clean.duckdb_read.override"),
+            )
+
+    @pytest.mark.policy
     def test_override_with_interdependent_fields(self, tmp_path: Path):
         """Override con campo che dipende dalla base non viene rifiutato in isolamento."""
         raw_dir = tmp_path / "raw" / "demo" / "2024"
@@ -597,7 +609,7 @@ class TestCleanReadOverrides:
         """Selection keys (mode, glob) negli override sollevano ValueError."""
         raw_dir = tmp_path / "raw" / "demo" / "2024"
         raw_dir.mkdir(parents=True)
-        with pytest.raises(ValueError, match="selection keys not allowed in overrides"):
+        with pytest.raises(ValueError, match="clean.read.overrides.2024"):
             resolve_clean_read_cfg(
                 raw_dir,
                 {"read": {"overrides": {2024: {"mode": "all"}}}},

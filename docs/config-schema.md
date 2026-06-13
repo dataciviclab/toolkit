@@ -171,6 +171,9 @@ Note pratiche per `http_post_file`:
 | `trim_whitespace` | `bool` | `true` |
 | `sample_size` | `int \| null` | `null` |
 | `sheet_name` | `string \| int \| null` | `null` |
+| `dateformat` | `string \| null` | `null` |
+| `timestampformat` | `string \| null` | `null` |
+| `overrides` | `dict` | `null` |
 | `mode` | `explicit \| latest \| largest \| all \| null` | `latest`¹ |
 | `glob` | `string` | `*` |
 | `prefer_from_raw_run` | `bool` | `true` |
@@ -191,6 +194,16 @@ Note pratiche:
 - `normalize_rows_to_columns: true` ha senso solo insieme a `columns`
 - con `normalize_rows_to_columns: true`, il toolkit normalizza le righe corte del CSV allo schema atteso prima di esporre `raw_input`
 - `align_by_header: true` (insieme a `normalize_rows_to_columns: true`) allinea le righe per nome colonna invece che per posizione: colonne attese ma non presenti nell'header vengono riempite con stringa vuota; colonne extra nel CSV vengono ignorate; colonne in ordine diverso vengono riallineate. Richiede `header: true`.
+- `dateformat` / `timestampformat`: specificano il formato di date/timestamp nel CSV (es. `%d/%m/%Y`). DuckDB usa questi formati in `read_csv` invece di auto-detect, risolvendo date in formato italiano o altri formati non ISO.
+- `overrides`: mapping `{year: {param: value}}` per parametri di parsing diversi per anno. Utile quando la struttura raw varia tra anni (es. skip diverso, colonna `_id` presente solo in un anno). Le chiavi consentite sono le stesse di `CleanRead` esclusi i parametri di selezione (`mode`, `glob`, `include`, `prefer_from_raw_run`, `allow_ambiguous`). Esempio:
+  ```yaml
+  read:
+    columns: {nome: VARCHAR, anno: BIGINT}
+    overrides:
+      2023:
+        columns: {_id: BIGINT, nome: VARCHAR, anno: BIGINT}
+        skip: 2
+  ```
 
 `CleanValidate`:
 

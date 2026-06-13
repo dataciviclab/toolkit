@@ -142,6 +142,24 @@ def resolve_clean_read_cfg(
     if "overrides" in explicit_cfg:
         raw_overrides = dict(explicit_cfg.pop("overrides", {}) or {})
 
+    # Validate STRUCTURE of ALL override entries (not just the executed year).
+    # Checks that every year's keys are known DuckDB params (parsing only,
+    # no selection keys).  Dependency validation (e.g. align_by_header needs
+    # normalize_rows_to_columns) happens later at merge time per-year.
+    known_override_keys = ALLOWED_READ_CSV_KEYS - READ_SELECTION_KEYS
+    for override_key, year_cfg in raw_overrides.items():
+        if not isinstance(year_cfg, dict):
+            raise ValueError(
+                f"clean.read.overrides.{override_key}: must be a mapping (dict), "
+                f"got {type(year_cfg).__name__}"
+            )
+        unknown = [k for k in year_cfg if k not in known_override_keys]
+        if unknown:
+            raise ValueError(
+                f"clean.read.overrides.{override_key}: unknown parameter(s): "
+                f"{unknown}. Allowed: {sorted(known_override_keys)}"
+            )
+
     selection_cfg, relation_overrides = _split_read_cfg(explicit_cfg)
     # Belt and suspenders: ensure overrides doesn't leak
     relation_overrides.pop("overrides", None)
@@ -180,35 +198,3 @@ def resolve_clean_read_cfg(
     )
 
     return selection_cfg, merged_relation_cfg, params_source
-
-
-def _validate_and_normalize_overrides(
-    raw_overrides: dict[str | int, dict[str, Any]],
-    logger=None,
-) -> dict[str | int, dict[str, Any]]:
-    """Validate and normalize per-year override configs against ``CleanReadConfig``.
-
-    Each year's override is validated with ``CleanReadConfig.model_validate``
-    and then ``model_dump`` returns the normalized form (e.g. ``columns`` in
-    list format is converted to dict, YAML string booleans are parsed).
-
-    Raises ``ValueError`` with the offending year key if any override
-    contains invalid or unknown fields (catches typos like ``delmi``).
-
-    Returns a dict of ``{year: validated_dict}`` with the same structure
-    as the input but with normalized values.
-    """
-    result: dict[str | int, dict[str, Any]] = {}
-    if not raw_overrides:
-        return result
-
-    from toolkit.core.config_models.clean import CleanReadConfig
-
-    for year, cfg in raw_overrides.items():
-        try:
-            validated = CleanReadConfig.model_validate(cfg)
-            result[year] = validated.model_dump(exclude_unset=True)
-        except Exception as exc:
-            raise ValueError(f"clean.read.overrides.{year}: invalid config: {exc}") from exc
-
-    return result

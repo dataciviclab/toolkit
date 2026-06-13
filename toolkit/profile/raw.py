@@ -8,6 +8,7 @@ and mapping suggestion generation. Internal sniffing logic lives in
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -479,33 +480,30 @@ def profile_with_read_cfg(
     }
 
 
+# Pattern per riconoscere valori che sembrano date (NN/NN/NNNN, NNNN/NN/NN, ecc.)
+# Usato in _extract_date_raw_values per trovare colonne VARCHAR che DuckDB
+# non ha classificato come DATE per mancanza di dateformat.
+_DATE_LIKE_RE = re.compile(r"^\d{1,4}[/\-]\d{1,2}[/\-]\d{1,4}$")
+
+
 def _extract_date_raw_values(
     file0: Path,
     mapping_suggestions: dict[str, Any],
     columns_raw: list[str],
     effective_read_cfg: dict[str, Any],
 ) -> dict[str, list[str]]:
-    """Extract raw string values for date-typed columns before DuckDB conversion.
+    """Extract raw string values for date-like columns before DuckDB conversion.
 
-    Reads the raw CSV file using the SAME read configuration that DuckDB uses
-    (same encoding, delimiter, header, skip, quote, escape) and collects
-    string values for columns that DuckDB categorized as ``date``.
-    This preserves the original date string format (e.g. ``15/03/2024``)
-    which DuckDB converts to ``Timestamp``.
+    Reads the raw CSV file directly (using the SAME read configuration as DuckDB)
+    and determines which columns look like dates by scanning raw string values
+    — NOT using DuckDB's ``sample_rows`` which already converts dates to Timestamp.
 
-    Returns ``{col_name: [val1, val2, ...]}`` for each date column with samples,
-    or empty dict if no date columns or file cannot be read.
+    Returns ``{col_name: [val1, val2, ...]}`` for each column that looks like
+    a date, or empty dict if none found.
     """
-    date_cols = [
-        col
-        for col, spec in mapping_suggestions.items()
-        if spec.get("type") == "date" and col in columns_raw
-    ]
-    if not date_cols:
+    if not columns_raw:
         return {}
 
-    col_index = {name: i for i, name in enumerate(columns_raw)}
-    result: dict[str, list[str]] = {col: [] for col in date_cols}
     enc = effective_read_cfg.get("encoding") or "utf-8"
     sep = effective_read_cfg.get("delim") or effective_read_cfg.get("sep") or ","
     skip_rows = int(effective_read_cfg.get("skip") or 0)
@@ -517,33 +515,59 @@ def _extract_date_raw_values(
     if effective_read_cfg.get("escape"):
         dialect_kwargs["escapechar"] = effective_read_cfg["escape"]
 
+    # Single pass: read raw rows, sample first 30 for detection,
+    # then extract values for date-like columns from ALL read rows
+    raw_samples: dict[int, list[str]] = {}
+    all_rows: list[list[str]] = []
+
     try:
         with open(file0, encoding=enc, newline="") as f:
             reader = csv.reader(f, **dialect_kwargs)
 
-            # Skip preamble rows
             for _ in range(skip_rows):
                 next(reader, None)
-
-            # Skip header row when DuckDB treats first row as header
             if has_header:
                 next(reader, None)
 
             for row in reader:
                 if not row:
                     continue
-                for col in date_cols:
-                    idx = col_index.get(col)
-                    if idx is not None and idx < len(row):
-                        val = (row[idx] or "").strip()
-                        if val:
-                            result[col].append(val)
-                if all(len(v) >= 30 for v in result.values()):
-                    break
+                all_rows.append(row)
+                # Keep first 30 rows as detection sample
+                if len(all_rows) <= 30:
+                    for i, val in enumerate(row):
+                        trimmed = val.strip()
+                        if trimmed:
+                            raw_samples.setdefault(i, []).append(trimmed)
     except Exception:
         pass
 
-    return {k: v for k, v in result.items() if v}
+    if not raw_samples:
+        return {}
+
+    # Find columns where >= 60% of sample values look like dates
+    date_col_indices: set[int] = set()
+    for col_idx, values in raw_samples.items():
+        non_empty = [v for v in values if v]
+        if not non_empty:
+            continue
+        date_like = sum(1 for v in non_empty if _DATE_LIKE_RE.match(v))
+        if date_like >= len(non_empty) * 0.6 and col_idx < len(columns_raw):
+            date_col_indices.add(col_idx)
+
+    if not date_col_indices:
+        return {}
+
+    result: dict[str, list[str]] = {}
+    for col_idx in sorted(date_col_indices):
+        col_name = columns_raw[col_idx]
+        vals = [
+            row[col_idx].strip() for row in all_rows if col_idx < len(row) and row[col_idx].strip()
+        ]
+        if vals:
+            result[col_name] = vals
+
+    return result
 
 
 @dataclass

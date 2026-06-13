@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import re
 from pathlib import Path
 from typing import Any
@@ -7,7 +8,6 @@ from typing import Any
 
 def _snake_case(name: str) -> str:
     """Convert a column name to snake_case (best-effort)."""
-    import re
 
     # Replace spaces and special chars with underscores
     s = name.strip()
@@ -50,56 +50,85 @@ def _map_duckdb_type(raw_type: str) -> str:
     return "VARCHAR"
 
 
-_DATE_FORMAT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"^\d{2}/\d{2}/\d{4}$"), "%d/%m/%Y"),
-    (re.compile(r"^\d{2}-\d{2}-\d{4}$"), "%d-%m-%Y"),
-    (re.compile(r"^\d{2}/\d{2}/\d{2}$"), "%d/%m/%y"),
-    (re.compile(r"^\d{2}-\d{2}-\d{2}$"), "%d-%m-%y"),
-    (re.compile(r"^\d{4}/\d{2}/\d{2}$"), "%Y/%m/%d"),
+# Formati data organizzati per gruppo con stesso separatore.
+# I gruppi con due formati (DMY/MDY) richiedono disambiguazione:
+# valori che parsano in UN SOLO formato votano quello; valori che
+# parsano in entrambi (es. "03/04/2024") sono ambigui e non contano.
+# I gruppi con un solo formato (YYYY/mm/dd) sono non-ambigu.
+_DATE_FORMAT_GROUPS: list[tuple[str, ...]] = [
+    ("%d/%m/%Y", "%m/%d/%Y"),  # slash 4-digit
+    ("%d-%m-%Y", "%m-%d-%Y"),  # dash 4-digit
+    ("%d/%m/%y", "%m/%d/%y"),  # slash 2-digit
+    ("%d-%m-%y", "%m-%d-%y"),  # dash 2-digit
+    ("%Y/%m/%d",),  # ISO con slash
 ]
+
+
+def _try_strptime(value: str, fmt: str) -> bool:
+    """Try to parse a date string with the given strptime format."""
+    try:
+        datetime.datetime.strptime(value, fmt)
+        return True
+    except ValueError:
+        return False
 
 
 def _suggest_dateformat(profile: dict[str, Any]) -> str | None:
     """Detect non-ISO date format from raw date values in the profile.
 
     Uses ``date_raw_values`` (extracted from raw CSV *before* DuckDB
-    converts dates to Timestamp) to detect date format patterns.
+    converts dates) and ``datetime.strptime`` for validation.
 
-    Each date column independently votes for its format. A column supports
-    a format if ≥60% of its non-empty values match that pattern.
-    Only suggests a ``dateformat`` if EVERY date column with a clear
-    format chooses the SAME format. Columns with no clear format (e.g.
-    ISO dates that match no non-ISO pattern) are ignored — they will
-    be parsed correctly by DuckDB regardless of ``dateformat``.
+    For ambiguous separators (``/``, ``-``), counts how many values
+    successfully parse in each format (DMY and MDY). Values that parse
+    in both formats are counted for both — the ambiguity means neither
+    format is *excluded*, but the format with more total parses wins.
 
-    Returns the ``dateformat`` string (e.g. ``%d/%m/%Y``) or ``None``.
+    Each column picks its best format (>=60% of its non-empty values).
+    Only suggests a ``dateformat`` if EVERY column picks the SAME format.
+
+    Returns the ``dateformat`` string or ``None``.
     """
     date_raw = profile.get("date_raw_values", {})
     if not date_raw:
         return None
 
-    # Per colonna: trova il formato vincente (se ≥60% dei suoi valori)
     col_formats: dict[str, str] = {}
     for col, values in date_raw.items():
         non_empty = [v for v in values if v]
-        if not non_empty:
+        total = len(non_empty)
+        if total == 0:
             continue
-        format_votes: dict[str, int] = {}
-        for v in non_empty:
-            for pattern, fmt in _DATE_FORMAT_PATTERNS:
-                if pattern.match(v):
-                    format_votes[fmt] = format_votes.get(fmt, 0) + 1
-                    break
-        if not format_votes:
-            continue
-        best_fmt, best_count = max(format_votes.items(), key=lambda x: x[1])
-        if best_count / len(non_empty) >= 0.6:
+
+        best_fmt: str | None = None
+        best_score = 0
+
+        for fmt_group in _DATE_FORMAT_GROUPS:
+            if len(fmt_group) == 1:
+                fmt = fmt_group[0]
+                count = sum(1 for v in non_empty if _try_strptime(v, fmt))
+                if count > best_score:
+                    best_score = count
+                    best_fmt = fmt
+            else:
+                dmy_fmt, mdy_fmt = fmt_group
+                dmy_count = sum(1 for v in non_empty if _try_strptime(v, dmy_fmt))
+                mdy_count = sum(1 for v in non_empty if _try_strptime(v, mdy_fmt))
+
+                # Only consider when one format clearly wins over the other
+                if dmy_count > mdy_count and dmy_count > best_score:
+                    best_score = dmy_count
+                    best_fmt = dmy_fmt
+                elif mdy_count > dmy_count and mdy_count > best_score:
+                    best_score = mdy_count
+                    best_fmt = mdy_fmt
+
+        if best_fmt is not None and best_score >= total * 0.6:
             col_formats[col] = best_fmt
 
     if not col_formats:
         return None
 
-    # Tutte le colonne con formato chiaro devono scegliere lo STESSO formato
     unique = set(col_formats.values())
     if len(unique) == 1:
         return unique.pop()

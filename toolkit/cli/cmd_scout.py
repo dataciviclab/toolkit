@@ -836,6 +836,19 @@ def preview(
     typer.echo(f"  Granularity:     {result.granularity}")
     typer.echo(f"  Year range:      {result.year_min} - {result.year_max}")
     typer.echo(f"  Row count:       {result.preview_row_count}")
+    if result.quality_score is not None:
+        verdict_icon = {"buona": "✅", "accettabile": "⚠️", "scarsa": "🔴"}
+        icon = verdict_icon.get(result.quality_verdict or "", "")
+        typer.echo(
+            f"  Quality score:   {result.quality_score}/100 ({icon} {result.quality_verdict})"
+        )
+        if result.quality_flags:
+            typer.echo(f"  Quality flags:   {', '.join(result.quality_flags)}")
+        if result.quality_ontologies:
+            families = sorted(result.quality_ontologies.keys())
+            typer.echo(f"  Ontologies:      {', '.join(families)}")
+        if result.quality_note:
+            typer.echo(f"  Quality note:    {result.quality_note}")
     if result.columns:
         cols = result.columns
         typer.echo(f"  Columns ({len(cols)}): {', '.join(str(c) for c in cols[:20])}")

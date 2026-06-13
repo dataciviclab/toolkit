@@ -13,6 +13,8 @@ Score: 0-100 pesato (pass=1, warn=0.5, fail=0, info=1, skip=1).
 
 from __future__ import annotations
 
+import csv
+import io
 import re
 import statistics
 from dataclasses import dataclass, field
@@ -127,11 +129,19 @@ class CheckResult:
 
 @dataclass
 class QualityReport:
-    """Report completo qualità CSV PA."""
+    """Report qualità CSV PA — diagnostico, non certificativo.
+
+    I check sono divisi in due categorie:
+    - **Strutturali** (S, C): affidabili, basati su pattern deterministici.
+    - **Semantici** (O, L): euristici, basati su naming convenzioni e keywords
+      — non costituiscono certificazione di qualità open data.
+    """
 
     score: int  # 0-100
-    verdict: str  # buona_qualita | accettabile_con_riserva | non_accettabile
+    verdict: str  # buona | accettabile | scarsa
     critical_fail: bool = False
+    sampled: bool = False
+    note: str = ""
     summary: dict[str, int] = field(default_factory=dict)
     checks: dict[str, list[CheckResult]] = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)
@@ -150,50 +160,36 @@ def _norm_header(h: str) -> str:
 
 
 def _detect_sep(raw: str) -> str:
-    """Rileva separatore CSV: ``,`` ``;`` ``\\t`` ``|``."""
-    line = raw.split("\n")[0] if raw else ""
-    counts = {",": 0, ";": 0, "\t": 0, "|": 0}
-    for ch in line:
-        if ch in counts:
-            counts[ch] += 1
-    sep = max(counts, key=counts.get)  # type: ignore[arg-type]
-    return sep
+    """Rileva separatore CSV via ``csv.Sniffer``.
+
+    Fallback su ``,`` se Sniffer fallisce (file con una colonna sola,
+    intestazioni non standard, ecc.).
+    """
+    sample = raw[:4096]
+    try:
+        dialect = csv.Sniffer().sniff(sample)
+        return dialect.delimiter
+    except csv.Error:
+        # Fallback: conteggio separatori sulla prima riga effettiva
+        line = sample.split("\n")[0] if sample else ""
+        counts: dict[str, int] = {",": 0, ";": 0, "\t": 0, "|": 0}
+        in_q = False
+        for ch in line:
+            if ch == '"':
+                in_q = not in_q
+            elif ch in counts and not in_q:
+                counts[ch] += 1
+        sep = max(counts, key=counts.get)  # type: ignore[arg-type]
+        return sep if counts[sep] > 0 else ","
 
 
 def _parse_csv(raw: str, sep: str) -> list[list[str]]:
-    """Parser CSV RFC 4180 completo: gestisce newline dentro virgolette."""
-    raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+    """Parser CSV tramite ``csv.reader`` (stdlib, RFC 4180)."""
+    reader = csv.reader(io.StringIO(raw), delimiter=sep)
     rows: list[list[str]] = []
-    current_row: list[str] = []
-    current_field: list[str] = []
-    in_quotes = False
-    i = 0
-    while i < len(raw):
-        c = raw[i]
-        if c == '"':
-            if in_quotes and i + 1 < len(raw) and raw[i + 1] == '"':
-                current_field.append('"')
-                i += 1
-            else:
-                in_quotes = not in_quotes
-        elif c == sep and not in_quotes:
-            current_row.append("".join(current_field))
-            current_field = []
-        elif c == "\n" and not in_quotes:
-            current_row.append("".join(current_field))
-            # Salta righe completamente vuote
-            if any(f.strip() for f in current_row):
-                rows.append(current_row)
-            current_row = []
-            current_field = []
-        else:
-            current_field.append(c)
-        i += 1
-    # Ultima riga (senza \n finale)
-    if current_field or current_row:
-        current_row.append("".join(current_field))
-        if any(f.strip() for f in current_row):
-            rows.append(current_row)
+    for row in reader:
+        if any(cell.strip() for cell in row):  # skips empty lines
+            rows.append(row)
     return rows
 
 
@@ -411,8 +407,8 @@ def _checks_contenuto(rows: list[list[str]], headers: list[str]) -> list[CheckRe
     dec_issues = []
     for ci, h in enumerate(headers):
         vals = [r[ci].strip() for r in data_rows if ci < len(r) and r[ci].strip()]
-        nums = [v for v in vals if re.match(r"^-?\d+([.,]\d+)?$", v)]
-        if len(nums) > 5 and any("," in v for v in nums):
+        num_strs = [v for v in vals if re.match(r"^-?\d+([.,]\d+)?$", v)]
+        if len(num_strs) > 5 and any("," in v for v in num_strs):
             dec_issues.append(f'"{h}"')
     if dec_issues:
         p(
@@ -427,20 +423,20 @@ def _checks_contenuto(rows: list[list[str]], headers: list[str]) -> list[CheckRe
     # C7 — Outlier statistici (campioni con num sufficiente)
     outliers = []
     for ci, h in enumerate(headers):
-        vals = []
+        num_vals: list[float] = []
         for r in data_rows:
             if ci < len(r):
                 try:
-                    vals.append(float(r[ci].strip().replace(",", ".")))
+                    num_vals.append(float(r[ci].strip().replace(",", ".")))
                 except (ValueError, IndexError):
                     pass
-        if len(vals) < 10:
+        if len(num_vals) < 10:
             continue
-        mean = statistics.mean(vals)
-        stdev = statistics.stdev(vals) if len(vals) > 1 else 0
+        mean = statistics.mean(num_vals)
+        stdev = statistics.stdev(num_vals) if len(num_vals) > 1 else 0
         if stdev == 0:
             continue
-        anom = [v for v in vals if abs(v - mean) > 4 * stdev]
+        anom = [v for v in num_vals if abs(v - mean) > 4 * stdev]
         if anom:
             outliers.append(f'"{h}": {len(anom)} valori fuori scala (media={mean:.1f})')
     if outliers:
@@ -558,7 +554,9 @@ def _checks_opendata(rows: list[list[str]], headers: list[str], raw: str = "") -
 # ─── CHECK: Linked Data / Ontologie ────────────────────────────────────────────
 
 
-def _checks_linkeddata(rows: list[list[str]], headers: list[str]) -> list[CheckResult]:
+def _checks_linkeddata(
+    rows: list[list[str]], headers: list[str]
+) -> tuple[list[CheckResult], dict[str, list[str]]]:
     results: list[CheckResult] = []
     data_rows = rows[1:]
     norm_h = [_norm_header(h) for h in headers]
@@ -687,6 +685,7 @@ def assess_quality(
     csv_text: str,
     *,
     title: str = "",
+    sampled: bool = False,
 ) -> QualityReport:
     """Valuta la qualità di un CSV secondo criteri PA.
 
@@ -694,22 +693,39 @@ def assess_quality(
         csv_text: Testo grezzo del CSV (UTF-8).
         title: Titolo opzionale del dataset (per ontology detection
                context-aware — riservato per estensione futura).
+        sampled: Se True, il testo è un campione (es. primi 1MB).
+                 Disabilita check strutturali che richiedono il file
+                 completo (S6 righe inconsistenti, S12 righe vuote)
+                 e annota il report come ``sampled``.
 
     Returns:
         QualityReport con score, verdetto, check per categoria, flags,
         ontologie rilevate.
+
+    Nota:
+        I check semantici (O, L) sono euristici basati su naming colonne
+        e keywords — non costituiscono certificazione di qualità.
     """
     sep = _detect_sep(csv_text)
     rows = _parse_csv(csv_text, sep)
     headers = rows[0] if rows else []
 
     str_checks = _checks_struttura(csv_text, rows, sep, headers)
+    # Se sampled: S6 (righe inconsistenti) e S12 (righe vuote) danno falsi
+    # positivi su taglio a metà record. Li forziamo a info/skip.
+    if sampled:
+        for c in str_checks:
+            if c.id in ("S6", "S12"):
+                object.__setattr__(c, "status", "skip")
     con_checks = _checks_contenuto(rows, headers)
     od_checks = _checks_opendata(rows, headers, csv_text)
     ld_checks, matched_ontos = _checks_linkeddata(rows, headers)
 
     all_checks = str_checks + con_checks + od_checks + ld_checks
     score = _compute_score(all_checks)
+    # Score arrotondato per difetto su campione
+    if sampled:
+        score = min(score, 95)
     crit_fail = _is_critical_fail(all_checks)
     flags = _build_flags(all_checks)
 
@@ -718,11 +734,17 @@ def assess_quality(
     pass_count = sum(1 for c in all_checks if c.status == "pass")
 
     if crit_fail or fail_count > 3:
-        verdict = "non_accettabile"
+        verdict = "scarsa"
     elif fail_count > 0 or warn_count > 5:
-        verdict = "accettabile_con_riserva"
+        verdict = "accettabile"
     else:
-        verdict = "buona_qualita"
+        verdict = "buona"
+
+    note_parts: list[str] = []
+    if sampled:
+        note_parts.append("valutazione su campione (max 1MB)")
+    note_parts.append("check semantici basati su convenzioni di naming — solo indicativi")
+    note = " — ".join(note_parts)
 
     # Ontologie aggregate
     ontologies: dict[str, list[str]] = {}
@@ -738,6 +760,8 @@ def assess_quality(
         score=score,
         verdict=verdict,
         critical_fail=crit_fail,
+        sampled=sampled,
+        note=note,
         summary={
             "pass": pass_count,
             "warn": warn_count,

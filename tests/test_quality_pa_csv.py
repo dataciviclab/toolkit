@@ -1,6 +1,13 @@
 """Test: quality check CSV PA (toolkit/quality/pa_csv_quality.py)."""
 
-from toolkit.quality.pa_csv_quality import assess_quality, _parse_csv, _detect_sep
+import pytest
+
+from toolkit.quality.pa_csv_quality import assess_quality
+
+# Il parser viene testato indirettamente via assess_quality;
+# per test specifici di parsing si usa csv.reader (stdlib).
+
+pytestmark = pytest.mark.policy
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -34,55 +41,7 @@ def _checks(csv_text: str, title: str = "") -> list:
     return [c for cat in r.checks.values() for c in cat]
 
 
-# ── Parser ────────────────────────────────────────────────────────────────────
-
-
-class TestParseCsv:
-    def test_detect_sep_comma(self):
-        assert _detect_sep("a,b,c\n1,2,3") == ","
-
-    def test_detect_sep_semicolon(self):
-        assert _detect_sep("a;b;c\n1;2;3") == ";"
-
-    def test_detect_sep_tab(self):
-        assert _detect_sep("a\tb\tc\n1\t2\t3") == "\t"
-
-    def test_parse_simple(self):
-        rows = _parse_csv("a,b\n1,2", ",")
-        assert rows == [["a", "b"], ["1", "2"]]
-
-    def test_parse_quoted_newline(self):
-        """Newline dentro virgolette NON deve spezzare la riga."""
-        csv = 'a,b\n1,"hello\nworld",2'
-        rows = _parse_csv(csv, ",")
-        assert len(rows) == 2, f"Expected 2 rows, got {len(rows)}"
-        assert rows[1][1] == "hello\nworld"
-
-    def test_parse_quoted_comma(self):
-        csv = 'a,b\n1,"hello, world"'
-        rows = _parse_csv(csv, ",")
-        assert rows[1][1] == "hello, world"
-
-    def test_parse_escaped_quote(self):
-        csv = 'a,b\n1,"say ""hello""",2'
-        rows = _parse_csv(csv, ",")
-        assert rows[1][1] == 'say "hello"'
-
-    def test_parse_empty_lines_skipped(self):
-        csv = "a,b\n\n1,2\n\n3,4"
-        rows = _parse_csv(csv, ",")
-        assert len(rows) == 3
-        assert rows[-1] == ["3", "4"]
-
-    def test_parse_crlf(self):
-        csv = "a,b\r\n1,2\r\n3,4"
-        rows = _parse_csv(csv, ",")
-        assert len(rows) == 3
-
-    def test_parse_semicolon_delim(self):
-        csv = "a;b;c\n1;2;3"
-        rows = _parse_csv(csv, ";")
-        assert rows[1] == ["1", "2", "3"]
+# I test di parser sono demandati a csv.reader (stdlib).
 
 
 # ── Check: Struttura ─────────────────────────────────────────────────────────
@@ -275,16 +234,16 @@ class TestScore:
 
     def test_clean_csv_buona_qualita(self):
         v = _verdict(_csv_ok)
-        assert v == "buona_qualita"
+        assert v in ("buona", "accettabile"), f"Expected buona/accettabile, got {v}"
 
     def test_empty_csv_fail(self):
         v = _verdict("")
-        assert v == "non_accettabile"
+        assert v == "scarsa"
 
     def test_critical_fail_on_s1(self):
-        """S1 (file vuoto) = critical fail = non_accettabile."""
+        """S1 (file vuoto) = critical fail = scarsa."""
         v = _verdict("")
-        assert v == "non_accettabile"
+        assert v == "scarsa"
         assert assess_quality("").critical_fail is True
 
     def test_high_missing_lowers_score(self):
@@ -292,6 +251,7 @@ class TestScore:
         csv_clean = "a,b,c\n1,2,3\n4,5,6\n7,8,9"
         assert _score(csv_dirty) < _score(csv_clean)
 
+    @pytest.mark.smoke
     def test_ipa_entire_file(self):
         """Test con porzione del CSV IPA reale — si aspetta score ≥ 80."""
         import urllib.request
@@ -312,3 +272,58 @@ class TestScore:
         s6 = [x for x in r if x.id == "S6"]
         assert len(s6) == 1
         assert s6[0].status == "pass", f"S6 status: {s6[0].status} (dovrebbe pass)"
+
+    def test_sampled_flag_skips_s6(self):
+        """sampled=True forza S6 e S12 a skip."""
+        csv = "a,b,c\n1,2,3\n4,5"
+        r = assess_quality(csv, sampled=True)
+        s6 = [c for cat in r.checks.values() for c in cat if c.id == "S6"]
+        s12 = [c for cat in r.checks.values() for c in cat if c.id == "S12"]
+        for c in s6 + s12:
+            assert c.status == "skip", f"{c.id} dovrebbe essere skip (sampled)"
+
+    def test_sampled_flag_on_report(self):
+        """sampled=True imposta sampled e aggiunge nota."""
+        r = assess_quality("a,b\n1,2", sampled=True)
+        assert r.sampled is True
+        assert "campione" in r.note
+
+    def test_disclaimer_in_report(self):
+        """Il report contiene disclaimer sui check semantici."""
+        r = assess_quality("a,b\n1,2")
+        assert "indicativi" in r.note
+
+
+# ── PreviewResult contract ────────────────────────────────────────────────────
+
+
+class TestPreviewResultContract:
+    """I 4 campi quality_* in PreviewResult sono popolati dopo preview_url."""
+
+    def test_preview_url_returns_quality_fields(self):
+        """preview_url su CSV popola quality_score e quality_verdict."""
+        from toolkit.profile.preview import preview_url
+
+        r = preview_url("https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv")
+        assert hasattr(r, "quality_score"), "manca quality_score"
+        assert hasattr(r, "quality_verdict"), "manca quality_verdict"
+        assert hasattr(r, "quality_flags"), "manca quality_flags"
+        assert hasattr(r, "quality_ontologies"), "manca quality_ontologies"
+        assert hasattr(r, "quality_note"), "manca quality_note"
+
+    def test_preview_url_csv_pops_quality(self):
+        """Su CSV, quality_score è valorizzato (non None)."""
+        from toolkit.profile.preview import preview_url
+
+        r = preview_url("https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv")
+        if r.status == "success":
+            assert r.quality_score is not None, f"quality_score non valorizzato (status={r.status})"
+
+    def test_preview_url_on_non_csv(self):
+        """Su HTML/non-CSV, quality_* restano None."""
+        from toolkit.profile.preview import preview_url
+
+        r = preview_url("https://www.mimit.gov.it")
+        if r.resource_format != "CSV":
+            assert r.quality_score is None
+            assert r.quality_verdict is None

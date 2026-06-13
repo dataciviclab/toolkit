@@ -81,6 +81,7 @@ class PreviewResult:
     quality_verdict: str | None = None
     quality_flags: list[str] | None = None
     quality_ontologies: dict[str, list[str]] | None = None
+    quality_note: str | None = None
 
 
 # ── Year extraction helpers ───────────────────────────────────────────────────
@@ -305,14 +306,19 @@ def preview_url(
             quality_verdict: str | None = None
             quality_flags: list[str] | None = None
             quality_ontologies: dict[str, list[str]] | None = None
+            quality_note: str | None = None
             try:
                 # Decodifica il contenuto per l'analisi qualità
                 csv_text = content.decode(enc or "utf-8", errors="replace")
-                qr = assess_quality(csv_text)
+                # Se il file è più grande del chunk scaricato, il preview
+                # lavora su campione — flag sampled per evitare falsi S6
+                truncated = file_size is not None and file_size > len(content)
+                qr = assess_quality(csv_text, sampled=truncated)
                 quality_score = qr.score
                 quality_verdict = qr.verdict
                 quality_flags = qr.flags or None
                 quality_ontologies = qr.ontologies or None
+                quality_note = qr.note or None
             except Exception as exc:
                 logger.debug("Quality check skipped for %s: %s", url, exc)
 
@@ -324,6 +330,7 @@ def preview_url(
             quality_verdict=quality_verdict,
             quality_flags=quality_flags,
             quality_ontologies=quality_ontologies,
+            quality_note=quality_note,
             url=url,
             status="success",
             reachable=reachable,

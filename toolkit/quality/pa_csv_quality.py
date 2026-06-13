@@ -161,32 +161,39 @@ def _detect_sep(raw: str) -> str:
 
 
 def _parse_csv(raw: str, sep: str) -> list[list[str]]:
-    """Parser CSV minimale RFC 4180."""
+    """Parser CSV RFC 4180 completo: gestisce newline dentro virgolette."""
     raw = raw.replace("\r\n", "\n").replace("\r", "\n")
     rows: list[list[str]] = []
-    for line in raw.split("\n"):
-        if not line.strip():
-            continue
-        fields: list[str] = []
-        cur = ""
-        in_q = False
-        i = 0
-        while i < len(line):
-            c = line[i]
-            if c == '"':
-                if in_q and i + 1 < len(line) and line[i + 1] == '"':
-                    cur += '"'
-                    i += 1
-                else:
-                    in_q = not in_q
-            elif c == sep and not in_q:
-                fields.append(cur)
-                cur = ""
+    current_row: list[str] = []
+    current_field: list[str] = []
+    in_quotes = False
+    i = 0
+    while i < len(raw):
+        c = raw[i]
+        if c == '"':
+            if in_quotes and i + 1 < len(raw) and raw[i + 1] == '"':
+                current_field.append('"')
+                i += 1
             else:
-                cur += c
-            i += 1
-        fields.append(cur)
-        rows.append(fields)
+                in_quotes = not in_quotes
+        elif c == sep and not in_quotes:
+            current_row.append("".join(current_field))
+            current_field = []
+        elif c == "\n" and not in_quotes:
+            current_row.append("".join(current_field))
+            # Salta righe completamente vuote
+            if any(f.strip() for f in current_row):
+                rows.append(current_row)
+            current_row = []
+            current_field = []
+        else:
+            current_field.append(c)
+        i += 1
+    # Ultima riga (senza \n finale)
+    if current_field or current_row:
+        current_row.append("".join(current_field))
+        if any(f.strip() for f in current_row):
+            rows.append(current_row)
     return rows
 
 

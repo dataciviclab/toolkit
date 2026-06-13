@@ -604,29 +604,30 @@ def test_apply_year_overrides_no_match(tmp_path: Path):
 
 
 @pytest.mark.policy
-def test_apply_year_overrides_columns_extra(tmp_path: Path):
-    """columns_extra fonde colonne extra in quelle base."""
-    from toolkit.clean.read_config import apply_year_overrides
+def test_resolve_clean_read_cfg_overrides_columns(tmp_path: Path):
+    """resolve_clean_read_cfg applica override columns per anno via percorso reale."""
+    from toolkit.clean.read_config import resolve_clean_read_cfg
 
-    base = {
-        "columns": {"a": "VARCHAR", "b": "VARCHAR"},
-        "overrides": {2024: {"columns_extra": {"_id": "BIGINT"}}},
-    }
-    result = apply_year_overrides(base, 2024)
-    assert list(result["columns"].keys()) == ["a", "b", "_id"]
+    raw_dir = tmp_path / "raw" / "demo" / "2023"
+    raw_dir.mkdir(parents=True)
+    profile_dir = raw_dir / "_profile"
+    profile_dir.mkdir(parents=True)
 
+    _, relation_cfg, params_source = resolve_clean_read_cfg(
+        raw_dir,
+        {
+            "read": {
+                "source": "config_only",
+                "columns": {"a": "VARCHAR", "b": "VARCHAR"},
+                "overrides": {2023: {"columns": {"_id": "BIGINT", "a": "VARCHAR", "b": "VARCHAR"}}},
+            }
+        },
+        logging.getLogger("tests.clean.duckdb_read.override_cols"),
+    )
 
-@pytest.mark.policy
-def test_apply_year_overrides_columns_prepend(tmp_path: Path):
-    """columns_prepend aggiunge colonne all'inizio."""
-    from toolkit.clean.read_config import apply_year_overrides
-
-    base = {
-        "columns": {"a": "VARCHAR", "b": "VARCHAR"},
-        "overrides": {2024: {"columns_prepend": {"_id": "BIGINT"}}},
-    }
-    result = apply_year_overrides(base, 2024)
-    assert list(result["columns"].keys()) == ["_id", "a", "b"]
+    assert list(relation_cfg["columns"].keys()) == ["_id", "a", "b"]
+    assert "overrides" not in relation_cfg
+    assert "year_override_2023" in params_source
 
 
 @pytest.mark.policy

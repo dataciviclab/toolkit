@@ -86,11 +86,10 @@ def apply_year_overrides(read_cfg: dict[str, Any], year: int) -> dict[str, Any]:
     and merges matching keys into the result.  The ``overrides`` key itself
     is removed — it is not a DuckDB ``read_csv`` parameter.
 
-    Supported override keys:
-    - Any ``ALLOWED_READ_CSV_KEYS`` param (``skip``, ``encoding``, etc.)
-      → merged directly
-    - ``columns_extra``   → merged into base ``columns`` (replaces/adds keys)
-    - ``columns_prepend`` → merged into base ``columns``, placed FIRST
+    Override values are expected to be **already validated and normalized**
+    by ``_validate_and_normalize_overrides`` (called upstream in
+    ``resolve_clean_read_cfg``) — raw YAML values like ``columns`` in list
+    form are already converted to dict form, booleans are already parsed, etc.
 
     This is the single shared resolution used by both the **clean runtime**
     (via ``resolve_clean_read_cfg``) and the **RAW profiling** (via
@@ -104,23 +103,8 @@ def apply_year_overrides(read_cfg: dict[str, Any], year: int) -> dict[str, Any]:
     if not year_override:
         return result
 
-    year_cfg = dict(year_override)
-
-    # Handle columns_extra / columns_prepend: merge into base columns
-    extra = year_cfg.pop("columns_extra", None)
-    prepend = year_cfg.pop("columns_prepend", None)
-    if extra is not None or prepend is not None:
-        base_columns = result.get("columns")
-        if isinstance(base_columns, dict):
-            merged = dict(base_columns)
-            if isinstance(prepend, dict):
-                merged = {**prepend, **merged}
-            if isinstance(extra, dict):
-                merged.update(extra)
-            result["columns"] = merged
-
-    # Remaining keys: filter to valid DuckDB params and merge
-    filtered = {k: v for k, v in year_cfg.items() if k in ALLOWED_READ_CSV_KEYS}
+    # Filter to valid DuckDB read_csv keys and merge
+    filtered = {k: v for k, v in year_override.items() if k in ALLOWED_READ_CSV_KEYS}
     result.update(filtered)
     return result
 
@@ -142,8 +126,10 @@ def resolve_clean_read_cfg(
     # Belt and suspenders: ensure overrides doesn't leak
     relation_overrides.pop("overrides", None)
 
-    # Validate each year's override dict against CleanReadConfig
-    _validate_overrides(raw_overrides, logger)
+    # Validate and normalize each year's override against CleanReadConfig.
+    # model_dump() returns the validated/normalized values (e.g. columns list
+    # converted to dict, booleans parsed from YAML strings).
+    validated_overrides = _validate_and_normalize_overrides(raw_overrides, logger)
 
     suggested_cfg = load_suggested_read(raw_year_dir)
     filtered_suggested = filter_suggested_read(suggested_cfg)
@@ -162,7 +148,7 @@ def resolve_clean_read_cfg(
     # Apply per-year override via the shared resolver (same as profile_raw uses)
     year = int(raw_year_dir.name)
     year_override_cfg = apply_year_overrides(
-        {"overrides": dict(raw_overrides)} if raw_overrides else {},
+        {"overrides": dict(validated_overrides)} if validated_overrides else {},
         year,
     )
     if year_override_cfg:
@@ -172,21 +158,33 @@ def resolve_clean_read_cfg(
     return selection_cfg, merged_relation_cfg, params_source
 
 
-def _validate_overrides(
+def _validate_and_normalize_overrides(
     raw_overrides: dict[str | int, dict[str, Any]],
     logger=None,
-) -> None:
-    """Validate per-year override configs against ``CleanReadConfig``.
+) -> dict[str | int, dict[str, Any]]:
+    """Validate and normalize per-year override configs against ``CleanReadConfig``.
+
+    Each year's override is validated with ``CleanReadConfig.model_validate``
+    and then ``model_dump`` returns the normalized form (e.g. ``columns`` in
+    list format is converted to dict, YAML string booleans are parsed).
 
     Raises ``ValueError`` with the offending year key if any override
     contains invalid or unknown fields (catches typos like ``delmi``).
+
+    Returns a dict of ``{year: validated_dict}`` with the same structure
+    as the input but with normalized values.
     """
+    result: dict[str | int, dict[str, Any]] = {}
     if not raw_overrides:
-        return
+        return result
+
     from toolkit.core.config_models.clean import CleanReadConfig
 
     for year, cfg in raw_overrides.items():
         try:
-            CleanReadConfig(**cfg)
+            validated = CleanReadConfig.model_validate(cfg)
+            result[year] = validated.model_dump(exclude_unset=True)
         except Exception as exc:
             raise ValueError(f"clean.read.overrides.{year}: invalid config: {exc}") from exc
+
+    return result

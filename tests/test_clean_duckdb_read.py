@@ -562,18 +562,16 @@ class TestCleanReadOverrides:
         assert not any("year_override" in s for s in src)
 
     @pytest.mark.policy
-    def test_invalid_override_key_silently_ignored(self, tmp_path: Path):
-        """Chiave inesistente nell'override ('delmi') viene ignorata, non blocca."""
+    def test_invalid_override_key_raises(self, tmp_path: Path):
+        """Chiave inesistente nell'override ('delmi') solleva ValueError."""
         raw_dir = tmp_path / "raw" / "demo" / "2024"
         raw_dir.mkdir(parents=True)
-        _, cfg, _ = resolve_clean_read_cfg(
-            raw_dir,
-            {"read": {"overrides": {2024: {"delmi": ";", "skip": 2}}}},
-            logging.getLogger("tests.clean.duckdb_read.override"),
-        )
-        # skip viene applicato, delmi ignorato
-        assert cfg.get("skip") == 2
-        assert "delmi" not in cfg
+        with pytest.raises(ValueError, match="clean.read.overrides.2024"):
+            resolve_clean_read_cfg(
+                raw_dir,
+                {"read": {"overrides": {2024: {"delmi": ";", "skip": 2}}}},
+                logging.getLogger("tests.clean.duckdb_read.override"),
+            )
 
     @pytest.mark.policy
     def test_override_with_interdependent_fields(self, tmp_path: Path):

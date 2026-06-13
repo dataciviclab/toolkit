@@ -106,7 +106,13 @@ def apply_year_overrides(read_cfg: dict[str, Any], year: int) -> dict[str, Any]:
     if not year_override:
         return validated
 
-    # Merge override values (still raw — columns could be list, booleans strings)
+    # Merge override values — reject unknown keys
+    unknown = [k for k in year_override if k not in ALLOWED_READ_CSV_KEYS]
+    if unknown:
+        raise ValueError(
+            f"clean.read.overrides.{year}: unknown parameter(s): {unknown}. "
+            f"Allowed: {sorted(ALLOWED_READ_CSV_KEYS)}"
+        )
     filtered = {k: v for k, v in year_override.items() if k in ALLOWED_READ_CSV_KEYS}
     validated.update(filtered)
 

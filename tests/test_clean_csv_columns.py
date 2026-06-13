@@ -509,8 +509,7 @@ def test_run_clean_align_by_header_requires_normalize_runtime(tmp_path: Path):
             },
             NoopLogger(),
         )
-    # L'errore originale è incatenato come causa diretta
-    assert exc_info.value.__cause__ is not None
-    assert "align_by_header=true requires normalize_rows_to_columns=true" in str(
-        exc_info.value.__cause__
-    )
+    # La validazione ora avviene in resolve_clean_read_cfg tramite
+    # CleanReadConfig.model_validate, non piu' in duckdb_read.
+    # Il messaggio di errore e' preservato.
+    assert "align_by_header=true requires normalize_rows_to_columns=true" in str(exc_info.value)

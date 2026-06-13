@@ -93,6 +93,8 @@ def _csv_read_options(
         "encoding",
         "decimal",
         "thousands",
+        "dateformat",
+        "timestampformat",
         "nullstr",
         "auto_detect",
         "strict_mode",

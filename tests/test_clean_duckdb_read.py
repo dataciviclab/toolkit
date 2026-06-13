@@ -593,6 +593,101 @@ def test_read_raw_to_relation_plain_path_no_inject_still_works(tmp_path: Path):
         con.close()
 
 
+@pytest.mark.policy
+def test_dateformat_parses_non_iso_date_format(tmp_path: Path):
+    """dateformat permette di parsare formati data non ISO.
+
+    ``01.02.2023`` con separatore punto non è riconosciuto da DuckDB
+    senza dateformat esplicito. Con ``dateformat=%d.%m.%Y`` deve diventare
+    1 febbraio 2023.
+    """
+    import datetime
+
+    input_file = tmp_path / "date_dot.csv"
+    input_file.write_text("data;valore\n01.02.2023;100\n15.08.2024;200\n", encoding="utf-8")
+
+    con = duckdb.connect(":memory:")
+    logger = logging.getLogger("tests.clean.duckdb_read.dateformat_dot")
+
+    info = duckdb_read.read_raw_to_relation(
+        con,
+        [input_file],
+        {"delim": ";", "encoding": "utf-8", "header": True, "dateformat": "%d.%m.%Y"},
+        "strict",
+        logger,
+    )
+
+    assert info.params_used["dateformat"] == "%d.%m.%Y"
+
+    rows = con.execute("SELECT data, valore FROM raw_input ORDER BY valore").fetchall()
+    assert len(rows) == 2
+
+    data_100 = rows[0][0]
+    data_200 = rows[1][0]
+
+    if isinstance(data_100, datetime.date):
+        assert data_100 == datetime.date(2023, 2, 1), (
+            f"01.02.2023 con dateformat=%d.%m.%Y dovrebbe essere 1-febbraio, ottenuto {data_100}"
+        )
+        assert data_200 == datetime.date(2024, 8, 15), (
+            f"15.08.2024 con dateformat=%d.%m.%Y dovrebbe essere 15-agosto, ottenuto {data_200}"
+        )
+    else:
+        data_100_str = str(data_100)
+        data_200_str = str(data_200)
+        assert "2023-02-01" in data_100_str or data_100_str == "2023-02-01", (
+            f"01.02.2023 con dateformat=%d.%m.%Y dovrebbe diventare 2023-02-01, ottenuto {data_100}"
+        )
+        assert "2024-08-15" in data_200_str or data_200_str == "2024-08-15", (
+            f"15.08.2024 con dateformat=%d.%m.%Y dovrebbe diventare 2024-08-15, ottenuto {data_200}"
+        )
+
+    con.close()
+
+
+@pytest.mark.policy
+def test_dateformat_disambiguates_dmy_vs_mdy(tmp_path: Path):
+    """dateformat controlla l'interpretazione di date ambigue.
+
+    ``02/01/2023`` è ambiguo tra dd/mm (2 gennaio) e mm/dd (1 febbraio).
+    Con ``dateformat=%d/%m/%Y`` deve essere 2 gennaio 2023.
+    """
+    import datetime
+
+    input_file = tmp_path / "date_ambiguous.csv"
+    input_file.write_text("data\n02/01/2023\n", encoding="utf-8")
+
+    con = duckdb.connect(":memory:")
+    logger = logging.getLogger("tests.clean.duckdb_read.dateformat_ambiguous")
+
+    info = duckdb_read.read_raw_to_relation(
+        con,
+        [input_file],
+        {"delim": ",", "encoding": "utf-8", "header": True, "dateformat": "%d/%m/%Y"},
+        "strict",
+        logger,
+    )
+
+    assert info.params_used["dateformat"] == "%d/%m/%Y"
+
+    rows = con.execute("SELECT data FROM raw_input").fetchall()
+    assert len(rows) == 1
+
+    data = rows[0][0]
+    if isinstance(data, datetime.date):
+        assert data == datetime.date(2023, 1, 2), (
+            f"02/01/2023 con dateformat=%d/%m/%Y dovrebbe essere 2-gennaio, ottenuto {data}"
+        )
+    else:
+        data_str = str(data)
+        assert data_str in ("2023-01-02", "02/01/2023"), (
+            f"02/01/2023 con dateformat=%d/%m/%Y dovrebbe normalizzarsi "
+            f"a 2-gennaio, ottenuto {data}"
+        )
+
+    con.close()
+
+
 @pytest.mark.pure_unit
 def test_build_raw_input_map_with_inject():
     """build_raw_input_map costruisce la mappa filename→inject_column da dict config."""

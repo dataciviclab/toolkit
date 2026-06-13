@@ -33,6 +33,8 @@ ALLOWED_READ_CSV_KEYS = {
     "trim_whitespace",
     "sample_size",
     "sheet_name",
+    "dateformat",
+    "timestampformat",
 }
 FORMAT_HINT_KEYS = {
     "delim",
@@ -50,6 +52,8 @@ FORMAT_HINT_KEYS = {
     "normalize_rows_to_columns",
     "align_by_header",
     "trim_whitespace",
+    "dateformat",
+    "timestampformat",
 }
 READ_SELECTION_KEYS = {"mode", "glob", "prefer_from_raw_run", "allow_ambiguous", "include"}
 READ_SOURCE_MODES = {"auto", "config_only"}
@@ -195,7 +199,8 @@ def csv_read_option_strings(
     ``union_by_name=true``) and append caller-specific ones (e.g. columns).
 
     Supported keys:
-    ``delim``, ``sep``, ``encoding``, ``decimal``, ``thousands``, ``nullstr``,
+    ``delim``, ``sep``, ``encoding``, ``decimal``, ``thousands``,
+    ``dateformat``, ``timestampformat``, ``nullstr``,
     ``auto_detect``, ``strict_mode``, ``ignore_errors``, ``null_padding``,
     ``parallel``, ``quote``, ``escape``, ``comment``, ``max_line_size``,
     ``columns``.
@@ -223,6 +228,14 @@ def csv_read_option_strings(
     thousands = read_cfg.get("thousands")
     if thousands is not None:
         opts.append(f"thousands='{sql_str(str(thousands))}'")
+
+    dateformat = read_cfg.get("dateformat")
+    if dateformat is not None:
+        opts.append(f"dateformat='{sql_str(str(dateformat))}'")
+
+    timestampformat = read_cfg.get("timestampformat")
+    if timestampformat is not None:
+        opts.append(f"timestampformat='{sql_str(str(timestampformat))}'")
 
     nullstr = read_cfg.get("nullstr")
     if nullstr is not None:

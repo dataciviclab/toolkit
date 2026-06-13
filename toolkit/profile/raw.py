@@ -7,6 +7,8 @@ and mapping suggestion generation. Internal sniffing logic lives in
 
 from __future__ import annotations
 
+import csv
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -151,6 +153,7 @@ def build_suggested_read_cfg(
         "columns",
         "trim_whitespace",
         "sample_size",
+        "dateformat",
     ):
         if key in source_cfg:
             cfg[key] = source_cfg[key]
@@ -163,6 +166,14 @@ def build_suggested_read_cfg(
         cfg["encoding"] = data["encoding_suggested"]
     if "skip" not in cfg and int(data.get("skip_suggested") or 0) > 0:
         cfg["skip"] = int(data["skip_suggested"])
+
+    # Propaga dateformat se non gia' in source_cfg
+    if "dateformat" not in cfg and data.get("date_raw_values"):
+        from toolkit.scaffold.clean import _suggest_dateformat
+
+        fmt = _suggest_dateformat(data)
+        if fmt:
+            cfg["dateformat"] = fmt
 
     cfg.setdefault("header", True)
 
@@ -469,6 +480,96 @@ def profile_with_read_cfg(
     }
 
 
+# Pattern per riconoscere valori che sembrano date (NN/NN/NNNN, NNNN/NN/NN, ecc.)
+# Usato in _extract_date_raw_values per trovare colonne VARCHAR che DuckDB
+# non ha classificato come DATE per mancanza di dateformat.
+_DATE_LIKE_RE = re.compile(r"^\d{1,4}[/\-]\d{1,2}[/\-]\d{1,4}$")
+
+
+def _extract_date_raw_values(
+    file0: Path,
+    mapping_suggestions: dict[str, Any],
+    columns_raw: list[str],
+    effective_read_cfg: dict[str, Any],
+) -> dict[str, list[str]]:
+    """Extract raw string values for date-like columns before DuckDB conversion.
+
+    Reads the raw CSV file directly (using the SAME read configuration as DuckDB)
+    and determines which columns look like dates by scanning raw string values
+    — NOT using DuckDB's ``sample_rows`` which already converts dates to Timestamp.
+
+    Returns ``{col_name: [val1, val2, ...]}`` for each column that looks like
+    a date, or empty dict if none found.
+    """
+    if not columns_raw:
+        return {}
+
+    enc = effective_read_cfg.get("encoding") or "utf-8"
+    sep = effective_read_cfg.get("delim") or effective_read_cfg.get("sep") or ","
+    skip_rows = int(effective_read_cfg.get("skip") or 0)
+    has_header = bool(effective_read_cfg.get("header", True))
+
+    dialect_kwargs: dict[str, Any] = {"delimiter": sep}
+    if effective_read_cfg.get("quote"):
+        dialect_kwargs["quotechar"] = effective_read_cfg["quote"]
+    if effective_read_cfg.get("escape"):
+        dialect_kwargs["escapechar"] = effective_read_cfg["escape"]
+
+    # Single pass: read first 30 data rows, sample values per column.
+    # Both detection and extraction use the SAME 30-row sample — keeps
+    # profile size bounded (date_raw_values has at most 30 items/column).
+    MAX_SAMPLE = 30
+    raw_samples: dict[int, list[str]] = {}
+    rows_read = 0
+
+    try:
+        with open(file0, encoding=enc, newline="") as f:
+            reader = csv.reader(f, **dialect_kwargs)
+
+            for _ in range(skip_rows):
+                next(reader, None)
+            if has_header:
+                next(reader, None)
+
+            for row in reader:
+                if not row:
+                    continue
+                if rows_read >= MAX_SAMPLE:
+                    break
+                rows_read += 1
+                for i, val in enumerate(row):
+                    trimmed = val.strip()
+                    if trimmed:
+                        raw_samples.setdefault(i, []).append(trimmed)
+    except Exception:
+        pass
+
+    if not raw_samples:
+        return {}
+
+    # Find columns where >= 60% of sample values look like dates
+    date_col_indices: set[int] = set()
+    for col_idx, values in raw_samples.items():
+        if not values:
+            continue
+        date_like = sum(1 for v in values if _DATE_LIKE_RE.match(v))
+        if date_like >= len(values) * 0.6 and col_idx < len(columns_raw):
+            date_col_indices.add(col_idx)
+
+    if not date_col_indices:
+        return {}
+
+    # Build result from the same 30-row sample
+    result: dict[str, list[str]] = {}
+    for col_idx in sorted(date_col_indices):
+        col_name = columns_raw[col_idx]
+        vals = raw_samples.get(col_idx, [])
+        if vals:
+            result[col_name] = vals
+
+    return result
+
+
 @dataclass
 class RawProfile:
     dataset: str
@@ -488,6 +589,7 @@ class RawProfile:
     missingness_top: List[Dict[str, Any]]
     sample_rows: List[Dict[str, Any]]
     mapping_suggestions: Dict[str, Any]
+    date_raw_values: Dict[str, List[str]]
 
     warnings: List[str]
 
@@ -561,6 +663,7 @@ def profile_raw(
             missingness_top=runtime_result["missingness_top"],
             sample_rows=runtime_result["sample_rows"],
             mapping_suggestions=runtime_result["mapping_suggestions"],
+            date_raw_values={},
             warnings=runtime_result["warnings"],
         )
     # ZIP or other unsupported binary — return empty profile with warning
@@ -580,6 +683,7 @@ def profile_raw(
             missingness_top=[],
             sample_rows=[],
             mapping_suggestions={},
+            date_raw_values={},
             warnings=["binary_file_not_supported: zip — use a different source format"],
         )
 
@@ -594,6 +698,17 @@ def profile_raw(
 
     # Phase 3: DuckDB runtime profiling
     runtime_result = profile_with_read_cfg(file0, sniff_hints, effective_read_cfg)
+
+    # Phase 4: extract raw string values for date-typed columns
+    # (DuckDB converts dates to Timestamp, losing the original format).
+    # Uses the same effective_read_cfg as DuckDB (encoding, delim, header,
+    # skip, quote, escape) so the raw parser stays in sync with the runtime.
+    date_raw_values = _extract_date_raw_values(
+        file0,
+        runtime_result["mapping_suggestions"],
+        runtime_result["columns_raw"],
+        effective_read_cfg,
+    )
 
     return RawProfile(
         dataset=dataset,
@@ -610,6 +725,7 @@ def profile_raw(
         missingness_top=runtime_result["missingness_top"],
         sample_rows=runtime_result["sample_rows"],
         mapping_suggestions=runtime_result["mapping_suggestions"],
+        date_raw_values=date_raw_values,
         warnings=runtime_result["warnings"],
     )
 

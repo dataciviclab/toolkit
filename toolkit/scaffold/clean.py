@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import re
 from pathlib import Path
 from typing import Any
@@ -7,7 +8,6 @@ from typing import Any
 
 def _snake_case(name: str) -> str:
     """Convert a column name to snake_case (best-effort)."""
-    import re
 
     # Replace spaces and special chars with underscores
     s = name.strip()
@@ -48,6 +48,92 @@ def _map_duckdb_type(raw_type: str) -> str:
     if raw_type_lower in ("bool", "boolean"):
         return "BOOLEAN"
     return "VARCHAR"
+
+
+# Formati data organizzati per gruppo con stesso separatore.
+# I gruppi con due formati (DMY/MDY) richiedono disambiguazione:
+# valori che parsano in UN SOLO formato votano quello; valori che
+# parsano in entrambi (es. "03/04/2024") sono ambigui e non contano.
+# I gruppi con un solo formato (YYYY/mm/dd) sono non-ambigu.
+_DATE_FORMAT_GROUPS: list[tuple[str, ...]] = [
+    ("%d/%m/%Y", "%m/%d/%Y"),  # slash 4-digit
+    ("%d-%m-%Y", "%m-%d-%Y"),  # dash 4-digit
+    ("%d/%m/%y", "%m/%d/%y"),  # slash 2-digit
+    ("%d-%m-%y", "%m-%d-%y"),  # dash 2-digit
+    ("%Y/%m/%d",),  # ISO con slash
+]
+
+
+def _try_strptime(value: str, fmt: str) -> bool:
+    """Try to parse a date string with the given strptime format."""
+    try:
+        datetime.datetime.strptime(value, fmt)
+        return True
+    except ValueError:
+        return False
+
+
+def _suggest_dateformat(profile: dict[str, Any]) -> str | None:
+    """Detect non-ISO date format from raw date values in the profile.
+
+    Uses ``date_raw_values`` (extracted from raw CSV *before* DuckDB
+    converts dates) and ``datetime.strptime`` for validation.
+
+    For ambiguous separators (``/``, ``-``), counts how many values
+    successfully parse in each format (DMY and MDY). Values that parse
+    in both formats are counted for both — the ambiguity means neither
+    format is *excluded*, but the format with more total parses wins.
+
+    Each column picks its best format (>=60% of its non-empty values).
+    Only suggests a ``dateformat`` if EVERY column picks the SAME format.
+
+    Returns the ``dateformat`` string or ``None``.
+    """
+    date_raw = profile.get("date_raw_values", {})
+    if not date_raw:
+        return None
+
+    col_formats: dict[str, str] = {}
+    for col, values in date_raw.items():
+        non_empty = [v for v in values if v]
+        total = len(non_empty)
+        if total == 0:
+            continue
+
+        best_fmt: str | None = None
+        best_score = 0
+
+        for fmt_group in _DATE_FORMAT_GROUPS:
+            if len(fmt_group) == 1:
+                fmt = fmt_group[0]
+                count = sum(1 for v in non_empty if _try_strptime(v, fmt))
+                if count > best_score:
+                    best_score = count
+                    best_fmt = fmt
+            else:
+                dmy_fmt, mdy_fmt = fmt_group
+                dmy_count = sum(1 for v in non_empty if _try_strptime(v, dmy_fmt))
+                mdy_count = sum(1 for v in non_empty if _try_strptime(v, mdy_fmt))
+
+                # Only consider when one format clearly wins over the other
+                if dmy_count > mdy_count and dmy_count > best_score:
+                    best_score = dmy_count
+                    best_fmt = dmy_fmt
+                elif mdy_count > dmy_count and mdy_count > best_score:
+                    best_score = mdy_count
+                    best_fmt = mdy_fmt
+
+        if best_fmt is not None and best_score >= total * 0.6:
+            col_formats[col] = best_fmt
+
+    if not col_formats:
+        return None
+
+    unique = set(col_formats.values())
+    if len(unique) == 1:
+        return unique.pop()
+
+    return None
 
 
 def _find_anno_raw_column(profile: dict[str, Any]) -> str | None:
@@ -302,6 +388,11 @@ def propose_clean_read(profile: dict[str, Any]) -> dict[str, Any]:
     decimal = profile.get("decimal_suggested")
     if decimal:
         read["decimal"] = decimal
+
+    # --- dateformat: auto-detect non-ISO date formats (es. dd/mm/YYYY) ---
+    date_fmt = _suggest_dateformat(profile)
+    if date_fmt:
+        read["dateformat"] = date_fmt
 
     # --- Columns: raw_name -> DuckDB type ---
     mapping = profile.get("mapping_suggestions", {})

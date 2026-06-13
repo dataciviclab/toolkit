@@ -86,6 +86,12 @@ def apply_year_overrides(read_cfg: dict[str, Any], year: int) -> dict[str, Any]:
     and merges matching keys into the result.  The ``overrides`` key itself
     is removed — it is not a DuckDB ``read_csv`` parameter.
 
+    Supported override keys:
+    - Any ``ALLOWED_READ_CSV_KEYS`` param (``skip``, ``encoding``, etc.)
+      → merged directly
+    - ``columns_extra``   → merged into base ``columns`` (replaces/adds keys)
+    - ``columns_prepend`` → merged into base ``columns``, placed FIRST
+
     This is the single shared resolution used by both the **clean runtime**
     (via ``resolve_clean_read_cfg``) and the **RAW profiling** (via
     ``profile_raw``) to guarantee profile and runtime never diverge.
@@ -95,9 +101,27 @@ def apply_year_overrides(read_cfg: dict[str, Any], year: int) -> dict[str, Any]:
     result = dict(read_cfg)
     raw_overrides = result.pop("overrides", None) or {}
     year_override = raw_overrides.get(year) or raw_overrides.get(str(year))
-    if year_override:
-        filtered = {k: v for k, v in year_override.items() if k in ALLOWED_READ_CSV_KEYS}
-        result.update(filtered)
+    if not year_override:
+        return result
+
+    year_cfg = dict(year_override)
+
+    # Handle columns_extra / columns_prepend: merge into base columns
+    extra = year_cfg.pop("columns_extra", None)
+    prepend = year_cfg.pop("columns_prepend", None)
+    if extra is not None or prepend is not None:
+        base_columns = result.get("columns")
+        if isinstance(base_columns, dict):
+            merged = dict(base_columns)
+            if isinstance(prepend, dict):
+                merged = {**prepend, **merged}
+            if isinstance(extra, dict):
+                merged.update(extra)
+            result["columns"] = merged
+
+    # Remaining keys: filter to valid DuckDB params and merge
+    filtered = {k: v for k, v in year_cfg.items() if k in ALLOWED_READ_CSV_KEYS}
+    result.update(filtered)
     return result
 
 

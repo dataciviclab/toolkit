@@ -604,6 +604,32 @@ def test_apply_year_overrides_no_match(tmp_path: Path):
 
 
 @pytest.mark.policy
+def test_apply_year_overrides_columns_extra(tmp_path: Path):
+    """columns_extra fonde colonne extra in quelle base."""
+    from toolkit.clean.read_config import apply_year_overrides
+
+    base = {
+        "columns": {"a": "VARCHAR", "b": "VARCHAR"},
+        "overrides": {2024: {"columns_extra": {"_id": "BIGINT"}}},
+    }
+    result = apply_year_overrides(base, 2024)
+    assert list(result["columns"].keys()) == ["a", "b", "_id"]
+
+
+@pytest.mark.policy
+def test_apply_year_overrides_columns_prepend(tmp_path: Path):
+    """columns_prepend aggiunge colonne all'inizio."""
+    from toolkit.clean.read_config import apply_year_overrides
+
+    base = {
+        "columns": {"a": "VARCHAR", "b": "VARCHAR"},
+        "overrides": {2024: {"columns_prepend": {"_id": "BIGINT"}}},
+    }
+    result = apply_year_overrides(base, 2024)
+    assert list(result["columns"].keys()) == ["_id", "a", "b"]
+
+
+@pytest.mark.policy
 def test_read_raw_to_relation_with_thousands_separator(tmp_path: Path):
     """DuckDB read_csv respects decimal=',' + thousands='.'.
 

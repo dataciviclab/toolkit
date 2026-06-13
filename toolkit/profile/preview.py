@@ -26,6 +26,7 @@ from typing import Any, Literal
 from lab_connectors.http import HttpClient
 
 from toolkit.profile.raw import profile_with_read_cfg, sniff_source_file
+from toolkit.quality.pa_csv_quality import assess_quality
 from toolkit.scout.http import fetch_content, probe_url_headers, resolve_preview_kind
 from toolkit.scout.infer import infer_granularity
 
@@ -74,6 +75,16 @@ class PreviewResult:
     granularity: str = "non_determinato"
     year_min: int | None = None
     year_max: int | None = None
+
+    # Qualità PA (opzionale, solo se CSV)
+    quality_score: int | None = None
+    quality_structural_score: int | None = None
+    quality_semantic_score: int | None = None
+    quality_combined_score: int | None = None
+    quality_verdict: str | None = None
+    quality_flags: list[str] | None = None
+    quality_ontologies: dict[str, list[str]] | None = None
+    quality_note: str | None = None
 
 
 # ── Year extraction helpers ───────────────────────────────────────────────────
@@ -200,6 +211,8 @@ def preview_url(
         # Content-Length da fetch_content: su 206 con Content-Range e' la
         # dimensione reale del file; altrimenti la lunghezza del chunk.
         content_file_size = fetched.get("content_length") or len(content)
+        # Salva se la dimensione era nota prima di sovrascrivere
+        file_size_was_known = file_size is not None
         if not file_size:
             file_size = content_file_size
 
@@ -293,10 +306,54 @@ def preview_url(
                     year_min = min(year_vals)
                     year_max = max(year_vals)
 
+            # ── 7. Qualità PA (solo CSV) ──────────────────────────────────────
+            quality_score: int | None = None
+            quality_structural_score: int | None = None
+            quality_semantic_score: int | None = None
+            quality_combined_score: int | None = None
+            quality_verdict: str | None = None
+            quality_flags: list[str] | None = None
+            quality_ontologies: dict[str, list[str]] | None = None
+            quality_note: str | None = None
+            try:
+                # Decodifica il contenuto per l'analisi qualità
+                csv_text = content.decode(enc or "utf-8", errors="replace")
+                # Rileva troncamento:
+                # - Content-Length noto e > chunk scaricato
+                # - Content-Length ignoto e chunk >= 1MB (soglia preview)
+                truncated = (file_size is not None and file_size > len(content)) or (
+                    not file_size_was_known and len(content) >= 1024 * 1024
+                )
+                qr = assess_quality(
+                    csv_text,
+                    sampled=truncated,
+                    known_sep=delim,
+                    known_encoding=enc,
+                    known_skip=skip,
+                )
+                quality_score = qr.score
+                quality_structural_score = qr.structural_score
+                quality_semantic_score = qr.semantic_score
+                quality_combined_score = qr.combined_score
+                quality_verdict = qr.verdict
+                quality_flags = qr.flags or None
+                quality_ontologies = qr.ontologies or None
+                quality_note = qr.note or None
+            except Exception as exc:
+                logger.debug("Quality check skipped for %s: %s", url, exc)
+
         finally:
             tmp_path.unlink(missing_ok=True)
 
         return PreviewResult(
+            quality_score=quality_score,
+            quality_structural_score=quality_structural_score,
+            quality_semantic_score=quality_semantic_score,
+            quality_combined_score=quality_combined_score,
+            quality_verdict=quality_verdict,
+            quality_flags=quality_flags,
+            quality_ontologies=quality_ontologies,
+            quality_note=quality_note,
             url=url,
             status="success",
             reachable=reachable,

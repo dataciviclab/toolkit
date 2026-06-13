@@ -60,51 +60,47 @@ _DATE_FORMAT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 
 
 def _suggest_dateformat(profile: dict[str, Any]) -> str | None:
-    """Detect non-ISO date format from sample rows for date-typed columns.
+    """Detect non-ISO date format from raw date values in the profile.
 
-    Scans sample values of columns typed as ``date`` and checks if they
-    match a known non-ISO pattern (e.g. ``dd/mm/YYYY``). Returns the
-    corresponding ``dateformat`` string (e.g. ``%d/%m/%Y``) or ``None``
-    if all date columns appear to be ISO or no date columns exist.
+    Uses ``date_raw_values`` (extracted from raw CSV *before* DuckDB
+    converts dates to Timestamp) to detect date format patterns.
 
-    Intended for use by ``propose_clean_read()`` to auto-suggest
-    ``dateformat`` in the scaffolded ``clean.read`` config.
+    Only suggests a ``dateformat`` if at least 60% of ALL non-empty
+    date values across ALL date-typed columns match the same format.
+    This avoids suggesting a global ``dateformat`` that would work for
+    one column but break another.
+
+    Returns the ``dateformat`` string (e.g. ``%d/%m/%Y``) or ``None``.
     """
-    mapping = profile.get("mapping_suggestions", {})
-    sample_rows = profile.get("sample_rows", [])
-    if not mapping or not sample_rows:
+    date_raw = profile.get("date_raw_values", {})
+    if not date_raw:
         return None
 
-    date_cols = [col for col, spec in mapping.items() if spec.get("type") == "date"]
-    if not date_cols:
-        return None
+    # Collect votes per format across all date columns
+    format_votes: dict[str, int] = {}
+    total_values = 0
 
-    for col in date_cols:
-        vals: list[str] = []
-        for r in sample_rows:
-            if col not in r:
-                continue
-            v = r.get(col)
-            if v is None:
-                continue
-            s = str(v).strip()
-            if s == "":
-                continue
-            vals.append(s)
-            if len(vals) >= 30:
-                break
-
-        non_empty = [v for v in vals if v]
+    for col, values in date_raw.items():
+        non_empty = [v for v in values if v]
         if not non_empty:
             continue
+        total_values += len(non_empty)
 
-        for pattern, fmt in _DATE_FORMAT_PATTERNS:
-            matches = sum(1 for v in non_empty if pattern.match(v))
-            threshold = max(2, int(len(non_empty) * 0.6))
-            if matches >= threshold:
-                return fmt
+        for v in non_empty:
+            for pattern, fmt in _DATE_FORMAT_PATTERNS:
+                if pattern.match(v):
+                    format_votes[fmt] = format_votes.get(fmt, 0) + 1
+                    break
 
-    return None
+    if not format_votes or total_values == 0:
+        return None
+
+    # A format wins only if >= 60% of ALL date values match it.
+    best_fmt, best_count = max(format_votes.items(), key=lambda x: x[1])
+    if best_count / total_values < 0.6:
+        return None
+
+    return best_fmt
 
 
 def _find_anno_raw_column(profile: dict[str, Any]) -> str | None:

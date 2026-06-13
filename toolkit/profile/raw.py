@@ -7,6 +7,7 @@ and mapping suggestion generation. Internal sniffing logic lives in
 
 from __future__ import annotations
 
+import csv
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -469,6 +470,66 @@ def profile_with_read_cfg(
     }
 
 
+def _extract_date_raw_values(
+    file0: Path,
+    mapping_suggestions: dict[str, Any],
+    columns_raw: list[str],
+    encoding: str | None,
+    delim: str | None,
+    skip: int,
+    header_line: str | None,
+) -> dict[str, list[str]]:
+    """Extract raw string values for date-typed columns before DuckDB conversion.
+
+    Reads the raw CSV file using sniffed parameters and collects string values
+    for columns that DuckDB categorized as ``date``. This preserves the original
+    date string format (e.g. ``15/03/2024``) which DuckDB converts to ``Timestamp``.
+
+    Returns ``{col_name: [val1, val2, ...]}`` for each date column with samples,
+    or empty dict if no date columns or file cannot be read.
+    """
+    date_cols = [
+        col
+        for col, spec in mapping_suggestions.items()
+        if spec.get("type") == "date" and col in columns_raw
+    ]
+    if not date_cols:
+        return {}
+
+    col_index = {name: i for i, name in enumerate(columns_raw)}
+    result: dict[str, list[str]] = {col: [] for col in date_cols}
+    enc = encoding or "utf-8"
+    sep = delim or ","
+
+    try:
+        with open(file0, encoding=enc, newline="") as f:
+            reader = csv.reader(f, delimiter=sep)
+
+            # Skip preamble rows
+            for _ in range(skip):
+                next(reader, None)
+
+            # Skip header row if the file has one
+            if header_line is not None:
+                next(reader, None)
+
+            for row in reader:
+                if not row:
+                    continue
+                for col in date_cols:
+                    idx = col_index.get(col)
+                    if idx is not None and idx < len(row):
+                        val = (row[idx] or "").strip()
+                        if val:
+                            result[col].append(val)
+                if all(len(v) >= 30 for v in result.values()):
+                    break
+    except Exception:
+        pass
+
+    return {k: v for k, v in result.items() if v}
+
+
 @dataclass
 class RawProfile:
     dataset: str
@@ -488,6 +549,7 @@ class RawProfile:
     missingness_top: List[Dict[str, Any]]
     sample_rows: List[Dict[str, Any]]
     mapping_suggestions: Dict[str, Any]
+    date_raw_values: Dict[str, List[str]]
 
     warnings: List[str]
 
@@ -561,6 +623,7 @@ def profile_raw(
             missingness_top=runtime_result["missingness_top"],
             sample_rows=runtime_result["sample_rows"],
             mapping_suggestions=runtime_result["mapping_suggestions"],
+            date_raw_values={},
             warnings=runtime_result["warnings"],
         )
     # ZIP or other unsupported binary — return empty profile with warning
@@ -580,6 +643,7 @@ def profile_raw(
             missingness_top=[],
             sample_rows=[],
             mapping_suggestions={},
+            date_raw_values={},
             warnings=["binary_file_not_supported: zip — use a different source format"],
         )
 
@@ -594,6 +658,18 @@ def profile_raw(
 
     # Phase 3: DuckDB runtime profiling
     runtime_result = profile_with_read_cfg(file0, sniff_hints, effective_read_cfg)
+
+    # Phase 4: extract raw string values for date-typed columns
+    # (DuckDB converts dates to Timestamp, losing the original format)
+    date_raw_values = _extract_date_raw_values(
+        file0,
+        runtime_result["mapping_suggestions"],
+        runtime_result["columns_raw"],
+        enc,
+        delim,
+        skip,
+        header_line,
+    )
 
     return RawProfile(
         dataset=dataset,
@@ -610,6 +686,7 @@ def profile_raw(
         missingness_top=runtime_result["missingness_top"],
         sample_rows=runtime_result["sample_rows"],
         mapping_suggestions=runtime_result["mapping_suggestions"],
+        date_raw_values=date_raw_values,
         warnings=runtime_result["warnings"],
     )
 

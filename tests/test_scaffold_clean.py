@@ -5,6 +5,7 @@ pure_unit: _select_expr, _columns_spec, generate_clean_sql, _find_anno_raw_colum
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -78,84 +79,107 @@ class TestSelectExpr:
 
 
 class TestSuggestDateformat:
-    """pure_unit: _suggest_dateformat rileva formati data non ISO."""
+    """pure_unit: _suggest_dateformat rileva formati data non ISO.
 
-    @pytest.mark.pure_unit
-    def test_dd_mm_YYYY_with_slash(self) -> None:
+    I test usano CSV reali processati da ``profile_raw`` per verificare
+    che la funzione funzioni su profili reali (dove DuckDB converte le
+    date in Timestamp, perdendo il formato originale).
+    """
+
+    @pytest.mark.policy
+    def test_dd_mm_YYYY_with_slash(self, tmp_path: Path) -> None:
         """dd/mm/YYYY con slash → %d/%m/%Y."""
-        profile = {
-            "mapping_suggestions": {
-                "Data": {"type": "date"},
-            },
-            "sample_rows": [
-                {"Data": "15/03/2024"},
-                {"Data": "01/02/2023"},
-                {"Data": "31/12/2025"},
-            ],
-        }
-        assert _suggest_dateformat(profile) == "%d/%m/%Y"
+        from dataclasses import asdict
+        from toolkit.profile.raw import profile_raw
 
-    @pytest.mark.pure_unit
-    def test_dd_mm_YYYY_with_dash(self) -> None:
+        csv_file = tmp_path / "date_slash.csv"
+        csv_file.write_text(
+            "data;valore\n15/03/2024;100\n01/02/2023;200\n31/12/2025;300\n",
+            encoding="utf-8",
+        )
+        profile = profile_raw(tmp_path, "test", 2024, primary_file=csv_file)
+        fmt = _suggest_dateformat(asdict(profile))
+        assert fmt == "%d/%m/%Y"
+
+    @pytest.mark.policy
+    def test_dd_mm_YYYY_with_dash(self, tmp_path: Path) -> None:
         """dd-mm-YYYY con trattino → %d-%m-%Y."""
-        profile = {
-            "mapping_suggestions": {
-                "data": {"type": "date"},
-            },
-            "sample_rows": [
-                {"data": "15-03-2024"},
-                {"data": "01-02-2023"},
-            ],
-        }
-        assert _suggest_dateformat(profile) == "%d-%m-%Y"
+        from dataclasses import asdict
+        from toolkit.profile.raw import profile_raw
 
-    @pytest.mark.pure_unit
-    def test_iso_date_returns_none(self) -> None:
+        csv_file = tmp_path / "date_dash.csv"
+        csv_file.write_text(
+            "data;valore\n15-03-2024;100\n01-02-2023;200\n",
+            encoding="utf-8",
+        )
+        profile = profile_raw(tmp_path, "test", 2024, primary_file=csv_file)
+        fmt = _suggest_dateformat(asdict(profile))
+        assert fmt == "%d-%m-%Y"
+
+    @pytest.mark.policy
+    def test_iso_date_returns_none(self, tmp_path: Path) -> None:
         """Date ISO (YYYY-MM-DD) non attivano dateformat."""
-        profile = {
-            "mapping_suggestions": {
-                "Data": {"type": "date"},
-            },
-            "sample_rows": [
-                {"Data": "2024-03-15"},
-                {"Data": "2023-02-01"},
-            ],
-        }
-        assert _suggest_dateformat(profile) is None
+        from dataclasses import asdict
+        from toolkit.profile.raw import profile_raw
 
-    @pytest.mark.pure_unit
-    def test_mixed_date_format_requires_majority(self) -> None:
-        """Se meno del 60% matcha un formato, non suggerisce."""
-        profile = {
-            "mapping_suggestions": {
-                "Data": {"type": "date"},
-            },
-            "sample_rows": [
-                {"Data": "15/03/2024"},
-                {"Data": "2024-03-15"},
-                {"Data": "01/02/2023"},
-            ],
-        }
-        # 2/3 = 66% > 60% → matcha %d/%m/%Y
-        assert _suggest_dateformat(profile) == "%d/%m/%Y"
+        csv_file = tmp_path / "date_iso.csv"
+        csv_file.write_text(
+            "data;valore\n2024-03-15;100\n2023-02-01;200\n",
+            encoding="utf-8",
+        )
+        profile = profile_raw(tmp_path, "test", 2024, primary_file=csv_file)
+        fmt = _suggest_dateformat(asdict(profile))
+        assert fmt is None
 
-    @pytest.mark.pure_unit
-    def test_no_date_columns_returns_none(self) -> None:
+    @pytest.mark.policy
+    def test_multiple_date_cols_agree_on_format(self, tmp_path: Path) -> None:
+        """Due colonne date con stesso formato → dateformat suggerito."""
+        from dataclasses import asdict
+        from toolkit.profile.raw import profile_raw
+
+        csv_file = tmp_path / "multi_date.csv"
+        csv_file.write_text(
+            "inizio;fine;valore\n15/03/2024;20/04/2024;100\n01/02/2023;10/03/2023;200\n",
+            encoding="utf-8",
+        )
+        profile = profile_raw(tmp_path, "test", 2024, primary_file=csv_file)
+        fmt = _suggest_dateformat(asdict(profile))
+        assert fmt == "%d/%m/%Y", f"got {fmt}"
+
+    @pytest.mark.policy
+    def test_no_date_columns_returns_none(self, tmp_path: Path) -> None:
         """Senza colonne date → None."""
-        profile = {
-            "mapping_suggestions": {
-                "Nome": {"type": "str"},
-                "Valore": {"type": "float"},
-            },
-            "sample_rows": [{"Nome": "foo", "Valore": "100"}],
-        }
-        assert _suggest_dateformat(profile) is None
+        from dataclasses import asdict
+        from toolkit.profile.raw import profile_raw
 
-    @pytest.mark.pure_unit
+        csv_file = tmp_path / "no_date.csv"
+        csv_file.write_text("nome;valore\nfoo;100\nbar;200\n", encoding="utf-8")
+        profile = profile_raw(tmp_path, "test", 2024, primary_file=csv_file)
+        fmt = _suggest_dateformat(asdict(profile))
+        assert fmt is None
+
+    @pytest.mark.policy
+    def test_mixed_date_cols_different_format_returns_none(self, tmp_path: Path) -> None:
+        """Se due colonne date hanno formati diversi, non suggerisce
+        (dateformat e' globale per read_csv, non puo' essere diverso per colonna)."""
+        from dataclasses import asdict
+        from toolkit.profile.raw import profile_raw
+
+        csv_file = tmp_path / "mixed_fmt.csv"
+        csv_file.write_text(
+            "data_it;data_us;valore\n15/03/2024;2024/03/15;100\n01/02/2023;2023/02/01;200\n",
+            encoding="utf-8",
+        )
+        profile = profile_raw(tmp_path, "test", 2024, primary_file=csv_file)
+        fmt = _suggest_dateformat(asdict(profile))
+        # 4 values in dd/mm/YYYY, 4 in YYYY/mm/dd → 50% each → < 60% → None
+        assert fmt is None, f"got {fmt}"
+
+    @pytest.mark.policy
     def test_empty_profile_returns_none(self) -> None:
-        """Profilo vuoto o senza sample → None."""
+        """Profilo vuoto o senza date_raw_values → None."""
         assert _suggest_dateformat({}) is None
-        assert _suggest_dateformat({"mapping_suggestions": {"D": {"type": "date"}}}) is None
+        assert _suggest_dateformat({"date_raw_values": {}}) is None
 
 
 # ---------------------------------------------------------------------------

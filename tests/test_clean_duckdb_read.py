@@ -562,16 +562,37 @@ class TestCleanReadOverrides:
         assert not any("year_override" in s for s in src)
 
     @pytest.mark.policy
-    def test_invalid_key_raises(self, tmp_path: Path):
-        """Chiave inesistente ('delmi') solleva ValueError."""
+    def test_invalid_override_key_silently_ignored(self, tmp_path: Path):
+        """Chiave inesistente nell'override ('delmi') viene ignorata, non blocca."""
         raw_dir = tmp_path / "raw" / "demo" / "2024"
         raw_dir.mkdir(parents=True)
-        with pytest.raises(ValueError, match="clean.read.overrides.2024"):
-            resolve_clean_read_cfg(
-                raw_dir,
-                {"read": {"overrides": {2024: {"delmi": ";"}}}},
-                logging.getLogger("tests.clean.duckdb_read.override"),
-            )
+        _, cfg, _ = resolve_clean_read_cfg(
+            raw_dir,
+            {"read": {"overrides": {2024: {"delmi": ";", "skip": 2}}}},
+            logging.getLogger("tests.clean.duckdb_read.override"),
+        )
+        # skip viene applicato, delmi ignorato
+        assert cfg.get("skip") == 2
+        assert "delmi" not in cfg
+
+    @pytest.mark.policy
+    def test_override_with_interdependent_fields(self, tmp_path: Path):
+        """Override con campo che dipende dalla base non viene rifiutato in isolamento."""
+        raw_dir = tmp_path / "raw" / "demo" / "2024"
+        raw_dir.mkdir(parents=True)
+        _, cfg, _ = resolve_clean_read_cfg(
+            raw_dir,
+            {
+                "read": {
+                    "normalize_rows_to_columns": True,
+                    "overrides": {2024: {"align_by_header": True}},
+                }
+            },
+            logging.getLogger("tests.clean.duckdb_read.override"),
+        )
+        # La combinazione base+override e' valida -> nessun errore, align_by_header applicato
+        assert cfg.get("normalize_rows_to_columns") is True
+        assert cfg.get("align_by_header") is True
 
 
 @pytest.mark.policy

@@ -132,11 +132,6 @@ def resolve_clean_read_cfg(
     # Belt and suspenders: ensure overrides doesn't leak
     relation_overrides.pop("overrides", None)
 
-    # Validate and normalize each year's override against CleanReadConfig.
-    # model_dump() returns the validated/normalized values (e.g. columns list
-    # converted to dict, booleans parsed from YAML strings).
-    validated_overrides = _validate_and_normalize_overrides(raw_overrides, logger)
-
     suggested_cfg = load_suggested_read(raw_year_dir)
     filtered_suggested = filter_suggested_read(suggested_cfg)
     if normalized_source == "auto" and filtered_suggested and logger is not None:
@@ -151,15 +146,24 @@ def resolve_clean_read_cfg(
         overrides=relation_overrides,
     )
 
-    # Apply per-year override via the shared resolver (same as profile_raw uses)
+    # Apply per-year override with full base context (apply_year_overrides
+    # needs the entire config to validate inter-dependent fields like
+    # align_by_header + normalize_rows_to_columns)
     year = int(raw_year_dir.name)
-    year_override_cfg = apply_year_overrides(
-        {"overrides": dict(validated_overrides)} if validated_overrides else {},
-        year,
-    )
-    if year_override_cfg:
-        merged_relation_cfg.update(year_override_cfg)
+    if raw_overrides and (year in raw_overrides or str(year) in raw_overrides):
+        merged_relation_cfg = apply_year_overrides(
+            {**merged_relation_cfg, "overrides": dict(raw_overrides)},
+            year,
+        )
         params_source.append(f"year_override_{year}")
+
+    # Single normalisation pass after all merges — catches raw YAML values
+    # (columns list, string booleans) from BOTH base and override in one shot.
+    from toolkit.core.config_models.clean import CleanReadConfig
+
+    merged_relation_cfg = CleanReadConfig.model_validate(merged_relation_cfg).model_dump(
+        exclude_unset=True
+    )
 
     return selection_cfg, merged_relation_cfg, params_source
 

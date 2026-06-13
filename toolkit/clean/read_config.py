@@ -82,31 +82,37 @@ def filter_suggested_read(cfg: dict[str, Any] | None) -> dict[str, Any]:
 def apply_year_overrides(read_cfg: dict[str, Any], year: int) -> dict[str, Any]:
     """Return ``read_cfg`` with per-year overrides merged in for the given ``year``.
 
-    Extracts ``overrides`` from the config (if present), looks up the year,
-    and merges matching keys into the result.  The ``overrides`` key itself
-    is removed — it is not a DuckDB ``read_csv`` parameter.
+    **Self-validating**: raw YAML values (``columns`` as list, booleans as
+    ``"false"`` strings) are normalized through ``CleanReadConfig.model_validate``
+    before merging.  Works identically whether called from the clean runtime
+    (``resolve_clean_read_cfg``) or the RAW profiler (``run_raw``) —
+    guarantees no divergence between profile and runtime.
 
-    Override values are expected to be **already validated and normalized**
-    by ``_validate_and_normalize_overrides`` (called upstream in
-    ``resolve_clean_read_cfg``) — raw YAML values like ``columns`` in list
-    form are already converted to dict form, booleans are already parsed, etc.
-
-    This is the single shared resolution used by both the **clean runtime**
-    (via ``resolve_clean_read_cfg``) and the **RAW profiling** (via
-    ``profile_raw``) to guarantee profile and runtime never diverge.
+    The ``overrides`` key is removed from the result — it is not a DuckDB
+    ``read_csv`` parameter.
     """
     if not read_cfg:
         return {}
-    result = dict(read_cfg)
-    raw_overrides = result.pop("overrides", None) or {}
+
+    from toolkit.core.config_models.clean import CleanReadConfig
+
+    # Validate and normalize base config through CleanReadConfig.
+    # This converts raw YAML: columns=list→dict, "false"→False, etc.
+    validated = CleanReadConfig.model_validate(read_cfg).model_dump(exclude_unset=True)
+
+    # Extract overrides (already validated as part of CleanReadConfig)
+    raw_overrides = validated.pop("overrides", None) or {}
     year_override = raw_overrides.get(year) or raw_overrides.get(str(year))
     if not year_override:
-        return result
+        return validated
 
-    # Filter to valid DuckDB read_csv keys and merge
+    # Merge override values (still raw — columns could be list, booleans strings)
     filtered = {k: v for k, v in year_override.items() if k in ALLOWED_READ_CSV_KEYS}
-    result.update(filtered)
-    return result
+    validated.update(filtered)
+
+    # Re-validate merged result to normalize override values too
+    validated = CleanReadConfig.model_validate(validated).model_dump(exclude_unset=True)
+    return validated
 
 
 def resolve_clean_read_cfg(

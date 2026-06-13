@@ -631,6 +631,26 @@ def test_resolve_clean_read_cfg_overrides_columns(tmp_path: Path):
 
 
 @pytest.mark.policy
+def test_apply_year_overrides_normalizes_raw_yaml(tmp_path: Path):
+    """apply_year_overrides normalizza YAML raw (columns lista, \"false\" stringa)."""
+    from toolkit.clean.read_config import apply_year_overrides
+
+    # Simula YAML raw: columns in formato lista, booleano come stringa
+    raw_cfg = {
+        "header": "false",  # stringa YAML, non bool
+        "columns": [{"name": "a", "type": "VARCHAR"}, {"name": "b", "type": "VARCHAR"}],  # lista
+        "overrides": {2024: {"skip": 2, "columns": [{"name": "_id", "type": "BIGINT"}]}},
+    }
+    result = apply_year_overrides(raw_cfg, 2024)
+
+    # header normalizzato a bool (non stringa)
+    assert result["header"] is False
+    # columns normalizzato a dict (non lista) con override fuso
+    assert isinstance(result["columns"], dict)
+    assert list(result["columns"].keys()) == ["_id"]
+
+
+@pytest.mark.policy
 def test_read_raw_to_relation_with_thousands_separator(tmp_path: Path):
     """DuckDB read_csv respects decimal=',' + thousands='.'.
 

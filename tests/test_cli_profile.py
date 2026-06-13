@@ -189,6 +189,7 @@ def _mock_preview_url(monkeypatch):
             quality_structural_score=None,
             quality_semantic_score=None,
             quality_combined_score=None,
+            quality_sampled=None,
             quality_verdict=None,
             quality_flags=None,
             quality_ontologies=None,

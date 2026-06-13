@@ -301,6 +301,20 @@ class TestScore:
 class TestPreviewResultContract:
     """I campi quality_* in PreviewResult sono popolati dopo preview_url."""
 
+    def test_quality_sampled_deterministic(self) -> None:
+        """quality_sampled in PreviewResult = True sul sampled, False altrimenti."""
+        from toolkit.quality.pa_csv_quality import assess_quality
+
+        # sampled=True
+        r = assess_quality("a,b\n1,2", sampled=True)
+        assert r.sampled is True
+        # sampled=False
+        r2 = assess_quality("a,b\n1,2", sampled=False)
+        assert r2.sampled is False
+        # sampled default (non passato)
+        r3 = assess_quality("a,b\n1,2")
+        assert r3.sampled is False
+
     @pytest.mark.smoke
     def test_preview_url_has_quality_fields(self) -> None:
         """PreviewResult ha tutti i campi quality_* attesi (su CSV)."""

@@ -725,14 +725,19 @@ def assess_quality(
         Usare ``structural_score`` per valutazioni oggettive,
         ``semantic_score`` come spunto esplorativo.
     """
+    # Applica known_skip al testo RAW prima del parse, contando righe
+    # fisiche (\\n). csv.reader scarta righe vuote — lo skip deve
+    # contare le righe reali del file, non le righe parse.
+    effective_skip = known_skip or 0
+    if effective_skip > 0:
+        lines = csv_text.split("\n")
+        if effective_skip < len(lines):
+            csv_text = "\n".join(lines[effective_skip:])
+        else:
+            csv_text = ""
+
     sep = known_sep or _detect_sep(csv_text)
     rows = _parse_csv(csv_text, sep)
-
-    # Applica known_skip: salta le righe di preambolo prima dell'header
-    effective_skip = known_skip or 0
-    if effective_skip > 0 and len(rows) > effective_skip:
-        rows = rows[effective_skip:]
-
     headers = rows[0] if rows else []
 
     str_checks = _checks_struttura(csv_text, rows, sep, headers)

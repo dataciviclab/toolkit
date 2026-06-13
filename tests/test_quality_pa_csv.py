@@ -328,6 +328,7 @@ class TestPreviewResultContract:
         if r.status == "success":
             assert r.quality_structural_score is not None
 
+    @pytest.mark.smoke
     def test_preview_url_on_non_csv(self) -> None:
         """Su HTML, quality_* restano None."""
         from toolkit.profile.preview import preview_url

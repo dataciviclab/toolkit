@@ -14,6 +14,7 @@ from toolkit.scaffold.clean import (
     _find_anno_raw_column,
     _has_anno_column,
     _select_expr,
+    _suggest_dateformat,
     generate_clean_sql,
 )
 
@@ -69,6 +70,92 @@ class TestSelectExpr:
         """BOOLEAN columns get TRY_CAST."""
         result = _select_expr("Attivo", "BOOLEAN", "attivo")
         assert 'TRY_CAST("Attivo" AS BOOLEAN)' in result
+
+
+# ---------------------------------------------------------------------------
+# pure_unit: _suggest_dateformat
+# ---------------------------------------------------------------------------
+
+
+class TestSuggestDateformat:
+    """pure_unit: _suggest_dateformat rileva formati data non ISO."""
+
+    @pytest.mark.pure_unit
+    def test_dd_mm_YYYY_with_slash(self) -> None:
+        """dd/mm/YYYY con slash → %d/%m/%Y."""
+        profile = {
+            "mapping_suggestions": {
+                "Data": {"type": "date"},
+            },
+            "sample_rows": [
+                {"Data": "15/03/2024"},
+                {"Data": "01/02/2023"},
+                {"Data": "31/12/2025"},
+            ],
+        }
+        assert _suggest_dateformat(profile) == "%d/%m/%Y"
+
+    @pytest.mark.pure_unit
+    def test_dd_mm_YYYY_with_dash(self) -> None:
+        """dd-mm-YYYY con trattino → %d-%m-%Y."""
+        profile = {
+            "mapping_suggestions": {
+                "data": {"type": "date"},
+            },
+            "sample_rows": [
+                {"data": "15-03-2024"},
+                {"data": "01-02-2023"},
+            ],
+        }
+        assert _suggest_dateformat(profile) == "%d-%m-%Y"
+
+    @pytest.mark.pure_unit
+    def test_iso_date_returns_none(self) -> None:
+        """Date ISO (YYYY-MM-DD) non attivano dateformat."""
+        profile = {
+            "mapping_suggestions": {
+                "Data": {"type": "date"},
+            },
+            "sample_rows": [
+                {"Data": "2024-03-15"},
+                {"Data": "2023-02-01"},
+            ],
+        }
+        assert _suggest_dateformat(profile) is None
+
+    @pytest.mark.pure_unit
+    def test_mixed_date_format_requires_majority(self) -> None:
+        """Se meno del 60% matcha un formato, non suggerisce."""
+        profile = {
+            "mapping_suggestions": {
+                "Data": {"type": "date"},
+            },
+            "sample_rows": [
+                {"Data": "15/03/2024"},
+                {"Data": "2024-03-15"},
+                {"Data": "01/02/2023"},
+            ],
+        }
+        # 2/3 = 66% > 60% → matcha %d/%m/%Y
+        assert _suggest_dateformat(profile) == "%d/%m/%Y"
+
+    @pytest.mark.pure_unit
+    def test_no_date_columns_returns_none(self) -> None:
+        """Senza colonne date → None."""
+        profile = {
+            "mapping_suggestions": {
+                "Nome": {"type": "str"},
+                "Valore": {"type": "float"},
+            },
+            "sample_rows": [{"Nome": "foo", "Valore": "100"}],
+        }
+        assert _suggest_dateformat(profile) is None
+
+    @pytest.mark.pure_unit
+    def test_empty_profile_returns_none(self) -> None:
+        """Profilo vuoto o senza sample → None."""
+        assert _suggest_dateformat({}) is None
+        assert _suggest_dateformat({"mapping_suggestions": {"D": {"type": "date"}}}) is None
 
 
 # ---------------------------------------------------------------------------

@@ -50,6 +50,63 @@ def _map_duckdb_type(raw_type: str) -> str:
     return "VARCHAR"
 
 
+_DATE_FORMAT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"^\d{2}/\d{2}/\d{4}$"), "%d/%m/%Y"),
+    (re.compile(r"^\d{2}-\d{2}-\d{4}$"), "%d-%m-%Y"),
+    (re.compile(r"^\d{2}/\d{2}/\d{2}$"), "%d/%m/%y"),
+    (re.compile(r"^\d{2}-\d{2}-\d{2}$"), "%d-%m-%y"),
+    (re.compile(r"^\d{4}/\d{2}/\d{2}$"), "%Y/%m/%d"),
+]
+
+
+def _suggest_dateformat(profile: dict[str, Any]) -> str | None:
+    """Detect non-ISO date format from sample rows for date-typed columns.
+
+    Scans sample values of columns typed as ``date`` and checks if they
+    match a known non-ISO pattern (e.g. ``dd/mm/YYYY``). Returns the
+    corresponding ``dateformat`` string (e.g. ``%d/%m/%Y``) or ``None``
+    if all date columns appear to be ISO or no date columns exist.
+
+    Intended for use by ``propose_clean_read()`` to auto-suggest
+    ``dateformat`` in the scaffolded ``clean.read`` config.
+    """
+    mapping = profile.get("mapping_suggestions", {})
+    sample_rows = profile.get("sample_rows", [])
+    if not mapping or not sample_rows:
+        return None
+
+    date_cols = [col for col, spec in mapping.items() if spec.get("type") == "date"]
+    if not date_cols:
+        return None
+
+    for col in date_cols:
+        vals: list[str] = []
+        for r in sample_rows:
+            if col not in r:
+                continue
+            v = r.get(col)
+            if v is None:
+                continue
+            s = str(v).strip()
+            if s == "":
+                continue
+            vals.append(s)
+            if len(vals) >= 30:
+                break
+
+        non_empty = [v for v in vals if v]
+        if not non_empty:
+            continue
+
+        for pattern, fmt in _DATE_FORMAT_PATTERNS:
+            matches = sum(1 for v in non_empty if pattern.match(v))
+            threshold = max(2, int(len(non_empty) * 0.6))
+            if matches >= threshold:
+                return fmt
+
+    return None
+
+
 def _find_anno_raw_column(profile: dict[str, Any]) -> str | None:
     """Find the raw column name that looks like a year column.
 
@@ -302,6 +359,11 @@ def propose_clean_read(profile: dict[str, Any]) -> dict[str, Any]:
     decimal = profile.get("decimal_suggested")
     if decimal:
         read["decimal"] = decimal
+
+    # --- dateformat: auto-detect non-ISO date formats (es. dd/mm/YYYY) ---
+    date_fmt = _suggest_dateformat(profile)
+    if date_fmt:
+        read["dateformat"] = date_fmt
 
     # --- Columns: raw_name -> DuckDB type ---
     mapping = profile.get("mapping_suggestions", {})

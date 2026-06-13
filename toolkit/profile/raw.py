@@ -152,6 +152,7 @@ def build_suggested_read_cfg(
         "columns",
         "trim_whitespace",
         "sample_size",
+        "dateformat",
     ):
         if key in source_cfg:
             cfg[key] = source_cfg[key]
@@ -164,6 +165,14 @@ def build_suggested_read_cfg(
         cfg["encoding"] = data["encoding_suggested"]
     if "skip" not in cfg and int(data.get("skip_suggested") or 0) > 0:
         cfg["skip"] = int(data["skip_suggested"])
+
+    # Propaga dateformat se non gia' in source_cfg
+    if "dateformat" not in cfg and data.get("date_raw_values"):
+        from toolkit.scaffold.clean import _suggest_dateformat
+
+        fmt = _suggest_dateformat(data)
+        if fmt:
+            cfg["dateformat"] = fmt
 
     cfg.setdefault("header", True)
 
@@ -474,16 +483,15 @@ def _extract_date_raw_values(
     file0: Path,
     mapping_suggestions: dict[str, Any],
     columns_raw: list[str],
-    encoding: str | None,
-    delim: str | None,
-    skip: int,
-    header_line: str | None,
+    effective_read_cfg: dict[str, Any],
 ) -> dict[str, list[str]]:
     """Extract raw string values for date-typed columns before DuckDB conversion.
 
-    Reads the raw CSV file using sniffed parameters and collects string values
-    for columns that DuckDB categorized as ``date``. This preserves the original
-    date string format (e.g. ``15/03/2024``) which DuckDB converts to ``Timestamp``.
+    Reads the raw CSV file using the SAME read configuration that DuckDB uses
+    (same encoding, delimiter, header, skip, quote, escape) and collects
+    string values for columns that DuckDB categorized as ``date``.
+    This preserves the original date string format (e.g. ``15/03/2024``)
+    which DuckDB converts to ``Timestamp``.
 
     Returns ``{col_name: [val1, val2, ...]}`` for each date column with samples,
     or empty dict if no date columns or file cannot be read.
@@ -498,19 +506,27 @@ def _extract_date_raw_values(
 
     col_index = {name: i for i, name in enumerate(columns_raw)}
     result: dict[str, list[str]] = {col: [] for col in date_cols}
-    enc = encoding or "utf-8"
-    sep = delim or ","
+    enc = effective_read_cfg.get("encoding") or "utf-8"
+    sep = effective_read_cfg.get("delim") or effective_read_cfg.get("sep") or ","
+    skip_rows = int(effective_read_cfg.get("skip") or 0)
+    has_header = bool(effective_read_cfg.get("header", True))
+
+    dialect_kwargs: dict[str, Any] = {"delimiter": sep}
+    if effective_read_cfg.get("quote"):
+        dialect_kwargs["quotechar"] = effective_read_cfg["quote"]
+    if effective_read_cfg.get("escape"):
+        dialect_kwargs["escapechar"] = effective_read_cfg["escape"]
 
     try:
         with open(file0, encoding=enc, newline="") as f:
-            reader = csv.reader(f, delimiter=sep)
+            reader = csv.reader(f, **dialect_kwargs)
 
             # Skip preamble rows
-            for _ in range(skip):
+            for _ in range(skip_rows):
                 next(reader, None)
 
-            # Skip header row if the file has one
-            if header_line is not None:
+            # Skip header row when DuckDB treats first row as header
+            if has_header:
                 next(reader, None)
 
             for row in reader:
@@ -660,15 +676,14 @@ def profile_raw(
     runtime_result = profile_with_read_cfg(file0, sniff_hints, effective_read_cfg)
 
     # Phase 4: extract raw string values for date-typed columns
-    # (DuckDB converts dates to Timestamp, losing the original format)
+    # (DuckDB converts dates to Timestamp, losing the original format).
+    # Uses the same effective_read_cfg as DuckDB (encoding, delim, header,
+    # skip, quote, escape) so the raw parser stays in sync with the runtime.
     date_raw_values = _extract_date_raw_values(
         file0,
         runtime_result["mapping_suggestions"],
         runtime_result["columns_raw"],
-        enc,
-        delim,
-        skip,
-        header_line,
+        effective_read_cfg,
     )
 
     return RawProfile(

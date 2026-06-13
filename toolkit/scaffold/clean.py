@@ -65,10 +65,12 @@ def _suggest_dateformat(profile: dict[str, Any]) -> str | None:
     Uses ``date_raw_values`` (extracted from raw CSV *before* DuckDB
     converts dates to Timestamp) to detect date format patterns.
 
-    Only suggests a ``dateformat`` if at least 60% of ALL non-empty
-    date values across ALL date-typed columns match the same format.
-    This avoids suggesting a global ``dateformat`` that would work for
-    one column but break another.
+    Each date column independently votes for its format. A column supports
+    a format if ≥60% of its non-empty values match that pattern.
+    Only suggests a ``dateformat`` if EVERY date column with a clear
+    format chooses the SAME format. Columns with no clear format (e.g.
+    ISO dates that match no non-ISO pattern) are ignored — they will
+    be parsed correctly by DuckDB regardless of ``dateformat``.
 
     Returns the ``dateformat`` string (e.g. ``%d/%m/%Y``) or ``None``.
     """
@@ -76,31 +78,33 @@ def _suggest_dateformat(profile: dict[str, Any]) -> str | None:
     if not date_raw:
         return None
 
-    # Collect votes per format across all date columns
-    format_votes: dict[str, int] = {}
-    total_values = 0
-
+    # Per colonna: trova il formato vincente (se ≥60% dei suoi valori)
+    col_formats: dict[str, str] = {}
     for col, values in date_raw.items():
         non_empty = [v for v in values if v]
         if not non_empty:
             continue
-        total_values += len(non_empty)
-
+        format_votes: dict[str, int] = {}
         for v in non_empty:
             for pattern, fmt in _DATE_FORMAT_PATTERNS:
                 if pattern.match(v):
                     format_votes[fmt] = format_votes.get(fmt, 0) + 1
                     break
+        if not format_votes:
+            continue
+        best_fmt, best_count = max(format_votes.items(), key=lambda x: x[1])
+        if best_count / len(non_empty) >= 0.6:
+            col_formats[col] = best_fmt
 
-    if not format_votes or total_values == 0:
+    if not col_formats:
         return None
 
-    # A format wins only if >= 60% of ALL date values match it.
-    best_fmt, best_count = max(format_votes.items(), key=lambda x: x[1])
-    if best_count / total_values < 0.6:
-        return None
+    # Tutte le colonne con formato chiaro devono scegliere lo STESSO formato
+    unique = set(col_formats.values())
+    if len(unique) == 1:
+        return unique.pop()
 
-    return best_fmt
+    return None
 
 
 def _find_anno_raw_column(profile: dict[str, Any]) -> str | None:

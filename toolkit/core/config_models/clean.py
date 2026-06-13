@@ -31,6 +31,8 @@ class CleanReadConfig(BaseModel):
     escape: str | None = None
     comment: str | None = None
     ignore_errors: bool | None = None
+    dateformat: str | None = None
+    timestampformat: str | None = None
     strict_mode: bool | None = None
     null_padding: bool | None = None
     parallel: bool | None = None

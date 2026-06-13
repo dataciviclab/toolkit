@@ -105,6 +105,24 @@ class TestCsvReadOptionStrings:
         assert result[1].startswith("encoding=")
         assert result[-1].startswith("columns=")
 
+    def test_dateformat(self):
+        assert csv_read_option_strings({"dateformat": "%d/%m/%Y"}) == ["dateformat='%d/%m/%Y'"]
+
+    def test_timestampformat(self):
+        assert csv_read_option_strings({"timestampformat": "%Y-%m-%dT%H:%M:%S"}) == [
+            "timestampformat='%Y-%m-%dT%H:%M:%S'"
+        ]
+
+    def test_dateformat_sql_injection(self):
+        """Single quotes in dateformat are escaped."""
+        result = csv_read_option_strings({"dateformat": "%d/''/''Y"})
+        assert "''" in result[0]
+
+    def test_timestampformat_sql_injection(self):
+        """Single quotes in timestampformat are escaped."""
+        result = csv_read_option_strings({"timestampformat": "%H:''':%M"})
+        assert "''" in result[0]
+
     def test_full_cfg(self):
         """All supported keys together."""
         cfg = {
@@ -112,6 +130,8 @@ class TestCsvReadOptionStrings:
             "encoding": "utf-8",
             "decimal": ",",
             "thousands": ".",
+            "dateformat": "%d/%m/%Y",
+            "timestampformat": "%H:%M:%S",
             "nullstr": ["", "NA"],
             "auto_detect": False,
             "strict_mode": False,
@@ -125,7 +145,10 @@ class TestCsvReadOptionStrings:
             "columns": {"id": "VARCHAR", "val": "DOUBLE"},
         }
         result = csv_read_option_strings(cfg)
-        # sep, encoding, decimal, thousands, nullstr, auto_detect, strict_mode,
+        # sep, encoding, decimal, thousands, dateformat, timestampformat,
+        # nullstr, auto_detect, strict_mode,
         # ignore_errors, null_padding, parallel, quote, escape, comment,
-        # max_line_size, columns = 15
-        assert len(result) == 15
+        # max_line_size, columns = 17
+        assert len(result) == 17
+        assert "dateformat='%d/%m/%Y'" in result
+        assert "timestampformat='%H:%M:%S'" in result

@@ -592,6 +592,18 @@ class TestCleanReadOverrides:
         assert cfg.get("normalize_rows_to_columns") is True
         assert cfg.get("align_by_header") is True
 
+    @pytest.mark.policy
+    def test_override_selection_keys_rejected(self, tmp_path: Path):
+        """Selection keys (mode, glob) negli override sollevano ValueError."""
+        raw_dir = tmp_path / "raw" / "demo" / "2024"
+        raw_dir.mkdir(parents=True)
+        with pytest.raises(ValueError, match="selection keys not allowed in overrides"):
+            resolve_clean_read_cfg(
+                raw_dir,
+                {"read": {"overrides": {2024: {"mode": "all"}}}},
+                logging.getLogger("tests.clean.duckdb_read.override"),
+            )
+
 
 @pytest.mark.policy
 def test_apply_year_overrides_merge(tmp_path: Path):

@@ -106,14 +106,22 @@ def apply_year_overrides(read_cfg: dict[str, Any], year: int) -> dict[str, Any]:
     if not year_override:
         return validated
 
-    # Merge override values — reject unknown keys
-    unknown = [k for k in year_override if k not in ALLOWED_READ_CSV_KEYS]
+    # Merge override values — reject selection keys and unknown params
+    invalid_selection = [k for k in year_override if k in READ_SELECTION_KEYS]
+    if invalid_selection:
+        raise ValueError(
+            f"clean.read.overrides.{year}: selection keys not allowed in overrides: "
+            f"{invalid_selection}. Use source-level configuration for per-year "
+            f"file selection."
+        )
+    known = ALLOWED_READ_CSV_KEYS - READ_SELECTION_KEYS
+    unknown = [k for k in year_override if k not in known]
     if unknown:
         raise ValueError(
             f"clean.read.overrides.{year}: unknown parameter(s): {unknown}. "
-            f"Allowed: {sorted(ALLOWED_READ_CSV_KEYS)}"
+            f"Allowed: {sorted(known)}"
         )
-    filtered = {k: v for k, v in year_override.items() if k in ALLOWED_READ_CSV_KEYS}
+    filtered = {k: v for k, v in year_override.items() if k in known}
     validated.update(filtered)
 
     # Re-validate merged result to normalize override values too

@@ -299,7 +299,7 @@ class TestScore:
 
 @pytest.mark.contract
 class TestPreviewResultContract:
-    """I 7 campi quality_* in PreviewResult sono popolati dopo preview_url."""
+    """I campi quality_* in PreviewResult sono popolati dopo preview_url."""
 
     @pytest.mark.smoke
     def test_preview_url_has_quality_fields(self) -> None:
@@ -311,6 +311,8 @@ class TestPreviewResultContract:
             "quality_score",
             "quality_structural_score",
             "quality_semantic_score",
+            "quality_combined_score",
+            "quality_sampled",
             "quality_verdict",
             "quality_flags",
             "quality_ontologies",

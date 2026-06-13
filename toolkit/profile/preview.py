@@ -81,6 +81,7 @@ class PreviewResult:
     quality_structural_score: int | None = None
     quality_semantic_score: int | None = None
     quality_combined_score: int | None = None
+    quality_sampled: bool | None = None
     quality_verdict: str | None = None
     quality_flags: list[str] | None = None
     quality_ontologies: dict[str, list[str]] | None = None
@@ -311,6 +312,7 @@ def preview_url(
             quality_structural_score: int | None = None
             quality_semantic_score: int | None = None
             quality_combined_score: int | None = None
+            quality_sampled: bool | None = None
             quality_verdict: str | None = None
             quality_flags: list[str] | None = None
             quality_ontologies: dict[str, list[str]] | None = None
@@ -335,6 +337,7 @@ def preview_url(
                 quality_structural_score = qr.structural_score
                 quality_semantic_score = qr.semantic_score
                 quality_combined_score = qr.combined_score
+                quality_sampled = qr.sampled
                 quality_verdict = qr.verdict
                 quality_flags = qr.flags or None
                 quality_ontologies = qr.ontologies or None
@@ -350,6 +353,7 @@ def preview_url(
             quality_structural_score=quality_structural_score,
             quality_semantic_score=quality_semantic_score,
             quality_combined_score=quality_combined_score,
+            quality_sampled=quality_sampled,
             quality_verdict=quality_verdict,
             quality_flags=quality_flags,
             quality_ontologies=quality_ontologies,

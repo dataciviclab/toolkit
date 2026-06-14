@@ -109,27 +109,28 @@ def _discover_smoke_fixtures(offline_only: bool = True) -> list[pytest.param]:
 
 @pytest.fixture(params=_discover_smoke_fixtures(offline_only=True))
 def smoke_offline(tmp_path: Path, request: pytest.FixtureRequest) -> Path:
-    """Copia uno smoke offline (local_file) in tmp_path e ritorna il path.
+    """Copia uno smoke offline in tmp_path e ritorna il path alla directory.
 
     Parametrizzato automaticamente su tutti gli smoke che non richiedono rete.
+    Se lo smoke ha ``dataset.offline.yml``, lo rinomina in ``dataset.yml``
+    nella copia, così il test vede sempre ``dataset.yml``.
     """
     import shutil
 
-    from _smoke_registry import SmokeTemplate
+    from _smoke_registry import SmokeTemplate, OFFLINE_CONFIG_NAME, ONLINE_CONFIG_NAME
 
     smoke: SmokeTemplate = request.param
     dst = tmp_path / smoke.name
     shutil.copytree(smoke.path, dst, ignore=shutil.ignore_patterns("_smoke_out", "README.md"))
+
+    # Se lo smoke usa un config offline, rinominiamolo in dataset.yml
+    # così i test possono sempre puntare a dataset.yml
+    offline_src = dst / OFFLINE_CONFIG_NAME
+    online_dst = dst / ONLINE_CONFIG_NAME
+    if offline_src.exists() and smoke._config_name == OFFLINE_CONFIG_NAME:
+        offline_src.rename(online_dst)
+
     return dst
-
-
-@pytest.fixture
-def smoke_offline_dir(smoke_offline: Path) -> Path:
-    """Convenienza: come ``smoke_offline`` ma ritorna direttamente lo smoke copiato.
-
-    Utile quando un test ha bisogno di più fixtures e vuole un nome esplicito.
-    """
-    return smoke_offline
 
 
 @pytest.fixture

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 # NOTE: il valore aggiunto di questi test NON è sul contratto CLI del
-# filtro --years (già coperto da test_cli_years_filter.py) ma sulla
-# verifica che il filtro funzioni su TUTTI gli smoke template
-# (3 template, 2 source type: local_file, http_file).
+# filtro --years (già coperto dal contratto specifico in
+# test_cli_path_contract.py e dal file years_filter eliminato dopo
+# la centralizzazione) ma sulla verifica che il filtro funzioni su
+# TUTTI gli smoke template (3 template, 2 source type: local_file, http_file).
 
 from pathlib import Path
 

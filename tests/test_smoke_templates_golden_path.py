@@ -41,9 +41,10 @@ def test_smoke_offline_golden_path(smoke_offline: Path) -> None:
     # Verifica struttura artifact completa
     assert_golden_path_artifacts(root, name, years, mart_tables)
 
-    # Verifica che i metadata non contengano path assoluti (portabilità)
+    # Verifica portabilità metadata: clean e mart non devono contenere
+    # path assoluti. La metadata raw può contenere path sorgente legittimi.
     for year in years:
-        for layer in ("raw", "clean", "mart"):
+        for layer in ("clean", "mart"):
             meta = assert_metadata_file(root, name, layer, year)
             assert_no_absolute_paths(meta, root)
 

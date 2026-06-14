@@ -111,9 +111,18 @@ def assert_validation_file(
 
     Returns:
         Contenuto del JSON parsato.
+
+    Note:
+        Il file raw_validation.json si trova direttamente nel raw dir,
+        mentre clean e mart usano il sottodirectory ``_validate/``.
     """
     fname = filename or f"{layer}_validation.json"
-    path = root / "data" / layer / dataset / str(year) / "_validate" / fname
+    layer_dir = root / "data" / layer / dataset / str(year)
+    # raw: validation direttamente nel layer dir; clean/mart: in _validate/
+    if layer == "raw":
+        path = layer_dir / fname
+    else:
+        path = layer_dir / "_validate" / fname
     assert path.exists(), f"File validazione non trovato: {path}"
     return json.loads(path.read_text(encoding="utf-8"))
 

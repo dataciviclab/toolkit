@@ -4,7 +4,7 @@ Il golden path CLI generico è coperto da test_smoke_templates_golden_path.py
 (3 template parametrizzati). Questo file verifica la struttura INTERNA dei
 metadata prodotta dal toolkit sul dataset canonico project-example,
 usando la Python API (run_raw/run_clean/run_mart) per accesso diretto
-ai layer.
+ai layer e controllo dei contratti di metadata.
 
 Non duplica gli assert generici (path, esistenza, sostituibilità) che
 sono già coperti dal test parametrizzato.
@@ -35,13 +35,9 @@ from toolkit.raw.run import run_raw
 pytestmark = pytest.mark.smoke
 
 
-def test_project_example_deep_metadata(project_example: Path, tmp_path: Path, monkeypatch) -> None:
+def test_project_example_deep_metadata(project_example: Path, monkeypatch) -> None:
     """Esegue la pipeline su project-example e verifica metadata in profondità."""
-    src = project_example
-    dst = tmp_path / "project-example"
-    import shutil
-
-    shutil.copytree(src, dst)
+    dst = project_example
     monkeypatch.chdir(dst)
 
     cfg = load_config(dst / "dataset.yml")
@@ -76,13 +72,39 @@ def test_project_example_deep_metadata(project_example: Path, tmp_path: Path, mo
     validate_cmd(step="clean", config=str(dst / "dataset.yml"))
     validate_cmd(step="mart", config=str(dst / "dataset.yml"))
 
+    # ── Contratti comuni a tutti i metadata ─────────────────────────
+    for layer, meta in [
+        ("raw", assert_metadata_file(root, cfg.dataset, "raw", year)),
+        ("clean", assert_metadata_file(root, cfg.dataset, "clean", year)),
+        ("mart", assert_metadata_file(root, cfg.dataset, "mart", year)),
+    ]:
+        assert meta["metadata_schema_version"] == 1, f"{layer}: schema_version"
+        assert "toolkit_version" in meta, f"{layer}: toolkit_version"
+        assert "config_hash" in meta, f"{layer}: config_hash"
+        assert isinstance(meta["config_hash"], str) and meta["config_hash"], (
+            f"{layer}: config_hash vuoto"
+        )
+        assert "inputs" in meta, f"{layer}: inputs"
+        assert isinstance(meta["inputs"], list) and meta["inputs"], f"{layer}: inputs vuoto"
+        assert "outputs" in meta, f"{layer}: outputs"
+        assert isinstance(meta["outputs"], list) and meta["outputs"], f"{layer}: outputs vuoto"
+        assert {"file", "sha256", "bytes"} <= set(meta["outputs"][0].keys()), (
+            f"{layer}: formato output"
+        )
+        assert {"file", "sha256", "bytes"} <= set(meta["inputs"][0].keys()), (
+            f"{layer}: formato input"
+        )
+        assert "summary" in meta, f"{layer}: summary"
+        assert meta["summary"]["ok"] is True, f"{layer}: summary.ok"
+        assert isinstance(meta["summary"]["errors_count"], int), f"{layer}: errors_count"
+        assert isinstance(meta["summary"]["warnings_count"], int), f"{layer}: warnings_count"
+
     # ── RAW metadata ────────────────────────────────────────────────
     raw_dir = assert_raw_dir(root, cfg.dataset, year)
     assert_validation_file(root, cfg.dataset, "raw", year)
     raw_meta = assert_metadata_file(root, cfg.dataset, "raw", year)
 
     assert raw_meta["validation"] == "raw_validation.json"
-    assert raw_meta["summary"]["ok"] is True
     assert raw_meta["primary_output_file"] == raw_meta["outputs"][0]["file"]
     assert (raw_dir / raw_meta["primary_output_file"]).exists()
     assert raw_meta["sources"]
@@ -90,6 +112,7 @@ def test_project_example_deep_metadata(project_example: Path, tmp_path: Path, mo
     assert raw_meta["profile_hints"]["delim_suggested"] == ";"
     assert raw_meta["profile_hints"]["columns_preview"][0] == "Regione"
     assert any("Provincia" in column for column in raw_meta["profile_hints"]["columns_preview"])
+    assert raw_meta["profile_hints"]["file_used"] == raw_meta["primary_output_file"]
 
     # ── CLEAN metadata ──────────────────────────────────────────────
     assert_validation_file(root, cfg.dataset, "clean", year)
@@ -124,11 +147,16 @@ def test_project_example_deep_metadata(project_example: Path, tmp_path: Path, mo
     for item in mart_meta["transition_profiles"]:
         assert item["from"] == "clean"
         assert item["to"] == "mart"
+        assert "target_name" in item, "transition target_name mancante"
         assert isinstance(item["source_row_count"], int)
         assert isinstance(item["target_row_count"], int)
         assert isinstance(item["added_columns"], list)
         assert isinstance(item["removed_columns"], list)
         assert isinstance(item["type_changes"], list)
+    assert {item["target_name"] for item in mart_meta["transition_profiles"]} == {
+        "rd_by_regione",
+        "rd_by_provincia",
+    }
     assert mart_meta["tables"] == [
         {
             "name": "rd_by_regione",
@@ -150,10 +178,15 @@ def test_project_example_deep_metadata(project_example: Path, tmp_path: Path, mo
 
     # ── Integrità dati ──────────────────────────────────────────────
     con = duckdb.connect(":memory:")
-    count = int(
-        con.execute(f"SELECT COUNT(*) FROM read_parquet('{clean_parquet.as_posix()}')").fetchone()[
-            0
-        ]
-    )
-    assert count > 0
+    for label, parquet_path in [
+        ("clean", clean_parquet),
+        ("mart_regione", assert_mart_parquet(root, cfg.dataset, year, "rd_by_regione")),
+        ("mart_provincia", assert_mart_parquet(root, cfg.dataset, year, "rd_by_provincia")),
+    ]:
+        count = int(
+            con.execute(
+                f"SELECT COUNT(*) FROM read_parquet('{parquet_path.as_posix()}')"
+            ).fetchone()[0]
+        )
+        assert count > 0, f"{label}: parquet vuoto"
     con.close()

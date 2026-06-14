@@ -1,8 +1,0 @@
-root: "./out"
-
-dataset:
-  name: "empty_sources"
-  years: [2024]
-
-raw:
-  sources: []

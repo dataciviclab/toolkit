@@ -100,8 +100,8 @@ def project_example(tmp_path: Path) -> Path:
 
 
 def _discover_smoke_fixtures() -> list[pytest.param]:
-    """Raccoglie gli smoke testabili offline (nativi local_file + tutti
-    quelli con ``dataset.offline.yml``, anche se source_type è http_file/ckan)."""
+    """Raccoglie gli smoke testabili offline: nativi ``local_file`` + quelli
+    con ``dataset.offline.yml`` (source_type ``http_file`` con server locale)."""
     from _smoke_registry import discover_testable_offline_smokes
 
     smokes = discover_testable_offline_smokes()
@@ -114,9 +114,10 @@ SMOKE_PORT_PLACEHOLDER = "{SMOKE_PORT}"
 @pytest.fixture(scope="session")
 def smoke_http_server():
     """Avvia un server HTTP locale su una porta libera per servirire i
-    fixture degli smoke offline che preservano il source_type (es. http_file).
+    fixture degli smoke offline che preservano il source_type ``http_file``.
 
-    Il server serve i file dalla radice del workspace toolkit.
+    Il server serve i file da ``smoke/`` con directory fissa, immune da
+    ``chdir`` nei test.
     """
     import http.server
     import socket
@@ -149,11 +150,11 @@ def smoke_http_server():
 def smoke_offline(tmp_path: Path, request: pytest.FixtureRequest) -> Path:
     """Copia uno smoke testabile offline in tmp_path e ritorna il path.
 
-    Parametrizzato automaticamente su tutti gli smoke offline nativi
-    (local_file) e su quelli con ``dataset.offline.yml`` e fixture congelate.
+    Parametrizzato su 3 template: 2 nativi ``local_file`` + 1 con
+    ``http_file`` servito da server HTTP locale.
 
-    Se lo smoke usa ``{SMOKE_PORT}`` nel config, avvia un server HTTP
-    locale e sostituisce il placeholder con la porta reale.
+    Se lo smoke usa ``{SMOKE_PORT}`` nel config, sostituisce il placeholder
+    con la porta reale del server.
     """
     import shutil
 

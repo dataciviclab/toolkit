@@ -10,10 +10,10 @@ from toolkit.cli.cmd_validate import validate as validate_cmd
 
 @pytest.mark.contract
 def test_smoke_offline_golden_path(smoke_offline: Path) -> None:
-    """Golden path su ogni smoke offline: run all + validate all + artifact check.
+    """Golden path su 3 template offline: run all + validate all + artifact.
 
-    Sostituisce i test golden path uno-per-uno con un test parametrizzato
-    su tutti gli smoke ``local_file``.
+    Copre source type ``local_file`` e ``http_file`` (con server locale).
+    Sostituisce i test golden path uno-per-uno con un test parametrizzato.
     """
     config_path = smoke_offline / "dataset.yml"
     assert config_path.exists(), f"dataset.yml non trovato in {smoke_offline}"

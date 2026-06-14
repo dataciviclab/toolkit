@@ -2,6 +2,7 @@ root: "./_smoke_out"
 
 dataset:
   name: "finanze_http_zip_2023"
+  source_id: "mef_irpef_comunale"
   years: [2023]
 
 raw:
@@ -14,6 +15,7 @@ raw:
 
 clean:
   sql: "sql/clean.sql"
+  read_mode: "fallback"
   read:
     source: config_only
     mode: latest
@@ -22,7 +24,28 @@ clean:
     encoding: "utf-8"
     trim_whitespace: true
 
+  required_columns:
+    - anno_imposta
+    - regione
+    - numero_contribuenti
+
+  validate:
+    min_rows: 100
+    not_null:
+      - anno_imposta
+
 mart:
   tables:
     - name: "irpef_by_regione"
       sql: "sql/mart/irpef_by_regione.sql"
+
+  required_tables:
+    - "irpef_by_regione"
+
+  validate:
+    table_rules:
+      irpef_by_regione:
+        min_rows: 1
+
+output:
+  artifacts: "standard"

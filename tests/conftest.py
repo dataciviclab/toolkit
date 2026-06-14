@@ -94,6 +94,97 @@ def project_example(tmp_path: Path) -> Path:
     return dst
 
 
+# ------------------------------------------------------------------
+# Smoke template fixtures (parametrizzate)
+# ------------------------------------------------------------------
+
+
+def _discover_smoke_fixtures() -> list[pytest.param]:
+    """Raccoglie gli smoke testabili offline: nativi ``local_file`` + quelli
+    con ``dataset.offline.yml`` (source_type ``http_file`` con server locale)."""
+    from _smoke_registry import discover_testable_offline_smokes
+
+    smokes = discover_testable_offline_smokes()
+    return [pytest.param(s, id=s.name, marks=[]) for s in smokes]
+
+
+SMOKE_PORT_PLACEHOLDER = "{SMOKE_PORT}"
+
+
+@pytest.fixture(scope="session")
+def smoke_http_server():
+    """Avvia un server HTTP locale su una porta libera per servirire i
+    fixture degli smoke offline che preservano il source_type ``http_file``.
+
+    Il server serve i file da ``smoke/`` con directory fissa, immune da
+    ``chdir`` nei test.
+    """
+    import http.server
+    import socket
+    import threading
+
+    toolkit_root = Path(__file__).resolve().parent.parent
+    smoke_dir = toolkit_root / "smoke"
+
+    # Handler che serve sempre dalla directory smoke/, immune da future chdir
+    class _SmokeHTTPHandler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=str(smoke_dir), **kwargs)
+
+    # Porta libera
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+
+    server = http.server.HTTPServer(("127.0.0.1", port), _SmokeHTTPHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield port
+    finally:
+        server.shutdown()
+
+
+@pytest.fixture(params=_discover_smoke_fixtures())
+def smoke_offline(tmp_path: Path, request: pytest.FixtureRequest) -> Path:
+    """Copia uno smoke testabile offline in tmp_path e ritorna il path.
+
+    Parametrizzato su 3 template: 2 nativi ``local_file`` + 1 con
+    ``http_file`` servito da server HTTP locale.
+
+    Se lo smoke usa ``{SMOKE_PORT}`` nel config, sostituisce il placeholder
+    con la porta reale del server.
+    """
+    import shutil
+
+    from _smoke_registry import SmokeTemplate, OFFLINE_CONFIG_NAME, ONLINE_CONFIG_NAME
+
+    smoke: SmokeTemplate = request.param
+    dst = tmp_path / smoke.name
+    shutil.copytree(smoke.path, dst, ignore=shutil.ignore_patterns("_smoke_out", "README.md"))
+
+    # Determina quale file config usare
+    offline_src = dst / OFFLINE_CONFIG_NAME
+    online_dst = dst / ONLINE_CONFIG_NAME
+    use_offline = offline_src.exists() and smoke._config_name == OFFLINE_CONFIG_NAME
+
+    config_file = offline_src if use_offline else online_dst
+
+    # Se il config contiene {SMOKE_PORT}, avvia il server e sostituisci
+    if config_file.exists() and SMOKE_PORT_PLACEHOLDER in config_file.read_text(encoding="utf-8"):
+        port = request.getfixturevalue("smoke_http_server")
+        content = config_file.read_text(encoding="utf-8")
+        content = content.replace(SMOKE_PORT_PLACEHOLDER, str(port))
+        config_file.write_text(content, encoding="utf-8")
+
+    # Rinomina dataset.offline.yml → dataset.yml per trasparenza ai test
+    if use_offline:
+        offline_src.rename(online_dst)
+
+    return dst
+
+
 @pytest.fixture
 def chdir_tmp(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Chdir to a clean temp directory for the duration of the test.

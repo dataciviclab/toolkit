@@ -2,6 +2,7 @@ root: "./_smoke_out"
 
 dataset:
   name: "istat_sdmx_22_289"
+  source_id: "istat_popolazione_residente"
   years: [2024]
 
 raw:
@@ -29,9 +30,30 @@ clean:
     delim: ","
     encoding: "utf-8"
     header: true
-  validate: {}
+
+  required_columns:
+    - TIME_PERIOD
+    - OBS_VALUE
+    - REF_AREA
+
+  validate:
+    min_rows: 1
+    not_null:
+      - TIME_PERIOD
+      - OBS_VALUE
 
 mart:
   tables:
     - name: "mart_ok"
       sql: "sql/mart/mart_ok.sql"
+
+  required_tables:
+    - "mart_ok"
+
+  validate:
+    table_rules:
+      mart_ok:
+        min_rows: 1
+
+output:
+  artifacts: "standard"

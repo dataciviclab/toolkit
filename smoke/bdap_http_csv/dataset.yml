@@ -2,7 +2,12 @@ root: "./_smoke_out"
 
 dataset:
   name: "bdap_http_csv"
+  source_id: "bdap_rendiconto_saldi"
   years: [2022]
+  time_coverage:
+    mode: full_series
+    start_year: 2003
+    end_year: 2024
 
 raw:
   sources:
@@ -13,6 +18,7 @@ raw:
 
 clean:
   sql: "sql/clean.sql"
+  read_mode: "fallback"
   read:
     delim: ";"
     decimal: "."
@@ -20,7 +26,29 @@ clean:
     header: true
     columns: null
 
+  required_columns:
+    - anno
+    - saldo_netto
+    - spese_finali
+    - entrate_finali
+
+  validate:
+    min_rows: 5
+    not_null:
+      - anno
+
 mart:
   tables:
     - name: "mart_ok"
       sql: "sql/mart/mart_ok.sql"
+
+  required_tables:
+    - "mart_ok"
+
+  validate:
+    table_rules:
+      mart_ok:
+        min_rows: 1
+
+output:
+  artifacts: "standard"

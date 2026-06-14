@@ -1,0 +1,7 @@
+"Anno di Riferimento";"Codice Regione";"Descrizione Regione";"Codice Ente SSN";"Descrizione Ente";"Codice Voce Contabile";"Descrizione Voce Contabile";"Importo Totale"
+2022;1;"Piemonte";100;"ASL TO1";"LEA01";"Assistenza sanitaria di base";1234567.89
+2022;1;"Piemonte";101;"ASL TO2";"LEA01";"Assistenza sanitaria di base";2345678.90
+2022;2;"Lombardia";200;"ASL MI1";"LEA01";"Assistenza sanitaria di base";3456789.01
+2022;2;"Lombardia";201;"ASL MI2";"LEA02";"Assistenza specialistica";4567890.12
+2023;1;"Piemonte";100;"ASL TO1";"LEA01";"Assistenza sanitaria di base";1345678.99
+2023;2;"Lombardia";200;"ASL MI1";"LEA02";"Assistenza specialistica";5678901.23

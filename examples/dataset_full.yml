@@ -3,7 +3,12 @@ schema_version: 1
 
 dataset:
   name: example_full
+  source_id: "example_source"
   years: [2023, 2024]
+  time_coverage:
+    mode: full_series
+    start_year: 2023
+    end_year: 2024
 
 raw:
   output_policy: versioned

@@ -340,27 +340,49 @@ def test_mart_validation_skips_min_rows_in_sample_mode(tmp_path: Path) -> None:
 
 
 @pytest.mark.regression
-def test_run_full_second_validation_block_uses_sample_mode(tmp_path: Path, monkeypatch) -> None:
-    """Il blocco di validazione finale in run_full() riceve sample_mode=True con --sample-rows."""
+def test_run_full_validates_via_context_not_direct_calls(tmp_path: Path, monkeypatch) -> None:
+    """run_full si fida del RunContext — le validazioni sono chiamate solo da run_year.
+
+    Questo test conta quante volte vengono chiamate le funzioni di validazione.
+    Con la vecchia doppia validazione, ogni funzione veniva chiamata 2 volte
+    (una in run_year + una in run_full). Con il fix, ogni funzione è chiamata
+    1 sola volta (solo dentro run_year).
+    """
     config_path = tmp_path / "dataset.yml"
     _write_config_with_min_rows(config_path, min_rows=1000)
 
-    sample_mode_passed = {"clean": False, "mart": False}
+    call_counts: dict[str, int] = {"raw": 0, "clean": 0, "mart": 0}
 
-    def _tracking_clean_validation(cfg, year, logger, *, sample_mode=False):
-        sample_mode_passed["clean"] = sample_mode
+    def _counting_raw(*args, **kwargs):
+        call_counts["raw"] += 1
         return _ok_summary()
 
-    def _tracking_mart_validation(cfg, year, logger, *, sample_mode=False):
-        sample_mode_passed["mart"] = sample_mode
+    def _counting_clean(*args, **kwargs):
+        call_counts["clean"] += 1
         return _ok_summary()
+
+    def _counting_mart(*args, **kwargs):
+        call_counts["mart"] += 1
+        return _ok_summary()
+
+    monkeypatch.setattr(cmd_run, "run_raw_validation", _counting_raw)
+    monkeypatch.setattr(cmd_run, "run_clean_validation", _counting_clean)
+    monkeypatch.setattr(cmd_run, "run_mart_validation", _counting_mart)
 
     monkeypatch.setattr(cmd_run, "run_raw", lambda *args, **kwargs: None)
     monkeypatch.setattr(cmd_run, "run_clean", lambda *args, **kwargs: None)
     monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cmd_run, "run_raw_validation", lambda *args, **kwargs: _ok_summary())
-    monkeypatch.setattr(cmd_run, "run_clean_validation", _tracking_clean_validation)
-    monkeypatch.setattr(cmd_run, "run_mart_validation", _tracking_mart_validation)
+
+    # run_full chiama run_preflight all'inizio — mockiamo per evitare
+    # che validate_config fallisca su config minimale del test
+    monkeypatch.setattr(
+        "toolkit.cli.preflight_ops.run_preflight",
+        lambda *args, **kwargs: {
+            "config_check": {"ok": True, "errors": [], "warnings": [], "slug": "test"},
+            "sources": [],
+            "status": "passed",
+        },
+    )
     import toolkit.cli.inspect.readiness_ops as _readiness_ops
 
     monkeypatch.setattr(
@@ -374,9 +396,6 @@ def test_run_full_second_validation_block_uses_sample_mode(tmp_path: Path, monke
         },
     )
 
-    # Esegue run full COME se chiamato da CI con --sample-rows 1000
-    # (tutti i parametri espliciti per bypassare i default Typer che
-    #  altrimenti restituiscono oggetti OptionInfo invece di None)
     cmd_run.run_full(
         config=str(config_path),
         smoke=False,
@@ -388,9 +407,11 @@ def test_run_full_second_validation_block_uses_sample_mode(tmp_path: Path, monke
         dry_run=False,
     )
 
-    assert sample_mode_passed["clean"] is True, (
-        "run_full deve passare sample_mode=True alla validazione clean"
-    )
-    assert sample_mode_passed["mart"] is True, (
-        "run_full deve passare sample_mode=True alla validazione mart"
-    )
+    # Ogni validazione deve essere chiamata ESATTAMENTE 1 volta,
+    # dalla _execute_layer() dentro run_year().
+    # 0 = non chiamata affatto (run_year skipped), 2+ = doppia validazione
+    for layer in ("raw", "clean", "mart"):
+        assert call_counts[layer] == 1, (
+            f"{layer}: chiamata {call_counts[layer]} volte "
+            f"(atteso 1 — 0 = non eseguita, 2+ = doppia validazione reintrodotta)"
+        )

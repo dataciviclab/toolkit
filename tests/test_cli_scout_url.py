@@ -179,7 +179,7 @@ def test_probe_url_uses_head_then_get_only_for_html(monkeypatch) -> None:
     assert calls[2] == ("get", "https://example.org/html")
 
 
-@pytest.mark.pure_unit
+@pytest.mark.smoke
 def test_probe_url_falls_back_to_get_when_head_fails(monkeypatch) -> None:
     """HEAD fails with error, GET with Range succeeds → probe returns file info."""
     head_called = False

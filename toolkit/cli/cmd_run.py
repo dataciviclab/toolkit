@@ -35,9 +35,9 @@ def _validation_runner(layer_name: str):
 
 def _planned_layers(step: str) -> list[str]:
     if step == "all":
-        return ["probe", "raw", "clean", "mart"]
+        return ["raw", "clean", "mart"]
     if step == "raw":
-        return ["probe", "raw"]
+        return ["raw"]
     return [step]
 
 
@@ -245,7 +245,6 @@ def run_year(
     sample_rows: int | None = None,
     sample_bytes: int | None = None,
     smoke: bool = False,
-    probe_pool=None,
 ) -> RunContext:
     if logger is None:
         logger = get_logger()
@@ -330,9 +329,6 @@ def run_year(
             return False
 
     source_id = cfg.source_id
-
-    if "probe" in layers_to_run and not dry_run:
-        _run_probe(cfg, year, base_logger, pool=probe_pool)
 
     if "raw" in layers_to_run:
         if not _execute_layer(
@@ -527,8 +523,8 @@ _STEP_DOCSTRINGS: dict[str, str] = {
         "l'aggregazione cross-year automaticamente."
     ),
     "all": (
-        "Esegue l'intera pipeline: probe → raw → clean → mart.\n\n"
-        "Equivalente a eseguire i quattro step in sequenza. "
+        "Esegue l'intera pipeline: raw → clean → mart.\n\n"
+        "Equivalente a eseguire i tre step in sequenza. "
         "Se il dataset è mart-only (compose), usa solo lo step mart."
     ),
 }
@@ -743,6 +739,26 @@ def run_full(
         "status": "passed",
     }
 
+    # ── Pre-flight check ────────────────────────────────────────────────
+    from toolkit.cli.preflight_ops import run_preflight as _run_preflight
+
+    preflight = _run_preflight(config, years_arg=years_arg)
+    results["preflight"] = {
+        "config_check": preflight["config_check"],
+        "sources": preflight["sources"],
+    }
+    if not preflight["config_check"].get("ok", False):
+        logger.error("Config validation failed — aborting")
+        results["status"] = "failed"
+        if json_output:
+            typer.echo(json.dumps(results, indent=2, default=str))
+        raise typer.Exit(code=1)
+    if preflight["status"] != "passed":
+        logger.warning(
+            "Pre-flight: %d source(s) unreachable (pipeline continua)",
+            sum(1 for s in preflight["sources"] if not s["reachable"]),
+        )
+
     # Process support datasets (dichiarati in dataset.yml con support:)
     # Vengono eseguiti prima del candidate cosi' i loro output sono disponibili
     # per le query MART del candidate (placeholder {support.NAME.mart} ecc.).
@@ -830,7 +846,7 @@ def run_full(
 
         for year in selected_years:
             logger.info("Run %s — year=%s", run_step, year)
-            run_year(
+            ctx = run_year(
                 cfg,
                 year,
                 step=run_step,
@@ -842,17 +858,15 @@ def run_full(
             )
 
             if not dry_flag:
+                # all_passed dal RunContext — la validazione è già avvenuta
+                # dentro run_year() per ogni layer eseguito.
                 if is_mart_only:
-                    # Validate solo mart (compose non ha raw/clean)
-                    val_mart = run_mart_validation(cfg, year, logger, sample_mode=sample_mode)
-                    all_passed = bool(val_mart.get("passed"))
+                    all_passed = bool(ctx.validations.get("mart", {}).get("passed", False))
                 else:
-                    # Validate all layers
-                    logger.info("Validate all — year=%s", year)
-                    val_raw = run_raw_validation(cfg.root, cfg.dataset, year, logger)
-                    val_clean = run_clean_validation(cfg, year, logger, sample_mode=sample_mode)
-                    val_mart = run_mart_validation(cfg, year, logger, sample_mode=sample_mode)
-                    all_passed = all(r.get("passed") for r in [val_raw, val_clean, val_mart])
+                    all_passed = all(
+                        ctx.validations.get(layer, {}).get("passed", False)
+                        for layer in ("raw", "clean", "mart")
+                    )
                 results["steps"][str(year)] = {
                     "run": "ok",
                     "validate": "passed" if all_passed else "failed",
@@ -934,6 +948,52 @@ def run_full(
         raise typer.Exit(code=1)
 
 
+def run_preflight_cmd(
+    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
+):
+    """Pre-flight check: valida config, verifica raggiungibilita' fonti,
+    e per CSV scarica un preview con quality score PA.
+
+    Non esegue la pipeline — solo diagnostica preventiva.
+    """
+    from toolkit.cli.preflight_ops import run_preflight
+
+    result = run_preflight(config, years_arg=years)
+
+    if json_output:
+        import json as _json
+
+        typer.echo(_json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    else:
+        status_icon = "✅" if result["status"] == "passed" else "🔴"
+        typer.echo(f"{status_icon} Pre-flight: {result['dataset']} ({result['config']})")
+        ck = result["config_check"]
+        if ck.get("ok"):
+            typer.echo("   Config: OK")
+        else:
+            for e in ck.get("errors", []):
+                typer.echo(f"   Config: 🔴 {e}")
+
+        for src in result["sources"]:
+            if src["status"] == "skipped":
+                continue
+            icon = "✅" if src["reachable"] else "🔴"
+            parts = [f"{src['name']} ({src['type']})"]
+            if src.get("url"):
+                parts.append(src["url"])
+            parts.append(f"{icon} {src['status']}")
+            if src.get("quality_score") is not None:
+                parts.append(f"quality={src['quality_score']}/100")
+            if src.get("columns"):
+                parts.append(f"{len(src['columns'])} colonne")
+            typer.echo(f"   {'  '.join(parts)}")
+
+    if result["status"] != "passed":
+        raise typer.Exit(code=1)
+
+
 def register(app: typer.Typer) -> None:
     run_sub = typer.Typer(no_args_is_help=True, add_completion=False)
     run_sub.command("probe")(run_probe_cmd)
@@ -942,5 +1002,6 @@ def register(app: typer.Typer) -> None:
     run_sub.command("mart")(run_mart_cmd)
     run_sub.command("all")(run_all_cmd)
     run_sub.command("full")(run_full)
+    run_sub.command("preflight")(run_preflight_cmd)
     run_sub.command("init")(run_init)
     app.add_typer(run_sub, name="run", help="Esegue la pipeline RAW → CLEAN → MART per un dataset.")

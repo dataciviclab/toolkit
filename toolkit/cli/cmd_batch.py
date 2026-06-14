@@ -154,100 +154,89 @@ def batch(
     rows: list[dict[str, str]] = []
     failures: list[dict[str, str]] = []
 
-    _shared_probe_pool = None
-    if step in ("probe", "raw", "all"):
-        from toolkit.core.probe import ProbePool
+    for config_path in config_paths:
+        config_started_at = perf_counter()
+        dataset_label = config_path.stem
 
-        _shared_probe_pool = ProbePool(workers=8, circuit_threshold=3)
-
-    try:
-        for config_path in config_paths:
-            config_started_at = perf_counter()
-            dataset_label = config_path.stem
-
-            try:
-                if smoke:
-                    # Carica prima senza override per scoprire cfg.root originale,
-                    # poi ricarica con root_override a {root}/smoke
-                    _cfg0, _logger0 = load_cfg_and_logger(str(config_path))
-                    if json_output:
-                        _silence_logger()
-                    cfg, logger = load_cfg_and_logger(
-                        str(config_path),
-                        root_override=str(_cfg0.root / "smoke"),
-                    )
-                else:
-                    cfg, logger = load_cfg_and_logger(str(config_path))
-
-                # Quando --json è attivo, silenzia il logger dopo ogni
-                # load_cfg_and_logger (che resetta il logger a ogni chiamata)
+        try:
+            if smoke:
+                # Carica prima senza override per scoprire cfg.root originale,
+                # poi ricarica con root_override a {root}/smoke
+                _cfg0, _logger0 = load_cfg_and_logger(str(config_path))
                 if json_output:
                     _silence_logger()
-                dataset_label = cfg.dataset
-
-                for year in cfg.years:
-                    run_started_at = perf_counter()
-                    status = "FAILED"
-                    try:
-                        # Quando --json è attivo, silenzia typer.echo durante
-                        # run_year per evitare che execution plan (dry-run)
-                        # o altri echo contaminino stdout JSON
-                        _run_ctx = _silence_typer_echo() if json_output else contextlib.nullcontext()
-                        with _run_ctx:
-                            context = run_year(
-                                cfg,
-                                year,
-                                step=step,
-                                dry_run=dry_flag,
-                                logger=logger,
-                                sample_rows=sample_rows_final,
-                                sample_bytes=sample_bytes_final,
-                                probe_pool=_shared_probe_pool,
-                            )
-                        status = context.status
-                    except Exception as exc:
-                        failures.append(
-                            {
-                                "config": str(config_path),
-                                "dataset": dataset_label,
-                                "years": str(year),
-                                "error": str(exc),
-                            }
-                        )
-                    finally:
-                        rows.append(
-                            _build_row(
-                                dataset=dataset_label,
-                                config_path=str(config_path),
-                                years=str(year),
-                                step=step,
-                                status=status,
-                                duration=_format_duration(perf_counter() - run_started_at),
-                            )
-                        )
-            except Exception as exc:
-                failures.append(
-                    {
-                        "config": str(config_path),
-                        "dataset": dataset_label,
-                        "years": "-",
-                        "error": str(exc),
-                    }
+                cfg, logger = load_cfg_and_logger(
+                    str(config_path),
+                    root_override=str(_cfg0.root / "smoke"),
                 )
-                rows.append(
-                    _build_row(
-                        dataset=dataset_label,
-                        config_path=str(config_path),
-                        years="-",
-                        step=step,
-                        status="FAILED",
-                        duration=_format_duration(perf_counter() - config_started_at),
+            else:
+                cfg, logger = load_cfg_and_logger(str(config_path))
+
+            # Quando --json è attivo, silenzia il logger dopo ogni
+            # load_cfg_and_logger (che resetta il logger a ogni chiamata)
+            if json_output:
+                _silence_logger()
+            dataset_label = cfg.dataset
+
+            for year in cfg.years:
+                run_started_at = perf_counter()
+                status = "FAILED"
+                try:
+                    # Quando --json è attivo, silenzia typer.echo durante
+                    # run_year per evitare che execution plan (dry-run)
+                    # o altri echo contaminino stdout JSON
+                    _run_ctx = _silence_typer_echo() if json_output else contextlib.nullcontext()
+                    with _run_ctx:
+                        context = run_year(
+                            cfg,
+                            year,
+                            step=step,
+                            dry_run=dry_flag,
+                            logger=logger,
+                            sample_rows=sample_rows_final,
+                            sample_bytes=sample_bytes_final,
+                        )
+                    status = context.status
+                except Exception as exc:
+                    failures.append(
+                        {
+                            "config": str(config_path),
+                            "dataset": dataset_label,
+                            "years": str(year),
+                            "error": str(exc),
+                        }
                     )
+                finally:
+                    rows.append(
+                        _build_row(
+                            dataset=dataset_label,
+                            config_path=str(config_path),
+                            years=str(year),
+                            step=step,
+                            status=status,
+                            duration=_format_duration(perf_counter() - run_started_at),
+                        )
+                    )
+        except Exception as exc:
+            failures.append(
+                {
+                    "config": str(config_path),
+                    "dataset": dataset_label,
+                    "years": "-",
+                    "error": str(exc),
+                }
+            )
+            rows.append(
+                _build_row(
+                    dataset=dataset_label,
+                    config_path=str(config_path),
+                    years="-",
+                    step=step,
+                    status="FAILED",
+                    duration=_format_duration(perf_counter() - config_started_at),
                 )
+            )
 
-    finally:
-        if _shared_probe_pool is not None:
-            _shared_probe_pool.close()
     if json_output:
         report: dict[str, Any] = {
             "summary": {

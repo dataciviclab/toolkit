@@ -40,6 +40,7 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_sparql_query",
         "toolkit_preview_url",
         "toolkit_validate_config",
+        "toolkit_preflight",
     }
 
 
@@ -463,3 +464,24 @@ def test_toolkit_raw_preview_converts_year_zero_to_none(monkeypatch: pytest.Monk
     mcp_server.toolkit_raw_preview("d.yml", 0, 20)
 
     assert calls["year"] is None
+
+
+def test_toolkit_preflight_returns_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    """toolkit_preflight passa config e years a run_preflight."""
+    calls: dict[str, object] = {}
+
+    def fake_preflight(config, *, years_arg=None):
+        calls["config"] = str(config)
+        calls["years_arg"] = years_arg
+        return {"config": str(config), "sources": [], "years": [2024], "status": "passed"}
+
+    monkeypatch.setattr(
+        "toolkit.cli.preflight_ops.run_preflight",
+        fake_preflight,
+    )
+
+    result = mcp_server.toolkit_preflight("dataset.yml", years="2024")
+
+    assert result["status"] == "passed"
+    assert calls["config"] == "dataset.yml"
+    assert calls["years_arg"] == "2024"

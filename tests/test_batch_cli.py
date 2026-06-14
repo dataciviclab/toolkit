@@ -282,6 +282,27 @@ def test_batch_dry_run_with_json(tmp_path: Path) -> None:
 
 
 @pytest.mark.policy
+def test_batch_step_probe_dry_run_reports_dry_run(tmp_path: Path) -> None:
+    """--step probe --dry-run deve riportare DRY_RUN (non SUCCESS)."""
+    project = tmp_path / "project"
+    _write_batch_project(project, "batch_probe_dry", 2023)
+    configs_file = _write_configs_file(tmp_path, "project")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["batch", "--configs", str(configs_file), "--step", "probe", "--dry-run", "--json"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    report = json.loads(result.output)
+    assert report["summary"]["total"] == 1
+    assert report["summary"]["passed"] == 1
+    assert report["rows"][0]["status"] == "DRY_RUN"
+
+
+@pytest.mark.policy
 def test_batch_step_raw_dry_run_reuses_runner_across_configs(tmp_path: Path) -> None:
     """Batch --step raw --dry-run processa piu config e produce report."""
     project_a = tmp_path / "proj_a"

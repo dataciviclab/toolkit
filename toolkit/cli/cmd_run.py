@@ -280,9 +280,11 @@ def run_year(
 
     # Backward compat: batch --step probe instrada verso _run_probe
     if step == "probe":
-        if not dry_run:
+        if dry_run:
+            context.mark_dry_run()
+        else:
             _run_probe(cfg, year, base_logger)
-        context.complete_run()
+            context.complete_run()
         return context
 
     if dry_run:

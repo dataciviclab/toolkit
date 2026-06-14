@@ -2,6 +2,7 @@ root: "./_smoke_out"
 
 dataset:
   name: "zip_http_csv"
+  source_id: "irpef_zip_test"
   years: [2022]
 
 raw:
@@ -14,10 +15,25 @@ raw:
 
 clean:
   sql: "sql/clean.sql"
+  read_mode: "fallback"
   read:
     source: auto
+
+  validate:
+    min_rows: 1
 
 mart:
   tables:
     - name: "mart_ok"
       sql: "sql/mart/mart_ok.sql"
+
+  required_tables:
+    - "mart_ok"
+
+  validate:
+    table_rules:
+      mart_ok:
+        min_rows: 1
+
+output:
+  artifacts: "standard"

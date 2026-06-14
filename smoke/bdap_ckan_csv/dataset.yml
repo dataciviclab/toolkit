@@ -2,6 +2,7 @@ root: "./_smoke_out"
 
 dataset:
   name: "bdap_ckan_csv"
+  source_id: "bdap_ckan_lea"
   years: [2022]
 
 raw:
@@ -15,15 +16,37 @@ raw:
 
 clean:
   sql: "sql/clean.sql"
+  read_mode: "fallback"
   read:
     delim: ";"
     decimal: "."
     encoding: "utf-8"
     header: true
     columns: null
-  validate: {}
+
+  required_columns:
+    - anno
+    - regione
+    - importo_totale
+
+  validate:
+    min_rows: 5
+    not_null:
+      - anno
+      - regione
 
 mart:
   tables:
     - name: "mart_ok"
       sql: "sql/mart/mart_ok.sql"
+
+  required_tables:
+    - "mart_ok"
+
+  validate:
+    table_rules:
+      mart_ok:
+        min_rows: 1
+
+output:
+  artifacts: "standard"

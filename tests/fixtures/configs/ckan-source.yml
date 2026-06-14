@@ -1,0 +1,40 @@
+root: "./out"
+
+dataset:
+  name: "ckan_source"
+  years: [2024]
+
+raw:
+  sources:
+    - type: "ckan"
+      args:
+        portal_url: "https://dati.comune.example.it"
+        dataset_id: "esempio-dataset"
+        resource_name: "dati.csv"
+
+clean:
+  sql: "sql/clean.sql"
+  read:
+    source: config_only
+    header: true
+    delim: ","
+    encoding: "utf-8"
+
+  validate:
+    min_rows: 1
+
+mart:
+  tables:
+    - name: "totali"
+      sql: "sql/mart/totali.sql"
+
+  required_tables:
+    - "totali"
+
+  validate:
+    table_rules:
+      totali:
+        min_rows: 1
+
+output:
+  artifacts: "standard"

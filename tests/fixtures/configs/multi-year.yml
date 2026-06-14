@@ -1,0 +1,44 @@
+root: "./out"
+
+dataset:
+  name: "multi_year"
+  years: [2022, 2023, 2024]
+
+raw:
+  sources:
+    - type: "local_file"
+      args:
+        path: "data/raw/{year}/data.csv"
+        filename: "data_{year}.csv"
+
+clean:
+  sql: "sql/clean.sql"
+  read:
+    source: config_only
+    header: true
+    delim: ","
+    encoding: "utf-8"
+
+  validate:
+    min_rows: 1
+
+mart:
+  tables:
+    - name: "mart_example"
+      sql: "sql/mart/mart_example.sql"
+    - name: "mart_extra"
+      sql: "sql/mart/mart_extra.sql"
+
+  required_tables:
+    - "mart_example"
+    - "mart_extra"
+
+  validate:
+    table_rules:
+      mart_example:
+        min_rows: 1
+      mart_extra:
+        min_rows: 1
+
+output:
+  artifacts: "standard"

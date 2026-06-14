@@ -1,0 +1,25 @@
+root: "./out"
+
+dataset:
+  name: "mart_only"
+  years: [2024]
+
+raw: {}
+
+clean: {}
+
+mart:
+  tables:
+    - name: "totali"
+      sql: "sql/mart/totali.sql"
+
+  required_tables:
+    - "totali"
+
+  validate:
+    table_rules:
+      totali:
+        min_rows: 1
+
+output:
+  artifacts: "standard"

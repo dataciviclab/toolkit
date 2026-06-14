@@ -1,0 +1,44 @@
+root: "./out"
+
+dataset:
+  name: "primary"
+  years: [2024]
+
+raw:
+  sources:
+    - type: "local_file"
+      args:
+        path: "data/raw/{year}/data.csv"
+        filename: "data_{year}.csv"
+
+clean:
+  sql: "sql/clean.sql"
+  read:
+    source: config_only
+    header: true
+    delim: ","
+    encoding: "utf-8"
+
+  validate:
+    min_rows: 1
+
+mart:
+  tables:
+    - name: "totali"
+      sql: "sql/mart/totali.sql"
+
+  required_tables:
+    - "totali"
+
+  validate:
+    table_rules:
+      totali:
+        min_rows: 1
+
+support:
+  - name: "lookup"
+    config: "support/lookup/dataset.yml"
+    years: [2024]
+
+output:
+  artifacts: "standard"

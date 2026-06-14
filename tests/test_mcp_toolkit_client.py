@@ -489,8 +489,12 @@ def test_clean_preview(
             clean_preview(str(config_path), **kwargs)
     else:
         result = clean_preview(str(config_path), **kwargs)
+        assert result["dataset"] == dataset
         assert result["layer"] == layer
         assert result["column_count"] >= 1
+        assert len(result.get("preview", [])) >= 1
+        assert "row_count" in result
+        assert "truncated" in result
         if layer == "mart" and mart_index == 1:
             assert result["mart_name"] == "rd_by_provincia"
 
@@ -588,6 +592,9 @@ def test_list_candidates_sorting(tmp_path, monkeypatch, names, sorted_check):
     slugs = [c["slug"] for c in result]
     for name in names:
         assert name in slugs
+        item = [c for c in result if c["slug"] == name][0]
+        assert item["stage"] == "candidates"
+        assert item["years"] == [2024]
     if sorted_check:
         assert slugs == sorted(slugs)
 
@@ -742,12 +749,16 @@ def test_layer_query_modes(tmp_path, monkeypatch, mode, sql):
     if sql:
         kwargs["sql"] = sql
     result = layer_query(str(config_path), **kwargs)
+    assert result["layer"] == "clean"
     assert result["column_count"] >= 1
-    if mode == "sql":
-        assert result.get("mode") == mode
-    if mode == "preview":
+    if mode == "schema":
+        assert "columns" in result
+    elif mode == "preview":
         assert len(result.get("preview", [])) >= 1
-    if mode == "sql":
+        assert result.get("row_count", 0) >= 1
+    elif mode == "sql":
+        assert result.get("mode") == mode
+        assert result["column_count"] >= 2
         assert result.get("sql") is not None
 
 

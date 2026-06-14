@@ -141,25 +141,27 @@ def _probe_fmt(content_type: str | None) -> str:
     return _PROBE_FORMATS.get(base, base)
 
 
-def _resolve_source(src, year: int) -> dict[str, str]:
+def _resolve_source(src, year: int) -> dict[str, Any]:
     """Normalizza una fonte raw.sources in dict con stype, name, args, url.
 
     Condiviso tra _run_probe e preflight_ops.py per evitare duplicazione
     del parsing di source config (dict vs oggetto).
     """
-    stype = getattr(src, "type", None) or (
-        src.get("type") if isinstance(src, dict) else "http_file"
-    )
-    args = getattr(src, "args", None) or (src.get("args", {}) if isinstance(src, dict) else {})
-    name = getattr(src, "name", None) or (
-        src.get("name", stype) if isinstance(src, dict) else (src.name or stype)
-    )
-    url = (args.get("url") if isinstance(args, dict) else getattr(args, "url", "")) or ""
+    if isinstance(src, dict):
+        stype = str(src.get("type", "http_file"))
+        args: Any = src.get("args", {})
+        name = str(src.get("name", stype))
+    else:
+        stype = str(getattr(src, "type", "http_file") or "http_file")
+        args = getattr(src, "args", None) or {}
+        name = str(getattr(src, "name", None) or stype)
+
+    raw_url = (args.get("url") if isinstance(args, dict) else getattr(args, "url", "")) or ""
     return {
         "stype": stype,
         "args": args,
         "name": name,
-        "url": (url or "").replace("{year}", str(year)),
+        "url": str(raw_url).replace("{year}", str(year)),
     }
 
 

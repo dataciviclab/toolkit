@@ -94,6 +94,44 @@ def project_example(tmp_path: Path) -> Path:
     return dst
 
 
+# ------------------------------------------------------------------
+# Smoke template fixtures (parametrizzate)
+# ------------------------------------------------------------------
+
+
+def _discover_smoke_fixtures(offline_only: bool = True) -> list[pytest.param]:
+    """Raccoglie gli smoke e restituisce parametri pytest pronti per l'uso."""
+    from _smoke_registry import discover_offline_smokes, discover_smokes
+
+    smokes = discover_offline_smokes() if offline_only else discover_smokes()
+    return [pytest.param(s, id=s.name, marks=[]) for s in smokes]
+
+
+@pytest.fixture(params=_discover_smoke_fixtures(offline_only=True))
+def smoke_offline(tmp_path: Path, request: pytest.FixtureRequest) -> Path:
+    """Copia uno smoke offline (local_file) in tmp_path e ritorna il path.
+
+    Parametrizzato automaticamente su tutti gli smoke che non richiedono rete.
+    """
+    import shutil
+
+    from _smoke_registry import SmokeTemplate
+
+    smoke: SmokeTemplate = request.param
+    dst = tmp_path / smoke.name
+    shutil.copytree(smoke.path, dst, ignore=shutil.ignore_patterns("_smoke_out", "README.md"))
+    return dst
+
+
+@pytest.fixture
+def smoke_offline_dir(smoke_offline: Path) -> Path:
+    """Convenienza: come ``smoke_offline`` ma ritorna direttamente lo smoke copiato.
+
+    Utile quando un test ha bisogno di più fixtures e vuole un nome esplicito.
+    """
+    return smoke_offline
+
+
 @pytest.fixture
 def chdir_tmp(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Chdir to a clean temp directory for the duration of the test.

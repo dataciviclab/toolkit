@@ -2,21 +2,60 @@ root: "./_smoke_out"
 
 dataset:
   name: "local_file_csv"
-  years: [2022]
+  source_id: "test_local"
+  years: [2022, 2023]
+  time_coverage:
+    mode: full_series
+    start_year: 2022
+    end_year: 2023
 
 raw:
   sources:
-    - type: "local_file"
+    - name: "sample_data"
+      type: "local_file"
       args:
         path: "fixtures/local_file_sample.csv"
         filename: "local_file_sample_{year}.csv"
 
 clean:
   sql: "sql/clean.sql"
+  read_mode: "fallback"
   read:
-    source: auto
+    source: config_only
+    mode: largest
+    delim: ","
+    encoding: "utf-8"
+    header: true
+
+  required_columns:
+    - anno
+    - comune
+    - regione
+    - valore
+
+  validate:
+    min_rows: 5
+    not_null:
+      - comune
+      - anno
 
 mart:
   tables:
-    - name: "mart_ok"
+    - name: "mart_regione"
       sql: "sql/mart/mart_ok.sql"
+    - name: "mart_categoria"
+      sql: "sql/mart/mart_by_categoria.sql"
+
+  required_tables:
+    - "mart_regione"
+    - "mart_categoria"
+
+  validate:
+    table_rules:
+      mart_regione:
+        min_rows: 1
+      mart_categoria:
+        min_rows: 1
+
+output:
+  artifacts: "standard"

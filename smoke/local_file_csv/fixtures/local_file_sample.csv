@@ -1,3 +1,11 @@
-anno,comune,provincia,regione,valore
-2022,Asti,Asti,Piemonte,10
-2022,Alessandria,Alessandria,Piemonte,20
+anno,comune,provincia,regione,codice_comune,categoria,valore
+2022,Asti,Asti,Piemonte,5005,rifiuti,10.5
+2022,Alessandria,Alessandria,Piemonte,6003,rifiuti,20.3
+2022,Torino,Torino,Piemonte,1272,rifiuti,45.8
+2022,Genova,Genova,Liguria,10025,rifiuti,32.1
+2022,La Spezia,La Spezia,Liguria,11015,rifiuti,12.7
+2022,Milano,Milano,Lombardia,15146,rifiuti,78.2
+2022,Bergamo,Bergamo,Lombardia,16024,verde,18.9
+2023,Asti,Asti,Piemonte,5005,rifiuti,11.2
+2023,Alessandria,Alessandria,Piemonte,6003,rifiuti,21.1
+2023,Torino,Torino,Piemonte,1272,rifiuti,43.5

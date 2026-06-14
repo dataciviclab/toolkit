@@ -188,6 +188,22 @@ def smoke_offline(tmp_path: Path, request: pytest.FixtureRequest) -> Path:
 
 
 @pytest.fixture
+def mcp_project_example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str, int]:
+    """Copia project-example per test MCP client.
+
+    Returns:
+        (config_path, dataset_slug, anno_default).
+    """
+    import shutil
+
+    src = Path("project-example")
+    dst = tmp_path / "project-example"
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
+    monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))
+    return (dst / "dataset.yml", "project_example", 2022)
+
+
+@pytest.fixture
 def chdir_tmp(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Chdir to a clean temp directory for the duration of the test.
 

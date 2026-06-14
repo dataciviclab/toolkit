@@ -39,12 +39,11 @@ def write_parquet(path: Path, sql: str, *, table: str = "t") -> None:
         sql: CREATE TABLE + INSERT (es. ``CREATE TABLE t AS SELECT 1 AS x``).
         table: Nome della tabella temporanea (default ``t``).
     """
-    import duckdb
+    from lab_connectors.duckdb import safe_connect
 
-    con = duckdb.connect(":memory:")
-    con.execute(sql)
-    con.execute(f"COPY {table} TO '{path.as_posix()}' (FORMAT 'parquet')")
-    con.close()
+    with safe_connect() as con:
+        con.execute(sql)
+        con.execute(f"COPY {table} TO '{path.as_posix()}' (FORMAT 'parquet')")
 
 
 def write_text(path: Path, content: str) -> None:

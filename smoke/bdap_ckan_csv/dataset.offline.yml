@@ -1,0 +1,53 @@
+root: "./_smoke_out"
+
+dataset:
+  name: "bdap_ckan_csv_offline"
+  source_id: "bdap_ckan_test_offline"
+  years: [2022, 2023]
+
+raw:
+  sources:
+    - name: "bdap_ckan_sample"
+      type: "local_file"
+      args:
+        path: "fixtures/bdap_ckan_sample.csv"
+        filename: "bdap_lea_{year}.csv"
+
+clean:
+  sql: "sql/clean.sql"
+  read_mode: "fallback"
+  read:
+    source: config_only
+    mode: largest
+    delim: ";"
+    decimal: "."
+    encoding: "utf-8"
+    header: true
+    columns: null
+
+  required_columns:
+    - anno
+    - regione
+    - importo_totale
+
+  validate:
+    min_rows: 2
+    not_null:
+      - anno
+      - regione
+
+mart:
+  tables:
+    - name: "mart_ok"
+      sql: "sql/mart/mart_ok.sql"
+
+  required_tables:
+    - "mart_ok"
+
+  validate:
+    table_rules:
+      mart_ok:
+        min_rows: 1
+
+output:
+  artifacts: "standard"

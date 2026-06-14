@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
@@ -10,6 +11,27 @@ SMOKE_DIR = Path(__file__).resolve().parent.parent / "smoke"
 
 # Source types che non richiedono rete né server locale
 OFFLINE_SOURCE_TYPES = {"local_file"}
+
+# Nomi attesi degli smoke — usato dal test di completezza per rilevare
+# perdite silenziose di copertura (es. dataset.yml malformato non scoperto).
+EXPECTED_SMOKE_NAMES: set[str] = {
+    # Online (source_type reale, può richiedere rete)
+    "bdap_ckan_csv",
+    "bdap_http_csv",
+    "finanze_http_zip_2023",
+    "istat_sdmx_22_289",
+    "local_file_csv",
+    "zip_http_csv",
+    # Offline (source_type local_file con fixture congelate)
+    "bdap_http_csv_offline",
+    "bdap_ckan_csv_offline",
+}
+
+EXPECTED_OFFLINE_SMOKE_NAMES: set[str] = {
+    "local_file_csv",
+    "bdap_http_csv_offline",
+    "bdap_ckan_csv_offline",
+}
 
 
 @dataclass(frozen=True)
@@ -42,15 +64,39 @@ ONLINE_CONFIG_NAME = "dataset.yml"
 
 
 def _read_source_type_from_config(config_path: Path) -> str | None:
-    """Legge il primo source type da un file dataset.yml."""
+    """Legge il primo source type da un file dataset.yml.
+
+    Se il file non esiste o non contiene ``raw.sources``, emette un
+    ``UserWarning`` e ritorna ``None`` (la discovery salta lo smoke,
+    ma un test di completezza rileva la mancanza).
+    """
     if not config_path.exists():
+        warnings.warn(f"Config non trovato: {config_path}", stacklevel=2)
         return None
-    with open(config_path, encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    sources = (data or {}).get("raw", {}).get("sources", [])
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        warnings.warn(f"Config malformato {config_path}: {exc}", stacklevel=2)
+        return None
+
+    if not isinstance(data, dict):
+        warnings.warn(f"Config vuoto o non valido: {config_path}", stacklevel=2)
+        return None
+
+    sources = data.get("raw", {}).get("sources", [])
     if not sources:
+        warnings.warn(
+            f"Nessun raw.sources in {config_path} — lo smoke sarà omesso dalla discovery.",
+            stacklevel=2,
+        )
         return None
-    return sources[0].get("type")
+
+    st = sources[0].get("type")
+    if not st:
+        warnings.warn(f"Primo source di {config_path} senza 'type' — omesso.", stacklevel=2)
+        return None
+    return st
 
 
 def _has_online_config(smoke_path: Path) -> bool:
@@ -112,6 +158,15 @@ def discover_smokes() -> list[SmokeTemplate]:
 def discover_offline_smokes() -> list[SmokeTemplate]:
     """Solo smoke che non richiedono rete (local_file)."""
     return [s for s in discover_smokes() if not s.requires_network]
+
+
+def discover_testable_offline_smokes() -> list[SmokeTemplate]:
+    """Smoke che possono essere testati offline: nativi ``local_file`` + tutti
+    quelli con ``dataset.offline.yml`` (anche se source_type richiederebbe rete)."""
+    all_smokes = discover_smokes()
+    return [
+        s for s in all_smokes if not s.requires_network or s._config_name == OFFLINE_CONFIG_NAME
+    ]
 
 
 def iter_smoke_configs(smokes: list[SmokeTemplate]) -> Iterator[tuple[str, Path]]:

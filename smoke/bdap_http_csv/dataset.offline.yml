@@ -8,9 +8,9 @@ dataset:
 raw:
   sources:
     - name: "bdap_sample"
-      type: "local_file"
+      type: "http_file"
       args:
-        path: "fixtures/bdap_sample.csv"
+        url: "http://127.0.0.1:{SMOKE_PORT}/bdap_http_csv/fixtures/bdap_sample.csv"
         filename: "bdap_sample_{year}.csv"
 
 clean:

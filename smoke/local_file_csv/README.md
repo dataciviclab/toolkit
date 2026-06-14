@@ -6,7 +6,7 @@ Smoke offline per `local_file` — golden path di riferimento per i test contrac
 
 - Source type: `local_file`
 - Anni multipli: `[2022, 2023]`
-- `read_mode: strict`
+- `read_mode: fallback`
 - `read`: config esplicita (delim, encoding, header, mode: largest)
 - `required_columns`: anno, comune, regione, valore
 - `validate`: min_rows, not_null su comune e anno

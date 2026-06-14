@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+# NOTE: il valore aggiunto di questi test NON è sul contratto CLI del
+# filtro --years (già coperto da test_cli_years_filter.py) ma sulla
+# verifica che il filtro funzioni su TUTTI gli smoke template
+# (local_file, http_file, ckan). Se un nuovo protocollo viene aggiunto
+# come smoke offline, eredita automaticamente questi test.
+
 from pathlib import Path
 
 import pytest

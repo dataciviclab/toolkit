@@ -88,6 +88,7 @@ class TestProbePool:
         assert elapsed < 0.9, f"Pool troppo lento ({elapsed:.2f}s) — atteso < 0.9s per 3 probe"
         pool.close()
 
+    @pytest.mark.smoke
     @pytest.mark.policy
     def test_circuit_breaker_integration(self, monkeypatch) -> None:
         """Con circuit_threshold>0, errori consecutivi aprono il circuito.

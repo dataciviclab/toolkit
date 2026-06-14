@@ -280,6 +280,18 @@ def toolkit_validate_config(config_path: str) -> dict[str, Any]:
     return guard_timed(_validate_config_impl, "toolkit_validate_config", config_path)
 
 
+@mcp.tool(
+    description="Pre-flight check per un dataset: valida config, verifica "
+    "raggiungibilita' fonti, e per CSV produce quality score PA. "
+    "Non esegue la pipeline — solo diagnostica preventiva.",
+    structured_output=True,
+)
+def toolkit_preflight(config_path: str, years: str | None = None) -> dict[str, Any]:
+    from toolkit.cli.preflight_ops import run_preflight
+
+    return guard_timed(run_preflight, "toolkit_preflight", config_path, years_arg=years)
+
+
 # ---------------------------------------------------------------------------
 # Scout tools
 # ---------------------------------------------------------------------------

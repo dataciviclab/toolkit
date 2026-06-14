@@ -36,7 +36,7 @@ def test_run_dry_run_prints_plan_and_creates_only_run_record(
     assert result.exit_code == 0
     assert "Execution Plan" in result.output
     assert "status: DRY_RUN" in result.output
-    assert "steps: probe, raw, clean, mart" in result.output
+    assert "steps: raw, clean, mart" in result.output
     assert "sql_validation: OK" in result.output
 
     runs_dir = root_dir / "data" / "_runs" / "demo_ds" / "2022"

@@ -10,6 +10,7 @@ from toolkit.cli.cmd_validate import validate as validate_cmd
 from tests.helpers_assert_paths import (
     assert_file_replaceable,
     assert_golden_path_artifacts,
+    assert_mart_parquet,
     assert_metadata_file,
     assert_no_absolute_paths,
 )
@@ -48,10 +49,13 @@ def test_smoke_offline_golden_path(smoke_offline: Path) -> None:
             meta = assert_metadata_file(root, name, layer, year)
             assert_no_absolute_paths(meta, root)
 
-    # Verifica che un parquet clean sia sostituibile
+    # Verifica sostituibilità: clean parquet + prima tabella mart
     first_year = years[0]
     clean_parquet = (
         root / "data" / "clean" / name / str(first_year) / f"{name}_{first_year}_clean.parquet"
     )
     if clean_parquet.exists():
         assert_file_replaceable(clean_parquet)
+    if mart_tables:
+        mart_path = assert_mart_parquet(root, name, first_year, mart_tables[0])
+        assert_file_replaceable(mart_path)

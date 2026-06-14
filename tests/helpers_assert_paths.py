@@ -57,13 +57,6 @@ def assert_mart_dir(root: Path, dataset: str, year: int) -> Path:
 # ── Esistenza file singoli ───────────────────────────────────────────
 
 
-def assert_raw_file(root: Path, dataset: str, year: int, filename: str) -> Path:
-    """Verifica che un file raw esista (es. ``data.csv``)."""
-    path = root / "data" / "raw" / dataset / str(year) / filename
-    assert path.exists(), f"Raw file non trovato: {path}"
-    return path
-
-
 def assert_clean_parquet(root: Path, dataset: str, year: int) -> Path:
     """Verifica che il parquet clean ``{dataset}_{year}_clean.parquet`` esista.
 
@@ -125,16 +118,6 @@ def assert_validation_file(
         path = layer_dir / "_validate" / fname
     assert path.exists(), f"File validazione non trovato: {path}"
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def assert_layer_year_dir(root: Path, layer: str, dataset: str, year: int) -> Path:
-    """Verifica che un directory ``{layer}/{dataset}/{year}`` esista.
-
-    Versione generica per quando il layer è dinamico.
-    """
-    path = root / "data" / layer / dataset / str(year)
-    assert path.is_dir(), f"Directory {layer} non trovata: {path}"
-    return path
 
 
 # ── Asserzioni speciali (deep metadata) ──────────────────────────────
@@ -209,10 +192,3 @@ def assert_golden_path_artifacts(
             assert (mart_dir / "_validate" / "mart_validation.json").exists(), (
                 f"mart_validation.json mancante in {mart_dir}"
             )
-
-
-def assert_run_record_dir(root: Path, dataset: str, year: int) -> Path:
-    """Verifica che il directory dei run record esista."""
-    path = root / "data" / "_runs" / dataset / str(year)
-    assert path.is_dir(), f"Run record dir non trovato: {path}"
-    return path

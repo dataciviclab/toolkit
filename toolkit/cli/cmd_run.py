@@ -278,6 +278,13 @@ def run_year(
     )
     base_logger.info(log_ctx)
 
+    # Backward compat: batch --step probe instrada verso _run_probe
+    if step == "probe":
+        if not dry_run:
+            _run_probe(cfg, year, base_logger)
+        context.complete_run()
+        return context
+
     if dry_run:
         context.mark_dry_run()
         _print_execution_plan(cfg, year, layers_to_run, context, fail_on_error)

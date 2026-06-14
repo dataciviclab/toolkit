@@ -141,6 +141,28 @@ def _probe_fmt(content_type: str | None) -> str:
     return _PROBE_FORMATS.get(base, base)
 
 
+def _resolve_source(src, year: int) -> dict[str, str]:
+    """Normalizza una fonte raw.sources in dict con stype, name, args, url.
+
+    Condiviso tra _run_probe e preflight_ops.py per evitare duplicazione
+    del parsing di source config (dict vs oggetto).
+    """
+    stype = getattr(src, "type", None) or (
+        src.get("type") if isinstance(src, dict) else "http_file"
+    )
+    args = getattr(src, "args", None) or (src.get("args", {}) if isinstance(src, dict) else {})
+    name = getattr(src, "name", None) or (
+        src.get("name", stype) if isinstance(src, dict) else (src.name or stype)
+    )
+    url = (args.get("url") if isinstance(args, dict) else getattr(args, "url", "")) or ""
+    return {
+        "stype": stype,
+        "args": args,
+        "name": name,
+        "url": (url or "").replace("{year}", str(year)),
+    }
+
+
 def _run_probe(cfg, year: int, logger, pool=None) -> None:
     """Passo probe della pipeline: verifica raggiungibilita' fonti remote.
 
@@ -172,34 +194,19 @@ def _run_probe(cfg, year: int, logger, pool=None) -> None:
     try:
         futures = []
 
-        def _parse_and_submit(src) -> None:
-            stype = (
-                getattr(src, "type", None) or src.get("type", "http_file")
-                if isinstance(src, dict)
-                else src.type
-            )
-            args = (
-                getattr(src, "args", None) or src.get("args", {})
-                if isinstance(src, dict)
-                else src.args
-            )
-            name = (
-                getattr(src, "name", None) or src.get("name", stype)
-                if isinstance(src, dict)
-                else (src.name or stype)
-            )
+        for src in sources:
+            resolved = _resolve_source(src, year)
+            stype, name, args = resolved["stype"], resolved["name"], resolved["args"]
 
             if stype in ("http_file", "http_post_file"):
-                url = (args.get("url") or "").replace("{year}", str(year))
+                url = resolved["url"]
                 if url:
                     futures.append(pool.submit(url, dataset=name))
             elif stype == "ckan":
-                portal = (args.get("portal_url") or "").replace("{year}", str(year))
+                portal_url = args.get("portal_url", "")
+                portal = portal_url.replace("{year}", str(year)) if portal_url else ""
                 if portal:
                     futures.append(pool.submit(portal, dataset=name))
-
-        for src in sources:
-            _parse_and_submit(src)
 
         for result in pool.as_completed(futures):
             if result.reachable:
@@ -599,7 +606,49 @@ def _make_step_cmd(step: str):
     return cmd
 
 
-run_probe_cmd = _make_step_cmd("probe")
+def _run_probe_cmd(
+    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without executing"),
+):
+    """Verifica la raggiungibilita' delle fonti remote per un dataset.
+
+    Esegue probe HTTP per fonti http_file e CKAN.
+    Salta fonti locali, SDMX e SPARQL (non timeoutano).
+    Non blocca mai la pipeline: l'errore reale sara' rilevato da raw.
+
+    Per diagnostica piu' approfondita (quality score CSV, schema, encoding)
+    usa: toolkit run preflight
+    """
+    dry_flag = dry_run if isinstance(dry_run, bool) else False
+
+    cfg, logger = load_cfg_and_logger(config)
+    years_arg = years if isinstance(years, str) else None
+    selected_years = iter_selected_years(cfg, year_arg=None, years_arg=years_arg)
+
+    if dry_flag:
+        typer.echo(f"Probe plan — dataset: {cfg.dataset}")
+        typer.echo(f"  years: {', '.join(str(y) for y in selected_years)}")
+        sources = cfg.raw.sources or []
+        probe_count = sum(
+            1
+            for s in sources
+            for stype in (
+                [getattr(s, "type", None)] if hasattr(s, "type") else [s.get("type", "http_file")]
+            )
+            if stype in ("http_file", "http_post_file", "ckan")
+        )
+        skip_count = len(sources) - probe_count
+        typer.echo(f"  sources: {probe_count} da probe, {skip_count} skip")
+        if json_output:
+            typer.echo(json.dumps({"status": "DRY_RUN", "dataset": cfg.dataset}))
+        return
+
+    for year in selected_years:
+        _run_probe(cfg, year, logger)
+
+
 run_raw_cmd = _make_step_cmd("raw")
 run_clean_cmd = _make_step_cmd("clean")
 run_mart_cmd = _make_step_cmd("mart")
@@ -740,24 +789,26 @@ def run_full(
     }
 
     # ── Pre-flight check ────────────────────────────────────────────────
-    from toolkit.cli.preflight_ops import run_preflight as _run_preflight
+    # Solo in esecuzione reale (dry-run non fa rete)
+    if not dry_flag:
+        from toolkit.cli.preflight_ops import run_preflight as _run_preflight
 
-    preflight = _run_preflight(config, years_arg=years_arg)
-    results["preflight"] = {
-        "config_check": preflight["config_check"],
-        "sources": preflight["sources"],
-    }
-    if not preflight["config_check"].get("ok", False):
-        logger.error("Config validation failed — aborting")
-        results["status"] = "failed"
-        if json_output:
-            typer.echo(json.dumps(results, indent=2, default=str))
-        raise typer.Exit(code=1)
-    if preflight["status"] != "passed":
-        logger.warning(
-            "Pre-flight: %d source(s) unreachable (pipeline continua)",
-            sum(1 for s in preflight["sources"] if not s["reachable"]),
-        )
+        preflight = _run_preflight(config, years_arg=years_arg)
+        results["preflight"] = {
+            "config_check": preflight["config_check"],
+            "sources": preflight["sources"],
+        }
+        if not preflight["config_check"].get("ok", False):
+            logger.error("Config validation failed — aborting")
+            results["status"] = "failed"
+            if json_output:
+                typer.echo(json.dumps(results, indent=2, default=str))
+            raise typer.Exit(code=1)
+        if preflight["status"] != "passed":
+            logger.warning(
+                "Pre-flight: %d source(s) unreachable (pipeline continua)",
+                sum(1 for s in preflight["sources"] if not s["reachable"]),
+            )
 
     # Process support datasets (dichiarati in dataset.yml con support:)
     # Vengono eseguiti prima del candidate cosi' i loro output sono disponibili
@@ -795,7 +846,7 @@ def run_full(
             for sy in entry.years:
                 logger.info("Support: running %s year=%s", entry.name, sy)
                 try:
-                    run_year(
+                    ctx = run_year(
                         support_cfg,
                         sy,
                         step="all",
@@ -809,24 +860,13 @@ def run_full(
                     results["status"] = "failed"
                     break  # dipendenza fallita, abort
 
-                # Validate all layers
-                try:
-                    sv_raw = run_raw_validation(
-                        support_cfg.root, support_cfg.dataset, sy, support_logger
-                    )
-                    sv_clean = run_clean_validation(
-                        support_cfg, sy, support_logger, sample_mode=sample_mode
-                    )
-                    sv_mart = run_mart_validation(
-                        support_cfg, sy, support_logger, sample_mode=sample_mode
-                    )
-                    all_support_passed = all(r.get("passed") for r in [sv_raw, sv_clean, sv_mart])
-                    if not all_support_passed:
-                        logger.error("Support validation failed: %s year=%s", entry.name, sy)
-                        results["status"] = "failed"
-                        break  # dipendenza fallita, abort
-                except Exception as exc:
-                    logger.error("Support validation error: %s year=%s — %s", entry.name, sy, exc)
+                # all_passed dal RunContext (stessa logica del candidate)
+                all_support_passed = all(
+                    ctx.validations.get(layer, {}).get("passed", False)
+                    for layer in ("raw", "clean", "mart")
+                )
+                if not all_support_passed:
+                    logger.error("Support validation failed: %s year=%s", entry.name, sy)
                     results["status"] = "failed"
                     break  # dipendenza fallita, abort
 
@@ -996,7 +1036,7 @@ def run_preflight_cmd(
 
 def register(app: typer.Typer) -> None:
     run_sub = typer.Typer(no_args_is_help=True, add_completion=False)
-    run_sub.command("probe")(run_probe_cmd)
+    run_sub.command("probe")(_run_probe_cmd)
     run_sub.command("raw")(run_raw_cmd)
     run_sub.command("clean")(run_clean_cmd)
     run_sub.command("mart")(run_mart_cmd)

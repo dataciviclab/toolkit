@@ -79,22 +79,20 @@ def run_preflight(
     results["years"] = list(selected_years)
 
     # ── 3. Per anno, per fonte ──────────────────────────────────────────
+    # Riutilizza _resolve_source di cmd_run per normalizzare le fonti
+    # (dict vs oggetto) — stesso parsing di _run_probe.
+    from toolkit.cli.cmd_run import _resolve_source as _norm
+
     # Cache URL → risultato probe. Se stesso URL per anni diversi,
     # riusa il risultato invece di rifare la chiamata HTTP.
     _probe_cache: dict[str, dict[str, Any]] = {}
 
     for year in selected_years:
         for src in cfg.raw.sources or []:
-            # Normalize source: puo' essere dict o oggetto
-            stype = getattr(src, "type", None) or (
-                src.get("type") if isinstance(src, dict) else "http_file"
-            )
-            args = getattr(src, "args", None) or (
-                src.get("args", {}) if isinstance(src, dict) else {}
-            )
-            name = getattr(src, "name", None) or (
-                src.get("name", stype) if isinstance(src, dict) else (src.name or stype)
-            )
+            resolved = _norm(src, year)
+            stype = resolved["stype"]
+            args = resolved["args"]
+            name = resolved["name"]
 
             entry: dict[str, Any] = {
                 "name": name,
@@ -112,7 +110,7 @@ def run_preflight(
             }
 
             if stype in ("http_file", "http_post_file"):
-                url = (args.get("url") or "").replace("{year}", str(year))
+                url = resolved["url"]
                 entry["url"] = url
 
                 if not url:
@@ -168,7 +166,8 @@ def run_preflight(
                     results["status"] = "failed"
 
             elif stype == "ckan":
-                portal = (args.get("portal_url") or "").replace("{year}", str(year))
+                portal_url = args.get("portal_url", "")
+                portal = portal_url.replace("{year}", str(year)) if portal_url else ""
                 entry["url"] = portal
 
                 if not portal:

@@ -1,5 +1,5 @@
 import pytest
-import duckdb
+from lab_connectors.duckdb import safe_connect
 from pathlib import Path
 
 from tests.helpers import NoopLogger
@@ -49,9 +49,10 @@ def test_run_clean_csv_columns_reads_trailing_delimiter_csv(tmp_path: Path):
     out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
     assert out.exists()
 
-    con = duckdb.connect(":memory:")
-    rows = con.execute(f"SELECT a, b FROM read_parquet('{out.as_posix()}') ORDER BY a").fetchall()
-    con.close()
+    with safe_connect() as con:
+        rows = con.execute(
+            f"SELECT a, b FROM read_parquet('{out.as_posix()}') ORDER BY a"
+        ).fetchall()
 
     assert rows == [("1", "2"), ("3", "4")]
 
@@ -135,17 +136,16 @@ def test_run_clean_positional_csv_multi_file_concat(tmp_path: Path):
         "delim": ";",
         "trim_whitespace": True,
     }
-    con = duckdb.connect(":memory:")
-    params = _execute_normalized_csv_read(
-        con,
-        [tmp_path / "file1.csv", tmp_path / "file2.csv"],
-        read_cfg,
-    )
+    with safe_connect() as con:
+        params = _execute_normalized_csv_read(
+            con,
+            [tmp_path / "file1.csv", tmp_path / "file2.csv"],
+            read_cfg,
+        )
 
-    rows = con.execute("SELECT * FROM raw_input ORDER BY a").fetchall()
-    assert rows == [("1", "2"), ("3", "4"), ("5", "6")]
-    assert params["normalize_rows_to_columns"] is True
-    con.close()
+        rows = con.execute("SELECT * FROM raw_input ORDER BY a").fetchall()
+        assert rows == [("1", "2"), ("3", "4"), ("5", "6")]
+        assert params["normalize_rows_to_columns"] is True
 
 
 @pytest.mark.policy
@@ -229,11 +229,10 @@ def test_run_clean_compact_columns_format_renames_and_types(tmp_path: Path):
     out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
     assert out.exists()
 
-    con = duckdb.connect(":memory:")
-    rows = con.execute(
-        f"SELECT a_renamed, b_renamed FROM read_parquet('{out.as_posix()}')"
-    ).fetchall()
-    con.close()
+    with safe_connect() as con:
+        rows = con.execute(
+            f"SELECT a_renamed, b_renamed FROM read_parquet('{out.as_posix()}')"
+        ).fetchall()
     # Spaces trimmed by TRIM in projection
     assert rows == [("val_a", "val_b")]
 
@@ -271,11 +270,10 @@ def test_run_clean_compact_columns_format_with_int_type(tmp_path: Path):
     out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
     assert out.exists()
 
-    con = duckdb.connect(":memory:")
-    rows = con.execute(
-        f"SELECT anno_clean, valore_clean FROM read_parquet('{out.as_posix()}')"
-    ).fetchall()
-    con.close()
+    with safe_connect() as con:
+        rows = con.execute(
+            f"SELECT anno_clean, valore_clean FROM read_parquet('{out.as_posix()}')"
+        ).fetchall()
     assert rows == [(2024, 42)]
 
 
@@ -318,11 +316,10 @@ def test_run_clean_compact_columns_format_no_trim_whitespace(tmp_path: Path):
     out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
     assert out.exists()
 
-    con = duckdb.connect(":memory:")
-    rows = con.execute(
-        f"SELECT anno_clean, valore_clean FROM read_parquet('{out.as_posix()}')"
-    ).fetchall()
-    con.close()
+    with safe_connect() as con:
+        rows = con.execute(
+            f"SELECT anno_clean, valore_clean FROM read_parquet('{out.as_posix()}')"
+        ).fetchall()
     assert rows == [(2024, 42)]
 
 
@@ -457,11 +454,10 @@ def test_run_clean_align_by_header_integration(tmp_path: Path):
     out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
     assert out.exists()
 
-    con = duckdb.connect(":memory:")
-    rows = con.execute(
-        f"SELECT anno, oneri, consumi FROM read_parquet('{out.as_posix()}') ORDER BY anno"
-    ).fetchall()
-    con.close()
+    with safe_connect() as con:
+        rows = con.execute(
+            f"SELECT anno, oneri, consumi FROM read_parquet('{out.as_posix()}') ORDER BY anno"
+        ).fetchall()
     assert rows == [(2023, None, 200.3), (2024, None, 100.5)]
 
 

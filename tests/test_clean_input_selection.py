@@ -4,7 +4,6 @@ import logging
 import os
 from pathlib import Path
 
-import duckdb
 import pytest
 
 from tests.helpers import NoopLogger
@@ -280,11 +279,13 @@ def test_run_clean_dirty_csv_needs_auto_detect_false(tmp_path: Path):
     out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
     assert out.exists()
 
-    con = duckdb.connect(":memory:")
-    assert (
-        int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{out.as_posix()}')").fetchone()[0]) > 0
-    )
-    con.close()
+    from lab_connectors.duckdb import safe_connect
+
+    with safe_connect() as con:
+        assert (
+            int(con.execute(f"SELECT COUNT(*) FROM read_parquet('{out.as_posix()}')").fetchone()[0])
+            > 0
+        )
 
 
 def test_run_clean_dirty_csv_strict_mode_fails(tmp_path: Path):

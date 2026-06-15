@@ -230,13 +230,12 @@ def _render_dummy_clean_dir(clean_dir: Path, rows: int = 5) -> None:
     # Clean parquet
     clean_dir.mkdir(parents=True, exist_ok=True)
     parquet = clean_dir / "test_dataset_2022_clean.parquet"
-    import duckdb
+    from lab_connectors.duckdb import safe_connect
 
-    con = duckdb.connect()
-    con.execute(
-        f"COPY (SELECT 42 as value, 'a' as label FROM range({rows})) TO '{parquet}' (FORMAT PARQUET)"
-    )
-    con.close()
+    with safe_connect() as con:
+        con.execute(
+            f"COPY (SELECT 42 as value, 'a' as label FROM range({rows})) TO '{parquet}' (FORMAT PARQUET)"
+        )
     # metadata.json con output_profile per validate_promotion
     (clean_dir / "metadata.json").write_text(
         json.dumps(
@@ -312,15 +311,14 @@ def test_mart_validation_skips_min_rows_in_sample_mode(tmp_path: Path) -> None:
     # Mart dir con parquet e metadata
     mart_dir = config_path.parent / "out" / "data" / "mart" / "test_dataset" / "2022"
     mart_dir.mkdir(parents=True, exist_ok=True)
-    import duckdb
+    from lab_connectors.duckdb import safe_connect
 
-    con = duckdb.connect()
-    con.execute(
-        "COPY (SELECT 42 as value, 'a' as label FROM range(5)) TO '"
-        + str(mart_dir / "mart_example.parquet")
-        + "' (FORMAT PARQUET)"
-    )
-    con.close()
+    with safe_connect() as con:
+        con.execute(
+            "COPY (SELECT 42 as value, 'a' as label FROM range(5)) TO '"
+            + str(mart_dir / "mart_example.parquet")
+            + "' (FORMAT PARQUET)"
+        )
     (mart_dir / "metadata.json").write_text(
         '{"dataset": "test_dataset", "year": 2022, "outputs": ["mart_example.parquet"]}',
         encoding="utf-8",

@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
 import duckdb
 import pytest
 import yaml
+from lab_connectors.duckdb import safe_connect
 
+from tests.helpers import NoopLogger
 from toolkit.core.config import load_config
 from toolkit.mart.run import _run_hierarchy_levels
 
-_null_logger = logging.getLogger("test_null")
-_null_logger.addHandler(logging.NullHandler())
+_null_logger = NoopLogger()
 
 pytestmark = [pytest.mark.policy, pytest.mark.core]
 
@@ -34,210 +34,206 @@ def _setup_clean_view(con: duckdb.DuckDBPyConnection) -> None:
 
 def test_hierarchy_generates_aggregation(tmp_path: Path) -> None:
     """Two-level hierarchy + source_table override."""
-    con = duckdb.connect()
-    _setup_clean_view(con)
-    mart_dir = tmp_path / "mart"
-    mart_dir.mkdir()
+    with safe_connect() as con:
+        _setup_clean_view(con)
+        mart_dir = tmp_path / "mart"
+        mart_dir.mkdir()
 
-    # Two hierarchy levels aggregate from clean_input
-    written, executed, total_rows = _run_hierarchy_levels(
-        con,
-        {
-            "hierarchy": {
-                "axis": "territoriale",
-                "levels": [
-                    {"level": "comune", "table": "h_comune", "grain": ["comune", "regione"]},
-                    {"level": "regione", "table": "h_regione", "grain": ["regione"]},
-                ],
-            }
-        },
-        "test",
-        2024,
-        mart_dir,
-        logger=_null_logger,
-    )
-    assert len(written) == 2
-    assert (mart_dir / "h_comune.parquet").exists()
-    assert (mart_dir / "h_regione.parquet").exists()
+        # Two hierarchy levels aggregate from clean_input
+        written, executed, total_rows = _run_hierarchy_levels(
+            con,
+            {
+                "hierarchy": {
+                    "axis": "territoriale",
+                    "levels": [
+                        {"level": "comune", "table": "h_comune", "grain": ["comune", "regione"]},
+                        {"level": "regione", "table": "h_regione", "grain": ["regione"]},
+                    ],
+                }
+            },
+            "test",
+            2024,
+            mart_dir,
+            logger=_null_logger,
+        )
+        assert len(written) == 2
+        assert (mart_dir / "h_comune.parquet").exists()
+        assert (mart_dir / "h_regione.parquet").exists()
 
-    # Verify SUM values: Roma=100+120=220, Milano=200+180=380
-    rows = con.execute(
-        f"SELECT comune, valore FROM read_parquet('{mart_dir / 'h_comune.parquet'}') ORDER BY comune"
-    ).fetchall()
-    assert rows[0] == ("Milano", 380)
-    assert rows[2] == ("Roma", 220)
-    assert total_rows == 6  # 3 comune + 3 regione
+        # Verify SUM values: Roma=100+120=220, Milano=200+180=380
+        rows = con.execute(
+            f"SELECT comune, valore FROM read_parquet('{mart_dir / 'h_comune.parquet'}') ORDER BY comune"
+        ).fetchall()
+        assert rows[0] == ("Milano", 380)
+        assert rows[2] == ("Roma", 220)
+        assert total_rows == 6  # 3 comune + 3 regione
 
-    # Second pass: source_table override aggregates from a mart table
-    con.execute("CREATE TABLE mart_base AS SELECT * FROM clean_input")
-    w2, _, _ = _run_hierarchy_levels(
-        con,
-        {
-            "hierarchy": {
-                "axis": "x",
-                "levels": [
-                    {
-                        "level": "s",
-                        "table": "h_sub",
-                        "grain": ["regione"],
-                        "source_table": "mart_base",
-                    },
-                ],
-            }
-        },
-        "test",
-        2024,
-        mart_dir,
-        logger=_null_logger,
-    )
-    assert len(w2) == 1
-    rows2 = con.execute(
-        f"SELECT regione, valore FROM read_parquet('{mart_dir / 'h_sub.parquet'}') ORDER BY regione"
-    ).fetchall()
-    assert rows2[2] == ("Lombardia", 380)  # SUM(valore) from mart_base
-    con.close()
+        # Second pass: source_table override aggregates from a mart table
+        con.execute("CREATE TABLE mart_base AS SELECT * FROM clean_input")
+        w2, _, _ = _run_hierarchy_levels(
+            con,
+            {
+                "hierarchy": {
+                    "axis": "x",
+                    "levels": [
+                        {
+                            "level": "s",
+                            "table": "h_sub",
+                            "grain": ["regione"],
+                            "source_table": "mart_base",
+                        },
+                    ],
+                }
+            },
+            "test",
+            2024,
+            mart_dir,
+            logger=_null_logger,
+        )
+        assert len(w2) == 1
+        rows2 = con.execute(
+            f"SELECT regione, valore FROM read_parquet('{mart_dir / 'h_sub.parquet'}') ORDER BY regione"
+        ).fetchall()
+        assert rows2[2] == ("Lombardia", 380)  # SUM(valore) from mart_base
 
 
 def test_hierarchy_count_fallback(tmp_path: Path) -> None:
     """Without numeric columns, hierarchy uses COUNT(*)."""
-    con = duckdb.connect()
-    con.execute(
-        "CREATE VIEW clean_input AS SELECT * FROM (VALUES ('Roma','Lazio','X'),('Milano','Lombardia','Y')) "
-        "AS t(comune, regione, codice)"
-    )
-    mart_dir = tmp_path / "m"
-    mart_dir.mkdir()
-    written, _, _ = _run_hierarchy_levels(
-        con,
-        {
-            "hierarchy": {
-                "axis": "x",
-                "levels": [{"level": "c", "table": "h_c", "grain": ["comune"]}],
-            }
-        },
-        "test",
-        2024,
-        mart_dir,
-        logger=_null_logger,
-    )
-    rows = con.execute(
-        f"SELECT record_count FROM read_parquet('{mart_dir / 'h_c.parquet'}')"
-    ).fetchall()
-    assert rows == [(1,), (1,)]  # COUNT(*) per comune
-    con.close()
+    with safe_connect() as con:
+        con.execute(
+            "CREATE VIEW clean_input AS SELECT * FROM (VALUES ('Roma','Lazio','X'),('Milano','Lombardia','Y')) "
+            "AS t(comune, regione, codice)"
+        )
+        mart_dir = tmp_path / "m"
+        mart_dir.mkdir()
+        written, _, _ = _run_hierarchy_levels(
+            con,
+            {
+                "hierarchy": {
+                    "axis": "x",
+                    "levels": [{"level": "c", "table": "h_c", "grain": ["comune"]}],
+                }
+            },
+            "test",
+            2024,
+            mart_dir,
+            logger=_null_logger,
+        )
+        rows = con.execute(
+            f"SELECT record_count FROM read_parquet('{mart_dir / 'h_c.parquet'}')"
+        ).fetchall()
+        assert rows == [(1,), (1,)]  # COUNT(*) per comune
 
 
 def test_hierarchy_exclude_metrics(tmp_path: Path) -> None:
     """exclude_metrics rimuove colonne numeriche dalla lista metriche."""
-    con = duckdb.connect()
-    con.execute(
-        "CREATE VIEW clean_input AS SELECT * FROM (VALUES "
-        "  ('Lazio', 2023, 100, 50.5), "
-        "  ('Lombardia', 2023, 200, 75.2), "
-        "  ('Lazio', 2024, 150, 60.0) "
-        ") AS t(regione, anno, valore, costo)"
-    )
-    mart_dir = tmp_path / "m"
-    mart_dir.mkdir()
+    with safe_connect() as con:
+        con.execute(
+            "CREATE VIEW clean_input AS SELECT * FROM (VALUES "
+            "  ('Lazio', 2023, 100, 50.5), "
+            "  ('Lombardia', 2023, 200, 75.2), "
+            "  ('Lazio', 2024, 150, 60.0) "
+            ") AS t(regione, anno, valore, costo)"
+        )
+        mart_dir = tmp_path / "m"
+        mart_dir.mkdir()
 
-    # exclude_metrics=['anno'] — anno è numerico ma non deve essere sommato
-    written, executed, _ = _run_hierarchy_levels(
-        con,
-        {
-            "hierarchy": {
-                "axis": "territoriale",
-                "levels": [
-                    {
-                        "level": "regione",
-                        "table": "h_reg",
-                        "grain": ["regione"],
-                        "exclude_metrics": ["anno"],
-                    },
-                ],
-            }
-        },
-        "test",
-        2024,
-        mart_dir,
-        logger=_null_logger,
-    )
-    assert len(written) == 1
+        # exclude_metrics=['anno'] — anno è numerico ma non deve essere sommato
+        written, executed, _ = _run_hierarchy_levels(
+            con,
+            {
+                "hierarchy": {
+                    "axis": "territoriale",
+                    "levels": [
+                        {
+                            "level": "regione",
+                            "table": "h_reg",
+                            "grain": ["regione"],
+                            "exclude_metrics": ["anno"],
+                        },
+                    ],
+                }
+            },
+            "test",
+            2024,
+            mart_dir,
+            logger=_null_logger,
+        )
+        assert len(written) == 1
 
-    # 'anno' non deve apparire come metrica (solo valore e costo)
-    cols = con.execute(
-        f"DESCRIBE SELECT * FROM read_parquet('{mart_dir / 'h_reg.parquet'}')"
-    ).fetchall()
-    col_names = [c[0].lower() for c in cols]
+        # 'anno' non deve apparire come metrica (solo valore e costo)
+        cols = con.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{mart_dir / 'h_reg.parquet'}')"
+        ).fetchall()
+        col_names = [c[0].lower() for c in cols]
 
-    assert "regione" in col_names
-    assert "valore" in col_names  # SUM(valore) — metrica
-    assert "costo" in col_names  # SUM(costo) — metrica
-    assert "anno" not in col_names, f"anno should be excluded but found in: {col_names}"
+        assert "regione" in col_names
+        assert "valore" in col_names
+        assert "costo" in col_names
+        assert "anno" not in col_names
 
-    # Verify the SUM values are correct (compare as floats due to DuckDB Decimal)
-    rows = con.execute(
-        f"SELECT regione, CAST(valore AS DOUBLE), CAST(costo AS DOUBLE) FROM read_parquet('{mart_dir / 'h_reg.parquet'}') ORDER BY regione"
-    ).fetchall()
-    assert ("Lazio", 250.0, 110.5) in rows  # 100+150, 50.5+60.0
-    assert ("Lombardia", 200.0, 75.2) in rows
-    con.close()
+        # Verify the SUM values
+        rows = con.execute(
+            f"SELECT regione, CAST(valore AS DOUBLE), CAST(costo AS DOUBLE) FROM read_parquet('{mart_dir / 'h_reg.parquet'}') ORDER BY regione"
+        ).fetchall()
+        assert ("Lazio", 250.0, 110.5) in rows
+        assert ("Lombardia", 200.0, 75.2) in rows
 
 
 def test_hierarchy_edge_cases(tmp_path: Path) -> None:
     """Empty config returns empty; numeric grain not treated as metric."""
-    con = duckdb.connect()
-    _setup_clean_view(con)
     d = tmp_path / "d"
     d.mkdir()
 
-    # Empty hierarchy → empty result
-    w, e, r = _run_hierarchy_levels(con, {}, "t", 2024, d, logger=_null_logger)
-    assert (w, e, r) == ([], [], 0)
+    with safe_connect() as con:
+        _setup_clean_view(con)
 
-    # Numeric grain column (valore=INTEGER) must NOT appear as SUM metric
-    # Grain column must be excluded from metric_cols
-    w2, e2, _ = _run_hierarchy_levels(
-        con,
-        {
-            "hierarchy": {
-                "axis": "x",
-                "levels": [{"level": "x", "table": "h_test", "grain": ["valore"]}],
-            }
-        },
-        "t",
-        2024,
-        d,
-        logger=_null_logger,
-    )
-    cols = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{d / 'h_test.parquet'}')").fetchall()
-    col_names = [c[0].lower() for c in cols]
-    assert "valore" in col_names
-    # There should NOT be a SUM(valore) AS valore_1 or similar extra metric
-    metric_count = sum(1 for c in col_names if c.startswith("valore"))
-    assert metric_count == 1, (
-        f"valore appears {metric_count} times (grain leaking as metric): {col_names}"
-    )
-    con.close()
+        # Empty hierarchy → empty result
+        w, e, r = _run_hierarchy_levels(con, {}, "t", 2024, d, logger=_null_logger)
+        assert (w, e, r) == ([], [], 0)
 
-    # Missing source → ValueError (separate connection without clean_input)
-    con2 = duckdb.connect()
-    d2 = tmp_path / "d2"
-    d2.mkdir()
-    with pytest.raises(ValueError, match="source table.*not found"):
-        _run_hierarchy_levels(
-            con2,
+        # Numeric grain column (valore=INTEGER) must NOT appear as SUM metric
+        w2, e2, _ = _run_hierarchy_levels(
+            con,
             {
                 "hierarchy": {
                     "axis": "x",
-                    "levels": [{"level": "x", "table": "x", "grain": ["comune"]}],
+                    "levels": [{"level": "x", "table": "h_test", "grain": ["valore"]}],
                 }
             },
             "t",
             2024,
-            d2,
+            d,
             logger=_null_logger,
         )
-    con2.close()
+        cols = con.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{d / 'h_test.parquet'}')"
+        ).fetchall()
+        col_names = [c[0].lower() for c in cols]
+        assert "valore" in col_names
+        metric_count = sum(1 for c in col_names if c.startswith("valore"))
+        assert metric_count == 1, (
+            f"valore appears {metric_count} times (grain leaking as metric): {col_names}"
+        )
+
+    # Missing source → ValueError (separate connection without clean_input)
+    with safe_connect() as con2:
+        d2 = tmp_path / "d2"
+        d2.mkdir()
+        with pytest.raises(ValueError, match="source table.*not found"):
+            _run_hierarchy_levels(
+                con2,
+                {
+                    "hierarchy": {
+                        "axis": "x",
+                        "levels": [{"level": "x", "table": "x", "grain": ["comune"]}],
+                    }
+                },
+                "t",
+                2024,
+                d2,
+                logger=_null_logger,
+            )
 
 
 @pytest.mark.smoke

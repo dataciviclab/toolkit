@@ -152,6 +152,24 @@ def _collect_mart_transitions(root: Path, dataset: str, year: int) -> list[dict[
     return meta.get("transition_profiles") or []
 
 
+def _all_reports_for_dataset(root: str | Path, dataset: str) -> list[dict[str, Any]]:
+    """Legge tutti i report JSON esistenti per un dataset, ordinati per anno.
+
+    Cerca in {root}/data/_reports/{dataset}/*_run_report.json.
+    """
+    root_path = Path(root)
+    reports_dir = root_path / "data" / _REPORT_DIR / dataset
+    if not reports_dir.exists():
+        return []
+
+    reports: list[dict[str, Any]] = []
+    for f in sorted(reports_dir.glob("*_run_report.json")):
+        raw = read_json_or_none(f)
+        if raw:
+            reports.append(raw)
+    return reports
+
+
 def _duration_seconds(start: str | None, end: str | None) -> float | None:
     """Calcola secondi tra due timestamp ISO."""
     if not start or not end:
@@ -257,12 +275,19 @@ def build_run_report(
         warnings = _get_warnings(val)
         errors = _get_errors(val)
         file_bytes = _collect_output_bytes(root_path, lname, dataset, year)
+        layer_status = ((record or {}).get("layers") or {}).get(lname, {}).get("status")
+
+        # Distingue layer non presente (es. mart-only: raw/clean assenti) da layer fallito
+        val_ok: bool | None = val.get("ok")
+        if val_ok is None and not val and layer_status is None:
+            val_ok = None  # layer non eseguito (non è un fallimento)
+
         layer_entry: dict[str, Any] = {
-            "status": ((record or {}).get("layers") or {}).get(lname, {}).get("status"),
+            "status": layer_status,
             "duration_seconds": layer_timings.get(lname),
             "file_size_bytes": file_bytes,
             "validation": {
-                "ok": val.get("ok", False),
+                "ok": val_ok,
                 "errors": len(errors),
                 "warnings": len(warnings),
             },
@@ -378,6 +403,7 @@ def _validation_icon(ok: bool | None) -> str:
         return "✅"
     if ok is False:
         return "🔴"
+    # None = layer non eseguito (es. mart-only)
     return "·"
 
 
@@ -515,27 +541,38 @@ def build_dataset_readme(
             lines.append(f"- Quality score medio: **{qs}/100**")
         lines.append("")
 
-    # Warning ed errori per anno
-    lines.append("## Warning ed errori\n")
-    for r in sorted(reports, key=lambda x: x.get("year", 0)):
-        year = r.get("year", "?")
-        layers = r.get("layers") or {}
-        has_issues = False
+    # Warning ed errori per anno (solo se presenti)
+    _any_issues = False
+    for r in reports:
         for lname in ("raw", "clean", "mart"):
-            lr = layers.get(lname) or {}
-            ws = lr.get("warnings") or []
-            es = lr.get("errors") or []
-            if ws or es:
-                if not has_issues:
-                    lines.append(f"### Anno {year}\n")
-                    has_issues = True
-                lines.append(f"**{lname}**: {len(es)} errori, {len(ws)} warning")
-                for w in ws[:3]:
-                    lines.append(f"  - ⚠ {w}")
-                for e in es[:3]:
-                    lines.append(f"  - ❌ {e}")
-        if has_issues:
-            lines.append("")
+            lr = (r.get("layers") or {}).get(lname) or {}
+            if lr.get("warnings") or lr.get("errors"):
+                _any_issues = True
+                break
+        if _any_issues:
+            break
+
+    if _any_issues:
+        lines.append("## Warning ed errori\n")
+        for r in sorted(reports, key=lambda x: x.get("year", 0)):
+            year = r.get("year", "?")
+            layers = r.get("layers") or {}
+            has_issues = False
+            for lname in ("raw", "clean", "mart"):
+                lr = layers.get(lname) or {}
+                ws = lr.get("warnings") or []
+                es = lr.get("errors") or []
+                if ws or es:
+                    if not has_issues:
+                        lines.append(f"### Anno {year}\n")
+                        has_issues = True
+                    lines.append(f"**{lname}**: {len(es)} errori, {len(ws)} warning")
+                    for w in ws[:3]:
+                        lines.append(f"  - ⚠ {w}")
+                    for e in es[:3]:
+                        lines.append(f"  - ❌ {e}")
+            if has_issues:
+                lines.append("")
 
     # Readiness per anno
     has_readiness = any(r.get("readiness") for r in reports)

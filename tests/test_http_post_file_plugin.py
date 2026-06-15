@@ -32,7 +32,9 @@ def test_fetch_success() -> None:
 
     assert payload == b"payload"
     assert len(fake.requests) == 1
+    assert fake.requests[0][0] == "POST"
     assert fake.requests[0][1] == "https://example.test/download"
+    assert fake.requests[0][2].get("data") == {"key": "val"}
 
 
 @pytest.mark.contract
@@ -51,6 +53,7 @@ def test_fetch_without_data() -> None:
 
     assert payload == b"no-data"
     assert len(fake.requests) == 1
+    assert fake.requests[0][2].get("data") is None
 
 
 @pytest.mark.contract
@@ -162,5 +165,7 @@ class TestNonTruncableSampleBytes:
 
         if should_ignore:
             assert len(payload) == 10001
+            headers = fake.requests[0][2].get("headers", {}) or {}
+            assert "Range" not in headers
         else:
             assert len(payload) <= 5000

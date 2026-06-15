@@ -152,15 +152,15 @@ def _collect_mart_transitions(root: Path, dataset: str, year: int) -> list[dict[
     return meta.get("transition_profiles") or []
 
 
-_VALID_PASSED = frozenset({"SUCCESS", "SUCCESS_WITH_WARNINGS"})
 _VALID_FAILED = frozenset({"FAILED", "BLOCKED", "ERROR"})
+_VALID_INCOMPLETE = frozenset({"RUNNING", "DRY_RUN"})
 
 
 def _derive_overall_status(reports: list[dict[str, Any]]) -> str:
     """Deriva lo stato complessivo da una lista di report.
 
     - Se almeno un report e' FAILED/BLOCKED/ERROR → 'failed'
-    - Se almeno un report e' None/RUNNING → 'incomplete'
+    - Se almeno un report e' None/RUNNING/DRY_RUN → 'incomplete'
     - Se almeno un report e' SUCCESS_WITH_WARNINGS → 'passed_with_warnings'
     - Se tutti sono SUCCESS → 'passed'
     - Se lista vuota → 'unknown'
@@ -173,7 +173,7 @@ def _derive_overall_status(reports: list[dict[str, Any]]) -> str:
         s = r.get("status")
         if s in _VALID_FAILED:
             return "failed"
-        if s is None or s == "RUNNING":
+        if s is None or s in _VALID_INCOMPLETE or s not in ("SUCCESS", "SUCCESS_WITH_WARNINGS"):
             has_incomplete = True
 
     if has_incomplete:

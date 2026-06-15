@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import duckdb
 import pytest
 
 from tests.helpers import NoopLogger
@@ -177,16 +176,17 @@ def test_project_example_deep_metadata(project_example: Path, monkeypatch) -> No
         assert_mart_parquet(root, cfg.dataset, year, table)
 
     # ── Integrità dati ──────────────────────────────────────────────
-    con = duckdb.connect(":memory:")
-    for label, parquet_path in [
-        ("clean", clean_parquet),
-        ("mart_regione", assert_mart_parquet(root, cfg.dataset, year, "rd_by_regione")),
-        ("mart_provincia", assert_mart_parquet(root, cfg.dataset, year, "rd_by_provincia")),
-    ]:
-        count = int(
-            con.execute(
-                f"SELECT COUNT(*) FROM read_parquet('{parquet_path.as_posix()}')"
-            ).fetchone()[0]
-        )
-        assert count > 0, f"{label}: parquet vuoto"
-    con.close()
+    from lab_connectors.duckdb import safe_connect
+
+    with safe_connect() as con:
+        for label, parquet_path in [
+            ("clean", clean_parquet),
+            ("mart_regione", assert_mart_parquet(root, cfg.dataset, year, "rd_by_regione")),
+            ("mart_provincia", assert_mart_parquet(root, cfg.dataset, year, "rd_by_provincia")),
+        ]:
+            count = int(
+                con.execute(
+                    f"SELECT COUNT(*) FROM read_parquet('{parquet_path.as_posix()}')"
+                ).fetchone()[0]
+            )
+            assert count > 0, f"{label}: parquet vuoto"

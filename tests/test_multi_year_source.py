@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import duckdb
 import pytest
+from lab_connectors.duckdb import safe_connect
 
 from toolkit.core.multi_year_source import (
     bind_multi_year_view,
@@ -31,10 +31,9 @@ class TestCollectMultiYearFiles:
         for y in years:
             d = root / "data" / "clean" / dataset / str(y)
             d.mkdir(parents=True, exist_ok=True)
-            con = duckdb.connect(":memory:")
-            con.execute(f"CREATE TABLE t AS SELECT {y} AS anno, 'x' AS val")
-            con.execute(f"COPY t TO '{d / f'{dataset}_{y}_clean.parquet'}' (FORMAT PARQUET)")
-            con.close()
+            with safe_connect() as con:
+                con.execute(f"CREATE TABLE t AS SELECT {y} AS anno, 'x' AS val")
+                con.execute(f"COPY t TO '{d / f'{dataset}_{y}_clean.parquet'}' (FORMAT PARQUET)")
 
     def test_clean_layer_single_year(self, tmp_path: Path) -> None:
         """Un anno -> lista con un file."""
@@ -71,10 +70,9 @@ class TestCollectMultiYearFiles:
         """Layer mart con source_table -> singolo file."""
         d = tmp_path / "data" / "mart" / "demo" / "2023"
         d.mkdir(parents=True)
-        con = duckdb.connect(":memory:")
-        con.execute("CREATE TABLE t AS SELECT 1 AS anno")
-        con.execute(f"COPY t TO '{d / 'my_table.parquet'}' (FORMAT PARQUET)")
-        con.close()
+        with safe_connect() as con:
+            con.execute("CREATE TABLE t AS SELECT 1 AS anno")
+            con.execute(f"COPY t TO '{d / 'my_table.parquet'}' (FORMAT PARQUET)")
         files = collect_multi_year_files(
             str(tmp_path), "demo", years=[2023], source_layer="mart", source_table="my_table"
         )
@@ -108,24 +106,22 @@ class TestBindMultiYearView:
 
     def _make_parquet(self, path: Path, rows: list[tuple[int, str]]) -> None:
         """Create a parquet file with columns (anno, val) from rows."""
-        con = duckdb.connect(":memory:")
-        for i, (anno, val) in enumerate(rows):
-            sql = f"CREATE {'OR REPLACE' if i else ''} TABLE t AS SELECT {anno} AS anno, '{val}' AS val"
-            con.execute(sql)
-        con.execute(f"COPY t TO '{path.as_posix()}' (FORMAT PARQUET)")
-        con.close()
+        with safe_connect() as con:
+            for i, (anno, val) in enumerate(rows):
+                sql = f"CREATE {'OR REPLACE' if i else ''} TABLE t AS SELECT {anno} AS anno, '{val}' AS val"
+                con.execute(sql)
+            con.execute(f"COPY t TO '{path.as_posix()}' (FORMAT PARQUET)")
 
     def test_single_file_creates_views(self, tmp_path: Path) -> None:
         """Singolo file -> source_input, clean_input, clean create."""
         p = tmp_path / "data.parquet"
         self._make_parquet(p, [(2023, "a")])
 
-        con = duckdb.connect(":memory:")
-        bind_multi_year_view(con, [p])
-        rows = con.execute("SELECT * FROM clean").fetchall()
+        with safe_connect() as con:
+            bind_multi_year_view(con, [p])
+            rows = con.execute("SELECT * FROM clean").fetchall()
         assert len(rows) == 1
         assert rows[0][0] == 2023
-        con.close()
 
     def test_multiple_files_creates_union(self, tmp_path: Path) -> None:
         """Multipli file -> union via read_parquet([...])."""
@@ -134,23 +130,21 @@ class TestBindMultiYearView:
         self._make_parquet(p1, [(2022, "a")])
         self._make_parquet(p2, [(2023, "b")])
 
-        con = duckdb.connect(":memory:")
-        bind_multi_year_view(con, [p1, p2])
-        rows = con.execute("SELECT * FROM clean ORDER BY 1").fetchall()
+        with safe_connect() as con:
+            bind_multi_year_view(con, [p1, p2])
+            rows = con.execute("SELECT * FROM clean ORDER BY 1").fetchall()
         assert len(rows) == 2
         assert rows[0][0] == 2022
         assert rows[1][0] == 2023
-        con.close()
 
     def test_mart_layer_extra_views(self, tmp_path: Path) -> None:
         """Layer=mart -> anche mart_input, mart, mart_all_years."""
         p = tmp_path / "data.parquet"
         self._make_parquet(p, [(2023, "a")])
 
-        con = duckdb.connect(":memory:")
-        bind_multi_year_view(con, [p], source_layer="mart")
-        rows = con.execute("SELECT * FROM mart").fetchall()
-        assert len(rows) == 1
-        rows = con.execute("SELECT * FROM mart_all_years").fetchall()
-        assert len(rows) == 1
-        con.close()
+        with safe_connect() as con:
+            bind_multi_year_view(con, [p], source_layer="mart")
+            rows = con.execute("SELECT * FROM mart").fetchall()
+            assert len(rows) == 1
+            rows = con.execute("SELECT * FROM mart_all_years").fetchall()
+            assert len(rows) == 1

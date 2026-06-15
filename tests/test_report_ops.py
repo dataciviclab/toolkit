@@ -214,6 +214,179 @@ class TestWriteRunReport:
         assert loaded["status"] == "SUCCESS"
 
 
-# (Lo smoke test di integrazione viene eseguito dalla suite smoke del toolkit
-# tramite `run_full` con smoke template local_file_csv. I test unitari sopra
-# coprono il contratto del markdown e del JSON.)
+# ---------------------------------------------------------------------------
+# FAILED report — simulazione run fallito
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+class TestRunFullFailedReport:
+    """run_full con run_year che fallisce produce report FAILED e rilancia."""
+
+    def _make_config(self, tmp_path: Path) -> Path:
+        """Crea un dataset.yml minimale per test."""
+        sql_dir = tmp_path / "sql" / "mart"
+        sql_dir.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
+        (sql_dir / "mart_example.sql").write_text("select * from clean_input", encoding="utf-8")
+        cfg = tmp_path / "dataset.yml"
+        cfg.write_text(
+            "\n".join(
+                [
+                    f'root: "{(tmp_path / "out").as_posix()}"',
+                    "dataset:",
+                    '  name: "test_fail"',
+                    "  years: [2023, 2024]",
+                    "raw: {}",
+                    "clean:",
+                    '  sql: "sql/clean.sql"',
+                    "mart:",
+                    "  tables:",
+                    '    - name: "mart_example"',
+                    '      sql: "sql/mart/mart_example.sql"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return cfg
+
+    def test_run_full_fail_produce_report_failed_e_rilancia(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """run_full con run_year che fallisce:
+        - scrive report FAILED per l'anno fallito
+        - NON scrive report per l'anno successivo (non eseguito)
+        - rilancia l'eccezione originale
+        """
+        from toolkit.cli import cmd_run
+
+        config_path = self._make_config(tmp_path)
+
+        # Mock preflight per saltare check rete
+        monkeypatch.setattr(
+            "toolkit.cli.preflight_ops.run_preflight",
+            lambda *args, **kwargs: {
+                "config_check": {"ok": True, "errors": [], "warnings": [], "slug": "test"},
+                "sources": [],
+                "status": "passed",
+            },
+        )
+
+        # Mock review_readiness
+        import toolkit.cli.inspect.readiness_ops as _readiness_ops
+
+        monkeypatch.setattr(
+            _readiness_ops,
+            "review_readiness",
+            lambda *args, **kwargs: {
+                "readiness": "ready",
+                "check_count": 5,
+                "ok_count": 5,
+                "fail_count": 0,
+                "layers": {},
+            },
+        )
+
+        # Mock run_year per fallire al primo anno
+        call_count = {"n": 0}
+
+        def _failing_run_year(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise RuntimeError("simulated run failure")
+            return None  # non dovrebbe arrivare qui
+
+        monkeypatch.setattr(cmd_run, "run_year", _failing_run_year)
+
+        # Chiamata: deve rilanciare l'eccezione
+        with pytest.raises(RuntimeError, match="simulated run failure"):
+            cmd_run.run_full(
+                config=str(config_path),
+                years=None,
+                smoke=False,
+                sample_rows=None,
+                sample_bytes=None,
+                root=None,
+                json_output=False,
+                dry_run=False,
+            )
+
+        # Verifica: report per anno 2023 esiste (fallito)
+        report_dir = tmp_path / "out" / "data" / "_reports" / "test_fail"
+        report_2023 = report_dir / "2023_run_report.json"
+        assert report_2023.exists(), "Report per anno fallito non trovato"
+
+        # Verifica: report per 2024 NON esiste (mai eseguito)
+        report_2024 = report_dir / "2024_run_report.json"
+        assert not report_2024.exists(), "Report per anno non eseguito non dovrebbe esistere"
+
+        # run_year chiamato solo 1 volta (secondo anno skippato)
+        assert call_count["n"] == 1, "run_year non dovrebbe essere chiamato per il secondo anno"
+
+        # Verifica: README aggregato esiste e contiene lo stato
+        readme = report_dir / "README.md"
+        assert readme.exists()
+        assert "test_fail" in readme.read_text(encoding="utf-8")
+
+
+class TestFailedReport:
+    """build_run_report chiamato con step_results minimale (come dopo eccezione)."""
+
+    @pytest.mark.contract
+    def test_failed_report_da_step_results_minimi(self, tmp_path: Path) -> None:
+        """Con step_results={'run':'failed'}, build_run_report produce status FAILED
+        e non solleva eccezioni (tollerante a layers assenti)."""
+        from toolkit.cli.inspect.report_ops import build_run_report
+
+        report = build_run_report(
+            config_path="/c.yml",
+            year=2024,
+            root=tmp_path,
+            dataset="fallito",
+            step_results={"run": "failed", "validate": "failed"},
+            run_mode="full",
+        )
+        assert report["dataset"] == "fallito"
+        assert report["year"] == 2024
+        assert report["readiness"] is None  # nessun readiness disponibile
+        # I layer ci sono sempre (raw/clean/mart) ma con validation=None
+        for lname in ("raw", "clean", "mart"):
+            assert lname in report["layers"]
+            assert report["layers"][lname]["validation"]["ok"] is None
+        assert report["preflight"]["sources_total"] == 0
+        assert report["status"] is None  # nessun run record su tmp_path
+
+    @pytest.mark.contract
+    def test_failed_report_scritto_su_disco(self, tmp_path: Path) -> None:
+        """write_run_report con status FAILED produce JSON valido."""
+        report = {
+            "dataset": "fallito",
+            "config_path": "/c.yml",
+            "year": 2024,
+            "run_id": None,
+            "status": "FAILED",
+            "readiness": None,
+            "layers": {},
+            "support_datasets": [],
+        }
+        path = write_run_report(report, tmp_path, "fallito", 2024)
+        assert path.exists()
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+        assert loaded["status"] == "FAILED"
+        assert loaded["layers"] == {}
+
+    @pytest.mark.contract
+    def test_readme_con_anno_fallito(self) -> None:
+        """Un report FAILED nel README mostra stato FAILED e readiness assente."""
+        r = {
+            "dataset": "test",
+            "config_path": "/c.yml",
+            "year": 2024,
+            "status": "FAILED",
+            "readiness": None,
+            "layers": {},
+            "support_datasets": [],
+        }
+        md = build_dataset_readme("test", "/c.yml", [r])
+        assert "FAILED" in md
+        assert "🔴" in md

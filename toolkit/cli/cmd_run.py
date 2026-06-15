@@ -1070,7 +1070,7 @@ def run_full(
 
     # Rilancia l'eccezione originale del candidate (preserva traceback)
     if _candidate_exc is not None:
-        raise _candidate_exc from _candidate_exc
+        raise _candidate_exc
 
     if json_output:
         typer.echo(json.dumps(results, indent=2, default=str))

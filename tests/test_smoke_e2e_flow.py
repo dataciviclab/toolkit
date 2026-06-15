@@ -12,7 +12,6 @@ import textwrap
 import zipfile
 from pathlib import Path
 
-import duckdb
 import pytest
 from typer.testing import CliRunner
 
@@ -36,13 +35,12 @@ def _invoke(args: list[str]) -> pytest.CapturedResult:
 
 def _assert_parquet_has_rows(path: Path) -> int:
     assert path.exists(), f"Parquet non trovato: {path}"
-    con = duckdb.connect(":memory:")
-    try:
+    from lab_connectors.duckdb import safe_connect
+
+    with safe_connect() as con:
         count = con.execute(f"SELECT COUNT(*) FROM read_parquet('{path}')").fetchone()[0]
         assert count > 0, f"Parquet vuoto: {path}"
         return int(count)
-    finally:
-        con.close()
 
 
 def _setup_project(tmp_path: Path, dataset: str = "smoke_test", year: int = 2024) -> Path:

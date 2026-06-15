@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import duckdb
+from lab_connectors.duckdb import safe_connect
 import pandas as pd
 import pytest
 import yaml
@@ -33,26 +33,25 @@ def test_read_raw_to_relation_fallback_invokes_robust_after_strict_failure(
 
     monkeypatch.setattr(duckdb_read, "_execute_csv_read", _fake_execute_csv_read)
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read")
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {"delim": ";", "encoding": "utf-8"},
-        "fallback",
-        logger,
-    )
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {"delim": ";", "encoding": "utf-8"},
+            "fallback",
+            logger,
+        )
 
-    assert len(calls) == 2
-    assert info.source == "robust"
-    assert info.params_used["ignore_errors"] is True
-    assert calls[0].get("ignore_errors") is None
-    assert calls[1]["ignore_errors"] is True
-    assert calls[1]["null_padding"] is True
-    assert calls[1]["strict_mode"] is False
-    assert calls[1]["sample_size"] == -1
-    con.close()
+        assert len(calls) == 2
+        assert info.source == "robust"
+        assert info.params_used["ignore_errors"] is True
+        assert calls[0].get("ignore_errors") is None
+        assert calls[1]["ignore_errors"] is True
+        assert calls[1]["null_padding"] is True
+        assert calls[1]["strict_mode"] is False
+        assert calls[1]["sample_size"] == -1
 
 
 @pytest.mark.policy
@@ -60,22 +59,21 @@ def test_read_raw_to_relation_strict_returns_strict_info(tmp_path: Path):
     input_file = tmp_path / "ok.csv"
     input_file.write_text("a;b\n1;2\n", encoding="utf-8")
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read.strict")
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.strict")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {"delim": ";", "encoding": "utf-8", "header": True},
-        "strict",
-        logger,
-    )
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {"delim": ";", "encoding": "utf-8", "header": True},
+            "strict",
+            logger,
+        )
 
-    assert info.source == "strict"
-    assert info.params_used["delim"] == ";"
-    assert info.params_used["encoding"] == "utf-8"
-    assert info.params_used["header"] is True
-    con.close()
+        assert info.source == "strict"
+        assert info.params_used["delim"] == ";"
+        assert info.params_used["encoding"] == "utf-8"
+        assert info.params_used["header"] is True
 
 
 @pytest.mark.policy
@@ -83,20 +81,19 @@ def test_read_raw_to_relation_passes_parallel_flag(tmp_path: Path):
     input_file = tmp_path / "ok.csv"
     input_file.write_text("a;b\n1;2\n", encoding="utf-8")
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read.parallel")
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.parallel")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {"delim": ";", "encoding": "utf-8", "header": True, "parallel": False},
-        "strict",
-        logger,
-    )
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {"delim": ";", "encoding": "utf-8", "header": True, "parallel": False},
+            "strict",
+            logger,
+        )
 
-    assert info.source == "strict"
-    assert info.params_used["parallel"] is False
-    con.close()
+        assert info.source == "strict"
+        assert info.params_used["parallel"] is False
 
 
 @pytest.mark.policy
@@ -104,25 +101,24 @@ def test_read_raw_to_relation_keeps_explicit_columns_unchanged(tmp_path: Path):
     input_file = tmp_path / "ok.csv"
     input_file.write_text("a;b\n1;2\n", encoding="utf-8")
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read.columns")
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.columns")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {
-            "delim": ";",
-            "encoding": "utf-8",
-            "header": True,
-            "columns": {"a": "VARCHAR", "b": "VARCHAR"},
-        },
-        "strict",
-        logger,
-    )
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {
+                "delim": ";",
+                "encoding": "utf-8",
+                "header": True,
+                "columns": {"a": "VARCHAR", "b": "VARCHAR"},
+            },
+            "strict",
+            logger,
+        )
 
-    assert info.source == "strict"
-    assert info.params_used["columns"] == {"a": "VARCHAR", "b": "VARCHAR"}
-    con.close()
+        assert info.source == "strict"
+        assert info.params_used["columns"] == {"a": "VARCHAR", "b": "VARCHAR"}
 
 
 @pytest.mark.policy
@@ -130,28 +126,26 @@ def test_read_raw_to_relation_strict_error_message_uses_current_config_keys(tmp_
     input_file = tmp_path / "bad.csv"
     input_file.write_text("a;b\n1;2;3\n", encoding="utf-8")
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read.strict_error")
-    original_execute = duckdb_read._execute_csv_read
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.strict_error")
+        original_execute = duckdb_read._execute_csv_read
 
-    def _fail_execute_csv_read(_con, _input_files, _read_cfg):
-        raise RuntimeError("strict boom")
+        def _fail_execute_csv_read(_con, _input_files, _read_cfg):
+            raise RuntimeError("strict boom")
 
-    duckdb_read._execute_csv_read = _fail_execute_csv_read
+        duckdb_read._execute_csv_read = _fail_execute_csv_read
 
-    try:
-        with pytest.raises(ValueError, match="clean.read.columns.*clean.read.source"):
-            duckdb_read.read_raw_to_relation(
-                con,
-                [input_file],
-                {"delim": ";", "encoding": "utf-8", "header": True},
-                "strict",
-                logger,
-            )
-    finally:
-        duckdb_read._execute_csv_read = original_execute
-
-    con.close()
+        try:
+            with pytest.raises(ValueError, match="clean.read.columns.*clean.read.source"):
+                duckdb_read.read_raw_to_relation(
+                    con,
+                    [input_file],
+                    {"delim": ";", "encoding": "utf-8", "header": True},
+                    "strict",
+                    logger,
+                )
+        finally:
+            duckdb_read._execute_csv_read = original_execute
 
 
 @pytest.mark.policy
@@ -159,35 +153,34 @@ def test_read_raw_to_relation_handles_no_header_fixed_schema_without_extra_colum
     input_file = tmp_path / "fixed.csv"
     input_file.write_text("A,2024,1,123,45.6\nB,2024,2,456,78.9\n", encoding="utf-8")
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read.fixed_schema")
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.fixed_schema")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {
-            "delim": ",",
-            "encoding": "utf-8",
-            "header": False,
-            "auto_detect": False,
-            "columns": {
-                "col0": "VARCHAR",
-                "col1": "VARCHAR",
-                "col2": "VARCHAR",
-                "col3": "VARCHAR",
-                "col4": "VARCHAR",
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {
+                "delim": ",",
+                "encoding": "utf-8",
+                "header": False,
+                "auto_detect": False,
+                "columns": {
+                    "col0": "VARCHAR",
+                    "col1": "VARCHAR",
+                    "col2": "VARCHAR",
+                    "col3": "VARCHAR",
+                    "col4": "VARCHAR",
+                },
             },
-        },
-        "fallback",
-        logger,
-    )
+            "fallback",
+            logger,
+        )
 
-    rows = con.execute(
-        "SELECT col0, col1, col2, col3, col4 FROM raw_input ORDER BY col0"
-    ).fetchall()
-    assert info.source == "strict"
-    assert rows == [("A", "2024", "1", "123", "45.6"), ("B", "2024", "2", "456", "78.9")]
-    con.close()
+        rows = con.execute(
+            "SELECT col0, col1, col2, col3, col4 FROM raw_input ORDER BY col0"
+        ).fetchall()
+        assert info.source == "strict"
+        assert rows == [("A", "2024", "1", "123", "45.6"), ("B", "2024", "2", "456", "78.9")]
 
 
 @pytest.mark.policy
@@ -195,32 +188,31 @@ def test_read_raw_to_relation_normalizes_short_rows_to_fixed_schema(tmp_path: Pa
     input_file = tmp_path / "ragged.csv"
     input_file.write_text("A;B;C\n1;2\n3;4;5\n", encoding="utf-8")
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read.normalize_rows")
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.normalize_rows")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {
-            "delim": ";",
-            "encoding": "utf-8",
-            "header": False,
-            "columns": {
-                "col0": "VARCHAR",
-                "col1": "VARCHAR",
-                "col2": "VARCHAR",
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {
+                "delim": ";",
+                "encoding": "utf-8",
+                "header": False,
+                "columns": {
+                    "col0": "VARCHAR",
+                    "col1": "VARCHAR",
+                    "col2": "VARCHAR",
+                },
+                "normalize_rows_to_columns": True,
             },
-            "normalize_rows_to_columns": True,
-        },
-        "strict",
-        logger,
-    )
+            "strict",
+            logger,
+        )
 
-    rows = con.execute("SELECT col0, col1, col2 FROM raw_input ORDER BY col0").fetchall()
-    assert info.source == "strict"
-    assert info.params_used["normalize_rows_to_columns"] is True
-    assert rows == [("1", "2", ""), ("3", "4", "5"), ("A", "B", "C")]
-    con.close()
+        rows = con.execute("SELECT col0, col1, col2 FROM raw_input ORDER BY col0").fetchall()
+        assert info.source == "strict"
+        assert info.params_used["normalize_rows_to_columns"] is True
+        assert rows == [("1", "2", ""), ("3", "4", "5"), ("A", "B", "C")]
 
 
 @pytest.mark.policy
@@ -228,31 +220,30 @@ def test_read_raw_to_relation_normalize_rows_skips_header_when_configured(tmp_pa
     input_file = tmp_path / "ragged_header.csv"
     input_file.write_text("h0;h1;h2\n1;2\n", encoding="utf-8")
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read.normalize_rows_header")
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.normalize_rows_header")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {
-            "delim": ";",
-            "encoding": "utf-8",
-            "header": True,
-            "columns": {
-                "col0": "VARCHAR",
-                "col1": "VARCHAR",
-                "col2": "VARCHAR",
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {
+                "delim": ";",
+                "encoding": "utf-8",
+                "header": True,
+                "columns": {
+                    "col0": "VARCHAR",
+                    "col1": "VARCHAR",
+                    "col2": "VARCHAR",
+                },
+                "normalize_rows_to_columns": True,
             },
-            "normalize_rows_to_columns": True,
-        },
-        "strict",
-        logger,
-    )
+            "strict",
+            logger,
+        )
 
-    rows = con.execute("SELECT col0, col1, col2 FROM raw_input").fetchall()
-    assert info.params_used["header"] is True
-    assert rows == [("1", "2", "")]
-    con.close()
+        rows = con.execute("SELECT col0, col1, col2 FROM raw_input").fetchall()
+        assert info.params_used["header"] is True
+        assert rows == [("1", "2", "")]
 
 
 @pytest.mark.policy
@@ -265,24 +256,23 @@ def test_read_raw_to_relation_reads_xlsx_first_sheet(tmp_path: Path):
         ]
     ).to_excel(input_file, index=False)
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read.xlsx")
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.xlsx")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {"header": True},
-        "fallback",
-        logger,
-    )
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {"header": True},
+            "fallback",
+            logger,
+        )
 
-    rows = con.execute(
-        'SELECT "Anno", "Regione", "Domanda" FROM raw_input ORDER BY "Regione"'
-    ).fetchall()
-    assert info.source == "excel"
-    assert info.params_used["sheet_name"] == 0
-    assert rows == [(2022, "Lazio", 123.4), (2022, "Umbria", 56.7)]
-    con.close()
+        rows = con.execute(
+            'SELECT "Anno", "Regione", "Domanda" FROM raw_input ORDER BY "Regione"'
+        ).fetchall()
+        assert info.source == "excel"
+        assert info.params_used["sheet_name"] == 0
+        assert rows == [(2022, "Lazio", 123.4), (2022, "Umbria", 56.7)]
 
 
 @pytest.mark.policy
@@ -297,27 +287,26 @@ def test_read_raw_to_relation_reads_xlsx_with_explicit_sheet_and_columns(tmp_pat
             index=False,
         )
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read.xlsx_sheet")
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.xlsx_sheet")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {
-            "header": False,
-            "sheet_name": "Export",
-            "columns": {"col0": "VARCHAR", "col1": "VARCHAR"},
-        },
-        "fallback",
-        logger,
-    )
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {
+                "header": False,
+                "sheet_name": "Export",
+                "columns": {"col0": "VARCHAR", "col1": "VARCHAR"},
+            },
+            "fallback",
+            logger,
+        )
 
-    rows = con.execute("SELECT col0, col1 FROM raw_input ORDER BY col0").fetchall()
-    assert info.source == "excel"
-    assert info.params_used["sheet_name"] == "Export"
-    assert info.params_used["columns"] == {"col0": "VARCHAR", "col1": "VARCHAR"}
-    assert rows == [("A", 1), ("B", 2)]
-    con.close()
+        rows = con.execute("SELECT col0, col1 FROM raw_input ORDER BY col0").fetchall()
+        assert info.source == "excel"
+        assert info.params_used["sheet_name"] == "Export"
+        assert info.params_used["columns"] == {"col0": "VARCHAR", "col1": "VARCHAR"}
+        assert rows == [("A", 1), ("B", 2)]
 
 
 @pytest.mark.policy
@@ -339,24 +328,23 @@ def test_read_raw_to_relation_reads_xls_with_xlrd_engine(tmp_path: Path):
     ws.write(2, 2, 56.7)
     wb.save(input_file)
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read.xls")
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.xls")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {"header": True},
-        "fallback",
-        logger,
-    )
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {"header": True},
+            "fallback",
+            logger,
+        )
 
-    rows = con.execute(
-        'SELECT "Anno", "Regione", "Domanda" FROM raw_input ORDER BY "Regione"'
-    ).fetchall()
-    assert info.source == "excel"
-    assert info.params_used["sheet_name"] == 0
-    assert rows == [(2022, "Lazio", 123.4), (2022, "Umbria", 56.7)]
-    con.close()
+        rows = con.execute(
+            'SELECT "Anno", "Regione", "Domanda" FROM raw_input ORDER BY "Regione"'
+        ).fetchall()
+        assert info.source == "excel"
+        assert info.params_used["sheet_name"] == 0
+        assert rows == [(2022, "Lazio", 123.4), (2022, "Umbria", 56.7)]
 
 
 @pytest.mark.policy
@@ -488,22 +476,21 @@ def test_read_raw_to_relation_with_thousands_separator(tmp_path: Path):
     input_file = tmp_path / "thousands.csv"
     input_file.write_text("id;val\n1;1.234,56\n2;7.890,12\n", encoding="utf-8")
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read.thousands")
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.thousands")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {"delim": ";", "encoding": "utf-8", "header": True, "decimal": ",", "thousands": "."},
-        "strict",
-        logger,
-    )
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {"delim": ";", "encoding": "utf-8", "header": True, "decimal": ",", "thousands": "."},
+            "strict",
+            logger,
+        )
 
-    assert info.params_used["decimal"] == ","
-    assert info.params_used["thousands"] == "."
-    rows = con.execute("SELECT id, val FROM raw_input ORDER BY id").fetchall()
-    assert rows == [(1, 1234.56), (2, 7890.12)], f"got {rows}"
-    con.close()
+        assert info.params_used["decimal"] == ","
+        assert info.params_used["thousands"] == "."
+        rows = con.execute("SELECT id, val FROM raw_input ORDER BY id").fetchall()
+        assert rows == [(1, 1234.56), (2, 7890.12)], f"got {rows}"
 
 
 @pytest.mark.contract
@@ -522,8 +509,7 @@ def test_read_raw_to_relation_injects_column_from_multiple_sources(tmp_path: Pat
     ]
 
     logger = logging.getLogger("tests.clean.duckdb_read.inject")
-    con = duckdb.connect(":memory:")
-    try:
+    with safe_connect() as con:
         info = duckdb_read.read_raw_to_relation(
             con, inputs, {"delim": ",", "encoding": "utf-8"}, "fallback", logger
         )
@@ -539,8 +525,6 @@ def test_read_raw_to_relation_injects_column_from_multiple_sources(tmp_path: Pat
         assert "inject_column" in info.params_used
         assert info.params_used["inject_column"]["cod_regione"]["reg_a.csv"] == "13"
         assert info.params_used["inject_column"]["cod_regione"]["reg_b.csv"] == "14"
-    finally:
-        con.close()
 
 
 @pytest.mark.contract
@@ -559,8 +543,7 @@ def test_read_raw_to_relation_inject_column_without_columns_cfg(tmp_path: Path):
     ]
 
     logger = logging.getLogger("tests.clean.duckdb_read.inject")
-    con = duckdb.connect(":memory:")
-    try:
+    with safe_connect() as con:
         duckdb_read.read_raw_to_relation(
             con, inputs, {"delim": ",", "encoding": "utf-8"}, "fallback", logger
         )
@@ -570,8 +553,6 @@ def test_read_raw_to_relation_inject_column_without_columns_cfg(tmp_path: Path):
             ("A", 3, 4),
             ("B", 5, 6),
         ], f"Unexpected rows: {rows}"
-    finally:
-        con.close()
 
 
 @pytest.mark.policy
@@ -581,16 +562,13 @@ def test_read_raw_to_relation_plain_path_no_inject_still_works(tmp_path: Path):
     input_file.write_text("a,b\n1,2\n3,4\n", encoding="utf-8")
 
     logger = logging.getLogger("tests.clean.duckdb_read.backward")
-    con = duckdb.connect(":memory:")
-    try:
+    with safe_connect() as con:
         info = duckdb_read.read_raw_to_relation(
             con, [input_file], {"delim": ",", "encoding": "utf-8"}, "fallback", logger
         )
         rows = con.execute("SELECT * FROM raw_input ORDER BY a").fetchall()
         assert rows == [(1, 2), (3, 4)]
         assert "inject_column" not in info.params_used
-    finally:
-        con.close()
 
 
 @pytest.mark.policy
@@ -606,43 +584,41 @@ def test_dateformat_parses_non_iso_date_format(tmp_path: Path):
     input_file = tmp_path / "date_dot.csv"
     input_file.write_text("data;valore\n01.02.2023;100\n15.08.2024;200\n", encoding="utf-8")
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read.dateformat_dot")
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.dateformat_dot")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {"delim": ";", "encoding": "utf-8", "header": True, "dateformat": "%d.%m.%Y"},
-        "strict",
-        logger,
-    )
-
-    assert info.params_used["dateformat"] == "%d.%m.%Y"
-
-    rows = con.execute("SELECT data, valore FROM raw_input ORDER BY valore").fetchall()
-    assert len(rows) == 2
-
-    data_100 = rows[0][0]
-    data_200 = rows[1][0]
-
-    if isinstance(data_100, datetime.date):
-        assert data_100 == datetime.date(2023, 2, 1), (
-            f"01.02.2023 con dateformat=%d.%m.%Y dovrebbe essere 1-febbraio, ottenuto {data_100}"
-        )
-        assert data_200 == datetime.date(2024, 8, 15), (
-            f"15.08.2024 con dateformat=%d.%m.%Y dovrebbe essere 15-agosto, ottenuto {data_200}"
-        )
-    else:
-        data_100_str = str(data_100)
-        data_200_str = str(data_200)
-        assert "2023-02-01" in data_100_str or data_100_str == "2023-02-01", (
-            f"01.02.2023 con dateformat=%d.%m.%Y dovrebbe diventare 2023-02-01, ottenuto {data_100}"
-        )
-        assert "2024-08-15" in data_200_str or data_200_str == "2024-08-15", (
-            f"15.08.2024 con dateformat=%d.%m.%Y dovrebbe diventare 2024-08-15, ottenuto {data_200}"
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {"delim": ";", "encoding": "utf-8", "header": True, "dateformat": "%d.%m.%Y"},
+            "strict",
+            logger,
         )
 
-    con.close()
+        assert info.params_used["dateformat"] == "%d.%m.%Y"
+
+        rows = con.execute("SELECT data, valore FROM raw_input ORDER BY valore").fetchall()
+        assert len(rows) == 2
+
+        data_100 = rows[0][0]
+        data_200 = rows[1][0]
+
+        if isinstance(data_100, datetime.date):
+            assert data_100 == datetime.date(2023, 2, 1), (
+                f"01.02.2023 con dateformat=%d.%m.%Y dovrebbe essere 1-febbraio, ottenuto {data_100}"
+            )
+            assert data_200 == datetime.date(2024, 8, 15), (
+                f"15.08.2024 con dateformat=%d.%m.%Y dovrebbe essere 15-agosto, ottenuto {data_200}"
+            )
+        else:
+            data_100_str = str(data_100)
+            data_200_str = str(data_200)
+            assert "2023-02-01" in data_100_str or data_100_str == "2023-02-01", (
+                f"01.02.2023 con dateformat=%d.%m.%Y dovrebbe diventare 2023-02-01, ottenuto {data_100}"
+            )
+            assert "2024-08-15" in data_200_str or data_200_str == "2024-08-15", (
+                f"15.08.2024 con dateformat=%d.%m.%Y dovrebbe diventare 2024-08-15, ottenuto {data_200}"
+            )
 
 
 @pytest.mark.policy
@@ -657,35 +633,33 @@ def test_dateformat_disambiguates_dmy_vs_mdy(tmp_path: Path):
     input_file = tmp_path / "date_ambiguous.csv"
     input_file.write_text("data\n02/01/2023\n", encoding="utf-8")
 
-    con = duckdb.connect(":memory:")
-    logger = logging.getLogger("tests.clean.duckdb_read.dateformat_ambiguous")
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.dateformat_ambiguous")
 
-    info = duckdb_read.read_raw_to_relation(
-        con,
-        [input_file],
-        {"delim": ",", "encoding": "utf-8", "header": True, "dateformat": "%d/%m/%Y"},
-        "strict",
-        logger,
-    )
-
-    assert info.params_used["dateformat"] == "%d/%m/%Y"
-
-    rows = con.execute("SELECT data FROM raw_input").fetchall()
-    assert len(rows) == 1
-
-    data = rows[0][0]
-    if isinstance(data, datetime.date):
-        assert data == datetime.date(2023, 1, 2), (
-            f"02/01/2023 con dateformat=%d/%m/%Y dovrebbe essere 2-gennaio, ottenuto {data}"
-        )
-    else:
-        data_str = str(data)
-        assert data_str in ("2023-01-02", "02/01/2023"), (
-            f"02/01/2023 con dateformat=%d/%m/%Y dovrebbe normalizzarsi "
-            f"a 2-gennaio, ottenuto {data}"
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {"delim": ",", "encoding": "utf-8", "header": True, "dateformat": "%d/%m/%Y"},
+            "strict",
+            logger,
         )
 
-    con.close()
+        assert info.params_used["dateformat"] == "%d/%m/%Y"
+
+        rows = con.execute("SELECT data FROM raw_input").fetchall()
+        assert len(rows) == 1
+
+        data = rows[0][0]
+        if isinstance(data, datetime.date):
+            assert data == datetime.date(2023, 1, 2), (
+                f"02/01/2023 con dateformat=%d/%m/%Y dovrebbe essere 2-gennaio, ottenuto {data}"
+            )
+        else:
+            data_str = str(data)
+            assert data_str in ("2023-01-02", "02/01/2023"), (
+                f"02/01/2023 con dateformat=%d/%m/%Y dovrebbe normalizzarsi "
+                f"a 2-gennaio, ottenuto {data}"
+            )
 
 
 @pytest.mark.pure_unit
@@ -762,8 +736,7 @@ def test_enrich_input_files():
 @pytest.mark.contract
 def test_parquet_inject_column_escapes_apostrophe(tmp_path: Path):
     """inject_column su parquet: valori con apostrofo non rompono la query."""
-    con = duckdb.connect(":memory:")
-    try:
+    with safe_connect() as con:
         file_a = tmp_path / "reg_a.parquet"
         con.execute(
             "COPY (SELECT 1 AS id, 10 AS val UNION ALL SELECT 2, 20) TO ? (FORMAT PARQUET)",
@@ -774,8 +747,6 @@ def test_parquet_inject_column_escapes_apostrophe(tmp_path: Path):
             "COPY (SELECT 3 AS id, 30 AS val) TO ? (FORMAT PARQUET)",
             [str(file_b)],
         )
-    finally:
-        con.close()
 
     from toolkit.core.input_file import RawInputFile
 
@@ -787,8 +758,7 @@ def test_parquet_inject_column_escapes_apostrophe(tmp_path: Path):
     ]
 
     logger = logging.getLogger("tests.clean.duckdb_read.inject_parquet")
-    con = duckdb.connect(":memory:")
-    try:
+    with safe_connect() as con:
         info = duckdb_read.read_raw_to_relation(con, inputs, None, "fallback", logger)
         rows = con.execute("SELECT nome, regione, id FROM raw_input ORDER BY nome, id").fetchall()
         assert rows == [
@@ -797,5 +767,3 @@ def test_parquet_inject_column_escapes_apostrophe(tmp_path: Path):
             ("Valle d'Aosta", "Valle d'Aosta", 3),
         ], f"Unexpected rows: {rows}"
         assert "inject_column" in info.params_used
-    finally:
-        con.close()

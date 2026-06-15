@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import duckdb
 import pytest
 
 from toolkit.mcp.toolkit_client import (
@@ -30,9 +29,10 @@ pytestmark = pytest.mark.contract
 
 def _write_parquet(path: Path, sql: str = "SELECT 1 AS id") -> None:
     """Scrive un parquet minimale."""
-    conn = duckdb.connect()
-    conn.execute(f"COPY ({sql}) TO '{path}' (FORMAT PARQUET)")
-    conn.close()
+    from lab_connectors.duckdb import safe_connect
+
+    with safe_connect() as conn:
+        conn.execute(f"COPY ({sql}) TO '{path}' (FORMAT PARQUET)")
 
 
 def _make_project_smoke(

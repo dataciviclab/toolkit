@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import duckdb
+from lab_connectors.duckdb import safe_connect
 import pytest
 
 from toolkit.cli.sql_dry_run import (
@@ -123,38 +123,29 @@ class TestPlaceholderColumns:
 class TestCreatePlaceholderRawInput:
     @pytest.mark.policy
     def test_creates_view_with_columns(self):
-        con = duckdb.connect(":memory:")
-        try:
+        with safe_connect() as con:
             _create_placeholder_raw_input_with_columns(con, ["x", "y"])
             result = con.execute("DESCRIBE raw_input").fetchall()
             names = [row[0] for row in result]
             assert names == ["x", "y"]
-        finally:
-            con.close()
 
     @pytest.mark.policy
     def test_creates_fallback_placeholder(self):
-        con = duckdb.connect(":memory:")
-        try:
+        with safe_connect() as con:
             _create_placeholder_raw_input_with_columns(con, [])
             result = con.execute("DESCRIBE raw_input").fetchall()
             names = [row[0] for row in result]
             assert names == ["__dry_run_placeholder"]
-        finally:
-            con.close()
 
     @pytest.mark.policy
     def test_infers_columns_from_sql(self):
-        con = duckdb.connect(":memory:")
-        try:
+        with safe_connect() as con:
             clean_cfg = {"read": {}}
             sql = 'select "val" from raw_input'
             _create_placeholder_raw_input_with_columns(con, _placeholder_columns(clean_cfg, sql))
             result = con.execute("DESCRIBE raw_input").fetchall()
             names = [row[0] for row in result]
             assert names == ["val"]
-        finally:
-            con.close()
 
 
 # --- Integration tests for _build_clean_preview ---
@@ -164,24 +155,18 @@ class TestBuildCleanPreview:
     @pytest.mark.policy
     def test_simple_sql_passes_immediately(self, tmp_path: Path):
         cfg = _make_cfg(tmp_path, clean_sql="select 1 as value")
-        con = duckdb.connect(":memory:")
-        try:
+        with safe_connect() as con:
             _build_clean_preview(cfg, year=2022, con=con)
             # Table should exist after successful build
             con.execute("SELECT * FROM __dry_run_clean_preview")
-        finally:
-            con.close()
 
     @pytest.mark.policy
     def test_sql_with_unquoted_column_infers_incrementally(self, tmp_path: Path):
         """Clean SQL uses unquoted column name not in read.columns."""
         cfg = _make_cfg(tmp_path, clean_sql="select x from raw_input")
-        con = duckdb.connect(":memory:")
-        try:
+        with safe_connect() as con:
             _build_clean_preview(cfg, year=2022, con=con)
             con.execute("SELECT * FROM __dry_run_clean_preview")
-        finally:
-            con.close()
 
     @pytest.mark.policy
     def test_sql_with_read_columns(self, tmp_path: Path):
@@ -190,12 +175,9 @@ class TestBuildCleanPreview:
             clean_sql='select "amount" from raw_input',
             clean_read={"columns": {"amount": "DOUBLE"}},
         )
-        con = duckdb.connect(":memory:")
-        try:
+        with safe_connect() as con:
             _build_clean_preview(cfg, year=2022, con=con)
             con.execute("SELECT * FROM __dry_run_clean_preview")
-        finally:
-            con.close()
 
     @pytest.mark.policy
     def test_sql_with_multiple_columns_and_casts(self, tmp_path: Path):
@@ -209,34 +191,25 @@ class TestBuildCleanPreview:
             clean_sql=sql,
             clean_read={"columns": {"id": "VARCHAR", "name": "VARCHAR"}},
         )
-        con = duckdb.connect(":memory:")
-        try:
+        with safe_connect() as con:
             _build_clean_preview(cfg, year=2022, con=con)
             con.execute("SELECT * FROM __dry_run_clean_preview")
-        finally:
-            con.close()
 
     @pytest.mark.policy
     def test_non_binder_error_raises_clean_dry_run_failure(self, tmp_path: Path):
         """Non-binder SQL errors should surface as CLEAN SQL dry-run failures."""
         cfg = _make_cfg(tmp_path, clean_sql="select from raw_input")
-        con = duckdb.connect(":memory:")
-        try:
+        with safe_connect() as con:
             with pytest.raises(ValueError, match="CLEAN SQL dry-run failed"):
                 _build_clean_preview(cfg, year=2022, con=con)
-        finally:
-            con.close()
 
     @pytest.mark.policy
     def test_missing_column_error_includes_path(self, tmp_path: Path):
         """SQL syntax error should include file path in the message."""
         cfg = _make_cfg(tmp_path, clean_sql="select from raw_input")
-        con = duckdb.connect(":memory:")
-        try:
+        with safe_connect() as con:
             with pytest.raises(ValueError) as exc_info:
                 _build_clean_preview(cfg, year=2022, con=con)
-        finally:
-            con.close()
         msg = str(exc_info.value)
         assert "CLEAN SQL dry-run failed" in msg
         assert "clean.sql" in msg
@@ -257,13 +230,10 @@ class TestValidateMartSql:
             clean_sql="select 1 as value",
             mart_tables=[{"name": "mart_out", "sql": "sql/mart/mart_out.sql"}],
         )
-        con = duckdb.connect(":memory:")
-        try:
+        with safe_connect() as con:
             # Build clean preview first (required by mart validation)
             _build_clean_preview(cfg, year=2022, con=con)
             _validate_mart_sql(cfg, year=2022, con=con)
-        finally:
-            con.close()
 
     @pytest.mark.policy
     def test_mart_sql_with_missing_column_fails(self, tmp_path: Path):
@@ -278,13 +248,10 @@ class TestValidateMartSql:
             clean_sql="select 1 as value",
             mart_tables=[{"name": "mart_out", "sql": "sql/mart/mart_out.sql"}],
         )
-        con = duckdb.connect(":memory:")
-        try:
+        with safe_connect() as con:
             _build_clean_preview(cfg, year=2022, con=con)
             with pytest.raises(ValueError, match="MART SQL dry-run failed"):
                 _validate_mart_sql(cfg, year=2022, con=con)
-        finally:
-            con.close()
 
     @pytest.mark.policy
     def test_mart_sql_with_template_placeholder_resolved(self, tmp_path: Path):
@@ -300,12 +267,9 @@ class TestValidateMartSql:
             clean_sql="select 1 as anno",
             mart_tables=[{"name": "mart_out", "sql": "sql/mart/mart_out.sql"}],
         )
-        con = duckdb.connect(":memory:")
-        try:
+        with safe_connect() as con:
             _build_clean_preview(cfg, year=2022, con=con)
             _validate_mart_sql(cfg, year=2022, con=con)
-        finally:
-            con.close()
 
     @pytest.mark.policy
     def test_mart_sql_with_unresolved_placeholder_fails(self, tmp_path: Path):
@@ -321,13 +285,10 @@ class TestValidateMartSql:
             clean_sql="select 1 as value",
             mart_tables=[{"name": "mart_out", "sql": "sql/mart/mart_out.sql"}],
         )
-        con = duckdb.connect(":memory:")
-        try:
+        with safe_connect() as con:
             _build_clean_preview(cfg, year=2022, con=con)
             with pytest.raises(ValueError, match="unresolved"):
                 _validate_mart_sql(cfg, year=2022, con=con)
-        finally:
-            con.close()
 
 
 # --- Top-level validate_sql_dry_run ---

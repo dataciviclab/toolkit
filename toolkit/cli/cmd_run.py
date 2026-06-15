@@ -888,69 +888,75 @@ def run_full(
     # Se un support e' fallito, non eseguire il candidate (dipendenza assente)
     candidate_blocked = results["status"] == "failed" and not dry_flag
 
-    if not candidate_blocked:
-        # Mart-only config (compose): non ha raw/clean, solo mart.
-        # run full usa step="mart" e valida solo mart.
-        is_mart_only = _is_mart_only_cfg(cfg)
-        run_step = "mart" if is_mart_only else "all"
+    # Esecuzione candidate: wrappata in try/except per garantire
+    # che il report venga generato anche in caso di eccezione.
+    try:
+        if not candidate_blocked:
+            is_mart_only = _is_mart_only_cfg(cfg)
+            run_step = "mart" if is_mart_only else "all"
+            fail_on_error_flag = bool(cfg.validation.fail_on_error)
 
-        fail_on_error_flag = bool(cfg.validation.fail_on_error)
-
-        for year in selected_years:
-            logger.info("Run %s — year=%s", run_step, year)
-            ctx = run_year(
-                cfg,
-                year,
-                step=run_step,
-                dry_run=dry_flag,
-                logger=logger,
-                sample_rows=sample_rows_final,
-                sample_bytes=sample_bytes_final,
-                smoke=smoke,
-            )
-
-            if not dry_flag:
-                # all_passed dal RunContext — la validazione è già avvenuta
-                # dentro run_year() per ogni layer eseguito.
-                if is_mart_only:
-                    all_passed = bool(ctx.validations.get("mart", {}).get("passed", False))
-                else:
-                    all_passed = all(
-                        ctx.validations.get(layer, {}).get("passed", False)
-                        for layer in ("raw", "clean", "mart")
-                    )
-                results["steps"][str(year)] = {
-                    "run": "ok",
-                    "validate": "passed" if all_passed else "failed",
-                }
-                if not all_passed and fail_on_error_flag:
-                    results["status"] = "failed"
-
-                # Review readiness (capture full result including layers)
-                from toolkit.cli.inspect.readiness_ops import review_readiness as _review_readiness
-
-                readiness = _review_readiness(config, year or None)
-                results["steps"][str(year)]["readiness"] = readiness.get("readiness")
-                results["steps"][str(year)]["checks"] = readiness.get("check_count", 0)
-                results["steps"][str(year)]["checks_ok"] = readiness.get("ok_count", 0)
-                results["steps"][str(year)]["checks_fail"] = readiness.get("fail_count", 0)
-                results["steps"][str(year)]["layers"] = readiness.get("layers", {})
-
-        # Multi-year mart: run once per dataset after per-year processing
-        if not dry_flag and _has_multi_year_mart(cfg):
-            try:
-                _maybe_run_multi_year_mart(
-                    cfg, selected_years, dry_run=False, logger=logger, sampling_active=sample_mode
+            for year in selected_years:
+                logger.info("Run %s — year=%s", run_step, year)
+                ctx = run_year(
+                    cfg,
+                    year,
+                    step=run_step,
+                    dry_run=dry_flag,
+                    logger=logger,
+                    sample_rows=sample_rows_final,
+                    sample_bytes=sample_bytes_final,
+                    smoke=smoke,
                 )
-                results["multi_year_mart"] = "ok"
-            except Exception as exc:
-                results["multi_year_mart"] = f"failed: {exc}"
-                if fail_on_error_flag:
-                    results["status"] = "failed"
+
+                if not dry_flag:
+                    if is_mart_only:
+                        all_passed = bool(ctx.validations.get("mart", {}).get("passed", False))
+                    else:
+                        all_passed = all(
+                            ctx.validations.get(layer, {}).get("passed", False)
+                            for layer in ("raw", "clean", "mart")
+                        )
+                    results["steps"][str(year)] = {
+                        "run": "ok",
+                        "validate": "passed" if all_passed else "failed",
+                    }
+                    if not all_passed and fail_on_error_flag:
+                        results["status"] = "failed"
+
+                    from toolkit.cli.inspect.readiness_ops import (
+                        review_readiness as _review_readiness,
+                    )
+
+                    readiness = _review_readiness(config, year or None)
+                    results["steps"][str(year)]["readiness"] = readiness.get("readiness")
+                    results["steps"][str(year)]["checks"] = readiness.get("check_count", 0)
+                    results["steps"][str(year)]["checks_ok"] = readiness.get("ok_count", 0)
+                    results["steps"][str(year)]["checks_fail"] = readiness.get("fail_count", 0)
+                    results["steps"][str(year)]["layers"] = readiness.get("layers", {})
+
+            # Multi-year mart
+            if not dry_flag and _has_multi_year_mart(cfg):
+                try:
+                    _maybe_run_multi_year_mart(
+                        cfg,
+                        selected_years,
+                        dry_run=False,
+                        logger=logger,
+                        sampling_active=sample_mode,
+                    )
+                    results["multi_year_mart"] = "ok"
+                except Exception as exc:
+                    results["multi_year_mart"] = f"failed: {exc}"
+                    if fail_on_error_flag:
+                        results["status"] = "failed"
+
+    except Exception as _run_err:
+        logger.error("Run candidate fallito con eccezione: %s", _run_err)
+        results["status"] = "failed"
 
     # ── Run report (best-effort: non fa fallire il run) ────────────────────
-    # Generato anche se candidate bloccato o run fallito — eseguito
-    # fuori dal blocco `if not candidate_blocked:` sopra.
+    # Eseguito sempre: anche con candidate bloccato, run fallito, o eccezione.
     try:
         if not dry_flag:
             from toolkit.cli.inspect.report_ops import (
@@ -984,6 +990,10 @@ def run_full(
             # Genera report per ogni anno del run corrente
             for year in selected_years:
                 step_data = results["steps"].get(str(year))
+                # Se candidate bloccato, step_data e' None: non scrivere report
+                # fittizio che riusa run record precedenti.
+                if candidate_blocked:
+                    continue
                 report = build_run_report(
                     config_path=config,
                     year=year,

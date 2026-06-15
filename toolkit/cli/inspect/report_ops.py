@@ -152,15 +152,32 @@ def _collect_mart_transitions(root: Path, dataset: str, year: int) -> list[dict[
     return meta.get("transition_profiles") or []
 
 
+_VALID_PASSED = frozenset({"SUCCESS", "SUCCESS_WITH_WARNINGS"})
+_VALID_FAILED = frozenset({"FAILED", "BLOCKED", "ERROR"})
+
+
 def _derive_overall_status(reports: list[dict[str, Any]]) -> str:
     """Deriva lo stato complessivo da una lista di report.
 
-    - Se almeno un report e' FAILED → 'failed'
-    - Se nessun FAILED ma almeno un SUCCESS_WITH_WARNINGS → 'passed_with_warnings'
-    - Altrimenti → 'passed'
+    - Se almeno un report e' FAILED/BLOCKED/ERROR → 'failed'
+    - Se almeno un report e' None/RUNNING → 'incomplete'
+    - Se almeno un report e' SUCCESS_WITH_WARNINGS → 'passed_with_warnings'
+    - Se tutti sono SUCCESS → 'passed'
+    - Se lista vuota → 'unknown'
     """
-    if any(r.get("status") == "FAILED" for r in reports):
-        return "failed"
+    if not reports:
+        return "unknown"
+
+    has_incomplete = False
+    for r in reports:
+        s = r.get("status")
+        if s in _VALID_FAILED:
+            return "failed"
+        if s is None or s == "RUNNING":
+            has_incomplete = True
+
+    if has_incomplete:
+        return "incomplete"
     if any(r.get("status") == "SUCCESS_WITH_WARNINGS" for r in reports):
         return "passed_with_warnings"
     return "passed"
@@ -462,6 +479,8 @@ def build_dataset_readme(
         status_icon = "🔴"
     elif status == "passed_with_warnings":
         status_icon = "⚠️"
+    elif status == "incomplete":
+        status_icon = "🔶"
     else:
         status_icon = "✅"
 

@@ -948,66 +948,68 @@ def run_full(
                 if fail_on_error_flag:
                     results["status"] = "failed"
 
-        # ── Run report (best-effort: non fa fallire il run) ────────────────
-        try:
-            if not dry_flag:
-                from toolkit.cli.inspect.report_ops import (
-                    build_run_report,
-                    write_run_report,
-                    write_dataset_readme,
-                    _all_reports_for_dataset,
+    # ── Run report (best-effort: non fa fallire il run) ────────────────────
+    # Generato anche se candidate bloccato o run fallito — eseguito
+    # fuori dal blocco `if not candidate_blocked:` sopra.
+    try:
+        if not dry_flag:
+            from toolkit.cli.inspect.report_ops import (
+                build_run_report,
+                write_run_report,
+                write_dataset_readme,
+                _all_reports_for_dataset,
+                _derive_overall_status,
+            )
+
+            run_mode = "smoke" if sample_mode else "full"
+
+            # Raccogli info dai support
+            support_info: list[dict[str, Any]] = []
+            if support_entries:
+                for entry in support_entries:
+                    for sy in entry.years:
+                        sup_run_dir = get_run_dir(Path(cfg.root), entry.name, sy)
+                        try:
+                            sup_rec = latest_run(sup_run_dir)
+                        except (FileNotFoundError, OSError):
+                            sup_rec = None
+                        support_info.append(
+                            {
+                                "name": entry.name,
+                                "year": sy,
+                                "status": (sup_rec or {}).get("status"),
+                            }
+                        )
+
+            # Genera report per ogni anno del run corrente
+            for year in selected_years:
+                step_data = results["steps"].get(str(year))
+                report = build_run_report(
+                    config_path=config,
+                    year=year,
+                    root=cfg.root,
+                    dataset=cfg.dataset,
+                    preflight=results.get("preflight"),
+                    step_results=step_data,
+                    run_mode=run_mode,
+                    support_datasets=support_info,
                 )
+                write_run_report(report, cfg.root, cfg.dataset, year)
 
-                run_mode = "smoke" if sample_mode else "full"
-
-                # Raccogli info dai support
-                support_info: list[dict[str, Any]] = []
-                if support_entries:
-                    for entry in support_entries:
-                        for sy in entry.years:
-                            sup_run_dir = get_run_dir(Path(cfg.root), entry.name, sy)
-                            try:
-                                sup_rec = latest_run(sup_run_dir)
-                            except (FileNotFoundError, OSError):
-                                sup_rec = None
-                            support_info.append(
-                                {
-                                    "name": entry.name,
-                                    "year": sy,
-                                    "status": (sup_rec or {}).get("status"),
-                                }
-                            )
-
-                # Genera report per ogni anno del run corrente
-                for year in selected_years:
-                    step_data = results["steps"].get(str(year))
-                    if not step_data:
-                        continue
-                    report = build_run_report(
-                        config_path=config,
-                        year=year,
-                        root=cfg.root,
-                        dataset=cfg.dataset,
-                        preflight=results.get("preflight"),
-                        step_results=step_data,
-                        run_mode=run_mode,
-                        support_datasets=support_info,
-                    )
-                    write_run_report(report, cfg.root, cfg.dataset, year)
-
-                # Leggi TUTTI i report JSON esistenti su disco (anche anni precedenti)
-                # e rigenera il README completo
-                all_reports = _all_reports_for_dataset(cfg.root, cfg.dataset)
-                if all_reports:
-                    write_dataset_readme(
-                        cfg.root,
-                        cfg.dataset,
-                        all_reports,
-                        overall_status=results.get("status"),
-                        config_path=config,
-                    )
-        except Exception as _report_err:
-            logger.warning("Generazione report saltata: %s", _report_err)
+            # Leggi TUTTI i report JSON esistenti su disco (anche anni precedenti)
+            # e rigenera il README completo con stato aggregato
+            all_reports = _all_reports_for_dataset(cfg.root, cfg.dataset)
+            if all_reports:
+                agg_status = _derive_overall_status(all_reports)
+                write_dataset_readme(
+                    cfg.root,
+                    cfg.dataset,
+                    all_reports,
+                    overall_status=agg_status,
+                    config_path=config,
+                )
+    except Exception as _report_err:
+        logger.warning("Generazione report saltata: %s", _report_err)
 
     if json_output:
         typer.echo(json.dumps(results, indent=2, default=str))

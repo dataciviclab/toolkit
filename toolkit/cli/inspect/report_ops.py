@@ -152,6 +152,20 @@ def _collect_mart_transitions(root: Path, dataset: str, year: int) -> list[dict[
     return meta.get("transition_profiles") or []
 
 
+def _derive_overall_status(reports: list[dict[str, Any]]) -> str:
+    """Deriva lo stato complessivo da una lista di report.
+
+    - Se almeno un report e' FAILED → 'failed'
+    - Se nessun FAILED ma almeno un SUCCESS_WITH_WARNINGS → 'passed_with_warnings'
+    - Altrimenti → 'passed'
+    """
+    if any(r.get("status") == "FAILED" for r in reports):
+        return "failed"
+    if any(r.get("status") == "SUCCESS_WITH_WARNINGS" for r in reports):
+        return "passed_with_warnings"
+    return "passed"
+
+
 def _all_reports_for_dataset(root: str | Path, dataset: str) -> list[dict[str, Any]]:
     """Legge tutti i report JSON esistenti per un dataset, ordinati per anno.
 
@@ -444,7 +458,12 @@ def build_dataset_readme(
         Testo markdown del README.
     """
     status = overall_status or "passed"
-    status_icon = "✅" if status == "passed" else "🔴"
+    if status == "failed":
+        status_icon = "🔴"
+    elif status == "passed_with_warnings":
+        status_icon = "⚠️"
+    else:
+        status_icon = "✅"
 
     lines = [
         f"# Run Report: `{dataset}`\n",

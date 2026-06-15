@@ -250,6 +250,7 @@ class TestRunFullFailedReport:
         )
         return cfg
 
+    @pytest.mark.contract
     def test_run_full_fail_produce_report_failed_e_rilancia(
         self, tmp_path: Path, monkeypatch
     ) -> None:

@@ -19,6 +19,7 @@ from toolkit.cli.inspect.report_ops import (
 
 
 @pytest.mark.contract
+@pytest.mark.pure_unit
 class TestBuildDatasetReadme:
     """Verifica che il README markdown aggregato abbia la struttura attesa."""
 

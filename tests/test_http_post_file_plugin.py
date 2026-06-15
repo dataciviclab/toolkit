@@ -9,83 +9,81 @@ from __future__ import annotations
 
 import pytest
 
-from lab_connectors.http import HttpClient, HttpResult
+from lab_connectors.http import HttpResult
+from lab_connectors.testing import FakeHttpClient, fake_response
 
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.http_post_file import HttpPostFileSource
 
 
-class _FakeResponse:
-    """Minimal response stub duck-typing requests.Response properties."""
-
-    def __init__(self, status_code: int = 200, content: bytes = b"ok") -> None:
-        self.status_code = status_code
-        self.content = content
-
-
 @pytest.mark.contract
-def test_fetch_success(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_success() -> None:
     """HttpResult ok → fetch returns bytes."""
-    results: list[tuple[str, dict | None, dict]] = []
-
-    def fake_post(self, url: str, data: dict | None = None, **kwargs):
-        results.append((url, data, kwargs))
-        return HttpResult(response=_FakeResponse(200, b"payload"), err=None)
-
-    monkeypatch.setattr(HttpClient, "post", fake_post)
+    fake = FakeHttpClient()
+    fake.responses["https://example.test/download"] = HttpResult(
+        response=fake_response(200, text="payload"),
+        err=None,
+    )
 
     source = HttpPostFileSource(timeout=15, retries=2, user_agent="ua-test")
+    source._client = fake
+
     payload = source.fetch("https://example.test/download", data={"key": "val"})
 
     assert payload == b"payload"
-    assert len(results) == 1
-    assert results[0][0] == "https://example.test/download"
-    assert results[0][1] == {"key": "val"}
+    assert len(fake.requests) == 1
+    assert fake.requests[0][0] == "POST"
+    assert fake.requests[0][1] == "https://example.test/download"
+    assert fake.requests[0][2].get("data") == {"key": "val"}
 
 
 @pytest.mark.contract
-def test_fetch_without_data(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_without_data() -> None:
     """Fetch without data passes None."""
-    results: list[tuple[str, dict | None, dict]] = []
-
-    def fake_post(self, url: str, data: dict | None = None, **kwargs):
-        results.append((url, data, kwargs))
-        return HttpResult(response=_FakeResponse(200, b"no-data"), err=None)
-
-    monkeypatch.setattr(HttpClient, "post", fake_post)
+    fake = FakeHttpClient()
+    fake.responses["https://example.test/download"] = HttpResult(
+        response=fake_response(200, text="no-data"),
+        err=None,
+    )
 
     source = HttpPostFileSource()
+    source._client = fake
+
     payload = source.fetch("https://example.test/download")
 
     assert payload == b"no-data"
-    assert len(results) == 1
-    assert results[0][1] is None
+    assert len(fake.requests) == 1
+    assert fake.requests[0][2].get("data") is None
 
 
 @pytest.mark.contract
-def test_fetch_http_status_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_http_status_error() -> None:
     """Non-200 HTTP status → DownloadError with status code in message."""
-
-    def fake_post(self, url: str, data: dict | None = None, **kwargs):
-        return HttpResult(response=_FakeResponse(503, b"service unavailable"), err=None)
-
-    monkeypatch.setattr(HttpClient, "post", fake_post)
+    fake = FakeHttpClient()
+    fake.responses["https://example.test/unavailable"] = HttpResult(
+        response=fake_response(503),
+        err=None,
+    )
 
     source = HttpPostFileSource(retries=1)
+    source._client = fake
+
     with pytest.raises(DownloadError, match="HTTP 503"):
         source.fetch("https://example.test/unavailable")
 
 
 @pytest.mark.contract
-def test_fetch_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_connection_error() -> None:
     """HttpResult with err → DownloadError."""
-
-    def fake_post(self, url: str, data: dict | None = None, **kwargs):
-        return HttpResult(response=None, err=ConnectionError("connection refused"))
-
-    monkeypatch.setattr(HttpClient, "post", fake_post)
+    fake = FakeHttpClient()
+    fake.responses["https://example.test/fail"] = HttpResult(
+        response=None,
+        err=ConnectionError("connection refused"),
+    )
 
     source = HttpPostFileSource(retries=2)
+    source._client = fake
+
     with pytest.raises(DownloadError, match="connection refused"):
         source.fetch("https://example.test/fail")
 
@@ -98,55 +96,47 @@ def test_fetch_passes_params() -> None:
     assert source._client.max_retries == 5
     assert source._client.user_agent == "custom-agent/1.0"
 
-    # Default user_agent when not specified
     source2 = HttpPostFileSource()
     assert source2._client.user_agent == "dataciviclab-toolkit/0.1"
 
 
 @pytest.mark.policy
-def test_ssl_fallback_semantics_preserved(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ssl_fallback_semantics_preserved() -> None:
     """ssl_fallback_used=True in HttpResult is transparent to caller."""
-
-    def fake_post(self, url: str, data: dict | None = None, **kwargs):
-        return HttpResult(
-            response=_FakeResponse(200, b"ssl-fallback-data"),
-            err=None,
-            ssl_fallback_used=True,
-        )
-
-    monkeypatch.setattr(HttpClient, "post", fake_post)
+    fake = FakeHttpClient()
+    fake.responses["https://example.test/ssl-expired"] = HttpResult(
+        response=fake_response(200, text="ssl-fallback-data"),
+        err=None,
+        ssl_fallback_used=True,
+    )
 
     source = HttpPostFileSource(retries=1)
-    payload = source.fetch("https://example.test/ssl-expired")
+    source._client = fake
 
+    payload = source.fetch("https://example.test/ssl-expired")
     assert payload == b"ssl-fallback-data"
 
 
 @pytest.mark.policy
-def test_ssl_fallback_failure_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ssl_fallback_failure_propagates() -> None:
     """HttpResult with ssl_fallback_used=False and err → DownloadError."""
-
-    def fake_post(self, url: str, data: dict | None = None, **kwargs):
-        return HttpResult(
-            response=None,
-            err=ConnectionError("fallback failed"),
-            ssl_fallback_used=False,
-        )
-
-    monkeypatch.setattr(HttpClient, "post", fake_post)
+    fake = FakeHttpClient()
+    fake.responses["https://example.test/ssl-fail"] = HttpResult(
+        response=None,
+        err=ConnectionError("fallback failed"),
+        ssl_fallback_used=False,
+    )
 
     source = HttpPostFileSource(retries=1)
+    source._client = fake
+
     with pytest.raises(DownloadError, match="fallback failed"):
         source.fetch("https://example.test/ssl-fail")
 
 
 @pytest.mark.contract
 class TestNonTruncableSampleBytes:
-    """sample_bytes viene ignorato per formati binari non troncabili (POST).
-
-    Regression: --smoke e --sample-bytes troncavano ZIP/parquet/xlsx
-    producendo file corrotti in CI. Vedi toolkit#312.
-    """
+    """sample_bytes ignorato per formati binari non troncabili (POST)."""
 
     @pytest.mark.contract
     @pytest.mark.parametrize(
@@ -159,26 +149,23 @@ class TestNonTruncableSampleBytes:
             ("https://example.test/download", False),
         ],
     )
-    def test_sample_bytes_ignored_for_binary_post(
-        self, url, should_ignore, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_sample_bytes_ignored_for_binary_post(self, url, should_ignore):
         """POST fetch: sample_bytes ignorato per estensioni non troncabili."""
-        results: list[tuple] = []
+        fake = FakeHttpClient()
+        content = (b"a" * 10000 + b"\n").decode()
+        fake.responses[url] = HttpResult(
+            response=fake_response(200, text=content),
+            err=None,
+        )
 
-        def fake_post(self, url: str, data: dict | None = None, **kwargs):
-            headers = kwargs.get("headers")
-            has_range = headers is not None and "Range" in headers
-            results.append((url, data, has_range))
-            content = b"a" * 10000 + b"\n"
-            return HttpResult(response=_FakeResponse(200, content), err=None)
-
-        monkeypatch.setattr(HttpClient, "post", fake_post)
         source = HttpPostFileSource(retries=1)
+        source._client = fake
 
         payload = source.fetch(url, data={"key": "val"}, sample_bytes=5000)
 
         if should_ignore:
-            assert len(payload) == 10001  # full file
-            assert not results[0][2]  # no Range header
+            assert len(payload) == 10001
+            headers = fake.requests[0][2].get("headers", {}) or {}
+            assert "Range" not in headers
         else:
-            assert len(payload) <= 5000  # troncato
+            assert len(payload) <= 5000

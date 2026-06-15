@@ -219,7 +219,6 @@ class TestWriteRunReport:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.contract
 class TestRunFullFailedReport:
     """run_full con run_year che fallisce produce report FAILED e rilancia."""
 
@@ -312,10 +311,14 @@ class TestRunFullFailedReport:
                 dry_run=False,
             )
 
-        # Verifica: report per anno 2023 esiste (fallito)
+        # Verifica: report per anno 2023 esiste con status FAILED
         report_dir = tmp_path / "out" / "data" / "_reports" / "test_fail"
         report_2023 = report_dir / "2023_run_report.json"
         assert report_2023.exists(), "Report per anno fallito non trovato"
+        import json
+
+        loaded = json.loads(report_2023.read_text(encoding="utf-8"))
+        assert loaded["status"] == "FAILED", f"Status atteso FAILED, got {loaded['status']}"
 
         # Verifica: report per 2024 NON esiste (mai eseguito)
         report_2024 = report_dir / "2024_run_report.json"
@@ -355,7 +358,8 @@ class TestFailedReport:
             assert lname in report["layers"]
             assert report["layers"][lname]["validation"]["ok"] is None
         assert report["preflight"]["sources_total"] == 0
-        assert report["status"] is None  # nessun run record su tmp_path
+        # step_results={"run":"failed"} → status="FAILED" (fallback senza run record)
+        assert report["status"] == "FAILED"
 
     @pytest.mark.contract
     def test_failed_report_scritto_su_disco(self, tmp_path: Path) -> None:

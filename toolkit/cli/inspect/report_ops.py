@@ -252,6 +252,13 @@ def build_run_report(
     # --- Run record ---
     record = run_ctx if run_ctx else _get_run_record(root_path, dataset, year)
     run_status = (record or {}).get("status")
+    # Se il run record non esiste (es. run_year solleva eccezione prima
+    # di scriverlo), usa lo step_results come fallback.
+    if run_status is None and step_results:
+        if step_results.get("run") == "failed":
+            run_status = "FAILED"
+        elif step_results.get("run") == "ok":
+            run_status = "SUCCESS"
     run_id = (record or {}).get("run_id")
     duration = (record or {}).get("duration_seconds")
     source_urls = (record or {}).get("source_urls") or []

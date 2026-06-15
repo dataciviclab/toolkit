@@ -920,13 +920,16 @@ def run_full(
     candidate_blocked = results["status"] == "failed" and not dry_flag
 
     # Esecuzione candidate: salva eccezione per rilanciarla DOPO il report.
-    _candidate_exc: BaseException | None = None
+    _candidate_exc: Exception | None = None
     if not candidate_blocked:
         is_mart_only = _is_mart_only_cfg(cfg)
         run_step = "mart" if is_mart_only else "all"
         fail_on_error_flag = bool(cfg.validation.fail_on_error)
 
         for year in selected_years:
+            # Registra anno come tentato PRIMA di run_year(), cosi'
+            # anche un'eccezione produce un report FAILED.
+            results["steps"][str(year)] = {"run": "running", "validate": "running"}
             try:
                 logger.info("Run %s — year=%s", run_step, year)
                 ctx = run_year(
@@ -939,8 +942,9 @@ def run_full(
                     sample_bytes=sample_bytes_final,
                     smoke=smoke,
                 )
-            except BaseException as exc:
+            except Exception as exc:
                 logger.error("Run %s year=%s fallito: %s", run_step, year, exc)
+                results["steps"][str(year)] = {"run": "failed", "validate": "failed"}
                 results["status"] = "failed"
                 _candidate_exc = exc
                 break  # interrompe il loop anni
@@ -1066,7 +1070,7 @@ def run_full(
 
     # Rilancia l'eccezione originale del candidate (preserva traceback)
     if _candidate_exc is not None:
-        raise _candidate_exc
+        raise _candidate_exc from _candidate_exc
 
     if json_output:
         typer.echo(json.dumps(results, indent=2, default=str))

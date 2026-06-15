@@ -13,6 +13,7 @@ from toolkit.clean.validate import run_clean_validation
 from toolkit.core.logging import bind_logger, get_logger
 from toolkit.core.paths import RAW_PROFILE, layer_dataset_dir, layer_year_dir
 from toolkit.core.run_context import RunContext
+from toolkit.core.run_records import get_run_dir, latest_run
 from toolkit.mart.run import run_mart, run_mart_multi_year
 from toolkit.mart.validate import run_mart_validation
 from toolkit.raw.run import run_raw
@@ -52,6 +53,37 @@ def _resolve_sql_path(cfg, rel_path: str | None) -> Path:
 
 def _is_mart_only_cfg(cfg) -> bool:
     return not bool(cfg.clean.sql)
+
+
+def _write_blocked_report(
+    config_path: str,
+    year: int,
+    root: str | Path,
+    dataset: str,
+    run_mode: str,
+    support_datasets: list[dict[str, Any]],
+) -> None:
+    """Scrive un report minimale per un anno non eseguito (candidate bloccato)."""
+    from toolkit.cli.inspect.report_ops import write_run_report
+
+    report = {
+        "dataset": dataset,
+        "config_path": str(config_path),
+        "year": year,
+        "run_id": None,
+        "run_mode": run_mode,
+        "toolkit_version": None,
+        "status": "BLOCKED",
+        "duration_seconds": None,
+        "config_hash": None,
+        "source_urls": [],
+        "readiness": None,
+        "readiness_checks": {"total": 0, "ok": 0, "fail": 0},
+        "preflight": {},
+        "layers": {},
+        "support_datasets": support_datasets,
+    }
+    write_run_report(report, root, dataset, year)
 
 
 def _validate_execution_plan(cfg, step: str) -> list[str]:
@@ -887,30 +919,37 @@ def run_full(
     # Se un support e' fallito, non eseguire il candidate (dipendenza assente)
     candidate_blocked = results["status"] == "failed" and not dry_flag
 
+    # Esecuzione candidate: salva eccezione per rilanciarla DOPO il report.
+    _candidate_exc: Exception | None = None
     if not candidate_blocked:
-        # Mart-only config (compose): non ha raw/clean, solo mart.
-        # run full usa step="mart" e valida solo mart.
         is_mart_only = _is_mart_only_cfg(cfg)
         run_step = "mart" if is_mart_only else "all"
-
         fail_on_error_flag = bool(cfg.validation.fail_on_error)
 
         for year in selected_years:
-            logger.info("Run %s — year=%s", run_step, year)
-            ctx = run_year(
-                cfg,
-                year,
-                step=run_step,
-                dry_run=dry_flag,
-                logger=logger,
-                sample_rows=sample_rows_final,
-                sample_bytes=sample_bytes_final,
-                smoke=smoke,
-            )
+            # Registra anno come tentato PRIMA di run_year(), cosi'
+            # anche un'eccezione produce un report FAILED.
+            results["steps"][str(year)] = {"run": "running", "validate": "running"}
+            try:
+                logger.info("Run %s — year=%s", run_step, year)
+                ctx = run_year(
+                    cfg,
+                    year,
+                    step=run_step,
+                    dry_run=dry_flag,
+                    logger=logger,
+                    sample_rows=sample_rows_final,
+                    sample_bytes=sample_bytes_final,
+                    smoke=smoke,
+                )
+            except Exception as exc:
+                logger.error("Run %s year=%s fallito: %s", run_step, year, exc)
+                results["steps"][str(year)] = {"run": "failed", "validate": "failed"}
+                results["status"] = "failed"
+                _candidate_exc = exc
+                break  # interrompe il loop anni
 
             if not dry_flag:
-                # all_passed dal RunContext — la validazione è già avvenuta
-                # dentro run_year() per ogni layer eseguito.
                 if is_mart_only:
                     all_passed = bool(ctx.validations.get("mart", {}).get("passed", False))
                 else:
@@ -925,8 +964,9 @@ def run_full(
                 if not all_passed and fail_on_error_flag:
                     results["status"] = "failed"
 
-                # Review readiness (capture full result including layers)
-                from toolkit.cli.inspect.readiness_ops import review_readiness as _review_readiness
+                from toolkit.cli.inspect.readiness_ops import (
+                    review_readiness as _review_readiness,
+                )
 
                 readiness = _review_readiness(config, year or None)
                 results["steps"][str(year)]["readiness"] = readiness.get("readiness")
@@ -935,17 +975,102 @@ def run_full(
                 results["steps"][str(year)]["checks_fail"] = readiness.get("fail_count", 0)
                 results["steps"][str(year)]["layers"] = readiness.get("layers", {})
 
-        # Multi-year mart: run once per dataset after per-year processing
-        if not dry_flag and _has_multi_year_mart(cfg):
+        # Multi-year mart (solo se il loop anni e' completo)
+        if _candidate_exc is None and not dry_flag and _has_multi_year_mart(cfg):
             try:
                 _maybe_run_multi_year_mart(
-                    cfg, selected_years, dry_run=False, logger=logger, sampling_active=sample_mode
+                    cfg,
+                    selected_years,
+                    dry_run=False,
+                    logger=logger,
+                    sampling_active=sample_mode,
                 )
                 results["multi_year_mart"] = "ok"
             except Exception as exc:
                 results["multi_year_mart"] = f"failed: {exc}"
                 if fail_on_error_flag:
                     results["status"] = "failed"
+
+    # ── Run report (best-effort: non fa fallire il run) ────────────────────
+    # Eseguito sempre: anche con candidate bloccato, run fallito, o eccezione.
+    try:
+        if not dry_flag:
+            from toolkit.cli.inspect.report_ops import (
+                build_run_report,
+                write_run_report,
+                write_dataset_readme,
+                _all_reports_for_dataset,
+                _derive_overall_status,
+            )
+
+            run_mode = "smoke" if sample_mode else "full"
+
+            # Raccogli info dai support
+            support_info: list[dict[str, Any]] = []
+            if support_entries:
+                for entry in support_entries:
+                    for sy in entry.years:
+                        sup_run_dir = get_run_dir(Path(cfg.root), entry.name, sy)
+                        try:
+                            sup_rec = latest_run(sup_run_dir)
+                        except (FileNotFoundError, OSError):
+                            sup_rec = None
+                        support_info.append(
+                            {
+                                "name": entry.name,
+                                "year": sy,
+                                "status": (sup_rec or {}).get("status"),
+                            }
+                        )
+
+            # Anni effettivamente eseguiti (hanno una voce in results["steps"])
+            attempted_years = set(results["steps"].keys())
+
+            # Genera report solo per gli anni tentati (non per quelli saltati
+            # da un'eccezione o da candidate_blocked), per evitare di
+            # riusare artifact di run precedenti.
+            for year in selected_years:
+                sy = str(year)
+                if sy not in attempted_years:
+                    # Anno non eseguito: scrive report BLOCKED esplicito
+                    # solo se il candidate era bloccato da support.
+                    if candidate_blocked:
+                        _write_blocked_report(
+                            config, year, cfg.root, cfg.dataset, run_mode, support_info
+                        )
+                    continue
+
+                step_data = results["steps"][sy]
+                report = build_run_report(
+                    config_path=config,
+                    year=year,
+                    root=cfg.root,
+                    dataset=cfg.dataset,
+                    preflight=results.get("preflight"),
+                    step_results=step_data,
+                    run_mode=run_mode,
+                    support_datasets=support_info,
+                )
+                write_run_report(report, cfg.root, cfg.dataset, year)
+
+            # Leggi TUTTI i report JSON esistenti su disco
+            # e rigenera il README completo con stato aggregato
+            all_reports = _all_reports_for_dataset(cfg.root, cfg.dataset)
+            if all_reports:
+                agg_status = _derive_overall_status(all_reports)
+                write_dataset_readme(
+                    cfg.root,
+                    cfg.dataset,
+                    all_reports,
+                    overall_status=agg_status,
+                    config_path=config,
+                )
+    except Exception as _report_err:
+        logger.warning("Generazione report saltata: %s", _report_err)
+
+    # Rilancia l'eccezione originale del candidate (preserva traceback)
+    if _candidate_exc is not None:
+        raise _candidate_exc
 
     if json_output:
         typer.echo(json.dumps(results, indent=2, default=str))

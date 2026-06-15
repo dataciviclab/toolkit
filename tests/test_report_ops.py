@@ -18,8 +18,6 @@ from toolkit.cli.inspect.report_ops import (
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.contract
-@pytest.mark.pure_unit
 class TestBuildDatasetReadme:
     """Verifica che il README markdown aggregato abbia la struttura attesa."""
 
@@ -73,12 +71,16 @@ class TestBuildDatasetReadme:
         report.update(overrides)
         return report
 
+    @pytest.mark.contract
+    @pytest.mark.pure_unit
     def test_ha_titolo_e_dataset(self) -> None:
         """Il README contiene titolo e nome dataset."""
         md = build_dataset_readme("test", "/c.yml", [self._make_report(2023)])
         assert "# Run Report: `test`" in md
         assert "/c.yml" in md
 
+    @pytest.mark.contract
+    @pytest.mark.pure_unit
     def test_tabella_ha_tutti_gli_anni(self) -> None:
         """La tabella elenca tutti gli anni presenti."""
         reports = [self._make_report(2023), self._make_report(2024)]
@@ -86,6 +88,8 @@ class TestBuildDatasetReadme:
         assert "| 2023 |" in md
         assert "| 2024 |" in md
 
+    @pytest.mark.contract
+    @pytest.mark.pure_unit
     def test_tabella_mostra_righe_e_warning(self) -> None:
         """La tabella include righe, warning, dimensione file."""
         md = build_dataset_readme("test", "/c.yml", [self._make_report(2023)])
@@ -93,6 +97,8 @@ class TestBuildDatasetReadme:
         assert "2w" in md
         assert "1.0KB" in md or "4.0KB" in md or "4KB" in md
 
+    @pytest.mark.contract
+    @pytest.mark.pure_unit
     def test_sezione_warning_per_anno(self) -> None:
         """Warning compaiono nella sezione dedicata per anno."""
         md = build_dataset_readme("test", "/c.yml", [self._make_report(2023)])
@@ -100,6 +106,8 @@ class TestBuildDatasetReadme:
         assert "colonna X rimossa" in md
         assert "colonna Z rimossa" in md
 
+    @pytest.mark.contract
+    @pytest.mark.pure_unit
     def test_sezione_readiness(self) -> None:
         """La sezione Review Readiness e' presente."""
         md = build_dataset_readme("test", "/c.yml", [self._make_report(2023)])
@@ -107,11 +115,15 @@ class TestBuildDatasetReadme:
         assert "ready" in md
         assert "5/5" in md
 
+    @pytest.mark.contract
+    @pytest.mark.pure_unit
     def test_qualita_nella_tabella(self) -> None:
         """Il quality score compare nella tabella."""
         md = build_dataset_readme("test", "/c.yml", [self._make_report(2023)])
         assert "**88**" in md
 
+    @pytest.mark.contract
+    @pytest.mark.pure_unit
     def test_nessun_warning_silenziato(self) -> None:
         """Report senza warning non genera sezione warning."""
         r = self._make_report(2023)
@@ -122,6 +134,8 @@ class TestBuildDatasetReadme:
         md = build_dataset_readme("test", "/c.yml", [r])
         assert "Warning ed errori" not in md
 
+    @pytest.mark.contract
+    @pytest.mark.pure_unit
     def test_readiness_needs_review(self) -> None:
         """Verdetto needs-review ha icona appropriata."""
         r = self._make_report(
@@ -131,6 +145,8 @@ class TestBuildDatasetReadme:
         assert "needs-review" in md
         assert "4/5" in md
 
+    @pytest.mark.contract
+    @pytest.mark.pure_unit
     def test_readiness_incomplete(self) -> None:
         r = self._make_report(
             2023, readiness="incomplete", readiness_checks={"total": 5, "ok": 2, "fail": 3}
@@ -139,20 +155,25 @@ class TestBuildDatasetReadme:
         assert "incomplete" in md
         assert "2/5" in md
 
+    @pytest.mark.contract
+    @pytest.mark.pure_unit
     def test_status_failed(self) -> None:
         r = self._make_report(2023, status="FAILED")
         md = build_dataset_readme("test", "/c.yml", [r], overall_status="failed")
         assert "FAILED" in md
         assert "failed" in md
 
+    @pytest.mark.contract
+    @pytest.mark.pure_unit
     def test_quality_null_non_mostra_valore(self) -> None:
         r = self._make_report(2023)
         r["preflight"]["quality_score_avg"] = None
         md = build_dataset_readme("test", "/c.yml", [r])
-        # La cella qualita' dovrebbe essere "-"
         lines = [line for line in md.split("\n") if "2023" in line and "|" in line]
         assert any("| - |" in line or "| - " in line for line in lines)
 
+    @pytest.mark.contract
+    @pytest.mark.pure_unit
     def test_support_datasets(self) -> None:
         r = self._make_report(
             2023,
@@ -168,8 +189,8 @@ class TestBuildDatasetReadme:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.contract
 class TestWriteRunReport:
+    @pytest.mark.contract
     def test_write_e_lettura(self, tmp_path: Path) -> None:
         """Scrive un report e verifica che sia JSON valido con i campi base."""
         report = {

@@ -9,6 +9,7 @@ from toolkit.core.support import (
     flatten_support_template_ctx,
     resolve_support_payloads,
     _support_expected_mart_outputs,
+    _support_expected_clean_output,
 )
 
 pytestmark = pytest.mark.policy
@@ -36,6 +37,7 @@ def _make_support_dataset(
     years: list[int] | None = None,
     mart_tables: list[str] | None = None,
     create_mart_outputs: bool = False,
+    create_clean_output: bool = False,
 ) -> Path:
     """Create a minimal support dataset project with config, mart dir, and optional parquet outputs."""
     years = years or [2024]
@@ -65,6 +67,12 @@ def _make_support_dataset(
             mart_dir.mkdir(parents=True, exist_ok=True)
             for table in mart_tables:
                 (mart_dir / f"{table}.parquet").write_bytes(b"")
+
+    if create_clean_output:
+        for year in years:
+            clean_dir = ds_dir / "data" / "clean" / name / str(year)
+            clean_dir.mkdir(parents=True, exist_ok=True)
+            (clean_dir / f"{name}_{year}_clean.parquet").write_bytes(b"")
 
     return config_path
 
@@ -127,6 +135,33 @@ class TestSupportExpectedMartOutputs:
         assert outputs == []
 
 
+# --- _support_expected_clean_output ---
+
+
+class TestSupportExpectedCleanOutput:
+    def test_single_year(self, tmp_path: Path):
+        ds_dir = tmp_path / "ds"
+        ds_dir.mkdir()
+        cfg = _fake_cfg(
+            root=ds_dir,
+            dataset="ds",
+            years=[2024],
+            mart={"tables": [{"name": "t", "sql": "sql/t.sql"}]},
+        )
+        path = _support_expected_clean_output(cfg, 2024)
+        assert path.name == "ds_2024_clean.parquet"
+        assert "clean" in str(path)
+
+    def test_path_contains_dataset_and_year(self, tmp_path: Path):
+        ds_dir = tmp_path / "myds"
+        ds_dir.mkdir()
+        cfg = _fake_cfg(root=ds_dir, dataset="myds", years=[2023], mart={"tables": []})
+        path = _support_expected_clean_output(cfg, 2023)
+        assert "myds" in str(path)
+        assert "2023" in str(path)
+        assert path.suffix == ".parquet"
+
+
 # --- resolve_support_payloads: happy paths ---
 
 
@@ -187,6 +222,33 @@ class TestResolveSupportPayloadsHappy:
         assert len(yr["outputs"]) == 1
         assert yr["existing_outputs"] == []
         assert yr["all_outputs_exist"] is False
+
+    def test_support_payload_includes_clean(self, tmp_path: Path):
+        """resolve_support_payloads deve includere il campo clean."""
+        config_path = _make_support_dataset(
+            tmp_path, create_mart_outputs=True, create_clean_output=True
+        )
+        entries = [_make_support_entry(config_path)]
+        result = resolve_support_payloads(entries, require_exists=True)
+
+        assert len(result) == 1
+        payload = result[0]
+        assert "clean" in payload
+        assert payload["clean"] is not None
+        assert payload["clean"].endswith("support_ds_2024_clean.parquet")
+
+    def test_support_payload_clean_is_none_when_missing(self, tmp_path: Path):
+        """Senza clean output, clean deve essere None."""
+        config_path = _make_support_dataset(
+            tmp_path, create_mart_outputs=True, create_clean_output=False
+        )
+        entries = [_make_support_entry(config_path)]
+        result = resolve_support_payloads(entries, require_exists=True)
+
+        assert len(result) == 1
+        payload = result[0]
+        assert "clean" in payload
+        assert payload["clean"] is None
 
     def test_none_entries_returns_empty(self):
         result = resolve_support_payloads(None, require_exists=True)
@@ -261,11 +323,13 @@ class TestFlattenSupportTemplateCtx:
                 "name": "my_support",
                 "outputs": ["/path/table_a.parquet"],
                 "mart": "/path/table_a.parquet",
+                "clean": "/path/clean.parquet",
             }
         ]
         ctx = flatten_support_template_ctx(payloads)
         assert ctx["support.my_support.outputs"] == ["/path/table_a.parquet"]
         assert ctx["support.my_support.mart"] == "/path/table_a.parquet"
+        assert ctx["support.my_support.clean"] == "/path/clean.parquet"
 
     def test_multiple_payloads(self):
         payloads = [
@@ -273,18 +337,22 @@ class TestFlattenSupportTemplateCtx:
                 "name": "alpha",
                 "outputs": ["/a/table.parquet"],
                 "mart": "/a/table.parquet",
+                "clean": "/a/clean.parquet",
             },
             {
                 "name": "beta",
                 "outputs": ["/b/t1.parquet", "/b/t2.parquet"],
                 "mart": "/b/t1.parquet",
+                "clean": None,
             },
         ]
         ctx = flatten_support_template_ctx(payloads)
         assert ctx["support.alpha.outputs"] == ["/a/table.parquet"]
         assert ctx["support.alpha.mart"] == "/a/table.parquet"
+        assert ctx["support.alpha.clean"] == "/a/clean.parquet"
         assert ctx["support.beta.outputs"] == ["/b/t1.parquet", "/b/t2.parquet"]
         assert ctx["support.beta.mart"] == "/b/t1.parquet"
+        assert ctx["support.beta.clean"] is None
 
     def test_empty_payloads(self):
         ctx = flatten_support_template_ctx([])
@@ -296,11 +364,13 @@ class TestFlattenSupportTemplateCtx:
                 "name": "empty_support",
                 "outputs": [],
                 "mart": None,
+                "clean": None,
             }
         ]
         ctx = flatten_support_template_ctx(payloads)
         assert ctx["support.empty_support.outputs"] == []
         assert ctx["support.empty_support.mart"] is None
+        assert ctx["support.empty_support.clean"] is None
 
 
 # --- Integration: resolve + flatten ---
@@ -308,15 +378,19 @@ class TestFlattenSupportTemplateCtx:
 
 class TestResolveAndFlatten:
     def test_end_to_end(self, tmp_path: Path):
-        config_path = _make_support_dataset(tmp_path, create_mart_outputs=True)
+        config_path = _make_support_dataset(
+            tmp_path, create_mart_outputs=True, create_clean_output=True
+        )
         entries = [_make_support_entry(config_path)]
         resolved = resolve_support_payloads(entries, require_exists=True)
         ctx = flatten_support_template_ctx(resolved)
 
         assert "support.my_support.outputs" in ctx
         assert "support.my_support.mart" in ctx
+        assert "support.my_support.clean" in ctx
         assert len(ctx["support.my_support.outputs"]) == 1
         assert ctx["support.my_support.mart"].endswith("table_a.parquet")
+        assert ctx["support.my_support.clean"].endswith("support_ds_2024_clean.parquet")
 
     def test_no_flatten_on_empty_resolve(self):
         resolved = resolve_support_payloads(None, require_exists=True)

@@ -13,6 +13,11 @@ def _support_expected_mart_outputs(cfg, year: int) -> list[Path]:
     return [mart_dir / f"{name}.parquet" for name in table_names]
 
 
+def _support_expected_clean_output(cfg, year: int) -> Path:
+    clean_dir = layer_year_dir(cfg.root, "clean", cfg.dataset, year)
+    return clean_dir / f"{cfg.dataset}_{year}_clean.parquet"
+
+
 def resolve_support_payloads(
     support_entries: list[dict[str, Any]] | None,
     *,
@@ -37,6 +42,7 @@ def resolve_support_payloads(
             expected_paths = _support_expected_mart_outputs(support_cfg, year)
             output_paths = [str(path) for path in expected_paths]
             existing_paths = [str(path) for path in expected_paths if path.exists()]
+            clean_path_expected = _support_expected_clean_output(support_cfg, year)
             all_outputs_exist = len(output_paths) > 0 and len(existing_paths) == len(output_paths)
             if require_exists and not output_paths:
                 raise ValueError(
@@ -61,9 +67,13 @@ def resolve_support_payloads(
                     "outputs": output_paths,
                     "existing_outputs": existing_paths,
                     "all_outputs_exist": all_outputs_exist,
+                    "clean": str(clean_path_expected) if clean_path_expected.exists() else None,
                 }
             )
             all_outputs.extend(existing_paths if require_exists else output_paths)
+
+        # Primo clean disponibile tra gli anni risolti (per template)
+        first_clean = next((yp["clean"] for yp in year_payloads if yp["clean"] is not None), None)
 
         resolved.append(
             {
@@ -74,6 +84,7 @@ def resolve_support_payloads(
                 "years_resolved": year_payloads,
                 "outputs": all_outputs,
                 "mart": all_outputs[0] if all_outputs else None,
+                "clean": first_clean,
             }
         )
     return resolved
@@ -85,4 +96,5 @@ def flatten_support_template_ctx(payloads: list[dict[str, Any]]) -> dict[str, An
         name = payload["name"]
         ctx[f"support.{name}.outputs"] = payload["outputs"]
         ctx[f"support.{name}.mart"] = payload["mart"]
+        ctx[f"support.{name}.clean"] = payload["clean"]
     return ctx

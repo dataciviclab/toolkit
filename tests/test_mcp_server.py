@@ -351,11 +351,7 @@ def test_csv_preview_ragged_csv_succeeds_with_robust_read(tmp_path: Path) -> Non
 
 
 def test_toolkit_list_candidates_passes_stage_and_filter(monkeypatch: pytest.MonkeyPatch) -> None:
-    """list_candidates must pass stage AND status_filter through to the impl.
-
-    Nota: guard() wrappa i non-dict in ``{"result": ...}``, quindi
-    il consumer MCP vedra' ``{"result": [{"slug": ..., ...}]}``.
-    """
+    """list_candidates must forward stage and status_filter to the impl."""
     calls: dict[str, object] = {}
 
     def fake_impl(stage: str, status_filter: str | None) -> list[dict[str, object]]:
@@ -367,14 +363,13 @@ def test_toolkit_list_candidates_passes_stage_and_filter(monkeypatch: pytest.Mon
 
     # Test con status_filter
     result = mcp_server.toolkit_list_candidates("candidates", "SUCCESS")
-    assert "result" in result
-    assert result["result"][0]["stage"] == "candidates"
-    assert result["result"][0]["status"] == "SUCCESS"
+    assert result[0]["stage"] == "candidates"
+    assert result[0]["status"] == "SUCCESS"
     assert calls == {"stage": "candidates", "status_filter": "SUCCESS"}
 
     # Test con status_filter=None
     result2 = mcp_server.toolkit_list_candidates("all", None)
-    assert result2["result"][0]["status"] is None
+    assert result2[0]["status"] is None
 
 
 def test_toolkit_dataset_info_passes_config_path(monkeypatch: pytest.MonkeyPatch) -> None:

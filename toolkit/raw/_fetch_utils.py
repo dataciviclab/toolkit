@@ -108,6 +108,12 @@ def _register_fetch(stype: str):
 def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
     src = registry.create(stype, **(client or {}))
     sample_bytes = formatted_args.get("sample_bytes")
+    if formatted_args.get("download_all", False):
+        return src.fetch_all(
+            formatted_args["portal_url"],
+            str(formatted_args["dataset_id"]),
+            sample_bytes=sample_bytes,
+        )
     return src.fetch(
         formatted_args["portal_url"],
         str(formatted_args["resource_id"])

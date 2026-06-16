@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import zipfile
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
@@ -232,6 +233,108 @@ class CkanSource:
         except DownloadError:
             pass
         return None
+
+    @staticmethod
+    def _is_csv_resource(resource: dict) -> bool:
+        """True if the resource is tabular CSV data (including CSV inside ZIP).
+
+        Uses the CKAN ``format`` field rather than URL extension, because
+        portals like ANAC tag JSON/TTL bundles as "JSON"/"TTL" even when
+        the download URL ends with ``.zip``.
+
+        Excludes metadata/log resources (e.g. ``*logCsv*`` on ANAC) that
+        happen to have format=CSV but are not actual data tables.
+        """
+        fmt = str(resource.get("format") or "").lower()
+        if fmt not in ("csv", "zip", "text/csv"):
+            return False
+        name = str(resource.get("name") or "").lower()
+        if "log" in name:
+            return False
+        return True
+
+    @staticmethod
+    def _extract_csv_from_zip(data: bytes) -> bytes:
+        """Extract first CSV from a ZIP archive. Returns the CSV content as bytes."""
+        zf = zipfile.ZipFile(io.BytesIO(data))
+        csv_members = [n for n in zf.namelist() if n.endswith(".csv")]
+        if not csv_members:
+            raise DownloadError("ZIP archive contains no CSV file")
+        return zf.read(csv_members[0])
+
+    def fetch_all(
+        self,
+        portal_url: str,
+        dataset_id: str,
+        *,
+        prefer_datastore: bool = True,
+        sample_bytes: int | None = None,
+    ) -> tuple[bytes, str]:
+        """Fetch ALL CSV/ZIP resources from a CKAN dataset and concatenate them into one CSV.
+
+        Useful for datasets with monthly files (e.g. ANAC CIG) where you need
+        all resources, not just the best-ranked one.
+
+        Returns (concatenated_csv_bytes, dataset_id).
+        """
+        api_url = _normalize_package_show_url(portal_url)
+        metadata = self._get_json(api_url, {"id": dataset_id})
+        result = metadata.get("result") or {}
+        resources = result.get("resources") or []
+        if not resources:
+            raise DownloadError(f"CKAN package_show returned no resources for dataset {dataset_id}")
+
+        csv_resources = [r for r in resources if self._is_csv_resource(r)]
+        if not csv_resources:
+            raise DownloadError(
+                f"No CSV/ZIP resources found in dataset {dataset_id} "
+                f"(available formats: {set(r.get('format', '?').upper() for r in resources)})"
+            )
+
+        all_chunks: list[bytes] = []
+        downloaded = 0
+        for i, resource in enumerate(csv_resources):
+            res_name = resource.get("name", f"resource_{i}")
+            try:
+                raw, url = self._try_resource(
+                    resource, prefer_datastore, portal_url, api_url, sample_bytes=sample_bytes
+                )
+            except DownloadError:
+                continue
+            if raw is None:
+                continue
+
+            # Extract CSV if the downloaded content is a ZIP archive
+            # (many CKAN portals serve CSV files inside ZIP even when
+            #  the format field says "CSV", e.g. ANAC).
+            if raw[:2] == b"PK":
+                try:
+                    raw = self._extract_csv_from_zip(raw)
+                except DownloadError:
+                    # valid ZIP without CSV inside → skip this resource
+                    continue
+
+            # Skip header on subsequent files
+            if i == 0:
+                all_chunks.append(raw)
+            else:
+                first_nl = raw.find(b"\n")
+                if first_nl != -1:
+                    all_chunks.append(raw[first_nl + 1 :])
+                else:
+                    all_chunks.append(raw)
+            downloaded += 1
+
+        if not all_chunks:
+            raise DownloadError(f"Failed to download any resource from dataset {dataset_id}")
+
+        # Concatenate all CSV chunks. Each chunk already ends with its own
+        # newline (``\\n`` or ``\\r\\n``), so we use ``b""`` join — not
+        # ``b"\\n"`` — to avoid doubling line terminators.
+        # Return a synthetic URL ending with .csv so the toolkit infers the
+        # right extension.
+        synthetic_url = f"{dataset_id}_all.csv"
+        return b"".join(all_chunks), synthetic_url
 
     def fetch(
         self,

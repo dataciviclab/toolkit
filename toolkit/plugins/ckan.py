@@ -294,7 +294,6 @@ class CkanSource:
         all_chunks: list[bytes] = []
         downloaded = 0
         for i, resource in enumerate(csv_resources):
-            res_name = resource.get("name", f"resource_{i}")
             try:
                 raw, url = self._try_resource(
                     resource, prefer_datastore, portal_url, api_url, sample_bytes=sample_bytes

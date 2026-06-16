@@ -248,8 +248,10 @@ class CkanSource:
         fmt = str(resource.get("format") or "").lower()
         if fmt not in ("csv", "zip", "text/csv"):
             return False
-        name = str(resource.get("name") or "").lower()
-        if "log" in name:
+        name_lower = str(resource.get("name") or "").lower()
+        # Exclude manifest/log resources that happen to have format=CSV
+        # but are not actual data tables. ANAC example: ``cig-2025_csv_logCsv``.
+        if "logcsv" in name_lower:
             return False
         return True
 
@@ -293,15 +295,14 @@ class CkanSource:
 
         all_chunks: list[bytes] = []
         downloaded = 0
-        for i, resource in enumerate(csv_resources):
-            try:
-                raw, url = self._try_resource(
-                    resource, prefer_datastore, portal_url, api_url, sample_bytes=sample_bytes
-                )
-            except DownloadError:
+        for resource in csv_resources:
+            outcome = self._try_resource(
+                resource, prefer_datastore, portal_url, api_url, sample_bytes=sample_bytes
+            )
+            if outcome is None:
                 continue
-            if raw is None:
-                continue
+
+            raw, _url = outcome
 
             # Extract CSV if the downloaded content is a ZIP archive
             # (many CKAN portals serve CSV files inside ZIP even when
@@ -313,8 +314,9 @@ class CkanSource:
                     # valid ZIP without CSV inside → skip this resource
                     continue
 
-            # Skip header on subsequent files
-            if i == 0:
+            # Skip header on subsequent files (use ``downloaded`` counter,
+            # not enumerate index, because earlier resources may have failed).
+            if downloaded == 0:
                 all_chunks.append(raw)
             else:
                 first_nl = raw.find(b"\n")

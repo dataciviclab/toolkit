@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from lab_connectors.http import HttpResult
-from lab_connectors.testing import FakeHttpClient, fake_response
+from lab_connectors.testing import FakeHttpClient, _FakeResponse, fake_response
 
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.ckan import CkanSource
@@ -574,3 +574,296 @@ def test_ckan_datastore_search_partial_page():
     assert lines[-1] == "6,r-6"
     ds_calls = [r for r in fake.requests if "datastore_search" in r[1]]
     assert len(ds_calls) == 4, f"Expected 4 API calls (capped at 2/page), got {len(ds_calls)}"
+
+
+# ---------------------------------------------------------------------------
+# fetch_all — download_all support
+# ---------------------------------------------------------------------------
+
+
+def _all_resources_package(package_name: str, resources: list[dict]) -> HttpResult:
+    """Helper: build a successful package_show response with given resources."""
+    return HttpResult(
+        response=fake_response(
+            200,
+            json_data={
+                "success": True,
+                "result": {"resources": resources},
+            },
+        ),
+        err=None,
+    )
+
+
+def _csv_resource(name: str, format_: str = "CSV") -> dict:
+    """Helper: build a CKAN resource dict pointing to a CSV URL."""
+    return {
+        "id": f"id-{name}",
+        "name": name,
+        "format": format_,
+        "url": f"https://dl.example.org/{name}.zip",
+    }
+
+
+def test_fetch_all_concatenates_two_csvs():
+    """Two CSV resources → one concatenated CSV with header from first only."""
+    fake = FakeHttpClient()
+    fake.responses[
+        "https://portal.example.org/api/3/action/package_show"
+    ] = _all_resources_package(
+        "test-pkg",
+        [
+            _csv_resource("m_2025_01", "CSV"),
+            _csv_resource("m_2025_02", "CSV"),
+        ],
+    )
+    # First CSV
+    fake.responses["https://dl.example.org/m_2025_01.zip"] = HttpResult(
+        response=fake_response(200, text="a,b,c\n1,2,3\n4,5,6\n"),
+        err=None,
+    )
+    # Second CSV
+    fake.responses["https://dl.example.org/m_2025_02.zip"] = HttpResult(
+        response=fake_response(200, text="a,b,c\n7,8,9\n"),
+        err=None,
+    )
+
+    source = CkanSource()
+    source._client = fake
+
+    payload, origin = source.fetch_all("https://portal.example.org/api/3", "test-pkg")
+
+    assert origin == "test-pkg_all.csv"
+    text = payload.decode("utf-8").rstrip("\n")
+    lines = text.split("\n")
+    assert lines[0] == "a,b,c"  # header from first file
+    assert lines[1] == "1,2,3"
+    assert lines[2] == "4,5,6"
+    assert lines[3] == "7,8,9"  # second file WITHOUT duplicate header
+    assert len(lines) == 4
+
+
+def test_fetch_all_first_resource_fails_fallback_correct():
+    """First resource fails → second succeeds → header is from second."""
+    fake = FakeHttpClient()
+    fake.responses[
+        "https://portal.example.org/api/3/action/package_show"
+    ] = _all_resources_package(
+        "test-pkg",
+        [
+            _csv_resource("m_2025_01", "CSV"),
+            _csv_resource("m_2025_02", "CSV"),
+        ],
+    )
+    # First fails
+    fake.responses["https://dl.example.org/m_2025_01.zip"] = HttpResult(
+        response=fake_response(404),
+        err=None,
+    )
+    # Second succeeds
+    fake.responses["https://dl.example.org/m_2025_02.zip"] = HttpResult(
+        response=fake_response(200, text="x,y\n10,20\n30,40\n"),
+        err=None,
+    )
+
+    source = CkanSource()
+    source._client = fake
+
+    payload, origin = source.fetch_all("https://portal.example.org/api/3", "test-pkg")
+
+    text = payload.decode("utf-8").rstrip("\n")
+    lines = text.split("\n")
+    assert lines[0] == "x,y"  # header from the only successfully downloaded file
+    assert lines[1] == "10,20"
+    assert lines[2] == "30,40"
+    assert len(lines) == 3
+
+
+class _BinaryFakeResponse(_FakeResponse):
+    """Fake response with arbitrary bytes content (for ZIP, etc.).
+
+    ``_FakeResponse`` derives ``content`` from ``text`` via UTF-8,
+    which corrupts binary payloads. This subclass ensures ``content``
+    returns the exact bytes passed.
+    """
+
+    def __init__(self, status_code: int, binary_content: bytes):
+        super().__init__(status_code=status_code)
+        self._binary_content = binary_content
+        self._text = binary_content.decode("latin-1")
+
+    @property
+    def content(self) -> bytes:
+        return self._binary_content
+
+
+def test_fetch_all_zip_with_csv():
+    """Resource returns ZIP → CSV is extracted and concatenated correctly."""
+    import io
+    import zipfile
+
+    def build_zip(csv_text: str) -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("data.csv", csv_text)
+        return buf.getvalue()
+
+    fake = FakeHttpClient()
+    fake.responses[
+        "https://portal.example.org/api/3/action/package_show"
+    ] = _all_resources_package(
+        "test-pkg",
+        [
+            _csv_resource("m_01", "CSV"),
+            _csv_resource("m_02", "CSV"),
+        ],
+    )
+    fake.responses["https://dl.example.org/m_01.zip"] = HttpResult(
+        response=_BinaryFakeResponse(200, build_zip("a,b\n1,2\n3,4\n")), err=None
+    )
+    fake.responses["https://dl.example.org/m_02.zip"] = HttpResult(
+        response=_BinaryFakeResponse(200, build_zip("a,b\n5,6\n")), err=None
+    )
+
+    source = CkanSource()
+    source._client = fake
+
+    payload, origin = source.fetch_all("https://portal.example.org/api/3", "test-pkg")
+
+    text = payload.decode("utf-8").rstrip("\n")
+    lines = text.split("\n")
+    assert lines[0] == "a,b"
+    assert lines[1] == "1,2"
+    assert lines[2] == "3,4"
+    assert lines[3] == "5,6"
+
+
+def test_fetch_all_zip_without_csv_skipped():
+    """Resource is ZIP but contains no CSV → resource is skipped, not fatal."""
+    import io
+    import zipfile
+
+    def build_zip(content_map: dict[str, str]) -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name, text in content_map.items():
+                zf.writestr(name, text)
+        return buf.getvalue()
+
+    fake = FakeHttpClient()
+    fake.responses[
+        "https://portal.example.org/api/3/action/package_show"
+    ] = _all_resources_package(
+        "test-pkg",
+        [
+            _csv_resource("m_01", "CSV"),
+            _csv_resource("m_02", "CSV"),
+        ],
+    )
+    fake.responses["https://dl.example.org/m_01.zip"] = HttpResult(
+        response=_BinaryFakeResponse(200, build_zip({"data.json": '{"a":1}'})),
+        err=None,
+    )
+    fake.responses["https://dl.example.org/m_02.zip"] = HttpResult(
+        response=_BinaryFakeResponse(200, build_zip({"data.csv": "a,b\n7,8\n"})),
+        err=None,
+    )
+
+    source = CkanSource()
+    source._client = fake
+
+    payload, origin = source.fetch_all("https://portal.example.org/api/3", "test-pkg")
+
+    text = payload.decode("utf-8").rstrip("\n")
+    lines = text.split("\n")
+    assert len(lines) == 2
+    assert lines[0] == "a,b"
+    assert lines[1] == "7,8"
+
+
+def test_fetch_all_log_resources_excluded():
+    """Resource with ``logcsv`` in name is excluded from CSV candidates."""
+    fake = FakeHttpClient()
+    fake.responses[
+        "https://portal.example.org/api/3/action/package_show"
+    ] = _all_resources_package(
+        "test-pkg",
+        [
+            _csv_resource("my_csv_logCsv", "CSV"),  # should be excluded
+            _csv_resource("m_2025_01", "CSV"),
+        ],
+    )
+    fake.responses["https://dl.example.org/m_2025_01.zip"] = HttpResult(
+        response=fake_response(200, text="x\n1\n"), err=None
+    )
+
+    source = CkanSource()
+    source._client = fake
+
+    payload, origin = source.fetch_all("https://portal.example.org/api/3", "test-pkg")
+
+    text = payload.decode("utf-8").rstrip("\n")
+    lines = text.split("\n")
+    assert lines == ["x", "1"]  # only the non-log resource
+
+
+def test_fetch_all_no_csv_resources_raises():
+    """Dataset has zero CSV resources → raises DownloadError."""
+    fake = FakeHttpClient()
+    fake.responses[
+        "https://portal.example.org/api/3/action/package_show"
+    ] = _all_resources_package(
+        "test-pkg",
+        [
+            {"id": "r1", "name": "data", "format": "JSON", "url": "https://dl.example.org/d.json"},
+        ],
+    )
+
+    source = CkanSource()
+    source._client = fake
+
+    with pytest.raises(DownloadError, match="No CSV/ZIP resources found"):
+        source.fetch_all("https://portal.example.org/api/3", "test-pkg")
+
+
+def test_fetch_all_no_resources_raises():
+    """Dataset has zero resources → raises DownloadError."""
+    fake = FakeHttpClient()
+    fake.responses[
+        "https://portal.example.org/api/3/action/package_show"
+    ] = HttpResult(
+        response=fake_response(200, json_data={"success": True, "result": {"resources": []}}),
+        err=None,
+    )
+
+    source = CkanSource()
+    source._client = fake
+
+    with pytest.raises(DownloadError, match="returned no resources"):
+        source.fetch_all("https://portal.example.org/api/3", "test-pkg")
+
+
+def test_fetch_all_all_resources_fail_raises():
+    """All CSV resources fail to download → raises DownloadError."""
+    fake = FakeHttpClient()
+    fake.responses[
+        "https://portal.example.org/api/3/action/package_show"
+    ] = _all_resources_package(
+        "test-pkg",
+        [
+            _csv_resource("m_01", "CSV"),
+            _csv_resource("m_02", "CSV"),
+        ],
+    )
+    fake.responses["https://dl.example.org/m_01.zip"] = HttpResult(
+        response=fake_response(500), err=None
+    )
+    fake.responses["https://dl.example.org/m_02.zip"] = HttpResult(
+        response=fake_response(500), err=None
+    )
+
+    source = CkanSource()
+    source._client = fake
+
+    with pytest.raises(DownloadError, match="Failed to download any resource"):
+        source.fetch_all("https://portal.example.org/api/3", "test-pkg")

@@ -25,7 +25,6 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_schema_diff",
         "toolkit_csv_preview",
         "toolkit_list_candidates",
-        "toolkit_dataset_info",
         "toolkit_clean_preview",
         "toolkit_raw_preview",
         "toolkit_layer",
@@ -35,8 +34,6 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_infer_topic",
         "toolkit_ckan_package_show",
         "toolkit_html_extract_links",
-        "toolkit_list_ckan_datasets",
-        "toolkit_list_sdmx_dataflows",
         "toolkit_sparql_query",
         "toolkit_preview_url",
         "toolkit_validate_config",
@@ -194,39 +191,6 @@ def test_toolkit_sparql_query_forwards_params(monkeypatch: pytest.MonkeyPatch) -
     }
 
 
-def test_toolkit_list_ckan_datasets_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: dict = {}
-
-    def fake_impl(portal_url: str, query: str | None, rows: int, timeout: int) -> dict:
-        calls.update(portal_url=portal_url, query=query, rows=rows, timeout=timeout)
-        return {"count": 10, "datasets": []}
-
-    monkeypatch.setattr(mcp_server, "list_ckan_datasets_impl", fake_impl)
-    result = mcp_server.toolkit_list_ckan_datasets(
-        "https://dati.gov.it/opendata", query="pensioni", rows=50, timeout=25
-    )
-    assert result == {"count": 10, "datasets": []}
-    assert calls == {
-        "portal_url": "https://dati.gov.it/opendata",
-        "query": "pensioni",
-        "rows": 50,
-        "timeout": 25,
-    }
-
-
-def test_toolkit_list_sdmx_dataflows_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: dict = {}
-
-    def fake_impl(agency: str, timeout: int) -> dict:
-        calls.update(agency=agency, timeout=timeout)
-        return {"agency": "IT1", "returned": 5, "dataflows": []}
-
-    monkeypatch.setattr(mcp_server, "list_sdmx_dataflows_impl", fake_impl)
-    result = mcp_server.toolkit_list_sdmx_dataflows(agency="IT1", timeout=20)
-    assert result == {"agency": "IT1", "returned": 5, "dataflows": []}
-    assert calls == {"agency": "IT1", "timeout": 20}
-
-
 def test_toolkit_probe_url_error_has_error_code(monkeypatch: pytest.MonkeyPatch) -> None:
     from lab_connectors.mcp import ErrorCode as LabErrorCode
     from toolkit.mcp.errors import ToolkitClientError
@@ -373,21 +337,6 @@ def test_toolkit_list_candidates_passes_stage_and_filter(monkeypatch: pytest.Mon
     # Test con status_filter=None
     result2 = mcp_server.toolkit_list_candidates("all", None)
     assert result2["candidates"][0]["status"] is None
-
-
-def test_toolkit_dataset_info_passes_config_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    """dataset_info must pass config_path to the impl."""
-    calls: dict[str, object] = {}
-
-    def fake_impl(config_path: str) -> dict[str, object]:
-        calls["config_path"] = config_path
-        return {"dataset": "test"}
-
-    monkeypatch.setattr(mcp_server, "dataset_info_impl", fake_impl)
-    result = mcp_server.toolkit_dataset_info("some/path/dataset.yml")
-
-    assert result["dataset"] == "test"
-    assert calls == {"config_path": "some/path/dataset.yml"}
 
 
 def test_toolkit_clean_preview_passes_params(monkeypatch: pytest.MonkeyPatch) -> None:

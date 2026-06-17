@@ -23,7 +23,6 @@ from toolkit.mcp.cli_adapter import inspect_paths
 from toolkit.mcp.schema_ops import (
     clean_preview,
     csv_preview,
-    dataset_info,
     list_runs,
     raw_preview,
     raw_profile,
@@ -42,8 +41,6 @@ from toolkit.mcp.scout_ops import (
     mcp_ckan_package_show,
     mcp_html_extract_links,
     mcp_infer_topic,
-    mcp_list_ckan_datasets,
-    mcp_list_sdmx_dataflows,
     mcp_preview_url,
     mcp_probe_url,
     mcp_probe_url_routed,

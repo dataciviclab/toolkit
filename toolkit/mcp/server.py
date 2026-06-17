@@ -28,15 +28,12 @@ from toolkit.core.dataset_loader import validate_config as _validate_config_impl
 from .toolkit_client import (
     clean_preview as clean_preview_impl,
     csv_preview as csv_preview_impl,
-    dataset_info as dataset_info_impl,
     inspect_paths as inspect_paths_impl,
     list_candidates as list_candidates_impl,
     list_runs as list_runs_impl,
     mcp_ckan_package_show as ckan_package_show_impl,
     mcp_html_extract_links as html_extract_links_impl,
     mcp_infer_topic as infer_topic_impl,
-    mcp_list_ckan_datasets as list_ckan_datasets_impl,
-    mcp_list_sdmx_dataflows as list_sdmx_dataflows_impl,
     mcp_preview_url as preview_url_impl,
     mcp_probe_url as probe_url_impl,
     mcp_probe_url_routed as probe_url_routed_impl,
@@ -137,14 +134,6 @@ def toolkit_list_candidates(
         return result
     # Altrimenti wrappa la lista in un dict per structured_output=True
     return {"candidates": result, "count": len(result) if isinstance(result, list) else 0}
-
-
-@mcp.tool(
-    description="Info di base da un dataset.yml: fonte, URL, anni, tabelle mart, support datasets.",
-    structured_output=True,
-)
-def toolkit_dataset_info(config_path: str) -> dict[str, Any]:
-    return guard_timed(dataset_info_impl, "toolkit_dataset_info", config_path)
 
 
 @mcp.tool(
@@ -368,34 +357,6 @@ def toolkit_ckan_package_show(
     return guard_timed(
         ckan_package_show_impl, "toolkit_ckan_package_show", endpoint, package_id, timeout
     )
-
-
-@mcp.tool(
-    description="Elenca i dataset di un portale CKAN via API package_search. "
-    "Accetta portal_url, query testuale opzionale (Solr), e numero massimo di risultati.",
-    structured_output=True,
-)
-def toolkit_list_ckan_datasets(
-    portal_url: str,
-    query: str | None = None,
-    rows: int = 100,
-    timeout: int = 30,
-) -> dict[str, Any]:
-    return guard_timed(
-        list_ckan_datasets_impl, "toolkit_list_ckan_datasets", portal_url, query, rows, timeout
-    )
-
-
-@mcp.tool(
-    description="Elenca i dataflow SDMX disponibili per un'agenzia SDMX. "
-    "Default: IT1 (ISTAT). Restituisce id, nome, agency_id e versione.",
-    structured_output=True,
-)
-def toolkit_list_sdmx_dataflows(
-    agency: str = "IT1",
-    timeout: int = 30,
-) -> dict[str, Any]:
-    return guard_timed(list_sdmx_dataflows_impl, "toolkit_list_sdmx_dataflows", agency, timeout)
 
 
 @mcp.tool(

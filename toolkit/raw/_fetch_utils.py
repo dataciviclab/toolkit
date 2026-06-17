@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-from toolkit.core.exceptions import DownloadError
 from toolkit.core.registry import registry
 
 
@@ -126,52 +125,6 @@ def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, 
         else None,
         sample_bytes=sample_bytes,
     )
-
-
-@_register_fetch("script")
-def _fetch_script(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
-    """Execute a script command and read its output as the raw data.
-
-    The script is run in a subprocess inside the candidate root directory.
-    ``{year}`` placeholders in ``command`` and ``output`` are resolved
-    before execution.
-
-    Expected config::
-
-        raw:
-          sources:
-            - type: script
-              args:
-                command: "python scripts/fetch_anac_year.py {year}"
-                output: "anac_{year}.csv"
-    """
-    import subprocess
-
-    command: str = formatted_args.get("command", "")
-    if not command:
-        raise DownloadError("script source requires a 'command' in args")
-
-    output_path = Path(formatted_args.get("output", "output.csv"))
-    candidate_root = Path.cwd()
-
-    result = subprocess.run(
-        command,
-        shell=True,
-        capture_output=True,
-        text=True,
-        timeout=600,
-        cwd=candidate_root,
-    )
-    if result.returncode != 0:
-        stderr_preview = result.stderr[:500] if result.stderr else "(no stderr)"
-        raise DownloadError(f"Script failed (exit {result.returncode}): {stderr_preview}")
-
-    output_abs = candidate_root / output_path
-    if not output_abs.exists():
-        raise DownloadError(f"Script did not produce expected output file: {output_abs}")
-
-    payload = output_abs.read_bytes()
-    return payload, str(output_path)
 
 
 @_register_fetch("sdmx")

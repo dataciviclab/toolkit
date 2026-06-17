@@ -14,9 +14,6 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 - `toolkit_inspect_paths(config_path, year=0)` — path contract + run metadata (run_file_count, years_seen, latest_run)
 - `toolkit_inspect_schema(config_path, layer="clean", year=0)`
 - `toolkit_inspect_profile(config_path, year=0)` — profilo raw (encoding, delim, colonne, missingness)
-- `toolkit_run_summary(config_path, year=0)` — statistiche aggregate (totali, successi, durata media)
-- `toolkit_summary(config_path, year=0)` — dashboard diagnostico (layer + run + warnings)
-- `toolkit_review_readiness(config_path, year=0)` — check di prontezza per review candidate
 - `toolkit_list_runs(config_path, year=0, since=None, until=None, status=None, limit=20, cross_year=False)`
 - `toolkit_list_candidates(stage="all", status_filter=None)` — elenca dataset disponibili in workspace
 - `toolkit_schema_diff(config_path)` — confronto segnali schema raw cross-year (encoding, colonne, ecc.)
@@ -70,6 +67,3 @@ Sostituire il path del `command` con il Python reale del clone locale che usera'
   - `clean` / `mart`: legge schema reale dei parquet risolti via `inspect paths`
 - `toolkit_schema_diff` confronta segnali schema raw (encoding, delim, colonne) tra tutti gli anni configurati per il dataset; riutilizza la stessa logica di `toolkit inspect schema-diff` ma esposto come tool MCP
 - `toolkit_csv_preview` legge un CSV usando la stessa pipeline di `profile_raw` (`sniff_source_file` + `profile_with_read_cfg`); restituisce schema + prime N righe + mapping_suggestions — utile per ispezionare file raw senza runnare la pipeline
-- `toolkit_run_summary` aggrega tutti i run record per dataset/year
-- `toolkit_summary` include `run.latest_run_record` (payload completo dell'ultimo run)
-- `toolkit_review_readiness` esegue check di readiness per review candidate: config valida, layer presenti, output leggibili, coerenza run record

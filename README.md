@@ -170,19 +170,13 @@ esegue le trasformazioni SQL su DuckDB e produce output in `root/data/`.
 
 ## MCP Server
 
-Il toolkit espone un server **MCP (Model Context Protocol)** per integrazione con agenti AI e IDE.
-Espone 9 tool read-only per ispezione rapida:
+Il toolkit espone un server **MCP (Model Context Protocol)** con 16 tool per integrazione con agenti AI e IDE.
 
-| Tool | Cosa fa |
+| Categoria | Tool principali |
 |---|---|
-| `toolkit_inspect_paths` | Path contract risolto + metadati run |
-| `toolkit_inspect_schema` | Schema di raw / clean / mart |
-| `toolkit_run_summary` | Statistiche aggregate dei run |
-| `toolkit_summary` | Dashboard diagnostico per dataset |
-| `toolkit_review_readiness` | Check di prontezza per review |
-| `toolkit_list_runs` | Run records con filtri |
-| `toolkit_schema_diff` | Confronto schema raw cross-year |
-| `toolkit_csv_preview` | Schema + preview CSV via profiler pipeline |
+| **Aggregati** | `toolkit_status` (stato completo: paths + summary + readiness + run_stats + info), `toolkit_layer` (query RAW/CLEAN/MART) |
+| **Ispettivi** | `toolkit_inspect_paths`, `toolkit_inspect_schema`, `toolkit_inspect_profile`, `toolkit_list_runs`, `toolkit_list_candidates`, `toolkit_schema_diff`, `toolkit_csv_preview`, `toolkit_preflight` |
+| **Scout** | `toolkit_probe_url`, `toolkit_probe_url_routed`, `toolkit_ckan_package_show`, `toolkit_html_extract_links`, `toolkit_sparql_query` |
 
 Config esempio per IDE (`.mcp.json`):
 

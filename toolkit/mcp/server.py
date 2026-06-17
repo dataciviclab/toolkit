@@ -8,9 +8,8 @@ Tool aggregati:
 - toolkit_status: paths + summary + readiness + run_stats + info in un tool
 
 Tool granulari (mantenuti per backward compat):
-- inspect_paths, inspect_schema, inspect_profile, summary
-- review_readiness, schema_diff, run_summary
-- list_runs, list_candidates
+- inspect_paths, inspect_schema, inspect_profile
+- schema_diff, list_runs, list_candidates
 - csv_preview
 - scout: probe_url, probe_url_routed, ckan, sparql, html
 
@@ -35,10 +34,7 @@ from .toolkit_client import (
     mcp_probe_url_routed as probe_url_routed_impl,
     mcp_sparql_query as sparql_query_impl,
     raw_profile as raw_profile_impl,
-    review_readiness as review_readiness_impl,
-    run_summary as run_summary_impl,
     schema_diff as schema_diff_impl,
-    summary as summary_impl,
     show_schema as show_schema_impl,
 )
 
@@ -79,38 +75,6 @@ def toolkit_inspect_schema(config_path: str, layer: str = "clean", year: int = 0
 )
 def toolkit_inspect_profile(config_path: str, year: int = 0) -> dict[str, Any]:
     return guard_timed(raw_profile_impl, "toolkit_inspect_profile", config_path, year or None)
-
-
-@mcp.tool(
-    description="Statistiche aggregate dei run: totali, successi, fallimenti, durata media.",
-    structured_output=True,
-)
-def toolkit_run_summary(
-    config_path: str,
-    year: int = 0,
-    *,
-    since: str | None = None,
-    until: str | None = None,
-) -> dict[str, Any]:
-    return guard_timed(
-        run_summary_impl, "toolkit_run_summary", config_path, year or None, since=since, until=until
-    )
-
-
-@mcp.tool(
-    description="Mostra un riepilogo diagnostico minimo per un dataset config.",
-    structured_output=True,
-)
-def toolkit_summary(config_path: str, year: int = 0) -> dict[str, Any]:
-    return guard_timed(summary_impl, "toolkit_summary", config_path, year or None)
-
-
-@mcp.tool(
-    description="Check di readiness per review candidate: config, layer, output e coerenza run record.",
-    structured_output=True,
-)
-def toolkit_review_readiness(config_path: str, year: int = 0) -> dict[str, Any]:
-    return guard_timed(review_readiness_impl, "toolkit_review_readiness", config_path, year or None)
 
 
 @mcp.tool(
@@ -214,14 +178,24 @@ def toolkit_layer(
 @mcp.tool(
     description="Stato completo di un dataset: paths + summary + readiness + run_stats + info. "
     "Aggrega inspect_paths, summary, review_readiness, run_summary e dataset_info "
-    "in una unica chiamata.",
+    "in una unica chiamata. I parametri since/until filtrano i run per finestra temporale.",
     structured_output=True,
 )
 def toolkit_status(
     config_path: str,
     year: int = 0,
+    *,
+    since: str | None = None,
+    until: str | None = None,
 ) -> dict[str, Any]:
-    return guard_timed(dataset_status_impl, "toolkit_status", config_path, year=year or None)
+    return guard_timed(
+        dataset_status_impl,
+        "toolkit_status",
+        config_path,
+        year=year or None,
+        since=since,
+        until=until,
+    )
 
 
 # ---------------------------------------------------------------------------

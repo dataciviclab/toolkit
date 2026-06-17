@@ -10,7 +10,7 @@ Tool aggregati:
 Tool granulari (mantenuti per backward compat):
 - inspect_paths, inspect_schema, inspect_profile, summary
 - review_readiness, schema_diff, run_summary
-- list_runs, list_candidates, dataset_info
+- list_runs, list_candidates
 - csv_preview
 - scout: probe_url, probe_url_routed, ckan, sparql, html
 

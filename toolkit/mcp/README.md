@@ -22,11 +22,6 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 - `toolkit_schema_diff(config_path)` — confronto segnali schema raw cross-year (encoding, colonne, ecc.)
 - `toolkit_csv_preview(csv_path, limit=20)` — schema + preview CSV via profiler pipeline
 
-### Tool aggregati (raccomandati)
-
-- `toolkit_status(config_path, year=0)` — stato completo: paths + summary + readiness + run_stats + info
-- `toolkit_layer(config_path, layer="clean", mode="schema")` — query unificata: schema/preview/profile/sql
-
 ### Scout fonti
 
 - `toolkit_probe_url(url, timeout=15)` — probe HTTP leggero (HEAD + Range): reachability, status code, content-type

@@ -194,7 +194,15 @@ def _fetch_script(stype: str, client: dict, formatted_args: dict) -> tuple[bytes
                 command: "python preprocess.py raw_{year}.csv"
                 output: "raw_{year}.csv"
     """
+    import os
     import subprocess
+
+    # Security guard: script source disabled by default
+    if os.environ.get("TOOLKIT_ALLOW_SCRIPT_SOURCE") != "1":
+        raise DownloadError(
+            "script source type is disabled by default. "
+            "Set TOOLKIT_ALLOW_SCRIPT_SOURCE=1 to enable."
+        )
 
     command: str = formatted_args.get("command", "")
     if not command:
@@ -203,6 +211,13 @@ def _fetch_script(stype: str, client: dict, formatted_args: dict) -> tuple[bytes
     output_path = Path(formatted_args.get("output", "output.csv"))
     base_dir_str = formatted_args.get("_base_dir")
     candidate_root = Path(base_dir_str) if base_dir_str else Path.cwd()
+
+    # Resolve output path and confine it under base_dir
+    output_abs = (candidate_root / output_path).resolve()
+    if not str(output_abs).startswith(str(candidate_root.resolve())):
+        raise DownloadError(
+            f"Output path {output_abs} is outside candidate base directory {candidate_root}"
+        )
 
     result = subprocess.run(
         command,
@@ -216,7 +231,6 @@ def _fetch_script(stype: str, client: dict, formatted_args: dict) -> tuple[bytes
         stderr_preview = result.stderr[:500] if result.stderr else "(no stderr)"
         raise DownloadError(f"Script failed (exit {result.returncode}): {stderr_preview}")
 
-    output_abs = candidate_root / output_path
     if not output_abs.exists():
         raise DownloadError(f"Script did not produce expected output file: {output_abs}")
 

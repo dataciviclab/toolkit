@@ -30,7 +30,7 @@ def test_infer_ext_never_returns_php():
 
 
 def test_run_raw_ckan_filename_inferred_from_resolved_url(monkeypatch, tmp_path: Path):
-    def _fake_fetch_payload(_stype: str, _client: dict, _formatted_args: dict):
+    def _fake_fetch_payload(_stype: str, _client: dict, _formatted_args: dict, **kwargs):
         return b"a,b\n1,2\n", "https://example.org/data.csv"
 
     monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
@@ -55,7 +55,7 @@ def test_run_raw_ckan_filename_inferred_from_resolved_url(monkeypatch, tmp_path:
 
 
 def test_run_raw_filename_override_has_priority(monkeypatch, tmp_path: Path):
-    def _fake_fetch_payload(_stype: str, _client: dict, _formatted_args: dict):
+    def _fake_fetch_payload(_stype: str, _client: dict, _formatted_args: dict, **kwargs):
         return b"a,b\n1,2\n", "https://example.org/dataset.csv.php"
 
     monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
@@ -81,7 +81,7 @@ def test_run_raw_filename_override_has_priority(monkeypatch, tmp_path: Path):
 
 
 def test_run_raw_avoids_overwrite_with_incremental_suffix(monkeypatch, tmp_path: Path):
-    def _fake_fetch_payload(_stype: str, _client: dict, _formatted_args: dict):
+    def _fake_fetch_payload(_stype: str, _client: dict, _formatted_args: dict, **kwargs):
         return b"new-content\n", "https://example.org/file.csv"
 
     monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
@@ -109,7 +109,7 @@ def test_run_raw_avoids_overwrite_with_incremental_suffix(monkeypatch, tmp_path:
 
 
 def test_manifest_created(monkeypatch, tmp_path: Path):
-    def _fake_fetch_payload(_stype: str, _client: dict, _formatted_args: dict):
+    def _fake_fetch_payload(_stype: str, _client: dict, _formatted_args: dict, **kwargs):
         return b"a,b\n1,2\n", "https://example.org/manifest.csv"
 
     monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
@@ -140,7 +140,7 @@ def test_manifest_created(monkeypatch, tmp_path: Path):
 def test_manifest_points_to_latest_in_versioned(monkeypatch, tmp_path: Path):
     payloads = iter([b"old\n", b"new\n"])
 
-    def _fake_fetch_payload(_stype: str, _client: dict, _formatted_args: dict):
+    def _fake_fetch_payload(_stype: str, _client: dict, _formatted_args: dict, **kwargs):
         return next(payloads), "https://example.org/file.csv"
 
     monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
@@ -170,7 +170,7 @@ def test_manifest_points_to_latest_in_versioned(monkeypatch, tmp_path: Path):
 def test_manifest_overwrite_policy(monkeypatch, tmp_path: Path):
     payloads = iter([b"old\n", b"new\n"])
 
-    def _fake_fetch_payload(_stype: str, _client: dict, _formatted_args: dict):
+    def _fake_fetch_payload(_stype: str, _client: dict, _formatted_args: dict, **kwargs):
         return next(payloads), "https://example.org/file.csv"
 
     monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
@@ -199,7 +199,7 @@ def test_manifest_overwrite_policy(monkeypatch, tmp_path: Path):
 
 
 def test_multisource_primary_selection(monkeypatch, tmp_path: Path):
-    def _fake_fetch_payload(_stype: str, _client: dict, formatted_args: dict):
+    def _fake_fetch_payload(_stype: str, _client: dict, formatted_args: dict, **kwargs):
         return f"payload:{formatted_args['filename']}\n".encode("utf-8"), formatted_args["filename"]
 
     monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
@@ -235,7 +235,7 @@ def test_multisource_primary_selection(monkeypatch, tmp_path: Path):
 def test_multisource_year_filter_skips_non_matching(monkeypatch, tmp_path: Path):
     """Sources with a year field that doesn't match the requested year are skipped."""
 
-    def _fake_fetch_payload(_stype: str, _client: dict, formatted_args: dict):
+    def _fake_fetch_payload(_stype: str, _client: dict, formatted_args: dict, **kwargs):
         return f"payload:{formatted_args['filename']}\n".encode("utf-8"), formatted_args["filename"]
 
     monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)
@@ -279,7 +279,7 @@ def test_multisource_year_filter_skips_non_matching(monkeypatch, tmp_path: Path)
 def test_multisource_year_filter_all_matching(monkeypatch, tmp_path: Path):
     """When no source has a year field, all sources are fetched (backward compatible)."""
 
-    def _fake_fetch_payload(_stype: str, _client: dict, formatted_args: dict):
+    def _fake_fetch_payload(_stype: str, _client: dict, formatted_args: dict, **kwargs):
         return f"payload:{formatted_args['filename']}\n".encode("utf-8"), formatted_args["filename"]
 
     monkeypatch.setattr("toolkit.raw.run._fetch_payload", _fake_fetch_payload)

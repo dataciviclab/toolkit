@@ -7,7 +7,7 @@ This module is a thin facade. The actual implementation lives in dedicated sub-m
 - cli_adapter: inspect_paths (direct call, no subprocess)
 - schema_ops: show_schema, raw_profile, run_state, summary, review_readiness, schema_diff, ...
 - aggregate_ops: layer_query (toolkit_layer), dataset_status (toolkit_status)
-- scout_ops: probe_url, infer_topic, ckan, sparql, html, sdmx
+- scout_ops: probe_url, ckan, sparql, html
 - discovery: list_candidates
 
 Note: run_state is kept here for internal use (tests) but is no longer a registered MCP tool.
@@ -23,6 +23,7 @@ from toolkit.mcp.cli_adapter import inspect_paths
 from toolkit.mcp.schema_ops import (
     clean_preview,
     csv_preview,
+    dataset_info,
     list_runs,
     raw_preview,
     raw_profile,
@@ -40,7 +41,6 @@ from toolkit.mcp.aggregate_ops import (
 from toolkit.mcp.scout_ops import (
     mcp_ckan_package_show,
     mcp_html_extract_links,
-    mcp_infer_topic,
     mcp_preview_url,
     mcp_probe_url,
     mcp_probe_url_routed,

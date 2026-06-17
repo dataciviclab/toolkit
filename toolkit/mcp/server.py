@@ -11,8 +11,8 @@ Tool granulari (mantenuti per backward compat):
 - inspect_paths, inspect_schema, inspect_profile, summary
 - review_readiness, schema_diff, run_summary
 - list_runs, list_candidates, dataset_info
-- csv_preview, clean_preview, raw_preview
-- scout: probe_url, probe_url_routed, infer_topic, ckan, sparql, html, sdmx
+- csv_preview
+- scout: probe_url, probe_url_routed, ckan, sparql, html
 
 Usa ``lab_connectors.mcp`` per init standardizzato, error handling e logging.
 """
@@ -23,22 +23,17 @@ from typing import Any
 
 from lab_connectors.mcp import create_mcp_server, guard_timed
 
-from toolkit.core.dataset_loader import validate_config as _validate_config_impl
-
 from .toolkit_client import (
-    clean_preview as clean_preview_impl,
     csv_preview as csv_preview_impl,
     inspect_paths as inspect_paths_impl,
     list_candidates as list_candidates_impl,
     list_runs as list_runs_impl,
     mcp_ckan_package_show as ckan_package_show_impl,
     mcp_html_extract_links as html_extract_links_impl,
-    mcp_infer_topic as infer_topic_impl,
     mcp_preview_url as preview_url_impl,
     mcp_probe_url as probe_url_impl,
     mcp_probe_url_routed as probe_url_routed_impl,
     mcp_sparql_query as sparql_query_impl,
-    raw_preview as raw_preview_impl,
     raw_profile as raw_profile_impl,
     review_readiness as review_readiness_impl,
     run_summary as run_summary_impl,
@@ -137,40 +132,6 @@ def toolkit_list_candidates(
 
 
 @mcp.tool(
-    description="Preview dei dati puliti (clean parquet) o mart. Mostra schema + prime N righe.",
-    structured_output=True,
-)
-def toolkit_clean_preview(
-    config_path: str,
-    layer: str = "clean",
-    mart_index: int = 0,
-    year: int = 0,
-    limit: int = 10,
-) -> dict[str, Any]:
-    return guard_timed(
-        clean_preview_impl,
-        "toolkit_clean_preview",
-        config_path,
-        layer,
-        mart_index,
-        year or None,
-        limit,
-    )
-
-
-@mcp.tool(
-    description="Preview del raw file primario (CSV) di un dataset. Wrapper su csv_preview + inspect_paths.",
-    structured_output=True,
-)
-def toolkit_raw_preview(
-    config_path: str,
-    year: int = 0,
-    limit: int = 20,
-) -> dict[str, Any]:
-    return guard_timed(raw_preview_impl, "toolkit_raw_preview", config_path, year or None, limit)
-
-
-@mcp.tool(
     description="Confronta i segnali di schema raw (encoding, colonne, ecc.) tra gli anni configurati per un dataset.",
     structured_output=True,
 )
@@ -222,7 +183,7 @@ def toolkit_csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
 
 @mcp.tool(
     description="Query unificata su RAW/CLEAN/MART: schema, preview, profilo o SQL. "
-    "Sostituisce inspect_schema/clean_preview/raw_preview/inspect_profile/parquet_query "
+    "Sostituisce inspect_schema/inspect_profile/parquet_query "
     "in un unico tool con parametro mode (schema|preview|profile|sql). "
     "Esempi: mode=schema (colonne+tipi), mode=preview (anteprima righe), "
     "mode=profile (diagnostica raw), mode=sql (SQL arbitrario su 'data').",
@@ -266,14 +227,6 @@ def toolkit_status(
 # ---------------------------------------------------------------------------
 # Validate config
 # ---------------------------------------------------------------------------
-
-
-@mcp.tool(
-    description="Validazione leggera dataset.yml: campi obbligatori, coerenza.",
-    structured_output=True,
-)
-def toolkit_validate_config(config_path: str) -> dict[str, Any]:
-    return guard_timed(_validate_config_impl, "toolkit_validate_config", config_path)
 
 
 @mcp.tool(
@@ -333,15 +286,6 @@ def toolkit_probe_url(url: str, timeout: int = 15) -> dict[str, Any]:
 )
 def toolkit_probe_url_routed(url: str, timeout: int = 15) -> dict[str, Any]:
     return guard_timed(probe_url_routed_impl, "toolkit_probe_url_routed", url, timeout)
-
-
-@mcp.tool(
-    description="Inferisce topic tematici da un testo (18 topic: lavoro, economia, sanita, istruzione, "
-    "trasporti, ambiente, agricoltura, turismo, giustizia, demografia, energia, ecc.).",
-    structured_output=True,
-)
-def toolkit_infer_topic(text: str) -> dict[str, Any]:
-    return guard_timed(infer_topic_impl, "toolkit_infer_topic", text)
 
 
 @mcp.tool(

@@ -149,6 +149,9 @@ def profile(
     """
     Profilo diagnostico del RAW: encoding, delimitatore, colonne.
 
+    .. deprecated::
+        Usa ``toolkit layer -c CONFIG -l raw -m profile`` invece.
+
     Con --config: analizza il raw layer del dataset e scrive raw_profile.json.
     Con --csv-path: sniffa direttamente un file CSV e stampa schema + preview.
 

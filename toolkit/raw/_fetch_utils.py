@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+from toolkit.core.exceptions import DownloadError
 from toolkit.core.registry import registry
 
 
@@ -176,6 +177,69 @@ def _fetch_local_file(stype: str, client: dict, formatted_args: dict) -> tuple[b
     return payload, formatted_args["path"]
 
 
+@_register_fetch("script")
+def _fetch_script(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
+    """Execute a script command and read its output as the raw data.
+
+    The script is run in a subprocess inside the candidate root directory.
+    ``{year}`` placeholders in ``command`` and ``output`` are resolved
+    before execution.
+
+    Expected config::
+
+        raw:
+          sources:
+            - type: script
+              args:
+                command: "python preprocess.py raw_{year}.csv"
+                output: "raw_{year}.csv"
+    """
+    import os
+    import subprocess
+
+    # Security guard: script source disabled by default
+    if os.environ.get("TOOLKIT_ALLOW_SCRIPT_SOURCE") != "1":
+        raise DownloadError(
+            "script source type is disabled by default. "
+            "Set TOOLKIT_ALLOW_SCRIPT_SOURCE=1 to enable."
+        )
+
+    command: str = formatted_args.get("command", "")
+    if not command:
+        raise DownloadError("script source requires a 'command' in args")
+
+    output_path = Path(formatted_args.get("output", "output.csv"))
+    base_dir_str = formatted_args.get("_base_dir")
+    candidate_root = Path(base_dir_str) if base_dir_str else Path.cwd()
+
+    # Resolve output path and confine it under base_dir
+    output_abs = (candidate_root / output_path).resolve()
+    try:
+        output_abs.relative_to(candidate_root.resolve())
+    except ValueError:
+        raise DownloadError(
+            f"Output path {output_abs} is outside candidate base directory {candidate_root}"
+        )
+
+    result = subprocess.run(
+        command,
+        shell=True,
+        capture_output=True,
+        text=True,
+        timeout=600,
+        cwd=candidate_root,
+    )
+    if result.returncode != 0:
+        stderr_preview = result.stderr[:500] if result.stderr else "(no stderr)"
+        raise DownloadError(f"Script failed (exit {result.returncode}): {stderr_preview}")
+
+    if not output_abs.exists():
+        raise DownloadError(f"Script did not produce expected output file: {output_abs}")
+
+    payload = output_abs.read_bytes()
+    return payload, str(output_path)
+
+
 def _fetch_fallback(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
     src = registry.create(stype, **(client or {}))
     first_val = next(iter(formatted_args.values()))
@@ -183,8 +247,15 @@ def _fetch_fallback(stype: str, client: dict, formatted_args: dict) -> tuple[byt
     return payload, str(first_val)
 
 
-def _fetch_payload(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
+def _fetch_payload(
+    stype: str,
+    client: dict,
+    formatted_args: dict,
+    base_dir: Path | None = None,
+) -> tuple[bytes, str]:
     """Dispatch fetch to the appropriate source-type handler."""
+    if base_dir is not None:
+        formatted_args = {**formatted_args, "_base_dir": str(base_dir)}
     handler = _FETCH_DISPATCH.get(stype, _fetch_fallback)
     return handler(stype, client, formatted_args)
 

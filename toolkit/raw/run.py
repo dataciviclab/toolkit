@@ -98,7 +98,7 @@ def run_raw(
         formatted_args = _format_args(args, year)
         if sample_bytes is not None:
             formatted_args["sample_bytes"] = sample_bytes
-        payload, origin = _fetch_payload(stype, client, formatted_args)
+        payload, origin = _fetch_payload(stype, client, formatted_args, base_dir=base_dir)
         inputs.append(
             {
                 "file": formatted_args.get("filename") or name,

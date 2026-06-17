@@ -107,6 +107,9 @@ def layer_query(
 def dataset_status(
     config_path: str,
     year: int | None = None,
+    *,
+    since: str | None = None,
+    until: str | None = None,
 ) -> dict[str, Any]:
     """Stato completo di un dataset: percorso, run, validation, info.
 
@@ -115,6 +118,8 @@ def dataset_status(
     Args:
         config_path: Path a dataset.yml o slug del dataset.
         year: Anno del dataset. Se omesso usa l'ultimo anno configurato.
+        since: Opzionale, ISO datetime lower bound per run_stats.
+        until: Opzionale, ISO datetime upper bound per run_stats.
 
     Returns:
         Dict con sezioni: paths_info, summary, readiness, run_stats, info.
@@ -131,6 +136,6 @@ def dataset_status(
         "paths_info": _inspect_paths(config_path, year=year),
         "summary": _summary(config_path, year=year),
         "readiness": _review_readiness(config_path, year=year),
-        "run_stats": _run_summary(config_path, year=year),
+        "run_stats": _run_summary(config_path, year=year, since=since, until=until),
         "info": _dataset_info(config_path),
     }

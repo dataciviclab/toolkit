@@ -178,14 +178,24 @@ def toolkit_layer(
 @mcp.tool(
     description="Stato completo di un dataset: paths + summary + readiness + run_stats + info. "
     "Aggrega inspect_paths, summary, review_readiness, run_summary e dataset_info "
-    "in una unica chiamata.",
+    "in una unica chiamata. I parametri since/until filtrano i run per finestra temporale.",
     structured_output=True,
 )
 def toolkit_status(
     config_path: str,
     year: int = 0,
+    *,
+    since: str | None = None,
+    until: str | None = None,
 ) -> dict[str, Any]:
-    return guard_timed(dataset_status_impl, "toolkit_status", config_path, year=year or None)
+    return guard_timed(
+        dataset_status_impl,
+        "toolkit_status",
+        config_path,
+        year=year or None,
+        since=since,
+        until=until,
+    )
 
 
 # ---------------------------------------------------------------------------

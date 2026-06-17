@@ -214,7 +214,9 @@ def _fetch_script(stype: str, client: dict, formatted_args: dict) -> tuple[bytes
 
     # Resolve output path and confine it under base_dir
     output_abs = (candidate_root / output_path).resolve()
-    if not str(output_abs).startswith(str(candidate_root.resolve())):
+    try:
+        output_abs.relative_to(candidate_root.resolve())
+    except ValueError:
         raise DownloadError(
             f"Output path {output_abs} is outside candidate base directory {candidate_root}"
         )

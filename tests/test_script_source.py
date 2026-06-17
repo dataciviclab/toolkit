@@ -170,3 +170,25 @@ def test_script_rejects_path_traversal(script_dir: Path):
             {"command": "echo ok", "output": "../outside.csv"},
             base_dir=script_dir,
         )
+
+
+def test_script_rejects_prefix_collision(tmp_path: Path):
+    """Output con path che inizia come base_dir ma non è dentro → DownloadError.
+
+    Regressione: str.startswith() è bypassabile.
+    Esempio: base_dir=/tmp/candidate, output=/tmp/candidate_evil/out.csv
+    """
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    # Crea una directory sibling che inizia con lo stesso prefisso
+    evil = tmp_path / "candidate_evil"
+    evil.mkdir()
+    evil_file = evil / "out.csv"
+
+    with pytest.raises(DownloadError, match="outside candidate base directory"):
+        _fetch_payload(
+            "script",
+            {},
+            {"command": "echo ok", "output": str(evil_file)},
+            base_dir=candidate,
+        )

@@ -25,21 +25,14 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_schema_diff",
         "toolkit_csv_preview",
         "toolkit_list_candidates",
-        "toolkit_dataset_info",
-        "toolkit_clean_preview",
-        "toolkit_raw_preview",
         "toolkit_layer",
         "toolkit_status",
         "toolkit_probe_url",
         "toolkit_probe_url_routed",
-        "toolkit_infer_topic",
         "toolkit_ckan_package_show",
         "toolkit_html_extract_links",
-        "toolkit_list_ckan_datasets",
-        "toolkit_list_sdmx_dataflows",
         "toolkit_sparql_query",
         "toolkit_preview_url",
-        "toolkit_validate_config",
         "toolkit_preflight",
     }
 
@@ -135,19 +128,6 @@ def test_toolkit_probe_url_routed_forwards_params(monkeypatch: pytest.MonkeyPatc
     assert calls == {"url": "https://dati.gov.it", "timeout": 15}
 
 
-def test_toolkit_infer_topic_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: dict = {}
-
-    def fake_impl(text: str) -> dict:
-        calls["text"] = text
-        return {"topics": [{"topic": "lavoro", "score": 3}]}
-
-    monkeypatch.setattr(mcp_server, "infer_topic_impl", fake_impl)
-    result = mcp_server.toolkit_infer_topic("disoccupazione giovanile")
-    assert result == {"topics": [{"topic": "lavoro", "score": 3}]}
-    assert calls == {"text": "disoccupazione giovanile"}
-
-
 def test_toolkit_ckan_package_show_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: dict = {}
 
@@ -192,39 +172,6 @@ def test_toolkit_sparql_query_forwards_params(monkeypatch: pytest.MonkeyPatch) -
         "timeout": 60,
         "max_rows": 500,
     }
-
-
-def test_toolkit_list_ckan_datasets_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: dict = {}
-
-    def fake_impl(portal_url: str, query: str | None, rows: int, timeout: int) -> dict:
-        calls.update(portal_url=portal_url, query=query, rows=rows, timeout=timeout)
-        return {"count": 10, "datasets": []}
-
-    monkeypatch.setattr(mcp_server, "list_ckan_datasets_impl", fake_impl)
-    result = mcp_server.toolkit_list_ckan_datasets(
-        "https://dati.gov.it/opendata", query="pensioni", rows=50, timeout=25
-    )
-    assert result == {"count": 10, "datasets": []}
-    assert calls == {
-        "portal_url": "https://dati.gov.it/opendata",
-        "query": "pensioni",
-        "rows": 50,
-        "timeout": 25,
-    }
-
-
-def test_toolkit_list_sdmx_dataflows_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: dict = {}
-
-    def fake_impl(agency: str, timeout: int) -> dict:
-        calls.update(agency=agency, timeout=timeout)
-        return {"agency": "IT1", "returned": 5, "dataflows": []}
-
-    monkeypatch.setattr(mcp_server, "list_sdmx_dataflows_impl", fake_impl)
-    result = mcp_server.toolkit_list_sdmx_dataflows(agency="IT1", timeout=20)
-    assert result == {"agency": "IT1", "returned": 5, "dataflows": []}
-    assert calls == {"agency": "IT1", "timeout": 20}
 
 
 def test_toolkit_probe_url_error_has_error_code(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -373,95 +320,6 @@ def test_toolkit_list_candidates_passes_stage_and_filter(monkeypatch: pytest.Mon
     # Test con status_filter=None
     result2 = mcp_server.toolkit_list_candidates("all", None)
     assert result2["candidates"][0]["status"] is None
-
-
-def test_toolkit_dataset_info_passes_config_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    """dataset_info must pass config_path to the impl."""
-    calls: dict[str, object] = {}
-
-    def fake_impl(config_path: str) -> dict[str, object]:
-        calls["config_path"] = config_path
-        return {"dataset": "test"}
-
-    monkeypatch.setattr(mcp_server, "dataset_info_impl", fake_impl)
-    result = mcp_server.toolkit_dataset_info("some/path/dataset.yml")
-
-    assert result["dataset"] == "test"
-    assert calls == {"config_path": "some/path/dataset.yml"}
-
-
-def test_toolkit_clean_preview_passes_params(monkeypatch: pytest.MonkeyPatch) -> None:
-    """clean_preview must pass all params to the impl, converting year=0 → None."""
-    calls: dict[str, object] = {}
-
-    def fake_impl(
-        config_path: str, layer: str, mart_index: int, year: int | None, limit: int
-    ) -> dict[str, object]:
-        calls.update(
-            config_path=config_path,
-            layer=layer,
-            mart_index=mart_index,
-            year=year,
-            limit=limit,
-        )
-        return {"ok": True}
-
-    monkeypatch.setattr(mcp_server, "clean_preview_impl", fake_impl)
-    result = mcp_server.toolkit_clean_preview("d.yml", "mart", 1, 2023, 20)
-
-    assert result == {"ok": True}
-    assert calls == {
-        "config_path": "d.yml",
-        "layer": "mart",
-        "mart_index": 1,
-        "year": 2023,
-        "limit": 20,
-    }
-
-
-def test_toolkit_clean_preview_converts_year_zero_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    """clean_preview(year=0) must send year=None to the impl."""
-    calls: dict[str, object] = {}
-
-    def fake_impl(
-        config_path: str, layer: str, mart_index: int, year: int | None, limit: int
-    ) -> dict[str, object]:
-        calls["year"] = year
-        return {"ok": True}
-
-    monkeypatch.setattr(mcp_server, "clean_preview_impl", fake_impl)
-    mcp_server.toolkit_clean_preview("d.yml", "clean", 0, 0, 10)
-
-    assert calls["year"] is None
-
-
-def test_toolkit_raw_preview_passes_params(monkeypatch: pytest.MonkeyPatch) -> None:
-    """raw_preview must pass all params to the impl, converting year=0 → None."""
-    calls: dict[str, object] = {}
-
-    def fake_impl(config_path: str, year: int | None, limit: int) -> dict[str, object]:
-        calls.update(config_path=config_path, year=year, limit=limit)
-        return {"ok": True}
-
-    monkeypatch.setattr(mcp_server, "raw_preview_impl", fake_impl)
-    result = mcp_server.toolkit_raw_preview("d.yml", 2023, 30)
-
-    assert result == {"ok": True}
-    assert calls == {"config_path": "d.yml", "year": 2023, "limit": 30}
-
-
-def test_toolkit_raw_preview_converts_year_zero_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    """raw_preview(year=0) must send year=None to the impl."""
-    calls: dict[str, object] = {}
-
-    def fake_impl(config_path: str, year: int | None, limit: int) -> dict[str, object]:
-        calls["year"] = year
-        return {"ok": True}
-
-    monkeypatch.setattr(mcp_server, "raw_preview_impl", fake_impl)
-    mcp_server.toolkit_raw_preview("d.yml", 0, 20)
-
-    assert calls["year"] is None
 
 
 def test_toolkit_preflight_returns_report(monkeypatch: pytest.MonkeyPatch) -> None:

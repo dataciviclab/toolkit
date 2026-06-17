@@ -19,21 +19,14 @@ Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e
 - `toolkit_review_readiness(config_path, year=0)` — check di prontezza per review candidate
 - `toolkit_list_runs(config_path, year=0, since=None, until=None, status=None, limit=20, cross_year=False)`
 - `toolkit_list_candidates(stage="all", status_filter=None)` — elenca dataset disponibili in workspace
-- `toolkit_dataset_info(config_path)` — info base da dataset.yml
 - `toolkit_schema_diff(config_path)` — confronto segnali schema raw cross-year (encoding, colonne, ecc.)
 - `toolkit_csv_preview(csv_path, limit=20)` — schema + preview CSV via profiler pipeline
-- `toolkit_clean_preview(config_path, layer="clean", mart_index=0, year=0, limit=10)` — preview dati puliti
-- `toolkit_raw_preview(config_path, year=0, limit=20)` — preview raw file
-- `toolkit_validate_config(config_path)` — validazione dataset.yml
 
 ### Scout fonti
 
 - `toolkit_probe_url(url, timeout=15)` — probe HTTP leggero (HEAD + Range): reachability, status code, content-type
 - `toolkit_probe_url_routed(url, timeout=15)` — probe arricchito con routing automatico (rileva CKAN, SDMX, HTML, file diretto)
-- `toolkit_infer_topic(text)` — inferisce topic tematici da un testo (18 topic: lavoro, economia, sanita, ...)
 - `toolkit_ckan_package_show(endpoint, package_id, timeout=30)` — fetch dataset CKAN via API `package_show`
-- `toolkit_list_ckan_datasets(portal_url, query=None, rows=100, timeout=30)` — elenca dataset di un portale CKAN via `package_search`
-- `toolkit_list_sdmx_dataflows(agency="IT1", timeout=30)` — elenca dataflow SDMX disponibili per un'agenzia
 - `toolkit_html_extract_links(url, timeout=20)` — estrae link a file dati (CSV, JSON, XLSX, ZIP, XML) da pagina HTML
 - `toolkit_sparql_query(endpoint, query, timeout=60, max_rows=500)` — esegue query SPARQL SELECT su endpoint pubblico
 

@@ -122,14 +122,21 @@ def toolkit_review_readiness(config_path: str, year: int = 0) -> dict[str, Any]:
 
 
 @mcp.tool(
-    description="Elenca tutti i dataset disponibili in dataset-incubator (candidates e support_datasets). Opzionalmente filtra per last_run_status.",
+    description="Elenca tutti i dataset disponibili in dataset-incubator (candidates e support_datasets). "
+    "Opzionalmente filtra per last_run_status. "
+    "Restituisce un dict con chiave 'candidates' contenente la lista.",
     structured_output=True,
 )
 def toolkit_list_candidates(
     stage: str = "all",
     status_filter: str | None = None,
 ) -> dict[str, Any]:
-    return guard_timed(list_candidates_impl, "toolkit_list_candidates", stage, status_filter)
+    result = guard_timed(list_candidates_impl, "toolkit_list_candidates", stage, status_filter)
+    # Se guard_timed restituisce un errore (dict con chiave "error"), passalo attraverso
+    if isinstance(result, dict) and "error" in result:
+        return result
+    # Altrimenti wrappa la lista in un dict per structured_output=True
+    return {"candidates": result, "count": len(result) if isinstance(result, list) else 0}
 
 
 @mcp.tool(

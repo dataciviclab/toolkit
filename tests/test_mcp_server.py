@@ -363,13 +363,16 @@ def test_toolkit_list_candidates_passes_stage_and_filter(monkeypatch: pytest.Mon
 
     # Test con status_filter
     result = mcp_server.toolkit_list_candidates("candidates", "SUCCESS")
-    assert result[0]["stage"] == "candidates"
-    assert result[0]["status"] == "SUCCESS"
+    assert isinstance(result, dict), f"expected dict, got {type(result)}"
+    assert "candidates" in result, f"expected 'candidates' key, got {list(result.keys())}"
+    assert result["candidates"][0]["stage"] == "candidates"
+    assert result["candidates"][0]["status"] == "SUCCESS"
+    assert result["count"] == 1
     assert calls == {"stage": "candidates", "status_filter": "SUCCESS"}
 
     # Test con status_filter=None
     result2 = mcp_server.toolkit_list_candidates("all", None)
-    assert result2[0]["status"] is None
+    assert result2["candidates"][0]["status"] is None
 
 
 def test_toolkit_dataset_info_passes_config_path(monkeypatch: pytest.MonkeyPatch) -> None:

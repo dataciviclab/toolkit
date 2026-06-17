@@ -102,6 +102,9 @@ def schema(
 ) -> None:
     """Mostra lo schema (colonne + tipi) di raw, clean o mart.
 
+    .. deprecated::
+        Usa ``toolkit layer -c CONFIG -l {layer} -m schema`` invece.
+
     Il path config puo' essere passato come argomento posizionale
     (es. toolkit inspect schema path/to/dataset.yml)
     o con l'opzione --config / -c.

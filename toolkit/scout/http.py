@@ -519,6 +519,50 @@ def extract_ckan_dataset_id(url: str, html_text: str = "") -> str | None:
     return None
 
 
+def _ckan_portal_base(url: str) -> str:
+    """Estrae il base path del portale CKAN da un URL qualsiasi.
+
+    Normalizza URL nella forma:
+      - ``https://portale.it/opendata/dataset/slug`` → ``https://portale.it/opendata``
+      - ``https://portale.it/opendata/api/3/action/package_show?id=...`` → ``https://portale.it/opendata``
+      - ``https://portale.it/dataset/slug`` → ``https://portale.it``
+      - ``https://dati.gov.it/opendata`` → ``https://dati.gov.it/opendata``
+
+    Returns:
+        URL base del portale (schema + netloc + path), senza trailing slash.
+    """
+    parsed = urlparse(url)
+    root = f"{parsed.scheme}://{parsed.netloc}"
+    path = parsed.path.rstrip("/")
+
+    # Toglie /dataset/{slug} o /dataset/...  (es. /opendata/dataset/foo → /opendata)
+    ds_match = re.search(r"^(.*?)/dataset/", path)
+    if ds_match:
+        path = ds_match.group(1).rstrip("/")
+        return f"{root}{path}" if path else root
+
+    # Toglie /api/3/action/package_show (es. /opendata/api/3/action/package_show → /opendata)
+    api_match = re.search(r"^(.*?)/api/3/action/package_show/?$", path)
+    if api_match:
+        path = api_match.group(1).rstrip("/")
+        return f"{root}{path}" if path else root
+
+    # Toglie /api/3/action (es. /opendata/api/3/action → /opendata)
+    api_match = re.search(r"^(.*?)/api/3/action/?$", path)
+    if api_match:
+        path = api_match.group(1).rstrip("/")
+        return f"{root}{path}" if path else root
+
+    # Toglie /api/3 o /api
+    api_match = re.search(r"^(.*?)/api(/[123])?/?$", path)
+    if api_match:
+        path = api_match.group(1).rstrip("/")
+        return f"{root}{path}" if path else root
+
+    # Nessun pattern CKAN riconosciuto — usa il path così com'è
+    return f"{root}{path}" if path else root
+
+
 def fetch_ckan_package(
     portal_url: str,
     dataset_id: str,
@@ -528,19 +572,28 @@ def fetch_ckan_package(
 ) -> dict[str, Any] | None:
     """Fetch CKAN package_show via API.
 
+    Normalizza automaticamente il base path del portale CKAN,
+    quindi funziona con qualsiasi URL: homepage, pagina dataset, endpoint API.
+
     Args:
         client: HttpClient opzionale. Se fornito, lo usa invece di crearne uno.
     """
     parsed = urlparse(portal_url)
     root = f"{parsed.scheme}://{parsed.netloc}"
-    api_bases: list[str] = []
-    if parsed.path.startswith("/api/3/action"):
-        api_bases.append(f"{root}/api/3/action/package_show")
-    elif parsed.path.startswith("/dataset/"):
-        api_bases.append(f"{root}/api/3/action/package_show")
-    else:
-        api_bases.append(f"{root}/api/3/action/package_show")
-        api_bases.append(f"{root}/package_show")
+
+    # Normalizza il base path del portale CKAN
+    portal_base = _ckan_portal_base(portal_url)
+
+    api_bases: list[str] = [
+        f"{portal_base}/api/3/action/package_show",
+    ]
+
+    # Fallback: API alla radice (per portali che ignorano il path prefix)
+    api_base_root = f"{root}/api/3/action/package_show"
+    if api_base_root != api_bases[0]:
+        api_bases.append(api_base_root)
+    # Ultimo fallback: package_show alla radice
+    api_bases.append(f"{root}/package_show")
 
     client = client or _mk_client(timeout=timeout)
     for api_base in api_bases:

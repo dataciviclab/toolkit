@@ -44,6 +44,7 @@ class ToolkitConfigModel(BaseModel):
     config: ConfigPolicy = Field(default_factory=ConfigPolicy)
     validation: GlobalValidationConfig = Field(default_factory=GlobalValidationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
+    registry: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _validate_unique_support_names(self) -> "ToolkitConfigModel":

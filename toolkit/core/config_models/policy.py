@@ -32,6 +32,7 @@ _TOP_LEVEL_ALLOWED_KEYS = {
     "config",
     "validation",
     "output",
+    "registry",
 }
 
 

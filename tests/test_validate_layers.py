@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from toolkit.raw.validate import validate_raw_output
-from toolkit.clean.validate import validate_clean, run_clean_validation
+from toolkit.clean.validate import validate_clean, run_clean_validation, validate_promotion
 from toolkit.core.config_models import TransitionConfig
 from toolkit.core.validation import check_transitions
 from toolkit.mart.validate import run_mart_validation, validate_mart
@@ -495,6 +495,77 @@ def test_ensure_dict_preserves_validate_alias() -> None:
     )
     mv = mart_dict["validate"]
     assert mv["transition"]["max_row_drop_pct"] == 10
+
+
+@pytest.mark.regression
+def test_validate_promotion_fallback_row_count_when_profile_has_null(tmp_path: Path):
+    """Regression: raw_profile.json con row_count=null ma columns_raw presenti.
+
+    validate_promotion() deve fare fallback al conteggio effettivo dei file raw
+    invece di usare row_count=None, altrimenti il gate di transizione non vede
+    la perdita di righe.
+    """
+    root = tmp_path / "root"
+    dataset = "test"
+    year = 2024
+
+    # Raw dir con CSV da 4 righe (1 header + 3 dati)
+    raw_dir = root / "data" / "raw" / dataset / str(year)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "data.csv").write_text("a,b,c\n1,2,3\n4,5,6\n7,8,9\n", encoding="utf-8")
+
+    # Profilo raw SALVATO ma con row_count=null (il caso reale pnrr-progetti)
+    profile_dir = raw_dir / "_profile"
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    (profile_dir / "raw_profile.json").write_text(
+        json.dumps(
+            {
+                "row_count": None,
+                "columns_raw": ["a", "b", "c"],
+                "columns_norm": ["a", "b", "c"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # Clean dir con 2 righe (drop di 1 riga)
+    clean_dir = root / "data" / "clean" / dataset / str(year)
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    from tests.helpers import write_parquet
+
+    write_parquet(
+        clean_dir / f"{dataset}_{year}_clean.parquet",
+        "CREATE TABLE t AS SELECT * FROM (VALUES (1,2,3), (4,5,6)) v(a,b,c)",
+    )
+
+    clean_meta = {
+        "input_files": ["data.csv"],
+        "read_params_used": {"delim": ",", "header": True},
+        "output_profile": {
+            "columns": [
+                {"name": "a", "type": "INTEGER"},
+                {"name": "b", "type": "INTEGER"},
+                {"name": "c", "type": "INTEGER"},
+            ],
+            "row_count": 2,
+        },
+        "outputs": [f"{dataset}_{year}_clean.parquet"],
+    }
+    (clean_dir / "metadata.json").write_text(json.dumps(clean_meta), encoding="utf-8")
+
+    from toolkit.core.config_models import TransitionConfig
+
+    transition = TransitionConfig(max_row_drop_pct=10, fail_on_row_drop_exceeded=True)
+
+    result = validate_promotion(raw_dir, clean_dir, root=root, transition=transition)
+
+    # Deve fallire: 3 raw rows → 2 clean rows = 33% drop > 10% soglia
+    assert result.ok is False, (
+        f"Expected transition error (33% drop > 10%), got ok=True. errors={result.errors}"
+    )
+    assert any("row drop" in e.lower() for e in result.errors), (
+        f"Expected row drop error, got: {result.errors}"
+    )
 
 
 # ---------------------------------------------------------------------------

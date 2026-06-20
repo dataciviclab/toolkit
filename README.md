@@ -104,7 +104,7 @@ Il toolkit non gestisce il deployment: scrive nella directory configurata via
 | `toolkit inspect schema-diff --config dataset.yml` | Confronta schema RAW tra anni configurati |
 | `toolkit review-readiness --config dataset.yml` | Check di prontezza per review candidate (raccomandato) |
 | `toolkit status --dataset <name> --year <year> --latest --config dataset.yml` | Ultimo run completato |
-| `toolkit inspect profile --config dataset.yml` | Profilo diagnostico del RAW (encoding, delimitatore, colonne) — scrive `raw_profile.json` e `suggested_read.yml` |
+| `toolkit inspect profile --config dataset.yml` | Profilo diagnostico del RAW (encoding, delimitatore, colonne) — scrive `raw_profile.json` |
 
 ### Altri comandi
 

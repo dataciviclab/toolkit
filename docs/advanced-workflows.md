@@ -89,7 +89,7 @@ Il comando verifica anche gli artefatti minimi del layer precedente prima di rip
 Artefatti principali:
 
 - `raw/<dataset>/<year>/_profile/raw_profile.json`
-- `raw/<dataset>/<year>/_profile/suggested_read.yml`
+- `raw/<dataset>/<year>/_profile/suggested_read.yml` (non più prodotto, leggibile come fallback se presente da run precedenti)
 
 Nota pratica:
 

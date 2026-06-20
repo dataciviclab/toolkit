@@ -451,19 +451,18 @@ class TestGenerateCleanSql:
 
 
 # ---------------------------------------------------------------------------
-# pure_unit: integrazione con suggest_clean_sql (full.py)
+# pure_unit: generate_clean_sql (clean.py)
 # ---------------------------------------------------------------------------
 
 
-class TestSuggestCleanSqlIntegration:
-    """pure_unit: suggest_clean_sql aggiornato coerentemente."""
+class TestGenerateCleanSqlIntegration:
+    """pure_unit: generate_clean_sql produce clean.sql coerente."""
 
     @pytest.mark.pure_unit
     def test_varchar_gets_trim(self) -> None:
-        """suggest_clean_sql applica TRIM alle colonne VARCHAR."""
-        from toolkit.scaffold.full import suggest_clean_sql
+        """generate_clean_sql applica TRIM alle colonne VARCHAR."""
+        from toolkit.scaffold.clean import generate_clean_sql
 
-        cols = ["nome", "categoria", "valore"]
         profile: dict[str, Any] = {
             "mapping_suggestions": {
                 "nome": {"type": "str"},
@@ -471,7 +470,7 @@ class TestSuggestCleanSqlIntegration:
                 "valore": {"type": "float"},
             },
         }
-        sql = suggest_clean_sql(cols, profile)
+        sql = generate_clean_sql(profile, "candidate", 2024)
         assert 'trim(CAST("nome" AS VARCHAR))' in sql
         assert 'trim(CAST("categoria" AS VARCHAR))' in sql
         assert 'TRY_CAST("valore" AS DOUBLE)' in sql

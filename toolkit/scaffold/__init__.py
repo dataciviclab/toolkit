@@ -1,7 +1,6 @@
 from toolkit.scaffold.clean import generate_clean_sql
 from toolkit.scaffold.full import (
     generate_full_scaffold,
-    suggest_clean_sql,
     suggest_mart_sql,
     suggest_validation,
 )
@@ -13,7 +12,6 @@ __all__ = [
     "infer_ext",
     "infer_filename",
     "slugify",
-    "suggest_clean_sql",
     "suggest_mart_sql",
     "suggest_validation",
 ]

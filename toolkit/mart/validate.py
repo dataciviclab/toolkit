@@ -216,11 +216,15 @@ def run_mart_validation(cfg, year: int, logger, *, sample_mode: bool = False) ->
         metadata.get("transition_profiles") or [],
         spec.validate.transition,
     )
-    if transition_report["warning_messages"]:
+    has_warnings = bool(transition_report["warning_messages"])
+    has_errors = bool(transition_report["error_messages"])
+    merged_errors = result.errors + transition_report["error_messages"]
+    merged_warnings = result.warnings + transition_report["warning_messages"]
+    if has_warnings or has_errors:
         result = ValidationResult(
-            ok=result.ok,
-            errors=result.errors,
-            warnings=result.warnings + transition_report["warning_messages"],
+            ok=result.ok and not has_errors,
+            errors=merged_errors,
+            warnings=merged_warnings,
             summary=result.summary,
             sections={"transition": transition_report},
         )

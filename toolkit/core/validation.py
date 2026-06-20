@@ -20,9 +20,12 @@ class ValidationResult:
 
 def write_validation_json(path: str | Path, result: ValidationResult) -> Path:
     out = Path(path)
+    quality_score = _compute_quality_score(len(result.errors), len(result.warnings))
     payload = {
         "validation_schema_version": 1,
         "ok": result.ok,
+        "quality_score": quality_score,
+        "quality_verdict": _quality_verdict(quality_score),
         "errors": result.errors,
         "warnings": result.warnings,
         "summary": result.summary,
@@ -53,13 +56,41 @@ def required_columns_check(actual: Iterable[str], required: Iterable[str]) -> Va
     )
 
 
+def _compute_quality_score(errors_count: int, warnings_count: int) -> int:
+    """Quality score 0-100 con gradiente: errors pesano -20, warnings pesano -5.
+
+    Un dataset perfetto (0 errori, 0 warnings) → 100.
+    Un dataset con 1 errore → 80.
+    Un dataset con 3 errori → 40.
+    Un dataset con 0 errori ma 6 warnings → 70 (visibile ma non bloccante).
+    """
+    score = 100 - errors_count * 20 - warnings_count * 5
+    return max(0, min(100, score))
+
+
+def _quality_verdict(score: int) -> str:
+    if score >= 80:
+        return "buona"
+    if score >= 50:
+        return "accettabile"
+    return "scarsa"
+
+
+_MAX_MSGS_IN_RUN_RECORD = 20
+
+
 def build_validation_summary(result: ValidationResult) -> dict[str, Any]:
     errors_count = len(result.errors)
     warnings_count = len(result.warnings)
+    quality_score = _compute_quality_score(errors_count, warnings_count)
     out: dict[str, Any] = {
         "passed": result.ok,
         "errors_count": errors_count,
         "warnings_count": warnings_count,
+        "quality_score": quality_score,
+        "quality_verdict": _quality_verdict(quality_score),
+        "errors": result.errors[:_MAX_MSGS_IN_RUN_RECORD],
+        "warnings": result.warnings[:_MAX_MSGS_IN_RUN_RECORD],
         "checks": [
             {
                 "name": "errors",
@@ -84,6 +115,8 @@ def check_transitions(
 ) -> dict[str, Any]:
     warning_messages: list[str] = []
     structured_warnings: list[dict[str, Any]] = []
+    error_messages: list[str] = []
+    structured_errors: list[dict[str, Any]] = []
     for profile in transition_profiles:
         target_name = profile.get("target_name", "?")
         source_layer = profile.get("from") or "clean"
@@ -104,18 +137,32 @@ def check_transitions(
                     f"exceeds threshold {transition_cfg.max_row_drop_pct}% "
                     f"({source_layer}={source_rows} -> {target_layer}={target_rows})"
                 )
-                warning_messages.append(message)
-                structured_warnings.append(
-                    {
-                        "kind": "row_drop_pct",
-                        "target_name": target_name,
-                        "source_row_count": source_rows,
-                        "target_row_count": target_rows,
-                        "drop_pct": round(drop_pct, 1),
-                        "threshold_pct": transition_cfg.max_row_drop_pct,
-                        "message": message,
-                    }
-                )
+                if transition_cfg.fail_on_row_drop_exceeded:
+                    error_messages.append(message)
+                    structured_errors.append(
+                        {
+                            "kind": "row_drop_pct",
+                            "target_name": target_name,
+                            "source_row_count": source_rows,
+                            "target_row_count": target_rows,
+                            "drop_pct": round(drop_pct, 1),
+                            "threshold_pct": transition_cfg.max_row_drop_pct,
+                            "message": message,
+                        }
+                    )
+                else:
+                    warning_messages.append(message)
+                    structured_warnings.append(
+                        {
+                            "kind": "row_drop_pct",
+                            "target_name": target_name,
+                            "source_row_count": source_rows,
+                            "target_row_count": target_rows,
+                            "drop_pct": round(drop_pct, 1),
+                            "threshold_pct": transition_cfg.max_row_drop_pct,
+                            "message": message,
+                        }
+                    )
 
         if transition_cfg.warn_removed_columns and removed:
             message = f"[transition:{target_name}] columns removed from {source_layer}: {removed}"
@@ -136,8 +183,12 @@ def check_transitions(
         "config": {
             "max_row_drop_pct": transition_cfg.max_row_drop_pct,
             "warn_removed_columns": transition_cfg.warn_removed_columns,
+            "fail_on_row_drop_exceeded": transition_cfg.fail_on_row_drop_exceeded,
         },
         "profiles_count": len(transition_profiles),
+        "errors_count": len(structured_errors),
+        "errors": structured_errors,
+        "error_messages": error_messages,
         "warnings_count": len(structured_warnings),
         "warnings": structured_warnings,
         "warning_messages": warning_messages,

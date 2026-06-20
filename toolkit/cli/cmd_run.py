@@ -1086,8 +1086,11 @@ def run_full(
                 ln = lyrs.get(lname) or {}
                 lv = ln.get("validation") or {}
                 ok = lv.get("ok")
+                qs = lv.get("quality_score")
                 icon = "✅" if ok else ("🔴" if ok is False else "·")
                 parts = []
+                if qs is not None:
+                    parts.append(f"qs={qs}")
                 if lname == "raw":
                     pf = ln.get("profile") or {}
                     if pf.get("encoding"):
@@ -1119,6 +1122,21 @@ def run_full(
             typer.echo(
                 f"       readiness: {s.get('readiness', '?')}  ({s.get('checks_ok', 0)}/{s.get('checks', 0)})"
             )
+
+            # Warning/error recap per layer (compacto)
+            _any_msgs = False
+            for lname in ("raw", "clean", "mart"):
+                ln = lyrs.get(lname) or {}
+                msgs = ln.get("validation_msgs") or {}
+                for kind, label in [("warnings", "⚠"), ("errors", "🔴")]:
+                    items = msgs.get(kind) or []
+                    for msg in items[:3]:
+                        if not _any_msgs:
+                            typer.echo("")
+                            _any_msgs = True
+                        typer.echo(f"       {lname} {label} {msg[:120]}")
+            if _any_msgs:
+                typer.echo("")
 
     if results["status"] != "passed":
         raise typer.Exit(code=1)

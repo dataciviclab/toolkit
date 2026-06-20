@@ -169,7 +169,9 @@ def test_check_transitions_warns_on_row_drop_over_threshold_and_removed_columns(
 
     report = check_transitions(
         transition_profiles,
-        TransitionConfig(max_row_drop_pct=20, warn_removed_columns=True),
+        TransitionConfig(
+            max_row_drop_pct=20, warn_removed_columns=True, fail_on_row_drop_exceeded=False
+        ),
     )
 
     assert report["warnings_count"] == 2
@@ -245,6 +247,7 @@ def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Pa
                 "transition": {
                     "max_row_drop_pct": 20,
                     "warn_removed_columns": True,
+                    "fail_on_row_drop_exceeded": False,
                 }
             },
         },
@@ -268,6 +271,7 @@ def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Pa
     assert report["transition"]["config"] == {
         "max_row_drop_pct": 20.0,
         "warn_removed_columns": True,
+        "fail_on_row_drop_exceeded": False,
     }
     assert any(item["kind"] == "row_drop_pct" for item in report["transition"]["warnings"])
     assert any(item["kind"] == "removed_columns" for item in report["transition"]["warnings"])
@@ -491,3 +495,222 @@ def test_ensure_dict_preserves_validate_alias() -> None:
     )
     mv = mart_dict["validate"]
     assert mv["transition"]["max_row_drop_pct"] == 10
+
+
+# ---------------------------------------------------------------------------
+# Gap 5 — Transition errors when fail_on_row_drop_exceeded=True
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.policy
+def test_check_transitions_errors_when_fail_on_row_drop_exceeded_true() -> None:
+    """Con fail_on_row_drop_exceeded=True, il row drop eccessivo produce
+    errori (non warnings) e impatta ok=False."""
+    profiles = [
+        {
+            "target_name": "mart_demo",
+            "source_row_count": 100,
+            "target_row_count": 50,  # 50% drop > 20% soglia
+            "removed_columns": [],
+        }
+    ]
+
+    # Default: solo warning (comportamento attuale, backward compat)
+    default_report = check_transitions(
+        profiles,
+        TransitionConfig(max_row_drop_pct=20, fail_on_row_drop_exceeded=False),
+    )
+    assert default_report["warnings_count"] == 1
+    assert default_report["errors_count"] == 0
+    assert any("row drop" in w for w in default_report["warning_messages"])
+
+    # fail_on_row_drop_exceeded=True: errore invece di warning
+    fail_report = check_transitions(
+        profiles,
+        TransitionConfig(max_row_drop_pct=20, fail_on_row_drop_exceeded=True),
+    )
+    assert fail_report["errors_count"] == 1
+    assert fail_report["warnings_count"] == 0
+    assert any("row drop" in e for e in fail_report["error_messages"])
+    assert len(fail_report["errors"]) == 1
+    assert fail_report["errors"][0]["kind"] == "row_drop_pct"
+
+
+@pytest.mark.policy
+def test_check_transitions_respects_fail_on_row_drop_exceeded_threshold() -> None:
+    """Con fail_on_row_drop_exceeded=True, drop sotto soglia continua a
+    non produrre ne' errori ne' warnings (come prima)."""
+    profiles = [
+        {
+            "target_name": "mart_demo",
+            "source_row_count": 100,
+            "target_row_count": 95,  # 5% drop < 20% soglia
+            "removed_columns": [],
+        }
+    ]
+
+    report = check_transitions(
+        profiles,
+        TransitionConfig(max_row_drop_pct=20, fail_on_row_drop_exceeded=True),
+    )
+    assert report["errors_count"] == 0
+    assert report["warnings_count"] == 0
+    assert report["error_messages"] == []
+    assert report["warning_messages"] == []
+
+
+@pytest.mark.policy
+def test_run_mart_validation_transition_errors_set_ok_false(tmp_path: Path):
+    """run_mart_validation con fail_on_row_drop_exceeded=True deve
+    propagare le transizioni come errori e marcare ok=False."""
+    root = tmp_path / "root"
+    mart_dir = root / "data" / "mart" / "demo" / "2024"
+    mart_dir.mkdir(parents=True, exist_ok=True)
+    write_parquet(mart_dir / "mart_demo.parquet", "CREATE TABLE t AS SELECT 1 AS k")
+
+    (mart_dir / "metadata.json").write_text(
+        json.dumps(
+            {
+                "outputs": [{"name": "mart_demo", "path": "mart_demo.parquet"}],
+                "transition_profiles": [
+                    {
+                        "target_name": "mart_demo",
+                        "source_row_count": 100,
+                        "target_row_count": 50,  # 50% drop > 20% soglia
+                        "removed_columns": [],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from tests.helpers import make_config
+
+    cfg = make_config(
+        root=root,
+        base_dir=root,
+        dataset="demo",
+        mart={
+            "tables": [{"name": "mart_demo", "sql": "sql/mart_demo.sql"}],
+            "required_tables": ["mart_demo"],
+            "validate": {
+                "transition": {
+                    "max_row_drop_pct": 20,
+                    "fail_on_row_drop_exceeded": True,
+                }
+            },
+        },
+    )
+
+    summary = run_mart_validation(
+        cfg, 2024, logger=SimpleNamespace(info=lambda *args, **kwargs: None)
+    )
+
+    assert summary["passed"] is False, (
+        f"Expected failed with fail_on_row_drop_exceeded=True, got: {summary}"
+    )
+    assert summary["errors_count"] >= 1, "Expected at least 1 transition error"
+
+    # Verifica che il JSON di validazione su disco contenga l'errore
+    report = json.loads(
+        (mart_dir / "_validate" / "mart_validation.json").read_text(encoding="utf-8")
+    )
+    assert len(report.get("errors", [])) >= 1
+    assert any("row drop" in e for e in report["errors"])
+
+
+# ---------------------------------------------------------------------------
+# Gap 1 — Quality score nella validazione
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.policy
+def test_quality_score_perfect_dataset():
+    """0 errori, 0 warnings → score=100, verdict='buona'."""
+    from toolkit.core.validation import _compute_quality_score, _quality_verdict
+
+    score = _compute_quality_score(0, 0)
+    assert score == 100
+    assert _quality_verdict(score) == "buona"
+
+
+@pytest.mark.policy
+def test_quality_score_with_errors():
+    """Gli errori pesano -20 ciascuno."""
+    from toolkit.core.validation import _compute_quality_score, _quality_verdict
+
+    # 1 errore → 80, ancora buona
+    score = _compute_quality_score(1, 0)
+    assert score == 80
+    assert _quality_verdict(score) == "buona"
+
+    # 3 errori → 40, scarsa
+    score = _compute_quality_score(3, 0)
+    assert score == 40
+    assert _quality_verdict(score) == "scarsa"
+
+
+@pytest.mark.policy
+def test_quality_score_with_warnings():
+    """I warnings pesano -5 ciascuno — visibili ma non bloccanti."""
+    from toolkit.core.validation import _compute_quality_score, _quality_verdict
+
+    # 6 warnings → 70, accettabile
+    score = _compute_quality_score(0, 6)
+    assert score == 70
+    assert _quality_verdict(score) == "accettabile"
+
+    # 1 errore + 4 warnings → 60, accettabile
+    score = _compute_quality_score(1, 4)
+    assert score == 60
+    assert _quality_verdict(score) == "accettabile"
+
+
+@pytest.mark.policy
+def test_quality_score_clamped():
+    """Score non scende sotto 0 ne' supera 100."""
+    from toolkit.core.validation import _compute_quality_score
+
+    # 100 errori → clamped a 0
+    score = _compute_quality_score(100, 0)
+    assert score == 0
+
+    # errori negativi (non dovrebbe capitare) → clamped a 100
+    score = _compute_quality_score(-1, 0)
+    assert score == 100
+
+
+@pytest.mark.policy
+def test_build_validation_summary_includes_quality_score():
+    """build_validation_summary() deve includere quality_score e quality_verdict."""
+    from toolkit.core.validation import ValidationResult, build_validation_summary
+
+    result = ValidationResult(
+        ok=True,
+        errors=[],
+        warnings=["warning 1", "warning 2"],
+    )
+    summary = build_validation_summary(result)
+
+    assert "quality_score" in summary
+    assert "quality_verdict" in summary
+    assert summary["quality_score"] == 90  # 100 - 2*5 = 90
+    assert summary["quality_verdict"] == "buona"
+
+
+@pytest.mark.policy
+def test_build_validation_summary_passed_true_with_warnings_has_reduced_score():
+    """Un dataset con passed=True ma warnings deve avere quality_score < 100."""
+    from toolkit.core.validation import ValidationResult, build_validation_summary
+
+    result = ValidationResult(
+        ok=True,  # passed
+        errors=[],
+        warnings=["w1", "w2", "w3"],
+    )
+    summary = build_validation_summary(result)
+
+    assert summary["passed"] is True
+    assert summary["quality_score"] == 85  # 100 - 3*5 = 85
+    assert summary["warnings_count"] == 3

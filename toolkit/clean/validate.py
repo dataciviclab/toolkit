@@ -239,10 +239,11 @@ def validate_promotion(
         transition or TransitionConfig(),
     )
     warnings.extend(transition_report["warning_messages"])
+    errors.extend(transition_report["error_messages"])
 
     return ValidationResult(
-        ok=True,
-        errors=[],
+        ok=len(errors) == 0,
+        errors=errors,
         warnings=warnings,
         summary={
             "raw_dir": raw_value,

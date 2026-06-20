@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from toolkit.core import duckdb_read
-from toolkit.clean.read_config import resolve_clean_read_cfg
+from toolkit.clean.read_config import load_suggested_read, resolve_clean_read_cfg
 
 
 @pytest.mark.policy
@@ -767,3 +767,41 @@ def test_parquet_inject_column_escapes_apostrophe(tmp_path: Path):
             ("Valle d'Aosta", "Valle d'Aosta", 3),
         ], f"Unexpected rows: {rows}"
         assert "inject_column" in info.params_used
+
+
+@pytest.mark.regression
+def test_load_suggested_read_raw_profile_wins_over_suggested_yml(tmp_path: Path):
+    """Con entrambi raw_profile.json (con decimal) e suggested_read.yml (senza decimal)
+    presenti, raw_profile.json deve vincere: decimal deve essere presente."""
+    profile_dir = tmp_path / "_profile"
+    profile_dir.mkdir(parents=True)
+
+    # suggested_read.yml — versione POVERA, senza decimal
+    (profile_dir / "suggested_read.yml").write_text(
+        yaml.dump({"clean": {"read": {"delim": ";", "encoding": "utf-8"}}}),
+        encoding="utf-8",
+    )
+
+    # raw_profile.json — versione RICCA, con decimal
+    (profile_dir / "raw_profile.json").write_text(
+        __import__("json").dumps(
+            {
+                "delim_suggested": ";",
+                "encoding_suggested": "utf-8",
+                "decimal_suggested": ",",
+                "skip_suggested": 0,
+                "robust_read_suggested": False,
+                "date_raw_values": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = load_suggested_read(tmp_path)
+
+    assert result is not None, "load_suggested_read deve restituire un dict"
+    assert result.get("decimal") == ",", (
+        f"Decimal deve venire da raw_profile.json, got: {result.get('decimal')}"
+    )
+    assert result.get("delim") == ";"
+    assert result.get("encoding") == "utf-8"

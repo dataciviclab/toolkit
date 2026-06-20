@@ -55,6 +55,17 @@ def _split_read_cfg(explicit_cfg: dict[str, Any]) -> tuple[dict[str, Any], dict[
 
 
 def load_suggested_read(raw_year_dir: Path) -> dict[str, Any] | None:
+    # 1. raw_profile.json (ricco, da DuckDB profiling) — priorità massima
+    raw_profile_path = raw_year_dir / RAW_PROFILE_DIR / RAW_PROFILE
+    raw_profile = read_json_or_none(raw_profile_path) if raw_profile_path.exists() else None
+    if raw_profile is not None:
+        from toolkit.profile.raw import build_suggested_read_cfg
+
+        derived = build_suggested_read_cfg(raw_profile)
+        if derived:
+            return dict(derived)
+
+    # 2. Fallback legacy: suggested_read.yml (versione povera, sniff leggero)
     suggested_path = raw_year_dir / RAW_PROFILE_DIR / RAW_SUGGESTED_READ
     if suggested_path.exists():
         payload = read_yaml(suggested_path)
@@ -64,16 +75,6 @@ def load_suggested_read(raw_year_dir: Path) -> dict[str, Any] | None:
                 read_cfg = clean_cfg.get("read")
                 if isinstance(read_cfg, dict):
                     return dict(read_cfg)
-
-    # Fallback: deriva da raw_profile.json (elimina la dipendenza da suggested_read.yml
-    # scritto durante run raw, che era una versione povera basata su sniff leggero).
-    raw_profile_path = raw_year_dir / RAW_PROFILE_DIR / RAW_PROFILE
-    raw_profile = read_json_or_none(raw_profile_path) if raw_profile_path.exists() else None
-    if raw_profile is not None:
-        from toolkit.profile.raw import build_suggested_read_cfg
-
-        derived = build_suggested_read_cfg(raw_profile)
-        return dict(derived) if derived else None
 
     return None
 
@@ -93,8 +94,14 @@ def resolve_clean_read_cfg(
     suggested_cfg = load_suggested_read(raw_year_dir)
     filtered_suggested = filter_suggested_read(suggested_cfg)
     if normalized_source == "auto" and filtered_suggested and logger is not None:
+        _src = (
+            "raw_profile.json"
+            if (raw_year_dir / RAW_PROFILE_DIR / RAW_PROFILE).exists()
+            else "suggested_read.yml"
+        )
         logger.info(
-            "CLEAN read hints loaded from suggested_read.yml: %s",
+            "CLEAN read hints loaded from %s: %s",
+            _src,
             json.dumps(filtered_suggested, ensure_ascii=False, sort_keys=True),
         )
 

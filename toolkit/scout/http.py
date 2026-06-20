@@ -455,7 +455,7 @@ def fetch_content(
                         "content_length": None,
                     }
         finally:
-            resp.close()
+            getattr(resp, "close", lambda: None)()
 
     raise RuntimeError(f"GET failed for {url}")
 

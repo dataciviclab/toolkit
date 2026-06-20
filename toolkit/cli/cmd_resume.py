@@ -170,4 +170,4 @@ def resume(
 
 
 def register(app: typer.Typer) -> None:
-    app.command("resume")(resume)
+    app.command("resume", hidden=True)(resume)

@@ -17,7 +17,6 @@ import typer
 from lab_connectors.duckdb import safe_connect
 
 from toolkit.cli.common import dump_cfg_section, iter_selected_years, load_cfg_and_logger
-from toolkit.core.artifacts import should_write
 from toolkit.core.csv_read import csv_read_option_strings, robust_preset
 from toolkit.core.sql_utils import sql_str
 from toolkit.core.paths import layer_year_dir
@@ -27,7 +26,6 @@ from toolkit.profile.raw import (
     profile_with_read_cfg,
     sniff_source_file,
     write_raw_profile,
-    write_suggested_read_yml,
 )
 
 
@@ -127,9 +125,6 @@ def run_profile(cfg: ToolkitConfig, years: list[int], logger: Logger) -> None:
         prof = profile_raw(raw_dir, cfg.dataset, y, read_cfg=clean_cfg.get("read"))
         paths = write_raw_profile(out_dir, prof)
         written_paths = list(paths.values())
-
-        if should_write("profile", "suggested_read", cfg):
-            written_paths.append(write_suggested_read_yml(out_dir, prof.__dict__))
 
         if written_paths:
             logger.info("PROFILE RAW -> %s", " | ".join(str(path) for path in written_paths))

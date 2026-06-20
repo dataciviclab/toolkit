@@ -73,29 +73,6 @@ def _emit_unknown_keys_notice(
         raise _err(message, path=path)
 
 
-def _normalize_legacy_payload(
-    data: dict[str, Any],
-    *,
-    path: Path,
-    strict_config: bool,
-) -> dict[str, Any]:
-    normalized = dict(data)
-
-    raw = normalized.get("raw")
-    if isinstance(raw, dict):
-        normalized["raw"] = dict(raw)
-
-    clean = normalized.get("clean")
-    if isinstance(clean, dict):
-        normalized["clean"] = dict(clean)
-
-    mart = normalized.get("mart")
-    if isinstance(mart, dict):
-        normalized["mart"] = dict(mart)
-
-    return normalized
-
-
 def _warn_or_reject_unknown_keys(
     data: dict[str, Any],
     *,

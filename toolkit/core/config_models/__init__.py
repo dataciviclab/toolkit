@@ -44,7 +44,6 @@ from toolkit.core.config_models.policy import (
     _declared_model_keys,
     _emit_deprecation_notice,
     _emit_unknown_keys_notice,
-    _normalize_legacy_payload,
     _warn_or_reject_unknown_keys,
 )
 
@@ -108,7 +107,6 @@ __all__ = [
     "_declared_model_keys",
     "_emit_deprecation_notice",
     "_emit_unknown_keys_notice",
-    "_normalize_legacy_payload",
     "_warn_or_reject_unknown_keys",
     # Raw
     "ClientConfig",

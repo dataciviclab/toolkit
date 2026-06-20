@@ -146,7 +146,6 @@ def _validate_mart_sql(
     mart_cfg_ = ensure_dict(cfg.mart)
     if clean_cfg_.get("sql"):
         con.execute("CREATE OR REPLACE VIEW clean_input AS SELECT * FROM __dry_run_clean_preview")
-        con.execute("CREATE OR REPLACE VIEW clean AS SELECT * FROM clean_input")
 
     tables = mart_cfg_.get("tables") or []
     # In dry-run: require_exists=False per non bloccare candidate senza support

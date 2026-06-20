@@ -272,6 +272,42 @@ class TestValidateMartSql:
             _validate_mart_sql(cfg, year=2022, con=con)
 
     @pytest.mark.policy
+    def test_mart_sql_with_from_clean_fails(self, tmp_path: Path):
+        """FROM clean non e' piu' supportato — solo clean_input funziona."""
+        mart_sql_dir = tmp_path / "sql" / "mart"
+        mart_sql_dir.mkdir(parents=True, exist_ok=True)
+        (mart_sql_dir / "mart_out.sql").write_text("select * from clean", encoding="utf-8")
+
+        cfg = _make_cfg(
+            tmp_path,
+            clean_sql="select 1 as value",
+            mart_tables=[{"name": "mart_out", "sql": "sql/mart/mart_out.sql"}],
+        )
+        with safe_connect() as con:
+            _build_clean_preview(cfg, year=2022, con=con)
+            with pytest.raises(ValueError, match="MART SQL dry-run failed"):
+                _validate_mart_sql(cfg, year=2022, con=con)
+
+    @pytest.mark.policy
+    def test_mart_sql_with_clean_prefix_fails(self, tmp_path: Path):
+        """Prefisso clean. non e' piu' supportato — solo clean_input. funziona."""
+        mart_sql_dir = tmp_path / "sql" / "mart"
+        mart_sql_dir.mkdir(parents=True, exist_ok=True)
+        (mart_sql_dir / "mart_out.sql").write_text(
+            "select clean.value from clean_input", encoding="utf-8"
+        )
+
+        cfg = _make_cfg(
+            tmp_path,
+            clean_sql="select 1 as value",
+            mart_tables=[{"name": "mart_out", "sql": "sql/mart/mart_out.sql"}],
+        )
+        with safe_connect() as con:
+            _build_clean_preview(cfg, year=2022, con=con)
+            with pytest.raises(ValueError, match="MART SQL dry-run failed"):
+                _validate_mart_sql(cfg, year=2022, con=con)
+
+    @pytest.mark.policy
     def test_mart_sql_with_unresolved_placeholder_fails(self, tmp_path: Path):
         """Mart SQL with unresolved placeholder should fail."""
         mart_sql_dir = tmp_path / "sql" / "mart"

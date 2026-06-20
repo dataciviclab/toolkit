@@ -130,7 +130,7 @@ def test_artifacts_policy_standard_keeps_expected_artifacts(
     mart_dir = root / "data" / "mart" / cfg.dataset / str(year)
 
     assert (profile_dir / "raw_profile.json").exists()
-    assert (profile_dir / "suggested_read.yml").exists()
+    # suggested_read.yml non è più scritto da run raw — deriva da raw_profile.json al volo
     assert (clean_dir / "_run" / "clean_rendered.sql").exists()
     assert any((mart_dir / "_run").glob("*_rendered.sql"))
 

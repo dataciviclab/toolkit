@@ -137,7 +137,7 @@ def test_cli_commands_use_dataset_yml_dir_as_path_base(tmp_path: Path, monkeypat
     mart_dir = root / "data" / "mart" / "project_example" / "2022"
 
     assert (raw_dir / "ispra_dettaglio_comunale_2022.csv").exists()
-    assert (raw_dir / "_profile" / "suggested_read.yml").exists()
+    assert (raw_dir / "_profile" / "raw_profile.json").exists()
     assert (clean_dir / "project_example_2022_clean.parquet").exists()
     assert (mart_dir / "rd_by_regione.parquet").exists()
     assert (mart_dir / "rd_by_provincia.parquet").exists()

@@ -59,7 +59,7 @@ def test_inspect_paths_reports_dataset_repo_layout_from_other_cwd(
     )
     assert "raw_hints:" in result.output
     assert "primary_output_file:" in result.output
-    assert "suggested_read_exists: True" in result.output
+    assert "suggested_read_exists: False" in result.output
     assert "latest_run_status: SUCCESS" in result.output
 
 

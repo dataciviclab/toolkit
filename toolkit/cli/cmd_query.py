@@ -186,4 +186,4 @@ def query(
 
 
 def register(app: typer.Typer) -> None:
-    app.command("query")(query)
+    app.command("query", hidden=True)(query)

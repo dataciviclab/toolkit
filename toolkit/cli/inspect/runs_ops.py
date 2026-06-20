@@ -1,8 +1,8 @@
 """inspect runs — cronologia run, dettagli e resume.
 
 Comando canonico per gestire i run.
-``toolkit resume`` e ``toolkit status --run-id`` sono alias che
-delegano a questo comando.
+``toolkit resume`` delega a questo comando.
+La logica di resume è in ``cmd_resume.resume()`` (condivisa).
 """
 
 from __future__ import annotations
@@ -11,24 +11,9 @@ import json
 
 import typer
 
-from toolkit.cli.cmd_run import run_year
+from toolkit.cli.cmd_resume import resume as _resume
 from toolkit.core.config import load_config
-from toolkit.core.logging import get_logger
-from toolkit.core.run_records import get_run_dir, latest_run, read_run_record
-
-_LAYER_ORDER = ("raw", "clean", "mart")
-
-
-def _find_resume_layer(record: dict) -> str | None:
-    layers_raw = record.get("layers")
-    layers = layers_raw if isinstance(layers_raw, dict) else {}
-    for layer in _LAYER_ORDER:
-        layer_info = layers.get(layer)
-        layer_dict = layer_info if isinstance(layer_info, dict) else {}
-        status = layer_dict.get("status")
-        if status != "SUCCESS":
-            return layer
-    return None
+from toolkit.core.run_records import get_run_dir, read_run_record
 
 
 def runs(
@@ -41,52 +26,32 @@ def runs(
 ):
     """Mostra cronologia run, dettagli, o riprende un run fallito.
 
-    Con --resume riprende dal primo layer non SUCCESS.
-    ``toolkit resume`` e ``toolkit status`` sono alias che delegano qui.
+    Con --resume riprende dal primo layer non SUCCESS (usa la stessa logica
+    di ``toolkit resume``).
 
     Esempi:
         toolkit inspect runs -c dataset.yml                  # elenca ultimi run
         toolkit inspect runs -c dataset.yml --run-id <id>    # dettaglio specifico
         toolkit inspect runs -c dataset.yml --resume          # riprendi dal fallimento
     """
+    # Resume flow → delega alla logica completa di cmd_resume.resume()
+    if resume:
+        _resume(
+            config=config,
+            year=year,
+            dataset=None,
+            run_id=run_id,
+            latest=(run_id is None),
+            from_layer=None,
+        )
+        return
+
     cfg = load_config(config)
     yr = year if year is not None else (cfg.years[0] if cfg.years else None)
     if yr is None:
         raise typer.BadParameter(f"No years configured in {config}")
 
     run_dir = get_run_dir(cfg.root, cfg.dataset, yr)
-
-    # Resume flow
-    if resume:
-        if not run_dir.exists():
-            typer.echo("Nessun run precedente trovato. Esegui prima 'toolkit run'.", err=True)
-            raise typer.Exit(code=1)
-
-        try:
-            record = read_run_record(run_dir, run_id) if run_id else latest_run(run_dir)
-        except FileNotFoundError as exc:
-            typer.echo(str(exc), err=True)
-            raise typer.Exit(code=1) from exc
-
-        start_layer = _find_resume_layer(record)
-        if start_layer is None:
-            typer.echo("Nessun layer da riprendere — run completato.")
-            return
-
-        logger = get_logger()
-        new_context = run_year(
-            cfg,
-            yr,
-            step="all",
-            start_from_layer=start_layer,
-            logger=logger,
-            resumed_from=str(record.get("run_id")),
-        )
-        typer.echo(
-            f"Ripreso da {record.get('run_id')} a partire da {start_layer}. "
-            f"Nuovo run_id: {new_context.run_id}"
-        )
-        return
 
     # Show specific run
     if run_id:
@@ -124,7 +89,7 @@ def runs(
     run_files = sorted(run_dir.glob("*.json"), reverse=True)[:limit]
     records = []
     for f in run_files:
-        rid = f.stem  # filename without .json
+        rid = f.stem
         try:
             rec = read_run_record(run_dir, rid)
             records.append(rec)

@@ -195,4 +195,4 @@ def review_readiness(
 
 
 def register(app: typer.Typer) -> None:
-    app.command("review-readiness")(review_readiness)
+    app.command("review-readiness", hidden=True)(review_readiness)

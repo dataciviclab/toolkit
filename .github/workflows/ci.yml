@@ -24,7 +24,7 @@ jobs:
       - name: Mypy
         run: python -m mypy toolkit/
       - name: Pytest
-        run: python -m pytest -p pytest_cov -n auto -q -p no:cacheprovider -m "not smoke" --cov=toolkit --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+        run: python -m pytest -p pytest_cov -n auto -q -p no:cacheprovider -m "not smoke" --cov=toolkit --cov-report=term-missing --cov-report=xml --cov-fail-under=81
       - name: Upload Coverage Artifact
         if: always() && hashFiles('coverage.xml') != ''
         uses: actions/upload-artifact@v7

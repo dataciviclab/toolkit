@@ -190,6 +190,24 @@ class TestInspectSummary:
         result = runner.invoke(app, ["inspect", "summary"])
         assert result.exit_code != 0
 
+    @pytest.mark.contract
+    def test_nonexistent_run_id_fails(self, tmp_path):
+        """--run-id inesistente deve fallire con errore."""
+        # Crea un dataset.yml minimale
+        cfg = tmp_path / "dataset.yml"
+        cfg.write_text(
+            "dataset:\n  name: test\n  years: [2024]\n"
+            "raw:\n  sources:\n    - type: local_file\n      args:\n        path: dummy.csv\n"
+            "clean:\n  sql: dummy.sql\n"
+            "mart:\n  tables: []\n",
+            encoding="utf-8",
+        )
+        result = runner.invoke(
+            app, ["inspect", "summary", "-c", str(cfg), "--run-id", "nonexistent"]
+        )
+        # Si aspetta un errore (run non trovato) — exit code != 0
+        assert result.exit_code != 0
+
 
 class TestInspectRuns:
     """inspect runs — contratto base."""
@@ -209,6 +227,20 @@ class TestInspectRuns:
     def test_missing_config_fails(self):
         """Senza --config deve fallire."""
         result = runner.invoke(app, ["inspect", "runs"])
+        assert result.exit_code != 0
+
+    @pytest.mark.contract
+    def test_nonexistent_run_id_fails(self, tmp_path):
+        """--run-id inesistente deve fallire con errore."""
+        cfg = tmp_path / "dataset.yml"
+        cfg.write_text(
+            "dataset:\n  name: test\n  years: [2024]\n"
+            "raw:\n  sources:\n    - type: local_file\n      args:\n        path: dummy.csv\n"
+            "clean:\n  sql: dummy.sql\n"
+            "mart:\n  tables: []\n",
+            encoding="utf-8",
+        )
+        result = runner.invoke(app, ["inspect", "runs", "-c", str(cfg), "--run-id", "nonexistent"])
         assert result.exit_code != 0
 
 

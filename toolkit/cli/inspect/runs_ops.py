@@ -21,18 +21,22 @@ def runs(
     year: int | None = typer.Option(None, "--year", "-y", help="Dataset year (default: first)"),
     resume: bool = typer.Option(False, "--resume", help="Resume latest/failed run"),
     run_id: str | None = typer.Option(None, "--run-id", help="Specific run id (show o resume)"),
+    from_layer: str | None = typer.Option(
+        None, "--from-layer", help="Force restart from raw | clean | mart (solo con --resume)"
+    ),
     limit: int = typer.Option(10, "--limit", help="Max runs da elencare"),
     json_output: bool = typer.Option(False, "--json", help="Output JSON"),
 ):
     """Mostra cronologia run, dettagli, o riprende un run fallito.
 
     Con --resume riprende dal primo layer non SUCCESS (usa la stessa logica
-    di ``toolkit resume``).
+    di ``toolkit resume``, con cui condivide il backend ``cmd_resume.resume()``).
 
     Esempi:
-        toolkit inspect runs -c dataset.yml                  # elenca ultimi run
-        toolkit inspect runs -c dataset.yml --run-id <id>    # dettaglio specifico
-        toolkit inspect runs -c dataset.yml --resume          # riprendi dal fallimento
+        toolkit inspect runs -c dataset.yml                              # elenca ultimi run
+        toolkit inspect runs -c dataset.yml --run-id <id>                 # dettaglio specifico
+        toolkit inspect runs -c dataset.yml --resume                      # riprendi dal fallimento
+        toolkit inspect runs -c dataset.yml --resume --from-layer clean  # forza ripartenza da clean
     """
     # Resume flow → delega alla logica completa di cmd_resume.resume()
     if resume:
@@ -42,7 +46,7 @@ def runs(
             dataset=None,
             run_id=run_id,
             latest=(run_id is None),
-            from_layer=None,
+            from_layer=from_layer,
         )
         return
 

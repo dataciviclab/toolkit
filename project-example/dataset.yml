@@ -3,6 +3,7 @@ root: "./_smoke_out"
 dataset:
   name: "project_example"
   years: [2022]
+  source_id: "ispra_rd"
 
 raw:
   sources:

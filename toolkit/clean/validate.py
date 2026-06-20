@@ -220,12 +220,16 @@ def validate_promotion(
     saved_profile_path = profile_dir / RAW_PROFILE
 
     saved = read_json_or_none(saved_profile_path) if saved_profile_path.exists() else None
-    if saved is not None:
+    if saved is not None and saved.get("row_count") is not None:
         raw_profile = {
             "row_count": saved.get("row_count"),
             "columns": [{"name": c, "type": "VARCHAR"} for c in (saved.get("columns_raw") or [])],
         }
     else:
+        if logger is None:
+            import logging as _logging
+
+            logger = _logging.getLogger(__name__)
         raw_profile = _profile_raw_input(input_files, read_cfg, read_mode, logger)
     transition_profile = compare_layer_profiles(
         raw_profile,
@@ -239,10 +243,11 @@ def validate_promotion(
         transition or TransitionConfig(),
     )
     warnings.extend(transition_report["warning_messages"])
+    errors.extend(transition_report["error_messages"])
 
     return ValidationResult(
-        ok=True,
-        errors=[],
+        ok=len(errors) == 0,
+        errors=errors,
         warnings=warnings,
         summary={
             "raw_dir": raw_value,

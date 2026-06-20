@@ -62,11 +62,17 @@ class TransitionConfig(BaseModel):
 
     max_row_drop_pct: float | None = None
     warn_removed_columns: bool = True
+    fail_on_row_drop_exceeded: bool = True
 
     @field_validator("warn_removed_columns", mode="before")
     @classmethod
     def _parse_warn_removed_columns(cls, value: Any) -> bool:
         return parse_bool(value, "mart.validate.transition.warn_removed_columns")
+
+    @field_validator("fail_on_row_drop_exceeded", mode="before")
+    @classmethod
+    def _parse_fail_on_row_drop_exceeded(cls, value: Any) -> bool:
+        return parse_bool(value, "mart.validate.transition.fail_on_row_drop_exceeded")
 
 
 class MartValidateConfig(BaseModel):

@@ -326,6 +326,7 @@ def build_run_report(
             "file_size_bytes": file_bytes,
             "validation": {
                 "ok": val_ok,
+                "quality_score": val.get("quality_score"),
                 "errors": len(errors),
                 "warnings": len(warnings),
             },
@@ -516,12 +517,15 @@ def build_dataset_readme(
         readiness_icon_col = _readiness_icon(r.get("readiness"))
         readiness_name = r.get("readiness", "?")
 
-        # Qualità
+        layers = r.get("layers") or {}
+
+        # Qualità: preflight PA score (CSV) → fallback validazione clean
         pf = r.get("preflight") or {}
         qs = pf.get("quality_score_avg")
-        q_str = f"**{qs}**" if qs else "-"
-
-        layers = r.get("layers") or {}
+        if qs is None:
+            r_clean_val = layers.get("clean", {}).get("validation", {})
+            qs = r_clean_val.get("quality_score")
+        q_str = f"**{qs}**" if qs is not None else "-"
 
         # Raw
         r_raw = layers.get("raw") or {}

@@ -331,6 +331,8 @@ def _validation_summary_for_layer(
 
     result = {
         "ok": content.get("ok"),
+        "quality_score": content.get("quality_score"),
+        "quality_verdict": content.get("quality_verdict"),
         "errors_count": len(content.get("errors", [])),
         "warnings_count": len(content.get("warnings", [])),
         "row_count": None,
@@ -366,5 +368,9 @@ def _validation_summary_for_layer(
             first_key = next(iter(row_counts), None)
             if first_key:
                 result["row_count"] = row_counts[first_key]
+
+    # Column names and validation rules (clean layer)
+    result["columns"] = summary.get("columns")
+    result["rules"] = summary.get("rules")
 
     return result

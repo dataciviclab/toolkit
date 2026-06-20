@@ -327,8 +327,81 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
         }
     )
 
-    ok_count = sum(1 for c in checks if c["ok"])
-    fail_count = sum(1 for c in checks if not c["ok"])
+    # --- A. Clean column naming (snake_case check) ---
+    clean_cols = clean_val.get("columns") or clean.get("columns")
+    if clean_cols:
+        _bad_naming: list[str] = []
+        for col in clean_cols:
+            norm = col.strip().replace(" ", "_").replace("-", "_").lower()
+            if col != norm:
+                _bad_naming.append(col)
+        naming_ok = len(_bad_naming) == 0
+        checks.append(
+            {
+                "check": "clean_columns_naming",
+                "ok": naming_ok,
+                "detail": "tutte snake_case"
+                if naming_ok
+                else f"{len(_bad_naming)} colonne non snake_case: {_bad_naming[:5]}",
+            }
+        )
+    else:
+        checks.append(
+            {"check": "clean_columns_naming", "ok": None, "detail": "colonne clean non disponibili"}
+        )
+
+    # --- B. Validation rules coverage ---
+    rules_obj = clean_val.get("rules") or clean.get("rules") or {}
+    if clean_cols:
+        covered_cols: set[str] = set()
+        for rule_name, rule_vals in rules_obj.items():
+            if isinstance(rule_vals, list):
+                covered_cols.update(rule_vals)
+            elif isinstance(rule_vals, dict):
+                covered_cols.update(rule_vals.keys())
+        coverage_pct = round(len(covered_cols) / len(clean_cols) * 100) if clean_cols else 0
+        if coverage_pct >= 80:
+            coverage_ok = True
+            coverage_detail = f"{coverage_pct}% colonne coperte da regole"
+        elif coverage_pct > 0:
+            coverage_ok = False
+            coverage_detail = (
+                f"solo {coverage_pct}% colonne coperte da regole "
+                f"({len(covered_cols)}/{len(clean_cols)})"
+            )
+        else:
+            coverage_ok = False
+            coverage_detail = "nessuna regola di validazione configurata"
+        checks.append(
+            {
+                "check": "validation_rules_coverage",
+                "ok": coverage_ok,
+                "detail": coverage_detail,
+            }
+        )
+    else:
+        checks.append(
+            {
+                "check": "validation_rules_coverage",
+                "ok": None,
+                "detail": "colonne clean non disponibili",
+            }
+        )
+
+    # --- C. Metadata completeness ---
+    has_source_id = bool(cfg.source_id)
+    checks.append(
+        {
+            "check": "metadata_complete",
+            "ok": has_source_id,
+            "detail": "source_id ✅"
+            if has_source_id
+            else "source_id ❌ (manca dataset.source_id in dataset.yml)",
+        }
+    )
+
+    ok_count = sum(1 for c in checks if c["ok"] is True)
+    fail_count = sum(1 for c in checks if c["ok"] is False)
 
     # --- Extract validation messages from validation JSON ---
     def _validation_msgs(layer_dir: Path, filename: str, max_items: int = 3) -> dict:
@@ -373,9 +446,10 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
     if raw_col_count is not None and clean_col_count is not None:
         col_drop = raw_col_count - clean_col_count
 
+    total_active = ok_count + fail_count
     if fail_count == 0:
         readiness = "ready"
-    elif ok_count >= len(checks) - 1:
+    elif ok_count >= total_active - 1:
         readiness = "needs-review"
     else:
         readiness = "incomplete"
@@ -402,6 +476,8 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
                 "validation_msgs": clean_msgs,
                 "output": clean.get("output"),
                 "row_count": clean_rows,
+                "columns": clean_val.get("columns") or clean.get("columns"),
+                "rules": clean_val.get("rules") or clean.get("rules"),
                 "transition": {
                     "raw_row_count": raw_row_count,
                     "clean_row_count": clean_row_count,

@@ -1,7 +1,7 @@
 """Tests per toolkit/scout/infer.py — inferenze pure.
 
 pure_unit: infer_years, suggest_years, infer_granularity, infer_topics,
-           suggest_clean_sql, suggest_mart_sql, suggest_validation
+           generate_clean_sql, suggest_mart_sql, suggest_validation
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ from toolkit.scout.infer import (
     infer_years,
     suggest_years,
 )
+from toolkit.scaffold.clean import generate_clean_sql
 from toolkit.scaffold.full import (
-    suggest_clean_sql,
     suggest_mart_sql,
     suggest_validation,
 )
@@ -183,12 +183,11 @@ class TestInferTopics:
 # ---------------------------------------------------------------------------
 
 
-class TestSuggestCleanSql:
+class TestGenerateCleanSql:
     """pure_unit: clean.sql con TRY_CAST basato su mapping_suggestions."""
 
     @pytest.mark.pure_unit
     def test_with_casts(self) -> None:
-        cols = ["nome", "valore", "anno"]
         profile: dict[str, Any] = {
             "mapping_suggestions": {
                 "nome": {"type": "str"},
@@ -196,7 +195,7 @@ class TestSuggestCleanSql:
                 "anno": {"type": "int"},
             },
         }
-        sql = suggest_clean_sql(cols, profile)
+        sql = generate_clean_sql(profile, "candidate", 2024)
         assert 'TRY_CAST("valore" AS DOUBLE)' in sql
         assert 'TRY_CAST("anno" AS BIGINT)' in sql
         assert '"nome"' in sql
@@ -204,18 +203,24 @@ class TestSuggestCleanSql:
 
     @pytest.mark.pure_unit
     def test_no_mapping(self) -> None:
-        cols = ["a", "b", "c"]
-        profile: dict[str, Any] = {"mapping_suggestions": {}}
-        sql = suggest_clean_sql(cols, profile)
+        profile: dict[str, Any] = {
+            "mapping_suggestions": {
+                "a": {"type": "string"},
+                "b": {"type": "string"},
+                "c": {"type": "string"},
+            },
+        }
+        sql = generate_clean_sql(profile, "candidate", 2024)
         assert "TRY_CAST" not in sql
         assert '"a"' in sql
         assert '"b"' in sql
         assert '"c"' in sql
 
     @pytest.mark.pure_unit
-    def test_empty_columns(self) -> None:
-        sql = suggest_clean_sql([], {})
-        assert "placeholder" in sql or "FROM raw_input" in sql
+    def test_empty_profile(self) -> None:
+        profile: dict[str, Any] = {"mapping_suggestions": {}}
+        sql = generate_clean_sql(profile, "candidate", 2024)
+        assert "FROM raw_input" in sql
 
 
 # ---------------------------------------------------------------------------
@@ -316,15 +321,14 @@ class TestShorthandTypes:
 
     @pytest.mark.pure_unit
     def test_clean_sql_with_shorthand_types(self) -> None:
-        """suggest_clean_sql riconosce int/float come tipi numerici."""
-        cols = ["eta", "reddito"]
+        """generate_clean_sql riconosce int/float come tipi numerici."""
         profile: dict[str, Any] = {
             "mapping_suggestions": {
                 "eta": {"type": "int"},
                 "reddito": {"type": "float"},
             },
         }
-        sql = suggest_clean_sql(cols, profile)
+        sql = generate_clean_sql(profile, "candidate", 2024)
         assert 'TRY_CAST("eta" AS BIGINT)' in sql, f"int type not recognized: {sql}"
         assert 'TRY_CAST("reddito" AS DOUBLE)' in sql
 

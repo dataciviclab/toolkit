@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from toolkit.cli import cmd_inspect, common
+from toolkit.cli import common
+from toolkit.core.io import read_json_or_none
 
 pytestmark = pytest.mark.pure_unit
 
@@ -21,7 +22,7 @@ def test_cmd_status_read_json_returns_none_on_invalid_json(tmp_path: Path) -> No
 def test_cmd_inspect_read_json_returns_none_on_missing_file(tmp_path: Path) -> None:
     path = tmp_path / "missing.json"
 
-    assert cmd_inspect._read_json(path) is None
+    assert read_json_or_none(path) is None
 
 
 def test_common_read_json_returns_payload_on_valid_json(tmp_path: Path) -> None:

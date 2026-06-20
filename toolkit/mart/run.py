@@ -369,9 +369,6 @@ def run_mart(
                 paths = ",".join([f"'{_sql_path_quote(p)}'" for p in clean_files])
                 con.execute(f"CREATE VIEW clean_input AS SELECT * FROM read_parquet([{paths}])")
 
-            # alias for backward-compatible SQL (old templates may reference "clean")
-            con.execute("CREATE OR REPLACE VIEW clean AS SELECT * FROM clean_input")
-
         tables = mart_cfg.get("tables") or []
         has_hierarchy = bool(mart_cfg.get("hierarchy"))
         if not isinstance(tables, list) or (not tables and not has_hierarchy):

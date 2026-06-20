@@ -18,7 +18,6 @@ from toolkit.profile.raw import (
     sniff_source_file,
     profile_raw,
     write_raw_profile,
-    write_suggested_read_yml,
 )
 from toolkit.scaffold.clean import scaffold_clean_if_missing
 from toolkit.raw._fetch_utils import (
@@ -168,12 +167,6 @@ def run_raw(
     }:
         try:
             profile_hints = sniff_source_file(primary_output_path)
-            if should_write("profile", "suggested_read", profile_ctx):
-                conservative_hints = dict(profile_hints)
-                conservative_hints["decimal_suggested"] = None
-                suggested_path = write_suggested_read_yml(out_dir / "_profile", conservative_hints)
-                logger.info("RAW suggested_read -> %s", suggested_path)
-
             if should_write("profile", "raw_profile", profile_ctx):
                 raw_profile = profile_raw(
                     out_dir,

@@ -25,7 +25,6 @@ toolkit status --dataset zip_http_csv --year 2022 --latest --config dataset.yml
 - `./_smoke_out/data/raw/zip_http_csv/2022/manifest.json`
 - `./_smoke_out/data/raw/zip_http_csv/2022/raw_validation.json`
 - `./_smoke_out/data/raw/zip_http_csv/2022/_profile/raw_profile.json`
-- `./_smoke_out/data/raw/zip_http_csv/2022/_profile/suggested_read.yml`
 - `./_smoke_out/data/clean/zip_http_csv/2022/metadata.json` con `read_params_source`, `read_source_used`, `read_params_used`
 - `./_smoke_out/data/mart/zip_http_csv/2022/mart_ok.parquet`
 

@@ -20,7 +20,6 @@ from toolkit.core.config_models.common import (
     SupportDatasetConfig,
     _err,
     _ensure_root_within_repo,
-    _normalize_legacy_payload,
     _normalize_section_paths,
     _require_map,
     _resolve_root,
@@ -108,7 +107,13 @@ def load_config_model(
         raise _err("dataset.years deve essere una lista non vuota, es: [2022, 2023].", path=p)
 
     strict_mode = strict_config or _read_strict_config(data, path=p)
-    normalized = _normalize_legacy_payload(data, path=p, strict_config=strict_mode)
+    # Shallow copy to avoid mutating caller dict
+    normalized = dict(data)
+    for section in ("raw", "clean", "mart"):
+        val = normalized.get(section)
+        if isinstance(val, dict):
+            normalized[section] = dict(val)
+
     normalized = _warn_or_reject_unknown_keys(normalized, path=p, strict_config=strict_mode)
     root_path, root_source = _resolve_root(normalized.get("root"), base_dir=base_dir)
     if repo_root is not None:

@@ -118,13 +118,15 @@ def _print_layer_profiles(dataset: str, year: int, layers: dict[str, Any]) -> No
     mart_clean_input = profiles.get("mart_clean_input")
     if isinstance(mart_clean_input, dict):
         typer.echo(f"  mart_clean_input: {format_profile_preview(mart_clean_input)}")
-    mart_tables: list[dict[str, Any]] = profiles.get("mart_tables") or []  # type: ignore[assignment]
+    mart_tables_raw = profiles.get("mart_tables")
+    mart_tables: list[dict[str, Any]] = mart_tables_raw if isinstance(mart_tables_raw, list) else []
     if mart_tables:
         typer.echo("  mart_tables:")
         for table in mart_tables:
             if isinstance(table, dict):
                 typer.echo(f"    {table.get('name', '?')}: {format_profile_preview(table)}")
-    transitions: list[dict[str, Any]] = profiles.get("clean_to_mart") or []  # type: ignore[assignment]
+    transitions_raw = profiles.get("clean_to_mart")
+    transitions: list[dict[str, Any]] = transitions_raw if isinstance(transitions_raw, list) else []
     if transitions:
         typer.echo("  clean_to_mart:")
         for item in transitions:

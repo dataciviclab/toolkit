@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import pytest
@@ -11,6 +12,12 @@ from typer.testing import CliRunner
 from toolkit.cli.app import app
 
 runner = CliRunner()
+
+
+def _strip_ansi(text: str) -> str:
+    """Rimuove sequenze ANSI escape (colori, bold, bordi) dall'output."""
+    return re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", text)
+
 
 CONFIG_PATH = "dataset-incubator/candidates/irpef-comunale/dataset.yml"
 
@@ -85,17 +92,19 @@ class TestInspectConfig:
     def test_help(self):
         """--help mostra i flag principali."""
         result = runner.invoke(app, ["inspect", "config", "--help"])
+        output = _strip_ansi(result.stdout)
         assert result.exit_code == 0
-        assert "--mode" in result.stdout
-        assert "--layer" in result.stdout
-        assert "--diff" in result.stdout
-        assert "--config" in result.stdout
+        assert "--mode" in output
+        assert "--layer" in output
+        assert "--diff" in output
+        assert "--config" in output
 
     @pytest.mark.contract
     def test_help_json_flag(self):
         """--json e' documentato."""
         result = runner.invoke(app, ["inspect", "config", "--help"])
-        assert "--json" in result.stdout
+        output = _strip_ansi(result.stdout)
+        assert "--json" in output
 
     @pytest.mark.contract
     @pytest.mark.parametrize("mode", ["schema", "preview", "profile", "sql"])
@@ -169,10 +178,11 @@ class TestInspectSummary:
     def test_help(self):
         """--help mostra i flag principali."""
         result = runner.invoke(app, ["inspect", "summary", "--help"])
+        output = _strip_ansi(result.stdout)
         assert result.exit_code == 0
-        assert "--config" in result.stdout
-        assert "--json" in result.stdout
-        assert "--run-id" in result.stdout
+        assert "--config" in output
+        assert "--json" in output
+        assert "--run-id" in output
 
     @pytest.mark.contract
     def test_missing_config_fails(self):
@@ -188,11 +198,12 @@ class TestInspectRuns:
     def test_help(self):
         """--help mostra i flag principali."""
         result = runner.invoke(app, ["inspect", "runs", "--help"])
+        output = _strip_ansi(result.stdout)
         assert result.exit_code == 0
-        assert "--config" in result.stdout
-        assert "--resume" in result.stdout
-        assert "--run-id" in result.stdout
-        assert "--limit" in result.stdout
+        assert "--config" in output
+        assert "--resume" in output
+        assert "--run-id" in output
+        assert "--limit" in output
 
     @pytest.mark.contract
     def test_missing_config_fails(self):
@@ -208,7 +219,8 @@ class TestInspectTopLevel:
     def test_inspect_help_shows_subcommands(self):
         """inspect --help mostra config, summary, runs."""
         result = runner.invoke(app, ["inspect", "--help"])
+        output = _strip_ansi(result.stdout)
         assert result.exit_code == 0
-        assert "config" in result.stdout
-        assert "summary" in result.stdout
-        assert "runs" in result.stdout
+        assert "config" in output
+        assert "summary" in output
+        assert "runs" in output

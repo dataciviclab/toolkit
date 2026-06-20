@@ -2,7 +2,7 @@
 
 Responsible for resolving clean.read contract from:
 - explicit clean.read config
-- suggested_read.yml hints from raw profiling
+- suggested_read.yml hints from raw profiling (o derivato da raw_profile.json)
 - merging and normalising into a unified read config
 
 Does NOT handle runtime read execution (see duckdb_read.py).
@@ -14,14 +14,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from toolkit.core.io import read_yaml
+from toolkit.core.io import read_json_or_none, read_yaml
 from toolkit.core.csv_read import (
     READ_SELECTION_KEYS,
     READ_SOURCE_MODES,
     filter_suggested_format_keys,
     merge_read_cfg,
 )
-from toolkit.core.paths import RAW_PROFILE_DIR, RAW_SUGGESTED_READ
+from toolkit.core.paths import RAW_PROFILE, RAW_PROFILE_DIR, RAW_SUGGESTED_READ
 
 
 def _read_source_mode(clean_cfg: dict[str, Any], logger=None) -> tuple[str, dict[str, Any]]:
@@ -56,22 +56,26 @@ def _split_read_cfg(explicit_cfg: dict[str, Any]) -> tuple[dict[str, Any], dict[
 
 def load_suggested_read(raw_year_dir: Path) -> dict[str, Any] | None:
     suggested_path = raw_year_dir / RAW_PROFILE_DIR / RAW_SUGGESTED_READ
-    if not suggested_path.exists():
-        return None
+    if suggested_path.exists():
+        payload = read_yaml(suggested_path)
+        if isinstance(payload, dict):
+            clean_cfg = payload.get("clean")
+            if isinstance(clean_cfg, dict):
+                read_cfg = clean_cfg.get("read")
+                if isinstance(read_cfg, dict):
+                    return dict(read_cfg)
 
-    payload = read_yaml(suggested_path)
-    if not isinstance(payload, dict):
-        return None
+    # Fallback: deriva da raw_profile.json (elimina la dipendenza da suggested_read.yml
+    # scritto durante run raw, che era una versione povera basata su sniff leggero).
+    raw_profile_path = raw_year_dir / RAW_PROFILE_DIR / RAW_PROFILE
+    raw_profile = read_json_or_none(raw_profile_path) if raw_profile_path.exists() else None
+    if raw_profile is not None:
+        from toolkit.profile.raw import build_suggested_read_cfg
 
-    clean_cfg = payload.get("clean")
-    if not isinstance(clean_cfg, dict):
-        return None
+        derived = build_suggested_read_cfg(raw_profile)
+        return dict(derived) if derived else None
 
-    read_cfg = clean_cfg.get("read")
-    if not isinstance(read_cfg, dict):
-        return None
-
-    return dict(read_cfg)
+    return None
 
 
 def filter_suggested_read(cfg: dict[str, Any] | None) -> dict[str, Any]:

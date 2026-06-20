@@ -1,24 +1,24 @@
 WITH base AS (
   SELECT
-    COALESCE("Regione", "REGIONE") AS regione,
-    COALESCE("Provincia", "PROVINCIA") AS provincia,
-    COALESCE("Comune", "COMUNE") AS comune,
+    CAST(COALESCE("Regione", "REGIONE") AS VARCHAR) AS regione,
+    CAST(COALESCE("Provincia", "PROVINCIA") AS VARCHAR) AS provincia,
+    CAST(COALESCE("Comune", "COMUNE") AS VARCHAR) AS comune,
 
     COALESCE(
-      "Raccolta differenziata (%)",
-      "Raccolta differenziata %",
-      "RD (%)",
-      "RD%",
+      CAST("Raccolta differenziata (%)" AS VARCHAR),
+      CAST("Raccolta differenziata %" AS VARCHAR),
+      CAST("RD (%)" AS VARCHAR),
+      CAST("RD%" AS VARCHAR),
 
       -- varianti strane viste in giro
-      "Raccolta differenziata ( % )"
+      CAST("Raccolta differenziata ( % )" AS VARCHAR)
     ) AS pct_rd_raw,
 
     COALESCE(
-      "Rifiuti urbani totali (t)",
-      "Rifiuti urbani totali t",
-      "RU totali (t)",
-      "RU totali t"
+      CAST("Rifiuti urbani totali (t)" AS VARCHAR),
+      CAST("Rifiuti urbani totali t" AS VARCHAR),
+      CAST("RU totali (t)" AS VARCHAR),
+      CAST("RU totali t" AS VARCHAR)
     ) AS ru_tot_t_raw
 
   FROM raw_input
@@ -54,4 +54,4 @@ SELECT
 FROM base
 WHERE regione  IS NOT NULL AND TRIM(regione)  <> ''
   AND provincia IS NOT NULL AND TRIM(provincia) <> ''
-  AND comune   IS NOT NULL AND TRIM(comune)   <> '';
+  AND comune   IS NOT NULL AND TRIM(comune)   <> ''

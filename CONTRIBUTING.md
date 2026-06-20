@@ -74,8 +74,8 @@ python -m toolkit.cli.app validate all --config project-example/dataset.yml
 # Inspect paths
 python -m toolkit.cli.app inspect paths --config project-example/dataset.yml
 
-# Profile RAW
-python -m toolkit.cli.app inspect profile --config project-example/dataset.yml
+# Profile RAW (canonico: inspect config)
+python -m toolkit.cli.app inspect config -c project-example/dataset.yml -l raw -m profile
 ```
 
 ## Test Suite Tiers

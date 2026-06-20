@@ -4,15 +4,15 @@ Questa nota raccoglie i flussi e le opzioni del toolkit che restano supportati, 
 
 Percorso canonico:
 
-- `toolkit run all --config dataset.yml`
-- `toolkit validate all --config dataset.yml`
-- `toolkit status --dataset <dataset> --year <year> --latest --config dataset.yml`
+- `toolkit run full --config dataset.yml`
+- `toolkit inspect summary -c dataset.yml`
+- `toolkit inspect config -c dataset.yml`
 - notebook locali che leggono output e metadata sotto `root/data/...`
 
 Questa categoria include anche tooling di supporto che non va confuso con il runtime principale del toolkit:
 
-- `inspect profile`
-- `resume`
+- `toolkit inspect runs --resume`
+- `toolkit inspect config -l raw -m profile`
 - run parziali per layer
 
 ## Quando usare cosa
@@ -28,7 +28,7 @@ Regola pratica:
 - se hai aggiunto o modificato solo tabelle multi-anno, aggiungi/aggiorna
   `years: [...]` nella tabella `mart`
 - se un run si interrompe ma il run record e gli artefatti precedenti sono
-  ancora coerenti, usa `toolkit resume`
+  ancora coerenti, usa `toolkit inspect runs --resume`
 - se hai toccato solo notebook, docs o script locali del repo dataset, non
   rilanciare la pipeline per default
 
@@ -42,7 +42,7 @@ Matrice minima:
 | cambio `clean.sql` o `clean.read` | `toolkit run clean --config dataset.yml` poi `toolkit run mart --config dataset.yml` |
 | cambio solo `mart.sql` | `toolkit run mart --config dataset.yml` |
 | cambio solo tabella multi-anno | `toolkit run mart --config dataset.yml` |
-| run interrotto a metà con run record/artifacts coerenti | `toolkit resume ... --config dataset.yml` |
+| run interrotto a metà con run record/artifacts coerenti | `toolkit inspect runs --resume -c dataset.yml` |
 | cambio solo notebook/docs | nessun rerun automatico |
 
 Il toolkit non impone di cancellare `raw/`, `clean/`, `mart/` tra un
@@ -71,20 +71,21 @@ Questi comandi non sono il happy path raccomandato per i nuovi repo dataset, ma 
 
 ## Resume
 
-`resume` serve quando esiste già un run record e vuoi ripartire dal primo layer non `SUCCESS` oppure forzare una ripartenza da `raw|clean|mart`.
+`inspect runs --resume` serve quando esiste già un run record e vuoi ripartire dal primo layer non `SUCCESS` oppure forzare una ripartenza da `raw|clean|mart`.
 
 Esempi:
 
 ```bash
-toolkit resume --dataset my_dataset --year 2024 --latest --config dataset.yml
-toolkit resume --dataset my_dataset --year 2024 --run-id <run_id> --from-layer clean --config dataset.yml
+toolkit inspect runs --resume -c dataset.yml
+toolkit inspect runs --resume -c dataset.yml --run-id <run_id>
+toolkit inspect runs --resume -c dataset.yml --from-layer clean
 ```
 
 Il comando verifica anche gli artefatti minimi del layer precedente prima di ripartire.
 
 ## Profile RAW
 
-`toolkit inspect profile --config dataset.yml` genera il profilo diagnostico RAW (encoding, delimitatore, colonne, statistiche).
+`toolkit inspect config -c dataset.yml -l raw -m profile` genera il profilo diagnostico RAW (encoding, delimitatore, colonne, statistiche).
 
 Artefatti principali:
 
@@ -94,7 +95,7 @@ Artefatti principali:
 Nota pratica:
 
 - `run raw` scrive già un profilo leggero e conservativo quando il file primario è profilabile
-- `inspect profile` produce lo stesso profilo ma con output CLI leggibile, utile per debug rapido
+- `inspect config -l raw -m profile` produce lo stesso profilo ma con output CLI leggibile, utile per debug rapido
 
 `raw_profile.json` è il nome canonico del profilo RAW. `profile.json` non è più scritto.
 
@@ -113,8 +114,8 @@ Opzioni utili ma avanzate:
 Uso consigliato:
 
 - repo dataset nuovi: configurazione esplicita e `--strict-config`
-- `inspect profile` se vuoi vedere il profilo RAW a schermo senza aprire il JSON
-- `inspect schema-diff` quando vuoi confrontare rapidamente hints e colonne tra piu anni senza aprire a mano i metadata RAW
+- `inspect config -l raw -m profile` se vuoi vedere il profilo RAW a schermo senza aprire il JSON
+- `inspect config --diff` quando vuoi confrontare rapidamente hints e colonne tra piu anni senza aprire a mano i metadata RAW
 
 ## Artifact policy
 

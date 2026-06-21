@@ -67,7 +67,7 @@ def mock_layer_query(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             }
         return {"dataset": "test"}
 
-    monkeypatch.setattr("toolkit.cli.cmd_layer.layer_query", _fake)
+    monkeypatch.setattr("toolkit.cli.inspect.config_ops.layer_query", _fake)
     return {}
 
 

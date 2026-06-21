@@ -9,7 +9,7 @@ toolkit run raw --config dataset.yml
 toolkit profile raw --config dataset.yml
 toolkit run clean --config dataset.yml
 toolkit run mart --config dataset.yml
-toolkit status --dataset bdap_http_csv --year 2022 --latest --config dataset.yml
+toolkit inspect summary -c dataset.yml --year 2022
 ```
 
 ## Verifiche attese

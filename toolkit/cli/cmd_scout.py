@@ -862,4 +862,4 @@ def preview(
 
 def register(app: typer.Typer) -> None:
     app.command("scout")(scout)
-    app.command("preview")(preview)
+    app.command("preview", hidden=True)(preview)

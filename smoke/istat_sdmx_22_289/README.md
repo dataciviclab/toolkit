@@ -9,7 +9,7 @@ toolkit run raw --config dataset.yml
 toolkit profile raw --config dataset.yml
 toolkit run clean --config dataset.yml
 toolkit run mart --config dataset.yml
-toolkit status --dataset istat_sdmx_22_289 --year 2024 --latest --config dataset.yml
+toolkit inspect summary -c dataset.yml --year 2024
 ```
 
 ## Verifiche attese

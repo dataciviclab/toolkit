@@ -27,8 +27,8 @@ chiaro tra ogni layer.
 ```bash
 pip install -e .[dev]
 
-toolkit run all -c project-example/dataset.yml
-toolkit validate all -c project-example/dataset.yml
+toolkit run full -c project-example/dataset.yml
+toolkit inspect summary -c project-example/dataset.yml
 ```
 
 Output prodotto in `project-example/_smoke_out/data/clean/project_example/2022/`. Trova il percorso esatto con `toolkit inspect paths --config project-example/dataset.yml`.
@@ -93,7 +93,7 @@ Il toolkit non gestisce il deployment: scrive nella directory configurata via
 | Prima esecuzione del dataset | `toolkit run all --config dataset.yml` |
 | Cambiato solo SQL di clean | `toolkit run clean --config dataset.yml` + `toolkit run mart` |
 | Cambiato solo SQL di mart | `toolkit run mart --config dataset.yml` |
-| Run interrotto (artefatti coerenti) | `toolkit resume --dataset <name> --year <year> --config dataset.yml` |
+| Run interrotto (artefatti coerenti) | `toolkit inspect runs --resume --config dataset.yml` |
 | Aggiunto/modificato tabella multi-anno | Aggiungere `years: [2022, 2023]` alla tabella in `mart.tables[]` |
 
 ### Diagnostica
@@ -101,20 +101,19 @@ Il toolkit non gestisce il deployment: scrive nella directory configurata via
 | Comando | Cosa fa |
 |---|---|
 | `toolkit inspect paths --config dataset.yml --year 2023` | Mostra path assoluti degli output (utile nei notebook). Esempio: `toolkit inspect paths --config project-example/dataset.yml --json` |
-| `toolkit inspect schema-diff --config dataset.yml` | Confronta schema RAW tra anni configurati |
-| `toolkit review-readiness --config dataset.yml` | Check di prontezza per review candidate (raccomandato) |
-| `toolkit status --dataset <name> --year <year> --latest --config dataset.yml` | Ultimo run completato |
-| `toolkit inspect profile --config dataset.yml` | Profilo diagnostico del RAW (encoding, delimitatore, colonne) — scrive `raw_profile.json` |
+| `toolkit inspect config -c dataset.yml -m schema` | Schema colonne e tipi di raw/clean/mart |
+| `toolkit inspect config -c dataset.yml -l raw -m profile` | Profilo diagnostico del RAW (encoding, delimitatore, colonne) |
+| `toolkit inspect config -c dataset.yml --diff` | Confronto schema RAW tra anni configurati |
+| `toolkit inspect summary -c dataset.yml` | Ultimo run completato, layer status, validation |
+| `toolkit inspect runs -c dataset.yml` | Cronologia run, dettaglio run specifico o resume |
 
 ### Altri comandi
 
 | Comando | Cosa fa |
 |---|---|
-| `toolkit query path/to/file.parquet [--sql "..."]` | Query SQL su parquet (via path o via dataset.yml + layer) |
 | `toolkit scout <URL>` | Esplora URL esterno (HTTP/CKAN/SDMX/HTML) — probe + routing + inferenze |
 | `toolkit scout <URL> --scaffold` | Probe + scaffold candidato completo (dataset.yml, SQL, README) |
 | `toolkit scout <URL> --run` | Probe + scaffold + raw run |
-| `toolkit scaffold <slug>` | Genera scheletro `dataset.yml` + SQL da un template |
 | `toolkit batch --file jobs.yml` | Esegue più dataset in sequenza |
 
 ---
@@ -261,12 +260,12 @@ toolkit/
 | Problema | Soluzione |
 |---|---|
 | `toolkit: command not found` | Usa `python -m toolkit.cli.app` al posto di `toolkit` |
-| "fare una query SQL su un parquet?" | `toolkit query path/to/file.parquet --sql "SELECT * FROM data WHERE ..."` |
-| `run all` fallisce | `toolkit review-readiness --config dataset.yml` + controlla che la fonte sia raggiungibile |
+| "fare una query SQL su un parquet?" | `toolkit inspect config -c dataset.yml -l clean -m sql --sql "SELECT * FROM data WHERE ..."` |
+| `run full` fallisce | `toolkit inspect summary -c dataset.yml` + controlla layer status e validation |
 | "dove sono i parquet prodotti?" | `toolkit inspect paths --config dataset.yml --year <anno>` o cerca in `root/data/` |
-| "errore schema tra anni diversi" | `toolkit inspect schema-diff --config dataset.yml` per vedere il drift RAW |
+| "errore schema tra anni diversi" | `toolkit inspect config -c dataset.yml --diff` per vedere il drift RAW |
 | Voglio solo un layer, non tutto | `toolkit run clean` o `toolkit run mart` — skippa i layer upstream se già presenti |
-| Il run si è interrotto a metà | `toolkit resume --dataset <name> --year <year> --config dataset.yml` (se i run record sono coerenti) |
+| Il run si è interrotto a metà | `toolkit inspect runs --resume -c dataset.yml` (se i run record sono coerenti) |
 | Devo cancellare output precedenti? | No — il toolkit sovrascrive in-place. Usa `output_policy: versioned` se vuoi tenere cronologia |
 | Come si legge l'output in un notebook? | Vedi [notebook-contract.md](docs/notebook-contract.md) |
 

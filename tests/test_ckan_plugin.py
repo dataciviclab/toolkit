@@ -608,9 +608,7 @@ def _csv_resource(name: str, format_: str = "CSV") -> dict:
 def test_fetch_all_concatenates_two_csvs():
     """Two CSV resources → one concatenated CSV with header from first only."""
     fake = FakeHttpClient()
-    fake.responses[
-        "https://portal.example.org/api/3/action/package_show"
-    ] = _all_resources_package(
+    fake.responses["https://portal.example.org/api/3/action/package_show"] = _all_resources_package(
         "test-pkg",
         [
             _csv_resource("m_2025_01", "CSV"),
@@ -646,9 +644,7 @@ def test_fetch_all_concatenates_two_csvs():
 def test_fetch_all_first_resource_fails_fallback_correct():
     """First resource fails → second succeeds → header is from second."""
     fake = FakeHttpClient()
-    fake.responses[
-        "https://portal.example.org/api/3/action/package_show"
-    ] = _all_resources_package(
+    fake.responses["https://portal.example.org/api/3/action/package_show"] = _all_resources_package(
         "test-pkg",
         [
             _csv_resource("m_2025_01", "CSV"),
@@ -709,9 +705,7 @@ def test_fetch_all_zip_with_csv():
         return buf.getvalue()
 
     fake = FakeHttpClient()
-    fake.responses[
-        "https://portal.example.org/api/3/action/package_show"
-    ] = _all_resources_package(
+    fake.responses["https://portal.example.org/api/3/action/package_show"] = _all_resources_package(
         "test-pkg",
         [
             _csv_resource("m_01", "CSV"),
@@ -751,9 +745,7 @@ def test_fetch_all_zip_without_csv_skipped():
         return buf.getvalue()
 
     fake = FakeHttpClient()
-    fake.responses[
-        "https://portal.example.org/api/3/action/package_show"
-    ] = _all_resources_package(
+    fake.responses["https://portal.example.org/api/3/action/package_show"] = _all_resources_package(
         "test-pkg",
         [
             _csv_resource("m_01", "CSV"),
@@ -784,9 +776,7 @@ def test_fetch_all_zip_without_csv_skipped():
 def test_fetch_all_log_resources_excluded():
     """Resource with ``logcsv`` in name is excluded from CSV candidates."""
     fake = FakeHttpClient()
-    fake.responses[
-        "https://portal.example.org/api/3/action/package_show"
-    ] = _all_resources_package(
+    fake.responses["https://portal.example.org/api/3/action/package_show"] = _all_resources_package(
         "test-pkg",
         [
             _csv_resource("my_csv_logCsv", "CSV"),  # should be excluded
@@ -810,9 +800,7 @@ def test_fetch_all_log_resources_excluded():
 def test_fetch_all_no_csv_resources_raises():
     """Dataset has zero CSV resources → raises DownloadError."""
     fake = FakeHttpClient()
-    fake.responses[
-        "https://portal.example.org/api/3/action/package_show"
-    ] = _all_resources_package(
+    fake.responses["https://portal.example.org/api/3/action/package_show"] = _all_resources_package(
         "test-pkg",
         [
             {"id": "r1", "name": "data", "format": "JSON", "url": "https://dl.example.org/d.json"},
@@ -829,9 +817,7 @@ def test_fetch_all_no_csv_resources_raises():
 def test_fetch_all_no_resources_raises():
     """Dataset has zero resources → raises DownloadError."""
     fake = FakeHttpClient()
-    fake.responses[
-        "https://portal.example.org/api/3/action/package_show"
-    ] = HttpResult(
+    fake.responses["https://portal.example.org/api/3/action/package_show"] = HttpResult(
         response=fake_response(200, json_data={"success": True, "result": {"resources": []}}),
         err=None,
     )
@@ -846,9 +832,7 @@ def test_fetch_all_no_resources_raises():
 def test_fetch_all_all_resources_fail_raises():
     """All CSV resources fail to download → raises DownloadError."""
     fake = FakeHttpClient()
-    fake.responses[
-        "https://portal.example.org/api/3/action/package_show"
-    ] = _all_resources_package(
+    fake.responses["https://portal.example.org/api/3/action/package_show"] = _all_resources_package(
         "test-pkg",
         [
             _csv_resource("m_01", "CSV"),

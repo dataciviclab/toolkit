@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from lab_connectors.duckdb import safe_connect
+from lab_connectors.duckdb import GCS_S3_CONFIG, safe_connect
 
 from toolkit.core.duckdb_read import read_raw_to_relation
 from toolkit.core.input_file import RawInputFile
@@ -45,7 +45,7 @@ def _run_sql(
     Returns:
         tuple of (source, params_used, output_profile)
     """
-    with safe_connect() as con:
+    with safe_connect(extensions=["httpfs"], config=GCS_S3_CONFIG) as con:
         read_info = read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
         if sample_rows is not None:
             # Strip trailing semicolons: clean.sql spesso termina con ;

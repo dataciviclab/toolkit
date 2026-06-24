@@ -169,5 +169,4 @@ def resume(
     )
 
 
-def register(app: typer.Typer) -> None:
-    app.command("resume", hidden=True)(resume)
+# Not registered as standalone CLI — usato da inspect runs --resume

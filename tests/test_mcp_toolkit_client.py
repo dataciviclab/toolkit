@@ -415,7 +415,9 @@ def test_schema_diff_cli_contract_alignment(
     config_path, _dataset, _year = mcp_project_example
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
-    result = runner.invoke(app, ["inspect", "schema-diff", "--config", str(config_path), "--json"])
+    result = runner.invoke(
+        app, ["inspect", "config", "--diff", "--config", str(config_path), "--json"]
+    )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
 

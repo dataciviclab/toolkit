@@ -118,7 +118,8 @@ def test_cli_commands_use_dataset_yml_dir_as_path_base(tmp_path: Path, monkeypat
     status_result = runner.invoke(
         app,
         [
-            "status",
+            "inspect",
+            "summary",
             "--dataset",
             "project_example",
             "--year",
@@ -157,9 +158,9 @@ def test_cli_resume_from_other_cwd_falls_back_and_reuses_relative_paths(
     result = runner.invoke(
         app,
         [
-            "resume",
-            "--dataset",
-            "project_example",
+            "inspect",
+            "runs",
+            "--resume",
             "--year",
             "2022",
             "--run-id",

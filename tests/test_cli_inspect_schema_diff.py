@@ -89,7 +89,8 @@ def test_inspect_schema_diff_reports_multi_year_changes(tmp_path: Path, monkeypa
         app,
         [
             "inspect",
-            "schema-diff",
+            "config",
+            "--diff",
             "--config",
             str(config_path),
         ],
@@ -115,7 +116,8 @@ def test_inspect_schema_diff_json_degrades_when_raw_is_missing(tmp_path: Path, m
         app,
         [
             "inspect",
-            "schema-diff",
+            "config",
+            "--diff",
             "--config",
             str(config_path),
             "--json",

@@ -1,7 +1,7 @@
 """Backend condiviso per query su layer RAW/CLEAN/MART.
 
 Usato da:
-- CLI ``toolkit layer`` (via ``cmd_layer.py``)
+- CLI ``toolkit inspect config`` (via ``config_ops.py``)
 - MCP ``toolkit_layer`` (via ``aggregate_ops.py``)
 
 Le funzioni qui NON gestiscono errori MCP (ToolkitClientError) — quelle

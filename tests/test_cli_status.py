@@ -76,7 +76,8 @@ def test_status_uses_same_run_dir_as_writer(tmp_path: Path, runner, chdir_tmp: P
     result = runner.invoke(
         app,
         [
-            "status",
+            "inspect",
+            "summary",
             "--dataset",
             "demo_ds",
             "--year",
@@ -128,7 +129,8 @@ def test_status_reports_raw_hints_when_raw_artifacts_exist(
     result = runner.invoke(
         app,
         [
-            "status",
+            "inspect",
+            "summary",
             "--dataset",
             "demo_ds",
             "--year",
@@ -269,7 +271,8 @@ mart:
     result = runner.invoke(
         app,
         [
-            "status",
+            "inspect",
+            "summary",
             "--dataset",
             "demo_ds",
             "--year",
@@ -363,7 +366,8 @@ def test_status_reports_layer_profiles_from_metadata(
     result = runner.invoke(
         app,
         [
-            "status",
+            "inspect",
+            "summary",
             "--dataset",
             "demo_ds",
             "--year",

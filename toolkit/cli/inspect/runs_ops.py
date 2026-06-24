@@ -1,7 +1,7 @@
 """inspect runs — cronologia run, dettagli e resume.
 
 Comando canonico per gestire i run.
-``toolkit resume`` delega a questo comando.
+``inspect runs --resume`` è il percorso canonico per il resume.
 La logica di resume è in ``cmd_resume.resume()`` (condivisa).
 """
 
@@ -29,8 +29,8 @@ def runs(
 ):
     """Mostra cronologia run, dettagli, o riprende un run fallito.
 
-    Con --resume riprende dal primo layer non SUCCESS (usa la stessa logica
-    di ``toolkit resume``, con cui condivide il backend ``cmd_resume.resume()``).
+    Con --resume riprende dal primo layer non SUCCESS.
+    La logica condivisa è in ``cmd_resume.resume()``.
 
     Esempi:
         toolkit inspect runs -c dataset.yml                              # elenca ultimi run

@@ -1,8 +1,7 @@
 """inspect summary — stato dataset, layer profile.
 
 Comando canonico per il riepilogo di un dataset.
-``toolkit status`` e ``review-readiness`` sono alias che
-delegano a questo comando.
+Sostituisce il vecchio alias ``toolkit status``.
 """
 
 from __future__ import annotations
@@ -150,7 +149,7 @@ def summary(
 ):
     """Mostra lo stato dei layer raw/clean/mart per un dataset.
 
-    ``toolkit status`` e ``review-readiness`` sono alias che delegano qui.
+    Sostituisce il vecchio alias ``toolkit status``.
 
     Esempi:
         toolkit inspect summary -c dataset.yml

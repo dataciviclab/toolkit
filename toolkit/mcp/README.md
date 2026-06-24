@@ -63,7 +63,7 @@ Sostituire il path del `command` con il Python reale del clone locale che usera'
 
 - `toolkit_inspect_paths` usa `toolkit inspect paths --json`; arricchito con run_file_count e years_seen dalla CLI
 - `toolkit_inspect_schema`
-  - `raw`: usa `toolkit inspect schema-diff --json`
+  - `raw`: usa `toolkit inspect config --diff --json`
   - `clean` / `mart`: legge schema reale dei parquet risolti via `inspect paths`
-- `toolkit_schema_diff` confronta segnali schema raw (encoding, delim, colonne) tra tutti gli anni configurati per il dataset; riutilizza la stessa logica di `toolkit inspect schema-diff` ma esposto come tool MCP
+- `toolkit_schema_diff` confronta segnali schema raw (encoding, delim, colonne) tra tutti gli anni configurati per il dataset; riutilizza la stessa logica di `toolkit inspect config --diff` ma esposto come tool MCP
 - `toolkit_csv_preview` legge un CSV usando la stessa pipeline di `profile_raw` (`sniff_source_file` + `profile_with_read_cfg`); restituisce schema + prime N righe + mapping_suggestions — utile per ispezionare file raw senza runnare la pipeline

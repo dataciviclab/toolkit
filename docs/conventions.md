@@ -36,7 +36,7 @@ Usa `normalize_rows_to_columns: true` per CSV multi-anno instabili con schema po
 | --- | --- |
 | **Encoding** | Prevale `cp1252` (Windows). Esplicita `encoding: cp1252`. |
 | **Header non standard** | Usa `header: false` e `skip: N` per saltare righe spurie. |
-| **Schema Drift** | Usa `toolkit inspect schema-diff` per rilevare cambi tra anni. |
+| **Schema Drift** | Usa `toolkit inspect config --diff` per rilevare cambi tra anni. |
 | **Chiavi Geografiche** | Non normalizzare nel `clean.sql` senza documentare in `notes.md`. |
 | **ZIP/XLSX** | Il toolkit non estrae ZIP; usa l'extractor corretto. |
 

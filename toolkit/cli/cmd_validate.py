@@ -99,4 +99,4 @@ def validate(
 
 
 def register(app: typer.Typer) -> None:
-    app.command("validate", hidden=True)(validate)
+    app.command("validate")(validate)

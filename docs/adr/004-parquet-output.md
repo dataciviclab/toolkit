@@ -40,6 +40,6 @@ Parquet come formato unico di output per CLEAN e MART.
 - Pyarrow non è più dipendenza diretta (riduce spazio installazione)
 
 **Negative:**
-- Non human-readable: per ispezionare serve `toolkit status`, DuckDB o `pandas.read_parquet()`
+- Non human-readable: per ispezionare serve `toolkit inspect summary`, DuckDB o `pandas.read_parquet()`
 - Strumenti legacy (Excel) non leggono Parquet direttamente
 - Dimensione minima: file Parquet piccoli (< 100 righe) hanno overhead

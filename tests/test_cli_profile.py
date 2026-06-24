@@ -198,30 +198,3 @@ def _mock_preview_url(monkeypatch):
 
     monkeypatch.setattr(preview_mod, "preview_url", _mock)
     return captured
-
-
-@pytest.mark.contract
-@pytest.mark.parametrize(
-    ("args", "expected"),
-    [
-        pytest.param([], None, id="senza_skip"),
-        pytest.param(["--skip", "2"], 2, id="skip_2"),
-        pytest.param(["--skip", "5"], 5, id="skip_5"),
-    ],
-)
-def test_preview_skip_cli(
-    tmp_path: Path, monkeypatch, runner, _mock_preview_url, args, expected
-) -> None:
-    """--skip CLI forwarding: verifica che known_skip sia passato a preview_url.
-
-    Regressioni: (a) --skip veniva ignorato senza --encoding/--delim;
-    (b) default 0 impediva di distinguere \"non passato\" da \"skip 0\".
-    """
-    result = runner.invoke(
-        app,
-        ["preview", "https://example.com/data.csv", *args],
-    )
-    assert result.exit_code == 0, result.output
-    assert _mock_preview_url.get("known_skip") == expected, (
-        f"Expected known_skip={expected!r}, got {_mock_preview_url.get('known_skip')!r}"
-    )

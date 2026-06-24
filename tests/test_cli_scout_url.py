@@ -6,10 +6,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 from typer.testing import CliRunner
 
-from lab_connectors.http import HttpClient, HttpResult
+from lab_connectors.http import CircuitOpenError, HttpClient, HttpResult
 
 from toolkit.cli.app import app
-from toolkit.scout.http import detect_ckan_in_html, extract_ckan_dataset_id
+from toolkit.scout.http import detect_ckan_in_html, extract_ckan_dataset_id, probe_url_headers
 from toolkit.scout.probe import probe_url
 
 pytestmark = pytest.mark.pure_unit  # all tests use local HTTP server or monkeypatch
@@ -213,37 +213,38 @@ def test_probe_url_falls_back_to_get_when_head_fails(monkeypatch) -> None:
     assert "csv" in (result["content_type"] or "")
 
 
-@pytest.mark.pure_unit
-def test_probe_url_https_fallback_when_http_fails(monkeypatch) -> None:
-    """HTTP fallisce (CircuitOpenError) → tenta HTTPS, che riesce."""
+@pytest.mark.contract
+def test_probe_url_https_fallback_con_circuit_breaker(monkeypatch) -> None:
+    """HTTP con circuit breaker aperto per host → HTTPS viene tentato comunque.
+
+    Il circuit breaker e' per netloc (es. ''realserver.test''), identico per
+    http:// e https://. Il fallback deve usare un client fresco senza circuito.
+    """
     calls: list[str] = []
 
     class _OkResp:
         headers = {"Content-Type": "text/csv"}
-        url = "https://bdap-opendata.https.test/data.csv"
+        url = "https://realserver.test/data.csv"
         status_code = 200
 
-    def _fake_head(self, url, **kwargs):
+    def _tracked_head(_self: object, url: str, **kwargs: object) -> HttpResult:
         calls.append(url)
         if url.startswith("http://"):
-            # Circuit breaker aperto per HTTP
-            return HttpResult(
-                response=None,
-                err=__import__("lab_connectors.http").http.CircuitOpenError(
-                    "circuit open for http://bdap-opendata.rgs.mef.gov.it"
-                ),
-            )
-        # HTTPS funziona
+            return HttpResult(response=None, err=CircuitOpenError("circuit open"))
         return HttpResult(response=_OkResp(), err=None)
 
-    monkeypatch.setattr(HttpClient, "head", _fake_head)
+    # Patch a livello di classe: TUTTI gli HttpClient.head usano _tracked_head
+    monkeypatch.setattr(HttpClient, "head", _tracked_head)
 
-    result = probe_url("http://bdap-opendata.rgs.mef.gov.it/data.csv")
-    assert result["status_code"] == 200
-    assert result["final_url"] == "https://bdap-opendata.https.test/data.csv"
-    # Verifica che HTTPS sia stato tentato dopo il fallimento HTTP
-    assert any("https://" in c for c in calls), f"HTTPS mai tentato: {calls}"
-    assert calls[0] == "http://bdap-opendata.rgs.mef.gov.it/data.csv"
+    client = HttpClient(circuit_threshold=1)
+    # Circuito gia' aperto per l'host (netloc condiviso HTTP/HTTPS)
+    client._cb_consecutive["realserver.test"] = 5
+
+    result = probe_url_headers("http://realserver.test/data.csv", client=client)
+    assert result["status_code"] == 200, f"HTTPS fallback dovrebbe funzionare: {result}"
+    assert any("https://" in c for c in calls), (
+        f"HTTPS mai tentato nonostante circuito HTTP aperto: {calls}"
+    )
 
 
 @pytest.mark.pure_unit

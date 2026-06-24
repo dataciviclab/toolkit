@@ -311,12 +311,22 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
         )
 
     # cross-layer raw→clean check (row retention, column coverage)
+    # In sample mode la transizione non e' rappresentativa:
+    # il sample raw e' troncato a N byte, il clean a sample_rows righe.
+    # Disabilitiamo il row drop check, lasciamo warn_removed_columns attivo.
+    transition = spec.validate.promotion
+    if sample_mode:
+        transition = TransitionConfig(
+            max_row_drop_pct=None,
+            warn_removed_columns=transition.warn_removed_columns,
+            fail_on_row_drop_exceeded=False,
+        )
     raw_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year)
     promotion_result = validate_promotion(
         raw_dir,
         out_dir,
         root=cfg.root,
-        transition=spec.validate.promotion,
+        transition=transition,
         logger=logger,
     )
     merged_errors = result.errors + promotion_result.errors

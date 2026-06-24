@@ -278,14 +278,60 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
         }
     )
 
-    # In sample mode (--sample-rows / --sample-bytes), min_rows non e' applicabile:
-    # il campione non e' rappresentativo per validazioni quantitative.
+    # ── Sensible defaults (prima di validate_clean) ────────────────────────
+    # min_rows: default 1 se non configurato (parquet vuoto = errore)
     if sample_mode:
         spec.validate.min_rows = None
-    # Sensible default: se min_rows non configurato, assume almeno 1 riga.
-    # Un parquet con 0 righe e' sempre un errore — meglio bloccarlo subito.
     elif spec.validate.min_rows is None:
         spec.validate.min_rows = 1
+
+    # NOT NULL inference: colonne con 0% null nel raw diventano not_null impliciti.
+    # Leggiamo il raw profile e facciamo una pre-DESCRIBE del parquet clean
+    # per sapere quali colonne raw sono state mappate nel clean.
+    raw_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year)
+    _profile_path = raw_dir / "_profile" / RAW_PROFILE
+    if _profile_path.exists():
+        try:
+            with safe_connect() as _pre_con:
+                if parquet.exists():
+                    _pre_cols_raw = _pre_con.execute(
+                        f"DESCRIBE SELECT * FROM read_parquet('{sql_path(parquet)}')"
+                    ).fetchall()
+                    _pre_clean_cols_list = [str(r[0]) for r in _pre_cols_raw]
+                else:
+                    _pre_clean_cols_list = []
+
+            _raw_profile_data = read_json_or_none(_profile_path)
+            if _raw_profile_data and _pre_clean_cols_list:
+                _trusted_raw = _raw_profile_data.get("columns_raw") or []
+                _raw_missing = _raw_profile_data.get("missingness_top") or []
+                _cols_with_nulls = {
+                    m.get("column") for m in _raw_missing if m.get("missing_pct", 0) > 0
+                }
+                _clean_set = set(_pre_clean_cols_list)
+                _inferred: list[str] = []
+                for _rc in _trusted_raw:
+                    _norm = _re.sub(r"([a-z])([A-Z])", r"\1_\2", _rc.strip())
+                    _norm = _re.sub(r"[^a-zA-Z0-9]+", "_", _norm)
+                    _norm = _re.sub(r"_+", "_", _norm).lower().strip("_") or "col"
+                    if _norm in _clean_set and _rc not in _cols_with_nulls:
+                        _inferred.append(_norm)
+                if _inferred:
+                    _explicit = set(spec.validate.not_null)
+                    _new_inferred = [c for c in _inferred if c not in _explicit]
+                    if _new_inferred:
+                        spec.validate.not_null = list(_explicit) + _new_inferred
+                        _safe_debug = getattr(logger, "debug", lambda *a, **kw: None)
+                        _safe_debug(
+                            "[sensible] NOT NULL inferito per %d colonne "
+                            "che erano complete nel raw: %s",
+                            len(_new_inferred),
+                            _new_inferred,
+                        )
+        except Exception:
+            # NOT NULL inference non bloccante — se fallisce (parquet non ancora
+            # esistente, raw profile mancante, errore DuckDB) si procede comunque.
+            pass
 
     result = validate_clean(
         parquet,
@@ -363,33 +409,6 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
                     f"[scaffold] {len(unmapped)} colonne raw non mappate nel clean "
                     f"(drop senza -- DROP: <motivo>?): {unmapped}"
                 )
-
-            # --- NOT NULL inference: colonne con 0% null nel raw
-            # Se una colonna era completa (0% null) nel dato originale e il
-            # suo nome normalizzato esiste nel clean, la aggiungiamo come
-            # not_null implicito — la pipeline ha appena pulito il dato,
-            # sa gia' quali colonne erano complete.
-            inferred_not_null: list[str] = []
-            raw_missingness = raw_profile.get("missingness_top") or []
-            cols_with_nulls = {
-                m.get("column") for m in raw_missingness if m.get("missing_pct", 0) > 0
-            }
-            for raw_col in trusted_raw_cols:
-                norm = _to_snake(raw_col)
-                if norm in clean_cols_set and raw_col not in cols_with_nulls:
-                    inferred_not_null.append(norm)
-            if inferred_not_null:
-                # Unisci con not_null esplicito, evita duplicati
-                explicit = set(spec.validate.not_null)
-                new_inferred = [c for c in inferred_not_null if c not in explicit]
-                if new_inferred:
-                    spec.validate.not_null = list(explicit) + new_inferred
-                    logger.debug(
-                        "[sensible] NOT NULL inferito per %d colonne "
-                        "che erano complete nel raw: %s",
-                        len(new_inferred),
-                        new_inferred,
-                    )
         else:
             profile_parse_error = True
 

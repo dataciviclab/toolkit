@@ -384,7 +384,7 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
                 new_inferred = [c for c in inferred_not_null if c not in explicit]
                 if new_inferred:
                     spec.validate.not_null = list(explicit) + new_inferred
-                    logger.info(
+                    logger.debug(
                         "[sensible] NOT NULL inferito per %d colonne "
                         "che erano complete nel raw: %s",
                         len(new_inferred),

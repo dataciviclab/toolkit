@@ -786,7 +786,8 @@ def run_init(
             typer.echo("  - profiling disponibile")
             typer.echo("  - clean.sql non scaffoldato nonostante il profilo raw sia disponibile")
             typer.echo(
-                "    Esegui: toolkit scaffold clean -c <config> oppure verifica i permessi di scrittura"
+                "    Esegui: toolkit run init -c <config> per generare clean.sql,"
+                " oppure verifica i permessi di scrittura"
             )
 
     typer.echo("")

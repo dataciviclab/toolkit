@@ -6,11 +6,47 @@ Consumed by ``clean.validate`` and ``mart.validate``.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import duckdb
 
 from toolkit.core.sql_utils import q_ident
+
+
+# Nomi di colonna che suggeriscono contenuto numerico.
+# Usato da check_column_types() per warning su type mismatch.
+_NUMERIC_COLUMN_PATTERNS: list[re.Pattern] = [
+    re.compile(r"^(importo|valore|totale|tot|ammontare|costo|spesa|entrata|gettito|prezzo)$", re.I),
+    re.compile(r"^(percentuale|pct|tasso|aliquota|quota|indice|media|ratio)$", re.I),
+    re.compile(r"^(anno|annualit[aà])$", re.I),
+    re.compile(r".*(importo|valore|spesa|entrata|costo|percentuale|pct|totale|ammontare)$", re.I),
+]
+
+# DuckDB type families considerate numeriche
+_NUMERIC_TYPE_PREFIXES = (
+    "INT",
+    "INTEGER",
+    "BIGINT",
+    "SMALLINT",
+    "TINYINT",
+    "HUGEINT",
+    "FLOAT",
+    "DOUBLE",
+    "DECIMAL",
+    "NUMERIC",
+    "REAL",
+)
+
+
+def _looks_numeric(name: str) -> bool:
+    """True se il nome colonna suggerisce contenuto numerico."""
+    return any(p.search(name) for p in _NUMERIC_COLUMN_PATTERNS)
+
+
+def _is_numeric_type(dtype: str) -> bool:
+    """True se il tipo DuckDB e' numerico."""
+    return dtype.upper().startswith(_NUMERIC_TYPE_PREFIXES)
 
 
 def _prefixed(prefix: str, msg: str) -> str:
@@ -138,3 +174,31 @@ def check_max_null_pct(
                 _prefixed(prefix, f"Column '{c}' null_pct too high: {pct:.3%} > {thr:.3%}")
             )
     return errors, warnings
+
+
+def check_column_types(
+    cols_with_types: list[tuple[str, str]],
+    prefix: str = "",
+) -> tuple[list[str], list[str]]:
+    """Sanity check: colonne con nome numerico devono avere tipo numerico.
+
+    Non bloccante (solo warning) — cattura il caso in cui un CAST SQL
+    silenziosamente produce VARCHAR invece di INTEGER/DOUBLE.
+
+    Args:
+        cols_with_types: Lista di (nome_colonna, tipo_duckdb) da DESCRIBE.
+        prefix: Prefisso opzionale per messaggi (es. nome tabella mart).
+
+    Returns:
+        (errors, warnings) — errors e' sempre [] per questo check.
+    """
+    warnings: list[str] = []
+    for col_name, col_type in cols_with_types:
+        if _looks_numeric(col_name) and not _is_numeric_type(col_type):
+            warnings.append(
+                _prefixed(
+                    prefix,
+                    f"Column '{col_name}' has numeric-suggestive name but type is '{col_type}'",
+                )
+            )
+    return [], warnings

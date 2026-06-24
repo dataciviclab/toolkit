@@ -291,6 +291,7 @@ def run_year(
         logger = get_logger()
 
     fail_on_error = bool(cfg.validation.fail_on_error)
+    validation_mode = cfg.validation.mode
     planned_layers = _validate_execution_plan(cfg, step)
     layers_to_run = _layers_from_start(planned_layers, start_from_layer)
 
@@ -341,6 +342,10 @@ def run_year(
 
         Con fail_on_error: false, il fallimento viene loggato ma non
         ri-lanciato. I layer downstream vengono skippati.
+
+        validation_mode:
+          strict (default): gli errori di validazione bloccano se fail_on_error=True
+          warn_only: gli errori di validazione diventano warning, la pipeline continua
         """
         nonlocal run_has_validation_warnings
 
@@ -359,9 +364,15 @@ def run_year(
             context.set_validation(layer_name, summary)
             if not summary.get("passed", False):
                 message = f"{layer_name.upper()} validation failed"
-                if fail_on_error:
+                if validation_mode == "strict" and fail_on_error:
                     raise ValidationGateError(message)
                 run_has_validation_warnings = True
+                if validation_mode == "warn_only":
+                    layer_logger.warning(
+                        "VALIDATION %s (%s) — warn_only mode, continuing",
+                        layer_name.upper(),
+                        message,
+                    )
             return True
         except Exception as exc:
             context.fail_layer(layer_name, str(exc))

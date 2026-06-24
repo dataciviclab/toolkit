@@ -13,6 +13,7 @@ from toolkit.core.io import read_json_or_none
 from toolkit.core.sql_utils import sql_path
 
 from toolkit.core.column_rules import (
+    check_column_types,
     check_max_null_pct,
     check_not_null,
     check_primary_key,
@@ -118,7 +119,9 @@ def validate_clean(
     with safe_connect() as con:
         con.execute(f"CREATE VIEW t AS SELECT * FROM read_parquet('{sql_path(p)}')")
 
-        cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
+        cols_raw = con.execute("DESCRIBE t").fetchall()
+        cols = [str(r[0]) for r in cols_raw]
+        cols_with_types = [(str(r[0]), str(r[1])) for r in cols_raw]
 
         required_result = required_columns_check(cols, required)
         errors.extend(required_result.errors)
@@ -154,6 +157,7 @@ def validate_clean(
             "path": path_value,
             "row_count": row_count,
             "columns": cols,
+            "columns_with_types": cols_with_types,
             "required": required,
             "primary_key": primary_key,
             "not_null": not_null,
@@ -278,6 +282,10 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     # il campione non e' rappresentativo per validazioni quantitative.
     if sample_mode:
         spec.validate.min_rows = None
+    # Sensible default: se min_rows non configurato, assume almeno 1 riga.
+    # Un parquet con 0 righe e' sempre un errore — meglio bloccarlo subito.
+    elif spec.validate.min_rows is None:
+        spec.validate.min_rows = 1
 
     result = validate_clean(
         parquet,
@@ -289,6 +297,18 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
         max_null_pct=spec.validate.max_null_pct,
         min_rows=spec.validate.min_rows,
     )
+
+    # column type sanity check (non bloccante, solo warning)
+    cols_with_types = result.summary.get("columns_with_types") or []
+    if cols_with_types:
+        type_warnings = check_column_types(cols_with_types)
+        result = ValidationResult(
+            ok=result.ok,
+            errors=result.errors,
+            warnings=result.warnings + type_warnings[1],
+            summary=result.summary,
+            sections=result.sections,
+        )
 
     # cross-layer raw→clean check (row retention, column coverage)
     raw_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year)
@@ -333,6 +353,31 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
                     f"[scaffold] {len(unmapped)} colonne raw non mappate nel clean "
                     f"(drop senza -- DROP: <motivo>?): {unmapped}"
                 )
+
+            # --- NOT NULL inference: colonne con 0% null nel raw
+            # Se una colonna era completa (0% null) nel dato originale e il
+            # suo nome normalizzato esiste nel clean, la aggiungiamo come
+            # not_null implicito — la pipeline ha appena pulito il dato,
+            # sa gia' quali colonne erano complete.
+            inferred_not_null: list[str] = []
+            raw_missingness = raw_profile.get("missingness_top") or []
+            cols_with_nulls = {
+                m.get("column") for m in raw_missingness if m.get("missing_pct", 0) > 0
+            }
+            for raw_col in trusted_raw_cols:
+                norm = _to_snake(raw_col)
+                if norm in clean_cols_set and raw_col not in cols_with_nulls:
+                    inferred_not_null.append(norm)
+            if inferred_not_null:
+                # Unisci con not_null esplicito, evita duplicati
+                explicit = set(spec.validate.not_null)
+                new_inferred = [c for c in inferred_not_null if c not in explicit]
+                if new_inferred:
+                    spec.validate.not_null = list(explicit) + new_inferred
+                    merged_warnings.append(
+                        f"[sensible] NOT NULL inferito per {len(new_inferred)} colonne "
+                        f"che erano complete nel raw: {new_inferred}"
+                    )
         else:
             profile_parse_error = True
 

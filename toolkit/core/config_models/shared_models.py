@@ -144,6 +144,7 @@ class GlobalValidationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     fail_on_error: bool = True
+    mode: Literal["strict", "warn_only"] = "strict"
 
 
 class ConfigPolicy(BaseModel):

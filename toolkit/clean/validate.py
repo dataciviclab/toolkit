@@ -302,28 +302,26 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
                     _pre_clean_cols_list = []
 
             _raw_profile_data = read_json_or_none(_profile_path)
-            if _raw_profile_data and _pre_clean_cols_list:
+            if _raw_profile_data and _pre_clean_cols_list and _raw_profile_data.get("null_counts"):
                 _trusted_raw = _raw_profile_data.get("columns_raw") or []
-                # Usa null_counts (full map) se disponibile, fallback a
-                # missingness_top (top 25, rischia falsi positivi).
-                _raw_null_counts = _raw_profile_data.get("null_counts") or {}
-                if _raw_null_counts:
-                    # null_counts e' una mappa completa: {col_name: missing_pct}
-                    # Una colonna con pct == 0.0 e' esplicitamente completa.
-                    _cols_with_nulls = {c for c, pct in _raw_null_counts.items() if pct > 0}
-                else:
-                    # Fallback: missingness_top contiene solo colonne CON null,
-                    # troncato a 25. Una colonna assente potrebbe avere null
-                    # fuori dalla top 25 → non possiamo inferire nulla.
-                    _raw_missing = _raw_profile_data.get("missingness_top") or []
-                    _cols_with_nulls = {m.get("column") for m in _raw_missing}
+                # null_counts e' una mappa completa (fino a 200 colonne):
+                #   {col_name_raw: missing_pct} per tutte le colonne profilate.
+                # Inferiamo NOT NULL SOLO per colonne esplicitamente presenti
+                # nella mappa con missing_pct == 0.0.
+                # Colonne non nella mappa (es. oltre la 200ª) o profili senza
+                # null_counts (legacy) non attivano l'inferenza.
+                _raw_null_counts = _raw_profile_data["null_counts"]
                 _clean_set = set(_pre_clean_cols_list)
                 _inferred: list[str] = []
                 for _rc in _trusted_raw:
+                    if _rc not in _raw_null_counts:
+                        continue  # colonna non profilata — non inferire
+                    if _raw_null_counts[_rc] > 0:
+                        continue  # colonna con null noti — non inferire
                     _norm = _re.sub(r"([a-z])([A-Z])", r"\1_\2", _rc.strip())
                     _norm = _re.sub(r"[^a-zA-Z0-9]+", "_", _norm)
                     _norm = _re.sub(r"_+", "_", _norm).lower().strip("_") or "col"
-                    if _norm in _clean_set and _rc not in _cols_with_nulls:
+                    if _norm in _clean_set:
                         _inferred.append(_norm)
                 if _inferred:
                     _explicit = set(spec.validate.not_null)
@@ -496,9 +494,28 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     paqa_semantic: int | None = None
     paqa_sampled: bool = False
     try:
-        _csv_files = sorted(raw_dir.glob("*.csv"))
-        if _csv_files:
-            _csv_path = _csv_files[0]
+        # Legge il file CSV effettivamente usato da clean (da clean metadata)
+        # invece del primo *.csv alfabetico — evita di processare un versioned
+        # backup (file_1.csv, file_2.csv) al posto del file originale.
+        _clean_meta_path = out_dir / METADATA
+        _csv_path: Path | None = None
+        if _clean_meta_path.exists():
+            _clean_meta = read_json_or_none(_clean_meta_path)
+            if _clean_meta:
+                _inputs = (_clean_meta.get("outputs") or []) + (
+                    _clean_meta.get("input_files") or []
+                )
+                for _f in _inputs:
+                    _p = Path(_f) if isinstance(_f, str) else None
+                    if _p and _p.suffix == ".csv" and _p.exists():
+                        _csv_path = _p
+                        break
+        if _csv_path is None:
+            _csv_files = sorted(raw_dir.glob("*.csv"))
+            if _csv_files:
+                # Fallback: primo CSV alfabetico (meno preciso)
+                _csv_path = _csv_files[0]
+        if _csv_path:
             _size = _csv_path.stat().st_size
             # Leggi campione: primi 15MB (stessa soglia CI sample-bytes)
             _sample_bytes = min(_size, 15_728_640)

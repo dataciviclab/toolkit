@@ -586,7 +586,9 @@ _STEP_DOCSTRINGS: dict[str, str] = {
     "all": (
         "Esegue l'intera pipeline: raw → clean → mart.\n\n"
         "Equivalente a eseguire i tre step in sequenza. "
-        "Se il dataset è mart-only (compose), usa solo lo step mart."
+        "Se il dataset è mart-only (compose), usa solo lo step mart.\n\n"
+        "Per dataset semplici (senza support: [] dichiarati in dataset.yml). "
+        "Se hai dipendenze tra dataset (support), usa 'toolkit run full'."
     ),
 }
 
@@ -814,10 +816,13 @@ def run_full(
     json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
 ):
-    """Esegue run all + validate all + review-readiness in un unico comando.
+    """Esegue pre-flight + run all (con support dataset) in un unico comando.
 
-    Se il dataset.yml dichiara support: [], i support vengono eseguiti
-    automaticamente prima del candidate (run all + validate per ogni anno).
+    Per dataset che dichiarano support: [] in dataset.yml: i support vengono
+    eseguiti automaticamente prima del candidate (run all per ogni anno).
+    Output: report JSON convalidato.
+
+    Per dataset semplici senza support, usa 'toolkit run all'.
     """
     dry_flag = dry_run if isinstance(dry_run, bool) else False
 

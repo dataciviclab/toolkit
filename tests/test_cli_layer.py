@@ -1,4 +1,4 @@
-"""Test contratto per la CLI ``toolkit layer``.
+"""Test contratto per la CLI ``toolkit inspect config``.
 
 Usa monkeypatch per isolare la CLI dal backend reale: testiamo solo
 il layer CLI (flag, errori, formato output), non l'esecuzione backend.
@@ -72,12 +72,12 @@ def mock_layer_query(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
 
 class TestCliLayer:
-    """Test contratto per toolkit layer CLI."""
+    """Test contratto per toolkit inspect config CLI."""
 
     @pytest.mark.contract
     def test_layer_help(self):
         """--help mostra i flag principali."""
-        result = runner.invoke(app, ["layer", "--help"])
+        result = runner.invoke(app, ["inspect", "config", "--help"])
         assert result.exit_code == 0
         output = _strip_ansi(result.stdout)
         assert "--mode" in output
@@ -87,7 +87,9 @@ class TestCliLayer:
     @pytest.mark.contract
     def test_layer_sql_without_sql_errors(self):
         """mode=sql senza --sql deve dare errore."""
-        result = runner.invoke(app, ["layer", "-c", CONFIG_PATH, "-l", "clean", "-m", "sql"])
+        result = runner.invoke(
+            app, ["inspect", "config", "-c", CONFIG_PATH, "-l", "clean", "-m", "sql"]
+        )
         assert result.exit_code != 0
         output = (result.stdout + result.stderr).lower()
         assert "sql" in output or "error" in output
@@ -95,7 +97,9 @@ class TestCliLayer:
     @pytest.mark.contract
     def test_layer_profile_on_clean_errors(self):
         """mode=profile su layer clean deve dare errore."""
-        result = runner.invoke(app, ["layer", "-c", CONFIG_PATH, "-l", "clean", "-m", "profile"])
+        result = runner.invoke(
+            app, ["inspect", "config", "-c", CONFIG_PATH, "-l", "clean", "-m", "profile"]
+        )
         assert result.exit_code != 0
         output = (result.stdout + result.stderr).lower()
         assert "raw" in output or "error" in output
@@ -104,7 +108,7 @@ class TestCliLayer:
     @pytest.mark.parametrize("mode", ["schema", "preview", "profile", "sql"])
     def test_layer_mode_json_output(self, mode, mock_layer_query):
         """Ogni mode produce JSON parsabile."""
-        args = ["layer", "-c", CONFIG_PATH, "-m", mode, "--json"]
+        args = ["inspect", "config", "-c", CONFIG_PATH, "-m", mode, "--json"]
         if mode == "profile":
             args.extend(["-l", "raw"])
         if mode == "sql":

@@ -1,8 +1,7 @@
 """inspect config — schema, preview, profile, SQL e diff di un dataset.
 
 Comando canonico per ispezionare un dataset.
-``toolkit layer`` e ``inspect schema``/profile/query sono alias che
-delegano a questo comando.
+Sostituisce i vecchi alias ``toolkit layer``, ``inspect schema``/profile/query.
 """
 
 from __future__ import annotations
@@ -33,8 +32,8 @@ def config(
 ) -> None:
     """Ispeziona configurazione e dati di un dataset: schema, preview, profile, SQL o diff.
 
-    Sostituisce i comandi ``toolkit layer``, ``inspect schema``, ``inspect profile``,
-    ``query`` e ``inspect schema-diff`` in un unico comando con flag ``--mode`` e ``--diff``.
+    Sostituisce i vecchi alias (``toolkit layer``, ``inspect schema``, ``inspect profile``,
+    ``query``, ``inspect schema-diff``) in un unico comando con flag ``--mode`` e ``--diff``.
 
     Esempi:
         toolkit inspect config -c dataset.yml                           # colonne + tipi (default)

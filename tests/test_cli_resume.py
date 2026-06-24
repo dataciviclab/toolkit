@@ -221,9 +221,9 @@ def test_cli_resume_starts_from_first_non_success_layer(
     result = runner.invoke(
         app,
         [
-            "resume",
-            "--dataset",
-            "demo_ds",
+            "inspect",
+            "runs",
+            "--resume",
             "--year",
             "2022",
             "--run-id",
@@ -270,9 +270,9 @@ def test_cli_resume_uses_config_root_when_cwd_differs(
     result = runner.invoke(
         app,
         [
-            "resume",
-            "--dataset",
-            "demo_ds",
+            "inspect",
+            "runs",
+            "--resume",
             "--year",
             "2022",
             "--run-id",
@@ -316,12 +316,11 @@ def test_resume_finds_latest_run(tmp_path: Path, monkeypatch, runner, chdir_tmp:
     result = runner.invoke(
         app,
         [
-            "resume",
-            "--dataset",
-            "demo_ds",
+            "inspect",
+            "runs",
+            "--resume",
             "--year",
             "2022",
-            "--latest",
             "--config",
             str(config_path),
         ],
@@ -371,9 +370,9 @@ def test_cli_resume_non_portable_record_warns_and_proceeds(tmp_path: Path, runne
     result = runner.invoke(
         app,
         [
-            "resume",
-            "--dataset",
-            "demo_ds",
+            "inspect",
+            "runs",
+            "--resume",
             "--year",
             "2022",
             "--run-id",
@@ -405,9 +404,9 @@ def test_cli_resume_falls_back_to_raw_when_raw_success_artifacts_are_missing(
     result = runner.invoke(
         app,
         [
-            "resume",
-            "--dataset",
-            "demo_ds",
+            "inspect",
+            "runs",
+            "--resume",
             "--year",
             "2022",
             "--run-id",
@@ -444,9 +443,9 @@ def test_cli_resume_success_with_warnings_requires_from_layer_or_exits_cleanly(
     result = runner.invoke(
         app,
         [
-            "resume",
-            "--dataset",
-            "demo_ds",
+            "inspect",
+            "runs",
+            "--resume",
             "--year",
             "2022",
             "--run-id",
@@ -482,9 +481,9 @@ def test_cli_resume_success_with_warnings_allows_forced_from_layer(
     result = runner.invoke(
         app,
         [
-            "resume",
-            "--dataset",
-            "demo_ds",
+            "inspect",
+            "runs",
+            "--resume",
             "--year",
             "2022",
             "--run-id",

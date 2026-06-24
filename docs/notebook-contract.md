@@ -69,9 +69,9 @@ Regola pratica:
 - CI che deve validare `effective_root` o path contract: usa `inspect paths --json`
 - se non passi `--year`, il payload può essere una lista multi-anno
 
-## Differenza rispetto a `inspect schema-diff`
+## Differenza rispetto a `inspect config --diff`
 
-`inspect schema-diff` non è un helper per notebook.
+`inspect config --diff` non è un helper per notebook.
 
 Serve invece quando vuoi:
 
@@ -82,7 +82,7 @@ Serve invece quando vuoi:
 In breve:
 
 - `inspect paths`: "dove sono gli artefatti e quale runtime path contract posso usare?"
-- `inspect schema-diff`: "il RAW cambia tra anni e quanto cambia?"
+- `inspect config --diff`: "il RAW cambia tra anni e quanto cambia?"
 
 Regola pratica:
 

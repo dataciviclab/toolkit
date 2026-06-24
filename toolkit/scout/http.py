@@ -337,6 +337,21 @@ def probe_url_headers(
             continue
         break
 
+    # HTTPS fallback: se l'URL era HTTP e non ha funzionato,
+    # riprova con HTTPS (molti server moderni non rispondono su porta 80).
+    if url.startswith("http://"):
+        https_url = "https://" + url[7:]
+        try:
+            return probe_url_headers(
+                https_url,
+                timeout=timeout,
+                user_agent=user_agent,
+                client=client,
+                circuit_threshold=circuit_threshold,
+            )
+        except (RuntimeError, CircuitOpenError):
+            pass  # fallisce anche HTTPS → errore originale
+
     raise RuntimeError(last_error or f"HEAD failed for {url}")
 
 

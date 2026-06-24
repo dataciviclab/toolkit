@@ -9,7 +9,6 @@ from typing import Any
 
 from lab_connectors.duckdb import safe_connect
 from toolkit.core.io import read_json_or_none
-
 from toolkit.core.sql_utils import sql_path
 
 from toolkit.core.column_rules import (
@@ -37,6 +36,7 @@ from toolkit.core.validation import (
     required_columns_check,
     write_validation_json,
 )
+from toolkit.quality.pa_csv_quality import assess_quality
 
 
 def _clean_validation_spec(
@@ -448,6 +448,43 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
             "Considera eseguire 'toolkit run raw -c <config>' per generare il profilo."
         )
 
+    # ── PAQA quality score: valuta la qualità del CSV raw ──────────────────
+    # Il risultato viene aggiunto alle stats del run record per monitoraggio
+    # nel tempo. Usa un campione (primi 15MB) per performance.
+    paqa_score: int | None = None
+    paqa_verdict: str | None = None
+    paqa_semantic: int | None = None
+    paqa_sampled: bool = False
+    try:
+        _csv_files = sorted(raw_dir.glob("*.csv"))
+        if _csv_files:
+            _csv_path = _csv_files[0]
+            _size = _csv_path.stat().st_size
+            # Leggi campione: primi 15MB (stessa soglia CI sample-bytes)
+            _sample_bytes = min(_size, 15_728_640)
+            _csv_text = _csv_path.read_bytes()[:_sample_bytes].decode(
+                raw_profile.get("encoding_suggested", "utf-8") if raw_profile else "utf-8",
+                errors="replace",
+            )
+            _paqa_result = assess_quality(
+                _csv_text,
+                sampled=(_size > _sample_bytes),
+                known_sep=raw_profile.get("delim_suggested") if raw_profile else None,
+                known_encoding=raw_profile.get("encoding_suggested") if raw_profile else None,
+                known_skip=raw_profile.get("skip_suggested") if raw_profile else None,
+            )
+            paqa_score = _paqa_result.structural_score
+            paqa_verdict = _paqa_result.verdict
+            paqa_semantic = _paqa_result.semantic_score
+            paqa_sampled = _paqa_result.sampled
+            if _paqa_result.critical_fail:
+                merged_warnings.append(
+                    f"[paqa] Qualita' CSV critica ({paqa_verdict}, score={paqa_score}): "
+                    f"{'; '.join(_paqa_result.flags[:5])}"
+                )
+    except Exception as _paqa_err:
+        merged_warnings.append(f"[paqa] Quality assessment skipped: {_paqa_err}")
+
     row_drop_pct = (
         round((raw_row_count - clean_row_count) / raw_row_count * 100, 2)
         if raw_row_count and clean_row_count is not None and raw_row_count > 0
@@ -487,6 +524,10 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
             ),
             **({"raw_missing_columns": raw_missing_columns} if raw_missing_columns else {}),
             **({"raw_probe_source": raw_probe_source} if raw_probe_source else {}),
+            **({"paqa_score": paqa_score} if paqa_score is not None else {}),
+            **({"paqa_verdict": paqa_verdict} if paqa_verdict is not None else {}),
+            **({"paqa_semantic": paqa_semantic} if paqa_semantic is not None else {}),
+            **({"paqa_sampled": paqa_sampled} if paqa_sampled else {}),
         },
         "columns": clean_cols,
         **({"rules": rules} if rules else {}),

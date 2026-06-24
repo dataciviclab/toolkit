@@ -53,7 +53,7 @@ def layer_query(
     """Query unificata su un layer (RAW/CLEAN/MART).
 
     Delega al backend condiviso ``toolkit.cli.layer_ops`` — stessa
-    implementazione della CLI ``toolkit layer``.
+    implementazione della CLI ``toolkit inspect config``.
 
     Args:
         config_path: Path a dataset.yml o slug del dataset.

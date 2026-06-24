@@ -103,10 +103,10 @@ def schema(
     """Mostra lo schema (colonne + tipi) di raw, clean o mart.
 
     .. deprecated::
-        Usa ``toolkit layer -c CONFIG -l {layer} -m schema`` invece.
+        Usa ``toolkit inspect config -c CONFIG -l {layer} -m schema`` invece.
 
     Il path config puo' essere passato come argomento posizionale
-    (es. toolkit inspect schema path/to/dataset.yml)
+    (es. toolkit inspect schema path/to/dataset.yml, hidden alias)
     o con l'opzione --config / -c.
     """
     resolved_config = config or config_path

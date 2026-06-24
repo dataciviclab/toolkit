@@ -407,7 +407,7 @@ def test_schema_diff_cli_contract_alignment(
     monkeypatch,
     tmp_path,
 ) -> None:
-    """toolkit inspect schema-diff --json matches SchemaDiffResult TypedDict."""
+    """toolkit inspect config --diff --json matches SchemaDiffResult TypedDict."""
     from typer.testing import CliRunner
     from toolkit.cli.app import app
     from toolkit.mcp.types import RawSchemaEntry, SchemaComparison, SchemaDiffResult

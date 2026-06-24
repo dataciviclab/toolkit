@@ -304,10 +304,19 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
             _raw_profile_data = read_json_or_none(_profile_path)
             if _raw_profile_data and _pre_clean_cols_list:
                 _trusted_raw = _raw_profile_data.get("columns_raw") or []
-                _raw_missing = _raw_profile_data.get("missingness_top") or []
-                _cols_with_nulls = {
-                    m.get("column") for m in _raw_missing if m.get("missing_pct", 0) > 0
-                }
+                # Usa null_counts (full map) se disponibile, fallback a
+                # missingness_top (top 25, rischia falsi positivi).
+                _raw_null_counts = _raw_profile_data.get("null_counts") or {}
+                if _raw_null_counts:
+                    # null_counts e' una mappa completa: {col_name: missing_pct}
+                    # Una colonna con pct == 0.0 e' esplicitamente completa.
+                    _cols_with_nulls = {c for c, pct in _raw_null_counts.items() if pct > 0}
+                else:
+                    # Fallback: missingness_top contiene solo colonne CON null,
+                    # troncato a 25. Una colonna assente potrebbe avere null
+                    # fuori dalla top 25 → non possiamo inferire nulla.
+                    _raw_missing = _raw_profile_data.get("missingness_top") or []
+                    _cols_with_nulls = {m.get("column") for m in _raw_missing}
                 _clean_set = set(_pre_clean_cols_list)
                 _inferred: list[str] = []
                 for _rc in _trusted_raw:

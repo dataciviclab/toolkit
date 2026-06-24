@@ -264,13 +264,22 @@ def _describe_columns(con: duckdb.DuckDBPyConnection) -> tuple[list[str], list[s
 def _sample_profile_rows(
     con: duckdb.DuckDBPyConnection,
     columns_raw: list[str],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, float]]:
+    """Sample rows, missingness_top (top 25), and full null_counts for ALL columns.
+
+    Returns:
+        (sample_rows, missingness_top, null_counts)
+
+        - ``null_count`` e' una mappa completa ``{col_name: missing_pct}`` per TUTTE
+          le colonne (non troncata). Usata dall'inferenza NOT NULL della validazione.
+    """
     df = con.execute("SELECT * FROM v LIMIT 50").fetchdf()
     sample_rows = df.to_dict(orient="records")
 
     # Single-pass missingness: one query with all columns in CASE expressions.
     # Avoids O(N) separate queries (N = columns), which was slow for 50+ column files.
     missingness_top: list[dict[str, Any]] = []
+    null_counts: dict[str, float] = {}
     cols_to_profile = columns_raw[:200]
     if cols_to_profile:
         case_exprs: list[str] = []
@@ -286,14 +295,14 @@ def _sample_profile_rows(
             if n_total > 0:
                 for i, c in enumerate(cols_to_profile):
                     nmiss = int(row[i + 1])
+                    pct = float(nmiss) / float(n_total) * 100.0
+                    null_counts[c] = pct
                     if nmiss > 0:
-                        missingness_top.append(
-                            {"column": c, "missing_pct": float(nmiss) / float(n_total) * 100.0}
-                        )
+                        missingness_top.append({"column": c, "missing_pct": pct})
 
                 missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
 
-    return sample_rows, missingness_top
+    return sample_rows, missingness_top, null_counts
 
 
 def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[str, Any]:
@@ -332,13 +341,14 @@ def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[s
     # Missingness
     n = len(df)
     missingness_top: list[dict[str, Any]] = []
+    null_counts: dict[str, float] = {}
     if n > 0:
         for col in columns_raw:
             nmiss = int(df[col].isna().sum())
+            pct = float(nmiss) / float(n) * 100.0
+            null_counts[col] = pct
             if nmiss > 0:
-                missingness_top.append(
-                    {"column": str(col), "missing_pct": float(nmiss) / float(n) * 100.0}
-                )
+                missingness_top.append({"column": str(col), "missing_pct": pct})
     missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
 
     # Mapping suggestions — no DuckDB types for Excel, use empty
@@ -351,6 +361,7 @@ def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[s
         "duckdb_types": duckdb_types,
         "sample_rows": sample_rows,
         "missingness_top": missingness_top,
+        "null_counts": null_counts,
         "mapping_suggestions": mapping_suggestions,
         "warnings": [],
         "robust_read_suggested": False,
@@ -454,7 +465,7 @@ def profile_with_read_cfg(
             duckdb_type_map: dict[str, str] = {
                 raw: dtype for raw, dtype in zip(columns_raw, duckdb_types)
             }
-            sample_rows, missingness_top = _sample_profile_rows(con, columns_raw)
+            sample_rows, missingness_top, null_counts = _sample_profile_rows(con, columns_raw)
             mapping_suggestions = _build_mapping_suggestions(
                 columns_raw, sample_rows, duckdb_types=duckdb_type_map
             )
@@ -464,7 +475,7 @@ def profile_with_read_cfg(
             "python_fallback_used: suggested_read generated from lightweight sniffing only"
         )
         columns_raw, columns_norm, duckdb_types = [], [], []
-        sample_rows, missingness_top = [], []
+        sample_rows, missingness_top, null_counts = [], [], {}
         mapping_suggestions = {}
         robust_read_suggested = True
 
@@ -474,6 +485,7 @@ def profile_with_read_cfg(
         "duckdb_types": duckdb_types,
         "sample_rows": sample_rows,
         "missingness_top": missingness_top,
+        "null_counts": null_counts,
         "mapping_suggestions": mapping_suggestions,
         "warnings": warnings,
         "robust_read_suggested": robust_read_suggested,

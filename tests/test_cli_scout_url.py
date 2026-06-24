@@ -214,6 +214,61 @@ def test_probe_url_falls_back_to_get_when_head_fails(monkeypatch) -> None:
 
 
 @pytest.mark.pure_unit
+def test_probe_url_https_fallback_when_http_fails(monkeypatch) -> None:
+    """HTTP fallisce (CircuitOpenError) → tenta HTTPS, che riesce."""
+    calls: list[str] = []
+
+    class _OkResp:
+        headers = {"Content-Type": "text/csv"}
+        url = "https://bdap-opendata.https.test/data.csv"
+        status_code = 200
+
+    def _fake_head(self, url, **kwargs):
+        calls.append(url)
+        if url.startswith("http://"):
+            # Circuit breaker aperto per HTTP
+            return HttpResult(
+                response=None,
+                err=__import__("lab_connectors.http").http.CircuitOpenError(
+                    "circuit open for http://bdap-opendata.rgs.mef.gov.it"
+                ),
+            )
+        # HTTPS funziona
+        return HttpResult(response=_OkResp(), err=None)
+
+    monkeypatch.setattr(HttpClient, "head", _fake_head)
+
+    result = probe_url("http://bdap-opendata.rgs.mef.gov.it/data.csv")
+    assert result["status_code"] == 200
+    assert result["final_url"] == "https://bdap-opendata.https.test/data.csv"
+    # Verifica che HTTPS sia stato tentato dopo il fallimento HTTP
+    assert any("https://" in c for c in calls), f"HTTPS mai tentato: {calls}"
+    assert calls[0] == "http://bdap-opendata.rgs.mef.gov.it/data.csv"
+
+
+@pytest.mark.pure_unit
+def test_probe_url_https_non_fa_fallback_se_http_funziona(monkeypatch) -> None:
+    """HTTP funziona → nessun tentativo HTTPS."""
+    calls: list[str] = []
+
+    class _OkResp:
+        headers = {"Content-Type": "text/csv"}
+        url = "http://example.com/data.csv"
+        status_code = 200
+
+    def _fake_head(self, url, **kwargs):
+        calls.append(url)
+        return HttpResult(response=_OkResp(), err=None)
+
+    monkeypatch.setattr(HttpClient, "head", _fake_head)
+
+    result = probe_url("http://example.com/data.csv")
+    assert result["status_code"] == 200
+    assert len(calls) == 1  # solo HTTP, nessun HTTPS
+    assert "https://" not in calls[0]
+
+
+@pytest.mark.pure_unit
 def test_probe_url_passes_timeout_and_user_agent(monkeypatch) -> None:
     """Verify probe_url creates HttpClient with the correct timeout and user-agent."""
     init_captured: dict = {}

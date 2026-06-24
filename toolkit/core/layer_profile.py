@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +8,24 @@ import duckdb
 from lab_connectors.duckdb import safe_connect
 
 from toolkit.core.sql_utils import q_ident, sql_path
+
+
+def _normalize_key(name: str) -> str:
+    """Normalizza un nome colonna per confronto cross-layer.
+
+    APPLICA:
+      - .upper() per case-insensitive
+      - sostituisce [^A-Z0-9] con underscore
+      - comprime underscore multipli
+
+    Copre i casi:
+      'Tipo ufficio' → 'TIPO_UFFICIO'
+      'Definiti - totale' → 'DEFINITI_TOTALE'
+      'ANNOCORSO' → 'ANNOCORSO'
+      'Raccolta differenziata (%)' → 'RACCOLTA_DIFFERENZIATA_'
+    """
+    s = re.sub(r"[^A-Z0-9]+", "_", name.upper())
+    return re.sub(r"_+", "_", s).strip("_")
 
 
 def profile_relation(con: duckdb.DuckDBPyConnection, relation_name: str) -> dict[str, Any]:
@@ -49,33 +68,33 @@ def compare_layer_profiles(
     source_columns = {item["name"]: item["type"] for item in source.get("columns", [])}
     target_columns = {item["name"]: item["type"] for item in target.get("columns", [])}
 
-    # Build UPPER-mapped views for case-insensitive comparison.
-    # This handles SQL renames like "ANNOCORSO AS annocorso" where raw has
-    # uppercase names and clean has lowercase — they are the same column.
-    source_upper_to_orig = {name.upper(): name for name in source_columns}
-    target_upper_to_orig = {name.upper(): name for name in target_columns}
+    # Build normalised-key views for case+separator-insensitive comparison.
+    # Handles renames like 'Tipo ufficio' → 'tipo_ufficio', 'Definiti - totale' → 'definiti_totale',
+    # 'Raccolta differenziata (%)' → 'raccolta_differenziata'.
+    source_norm_to_orig = {_normalize_key(name): name for name in source_columns}
+    target_norm_to_orig = {_normalize_key(name): name for name in target_columns}
 
-    source_upper = set(source_upper_to_orig.keys())
-    target_upper = set(target_upper_to_orig.keys())
+    source_norm = set(source_norm_to_orig.keys())
+    target_norm = set(target_norm_to_orig.keys())
 
-    # Columns present in both (case-insensitive match).
+    # Columns present in both (normalised match).
     # Use target's casing as the canonical name.
-    shared_upper = sorted(source_upper & target_upper)
+    shared_norm = sorted(source_norm & target_norm)
 
-    # Added: in target but not in source (case-insensitive).
+    # Added: in target but not in source (normalised).
     # Map back to original target casing.
-    added_upper = sorted(target_upper - source_upper)
-    added_columns = [target_upper_to_orig[u] for u in added_upper]
+    added_norm = sorted(target_norm - source_norm)
+    added_columns = [target_norm_to_orig[u] for u in added_norm]
 
-    # Removed: in source but not in target (case-insensitive).
+    # Removed: in source but not in target (normalised).
     # Map back to original source casing.
-    removed_upper = sorted(source_upper - target_upper)
-    removed_columns = [source_upper_to_orig[u] for u in removed_upper]
+    removed_norm = sorted(source_norm - target_norm)
+    removed_columns = [source_norm_to_orig[u] for u in removed_norm]
 
     type_changes = []
-    for name_upper in shared_upper:
-        src_name = source_upper_to_orig[name_upper]
-        tgt_name = target_upper_to_orig[name_upper]
+    for name_norm in shared_norm:
+        src_name = source_norm_to_orig[name_norm]
+        tgt_name = target_norm_to_orig[name_norm]
         if source_columns[src_name] != target_columns[tgt_name]:
             type_changes.append(
                 {

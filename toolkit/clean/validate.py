@@ -9,10 +9,10 @@ from typing import Any
 
 from lab_connectors.duckdb import safe_connect
 from toolkit.core.io import read_json_or_none
-
 from toolkit.core.sql_utils import sql_path
 
 from toolkit.core.column_rules import (
+    check_column_types,
     check_max_null_pct,
     check_not_null,
     check_primary_key,
@@ -36,6 +36,7 @@ from toolkit.core.validation import (
     required_columns_check,
     write_validation_json,
 )
+from toolkit.quality.pa_csv_quality import assess_quality
 
 
 def _clean_validation_spec(
@@ -118,7 +119,9 @@ def validate_clean(
     with safe_connect() as con:
         con.execute(f"CREATE VIEW t AS SELECT * FROM read_parquet('{sql_path(p)}')")
 
-        cols = [r[0] for r in con.execute("DESCRIBE t").fetchall()]
+        cols_raw = con.execute("DESCRIBE t").fetchall()
+        cols = [str(r[0]) for r in cols_raw]
+        cols_with_types = [(str(r[0]), str(r[1])) for r in cols_raw]
 
         required_result = required_columns_check(cols, required)
         errors.extend(required_result.errors)
@@ -154,6 +157,7 @@ def validate_clean(
             "path": path_value,
             "row_count": row_count,
             "columns": cols,
+            "columns_with_types": cols_with_types,
             "required": required,
             "primary_key": primary_key,
             "not_null": not_null,
@@ -274,10 +278,67 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
         }
     )
 
-    # In sample mode (--sample-rows / --sample-bytes), min_rows non e' applicabile:
-    # il campione non e' rappresentativo per validazioni quantitative.
+    # ── Sensible defaults (prima di validate_clean) ────────────────────────
+    # min_rows: default 1 se non configurato (parquet vuoto = errore)
     if sample_mode:
         spec.validate.min_rows = None
+    elif spec.validate.min_rows is None:
+        spec.validate.min_rows = 1
+
+    # NOT NULL inference: colonne con 0% null nel raw diventano not_null impliciti.
+    # Leggiamo il raw profile e facciamo una pre-DESCRIBE del parquet clean
+    # per sapere quali colonne raw sono state mappate nel clean.
+    raw_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year)
+    _profile_path = raw_dir / "_profile" / RAW_PROFILE
+    if _profile_path.exists():
+        try:
+            with safe_connect() as _pre_con:
+                if parquet.exists():
+                    _pre_cols_raw = _pre_con.execute(
+                        f"DESCRIBE SELECT * FROM read_parquet('{sql_path(parquet)}')"
+                    ).fetchall()
+                    _pre_clean_cols_list = [str(r[0]) for r in _pre_cols_raw]
+                else:
+                    _pre_clean_cols_list = []
+
+            _raw_profile_data = read_json_or_none(_profile_path)
+            if _raw_profile_data and _pre_clean_cols_list and _raw_profile_data.get("null_counts"):
+                _trusted_raw = _raw_profile_data.get("columns_raw") or []
+                # null_counts e' una mappa completa (fino a 200 colonne):
+                #   {col_name_raw: missing_pct} per tutte le colonne profilate.
+                # Inferiamo NOT NULL SOLO per colonne esplicitamente presenti
+                # nella mappa con missing_pct == 0.0.
+                # Colonne non nella mappa (es. oltre la 200ª) o profili senza
+                # null_counts (legacy) non attivano l'inferenza.
+                _raw_null_counts = _raw_profile_data["null_counts"]
+                _clean_set = set(_pre_clean_cols_list)
+                _inferred: list[str] = []
+                for _rc in _trusted_raw:
+                    if _rc not in _raw_null_counts:
+                        continue  # colonna non profilata — non inferire
+                    if _raw_null_counts[_rc] > 0:
+                        continue  # colonna con null noti — non inferire
+                    _norm = _re.sub(r"([a-z])([A-Z])", r"\1_\2", _rc.strip())
+                    _norm = _re.sub(r"[^a-zA-Z0-9]+", "_", _norm)
+                    _norm = _re.sub(r"_+", "_", _norm).lower().strip("_") or "col"
+                    if _norm in _clean_set:
+                        _inferred.append(_norm)
+                if _inferred:
+                    _explicit = set(spec.validate.not_null)
+                    _new_inferred = [c for c in _inferred if c not in _explicit]
+                    if _new_inferred:
+                        spec.validate.not_null = list(_explicit) + _new_inferred
+                        _safe_debug = getattr(logger, "debug", lambda *a, **kw: None)
+                        _safe_debug(
+                            "[sensible] NOT NULL inferito per %d colonne "
+                            "che erano complete nel raw: %s",
+                            len(_new_inferred),
+                            _new_inferred,
+                        )
+        except Exception:
+            # NOT NULL inference non bloccante — se fallisce (parquet non ancora
+            # esistente, raw profile mancante, errore DuckDB) si procede comunque.
+            pass
 
     result = validate_clean(
         parquet,
@@ -290,13 +351,35 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
         min_rows=spec.validate.min_rows,
     )
 
+    # column type sanity check (non bloccante, solo warning)
+    cols_with_types = result.summary.get("columns_with_types") or []
+    if cols_with_types:
+        type_warnings = check_column_types(cols_with_types)
+        result = ValidationResult(
+            ok=result.ok,
+            errors=result.errors,
+            warnings=result.warnings + type_warnings[1],
+            summary=result.summary,
+            sections=result.sections,
+        )
+
     # cross-layer raw→clean check (row retention, column coverage)
+    # In sample mode la transizione non e' rappresentativa:
+    # il sample raw e' troncato a N byte, il clean a sample_rows righe.
+    # Disabilitiamo il row drop check, lasciamo warn_removed_columns attivo.
+    transition = spec.validate.promotion
+    if sample_mode:
+        transition = TransitionConfig(
+            max_row_drop_pct=None,
+            warn_removed_columns=transition.warn_removed_columns,
+            fail_on_row_drop_exceeded=False,
+        )
     raw_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, year)
     promotion_result = validate_promotion(
         raw_dir,
         out_dir,
         root=cfg.root,
-        transition=spec.validate.promotion,
+        transition=transition,
         logger=logger,
     )
     merged_errors = result.errors + promotion_result.errors
@@ -403,6 +486,62 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
             "Considera eseguire 'toolkit run raw -c <config>' per generare il profilo."
         )
 
+    # ── PAQA quality score: valuta la qualità del CSV raw ──────────────────
+    # Il risultato viene aggiunto alle stats del run record per monitoraggio
+    # nel tempo. Usa un campione (primi 15MB) per performance.
+    paqa_score: int | None = None
+    paqa_verdict: str | None = None
+    paqa_semantic: int | None = None
+    paqa_sampled: bool = False
+    try:
+        # Legge il file CSV effettivamente usato da clean (da clean metadata)
+        # invece del primo *.csv alfabetico — evita di processare un versioned
+        # backup (file_1.csv, file_2.csv) al posto del file originale.
+        _clean_meta_path = out_dir / METADATA
+        _csv_path: Path | None = None
+        if _clean_meta_path.exists():
+            _clean_meta = read_json_or_none(_clean_meta_path)
+            if _clean_meta:
+                _inputs = (_clean_meta.get("outputs") or []) + (
+                    _clean_meta.get("input_files") or []
+                )
+                for _f in _inputs:
+                    _p = Path(_f) if isinstance(_f, str) else None
+                    if _p and _p.suffix == ".csv" and _p.exists():
+                        _csv_path = _p
+                        break
+        if _csv_path is None:
+            _csv_files = sorted(raw_dir.glob("*.csv"))
+            if _csv_files:
+                # Fallback: primo CSV alfabetico (meno preciso)
+                _csv_path = _csv_files[0]
+        if _csv_path:
+            _size = _csv_path.stat().st_size
+            # Leggi campione: primi 15MB (stessa soglia CI sample-bytes)
+            _sample_bytes = min(_size, 15_728_640)
+            _csv_text = _csv_path.read_bytes()[:_sample_bytes].decode(
+                raw_profile.get("encoding_suggested", "utf-8") if raw_profile else "utf-8",
+                errors="replace",
+            )
+            _paqa_result = assess_quality(
+                _csv_text,
+                sampled=(_size > _sample_bytes),
+                known_sep=raw_profile.get("delim_suggested") if raw_profile else None,
+                known_encoding=raw_profile.get("encoding_suggested") if raw_profile else None,
+                known_skip=raw_profile.get("skip_suggested") if raw_profile else None,
+            )
+            paqa_score = _paqa_result.structural_score
+            paqa_verdict = _paqa_result.verdict
+            paqa_semantic = _paqa_result.semantic_score
+            paqa_sampled = _paqa_result.sampled
+            if _paqa_result.critical_fail:
+                merged_warnings.append(
+                    f"[paqa] Qualita' CSV critica ({paqa_verdict}, score={paqa_score}): "
+                    f"{'; '.join(_paqa_result.flags[:5])}"
+                )
+    except Exception as _paqa_err:
+        merged_warnings.append(f"[paqa] Quality assessment skipped: {_paqa_err}")
+
     row_drop_pct = (
         round((raw_row_count - clean_row_count) / raw_row_count * 100, 2)
         if raw_row_count and clean_row_count is not None and raw_row_count > 0
@@ -442,6 +581,10 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
             ),
             **({"raw_missing_columns": raw_missing_columns} if raw_missing_columns else {}),
             **({"raw_probe_source": raw_probe_source} if raw_probe_source else {}),
+            **({"paqa_score": paqa_score} if paqa_score is not None else {}),
+            **({"paqa_verdict": paqa_verdict} if paqa_verdict is not None else {}),
+            **({"paqa_semantic": paqa_semantic} if paqa_semantic is not None else {}),
+            **({"paqa_sampled": paqa_sampled} if paqa_sampled else {}),
         },
         "columns": clean_cols,
         **({"rules": rules} if rules else {}),

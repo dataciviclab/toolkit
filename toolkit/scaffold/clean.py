@@ -50,6 +50,54 @@ def _map_duckdb_type(raw_type: str) -> str:
     return "VARCHAR"
 
 
+def _map_datastore_type(ds_type: str) -> str:
+    """Map CKAN DataStore type to DuckDB SQL type.
+
+    DataStore types (https://docs.ckan.org/en/latest/maintaining/datastore.html):
+      ``numeric``, ``int``, ``integer``, ``bigint`` → ``BIGINT``
+      ``float``, ``double``, ``real`` → ``DOUBLE``
+      ``text`` → ``VARCHAR``
+      ``timestamp``, ``date`` → ``DATE``
+      ``bool``, ``boolean`` → ``BOOLEAN``
+    """
+    dt = ds_type.strip().lower()
+    if dt in ("numeric", "int", "integer", "bigint", "smallint", "tinyint"):
+        return "BIGINT"
+    if dt in ("float", "double", "real", "number"):
+        return "DOUBLE"
+    if dt in ("timestamp", "date", "datetime"):
+        return "DATE"
+    if dt in ("bool", "boolean"):
+        return "BOOLEAN"
+    return "VARCHAR"  # text, json, array, e unknown
+
+
+def profile_from_datastore(fields: list[dict[str, Any]]) -> dict[str, Any]:
+    """Costruisce un profile dict compatibile con ``generate_clean_sql()``
+    a partire dai fields restituiti da ``datastore_search?limit=0``.
+
+    Args:
+        fields: Lista di dict CKAN DataStore con ``id``, ``type``,
+                opzionalmente ``info.label`` e ``info.notes``.
+
+    Returns:
+        Profile dict con ``mapping_suggestions`` utilizzabile da
+        ``generate_clean_sql()`` e ``generate_full_scaffold()``.
+    """
+    mapping: dict[str, dict[str, str]] = {}
+    for f in fields:
+        col = f.get("id", "")
+        if not col:
+            continue
+        ds_type = f.get("type", "text")
+        sql_type = _map_datastore_type(ds_type)
+        mapping[col] = {"type": sql_type}
+    return {
+        "mapping_suggestions": mapping,
+        "columns_raw": [f["id"] for f in fields if f.get("id")],
+    }
+
+
 # Formati data organizzati per gruppo con stesso separatore.
 # I gruppi con due formati (DMY/MDY) richiedono disambiguazione:
 # valori che parsano in UN SOLO formato votano quello; valori che

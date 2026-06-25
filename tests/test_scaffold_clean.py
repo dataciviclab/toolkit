@@ -474,3 +474,118 @@ class TestGenerateCleanSqlIntegration:
         assert 'trim(CAST("nome" AS VARCHAR))' in sql
         assert 'trim(CAST("categoria" AS VARCHAR))' in sql
         assert 'TRY_CAST("valore" AS DOUBLE)' in sql
+
+
+# ---------------------------------------------------------------------------
+# pure_unit: _map_datastore_type
+# ---------------------------------------------------------------------------
+
+
+class TestMapDatastoreType:
+    """pure_unit: _map_datastore_type traduce tipi DataStore → DuckDB."""
+
+    @pytest.mark.pure_unit
+    @pytest.mark.parametrize(
+        "ds_type,expected",
+        [
+            ("numeric", "BIGINT"),
+            ("int", "BIGINT"),
+            ("integer", "BIGINT"),
+            ("bigint", "BIGINT"),
+            ("smallint", "BIGINT"),
+            ("tinyint", "BIGINT"),
+            ("float", "DOUBLE"),
+            ("double", "DOUBLE"),
+            ("real", "DOUBLE"),
+            ("number", "DOUBLE"),
+            ("text", "VARCHAR"),
+            ("json", "VARCHAR"),
+            ("array", "VARCHAR"),
+            ("timestamp", "DATE"),
+            ("date", "DATE"),
+            ("datetime", "DATE"),
+            ("bool", "BOOLEAN"),
+            ("boolean", "BOOLEAN"),
+            ("unknown_type", "VARCHAR"),
+            ("", "VARCHAR"),
+        ],
+    )
+    def test_map_datastore_type(self, ds_type: str, expected: str) -> None:
+        from toolkit.scaffold.clean import _map_datastore_type
+
+        assert _map_datastore_type(ds_type) == expected
+
+
+# ---------------------------------------------------------------------------
+# pure_unit: profile_from_datastore
+# ---------------------------------------------------------------------------
+
+
+class TestProfileFromDatastore:
+    """pure_unit: profile_from_datastore costruisce profile da fields CKAN DataStore."""
+
+    @pytest.mark.pure_unit
+    def test_empty_fields(self) -> None:
+        """Lista vuota → mapping_suggestions vuoto, columns_raw vuoto."""
+        from toolkit.scaffold.clean import profile_from_datastore
+
+        result = profile_from_datastore([])
+        assert result == {"mapping_suggestions": {}, "columns_raw": []}
+
+    @pytest.mark.pure_unit
+    def test_single_text_field(self) -> None:
+        """Campo text → mapping con VARCHAR, columns_raw popolato."""
+        from toolkit.scaffold.clean import profile_from_datastore
+
+        fields = [
+            {"id": "nome", "type": "text", "info": {"label": "Nome", "notes": "Il nome"}},
+        ]
+        result = profile_from_datastore(fields)
+        assert result["mapping_suggestions"]["nome"]["type"] == "VARCHAR"
+        assert result["columns_raw"] == ["nome"]
+
+    @pytest.mark.pure_unit
+    def test_mixed_types(self) -> None:
+        """Tipi misti → mapping corretto per ogni campo."""
+        from toolkit.scaffold.clean import profile_from_datastore
+
+        fields = [
+            {"id": "id_lista", "type": "numeric"},
+            {"id": "denominazione", "type": "text"},
+            {"id": "sezione", "type": "numeric"},
+            {"id": "data_udienza", "type": "timestamp"},
+            {"id": "importo", "type": "float"},
+            {"id": "attivo", "type": "bool"},
+        ]
+        result = profile_from_datastore(fields)
+        assert result["mapping_suggestions"]["id_lista"]["type"] == "BIGINT"
+        assert result["mapping_suggestions"]["denominazione"]["type"] == "VARCHAR"
+        assert result["mapping_suggestions"]["sezione"]["type"] == "BIGINT"
+        assert result["mapping_suggestions"]["data_udienza"]["type"] == "DATE"
+        assert result["mapping_suggestions"]["importo"]["type"] == "DOUBLE"
+        assert result["mapping_suggestions"]["attivo"]["type"] == "BOOLEAN"
+        assert result["columns_raw"] == [
+            "id_lista",
+            "denominazione",
+            "sezione",
+            "data_udienza",
+            "importo",
+            "attivo",
+        ]
+
+    @pytest.mark.pure_unit
+    def test_generate_clean_sql_from_datastore(self) -> None:
+        """Profile da DataStore produce clean.sql con colonne mappate."""
+        from toolkit.scaffold.clean import generate_clean_sql, profile_from_datastore
+
+        fields = [
+            {"id": "nome", "type": "text"},
+            {"id": "valore", "type": "numeric"},
+            {"id": "data", "type": "date"},
+        ]
+        profile = profile_from_datastore(fields)
+        sql = generate_clean_sql(profile, "test_dataset", 2024)
+        assert 'trim(CAST("nome" AS VARCHAR)) AS nome' in sql
+        assert 'TRY_CAST("valore" AS BIGINT) AS valore' in sql
+        assert 'TRY_CAST("data" AS DATE) AS data' in sql
+        assert "{year}::INTEGER AS anno" in sql

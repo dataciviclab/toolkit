@@ -27,6 +27,7 @@ from toolkit.scout.http import (  # noqa: F401
     fetch_content,
     fetch_html_body,
     fetch_ckan_package,
+    fetch_ckan_datastore_schema,
     discover_ckan_resources,
     fetch_sdmx_years,
     is_html_content,

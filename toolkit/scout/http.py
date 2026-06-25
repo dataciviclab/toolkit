@@ -264,7 +264,7 @@ def probe_url_headers(
             fb_client = _mk_client(
                 timeout=timeout,
                 user_agent=user_agent,
-                circuit_threshold=0,  # circuit fresco, nessun retaggio HTTP
+                circuit_threshold=0,
             )
             return probe_url_headers(
                 https_url,
@@ -273,7 +273,9 @@ def probe_url_headers(
                 client=fb_client,
                 circuit_threshold=0,
             )
-        raise RuntimeError(last_error or f"HEAD failed for {url}")
+        # URL gia' HTTPS → raise CircuitOpenError per preservare la
+        # semantica "circuit_open" per i caller downstream (es. SO).
+        raise CircuitOpenError(str(last_error))
 
     # Tentativo HEAD con retry
     for attempt in range(1 + MAX_RETRIES):
@@ -361,7 +363,7 @@ def probe_url_headers(
     # HTTPS fallback finale (dopo HEAD + GET+Range falliti senza circuit breaker)
     try:
         return _try_https()
-    except (RuntimeError, CircuitOpenError):
+    except RuntimeError:
         raise RuntimeError(last_error or f"HEAD failed for {url}")
 
 

@@ -254,6 +254,27 @@ def probe_url_headers(
     )
     last_error: str | None = None
 
+    # HTTPS fallback helper: se l'URL era HTTP e non ha funzionato,
+    # riprova con HTTPS. Il circuit breaker e' per netloc, non per
+    # schema/porta, quindi http://host e https://host condividono lo
+    # stesso circuito. Usiamo un client senza circuit breaker.
+    def _try_https() -> dict[str, Any]:
+        if url.startswith("http://"):
+            https_url = "https://" + url[7:]
+            fb_client = _mk_client(
+                timeout=timeout,
+                user_agent=user_agent,
+                circuit_threshold=0,  # circuit fresco, nessun retaggio HTTP
+            )
+            return probe_url_headers(
+                https_url,
+                timeout=timeout,
+                user_agent=user_agent,
+                client=fb_client,
+                circuit_threshold=0,
+            )
+        raise RuntimeError(last_error or f"HEAD failed for {url}")
+
     # Tentativo HEAD con retry
     for attempt in range(1 + MAX_RETRIES):
         head_result = client.head(url)
@@ -277,7 +298,7 @@ def probe_url_headers(
             last_error = f"server_error_{head_result.response.status_code}"
         elif head_result.err is not None:
             if isinstance(head_result.err, CircuitOpenError):
-                raise head_result.err
+                return _try_https()
             last_error = type(head_result.err).__name__
         else:
             last_error = "head_failed"
@@ -330,14 +351,18 @@ def probe_url_headers(
             )
         if range_result.err is not None:
             if isinstance(range_result.err, CircuitOpenError):
-                raise range_result.err
+                return _try_https()
             last_error = type(range_result.err).__name__
         if attempt < MAX_RETRIES:
             time.sleep(RETRY_BACKOFF * (attempt + 1))
             continue
         break
 
-    raise RuntimeError(last_error or f"HEAD failed for {url}")
+    # HTTPS fallback finale (dopo HEAD + GET+Range falliti senza circuit breaker)
+    try:
+        return _try_https()
+    except (RuntimeError, CircuitOpenError):
+        raise RuntimeError(last_error or f"HEAD failed for {url}")
 
 
 def _build_probe_result(

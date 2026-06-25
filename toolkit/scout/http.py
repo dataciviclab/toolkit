@@ -258,7 +258,9 @@ def probe_url_headers(
     # riprova con HTTPS. Il circuit breaker e' per netloc, non per
     # schema/porta, quindi http://host e https://host condividono lo
     # stesso circuito. Usiamo un client senza circuit breaker.
-    def _try_https() -> dict[str, Any]:
+    # Se circuit_error=True, l'unico motivo del fallimento e' il circuito
+    # aperto (non un errore di rete generico).
+    def _try_https(circuit_error: bool = False) -> dict[str, Any]:
         if url.startswith("http://"):
             https_url = "https://" + url[7:]
             fb_client = _mk_client(
@@ -273,9 +275,10 @@ def probe_url_headers(
                 client=fb_client,
                 circuit_threshold=0,
             )
-        # URL gia' HTTPS → raise CircuitOpenError per preservare la
-        # semantica "circuit_open" per i caller downstream (es. SO).
-        raise CircuitOpenError(str(last_error))
+        # URL gia' HTTPS: niente fallback possibile.
+        if circuit_error:
+            raise CircuitOpenError("circuit open")
+        raise RuntimeError(last_error or f"HEAD failed for {url}")
 
     # Tentativo HEAD con retry
     for attempt in range(1 + MAX_RETRIES):
@@ -300,7 +303,7 @@ def probe_url_headers(
             last_error = f"server_error_{head_result.response.status_code}"
         elif head_result.err is not None:
             if isinstance(head_result.err, CircuitOpenError):
-                return _try_https()
+                return _try_https(circuit_error=True)
             last_error = type(head_result.err).__name__
         else:
             last_error = "head_failed"
@@ -353,7 +356,7 @@ def probe_url_headers(
             )
         if range_result.err is not None:
             if isinstance(range_result.err, CircuitOpenError):
-                return _try_https()
+                return _try_https(circuit_error=True)
             last_error = type(range_result.err).__name__
         if attempt < MAX_RETRIES:
             time.sleep(RETRY_BACKOFF * (attempt + 1))

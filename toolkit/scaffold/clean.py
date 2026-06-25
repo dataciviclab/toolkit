@@ -61,9 +61,11 @@ def _map_datastore_type(ds_type: str) -> str:
       ``bool``, ``boolean`` → ``BOOLEAN``
     """
     dt = ds_type.strip().lower()
-    if dt in ("numeric", "int", "integer", "bigint", "smallint", "tinyint"):
+    if dt in ("int", "integer", "bigint", "smallint", "tinyint"):
         return "BIGINT"
-    if dt in ("float", "double", "real", "number"):
+    # numeric in CKAN/PostgreSQL ammette decimali (NUMERIC(p,s)),
+    # quindi va mappato a DOUBLE per evitare troncamenti silenziosi.
+    if dt in ("numeric", "float", "double", "real", "number"):
         return "DOUBLE"
     if dt in ("timestamp", "date", "datetime"):
         return "DATE"

@@ -488,7 +488,7 @@ class TestMapDatastoreType:
     @pytest.mark.parametrize(
         "ds_type,expected",
         [
-            ("numeric", "BIGINT"),
+            ("numeric", "DOUBLE"),
             ("int", "BIGINT"),
             ("integer", "BIGINT"),
             ("bigint", "BIGINT"),
@@ -558,9 +558,9 @@ class TestProfileFromDatastore:
             {"id": "attivo", "type": "bool"},
         ]
         result = profile_from_datastore(fields)
-        assert result["mapping_suggestions"]["id_lista"]["type"] == "BIGINT"
+        assert result["mapping_suggestions"]["id_lista"]["type"] == "DOUBLE"
         assert result["mapping_suggestions"]["denominazione"]["type"] == "VARCHAR"
-        assert result["mapping_suggestions"]["sezione"]["type"] == "BIGINT"
+        assert result["mapping_suggestions"]["sezione"]["type"] == "DOUBLE"
         assert result["mapping_suggestions"]["data_udienza"]["type"] == "DATE"
         assert result["mapping_suggestions"]["importo"]["type"] == "DOUBLE"
         assert result["mapping_suggestions"]["attivo"]["type"] == "BOOLEAN"
@@ -586,6 +586,6 @@ class TestProfileFromDatastore:
         profile = profile_from_datastore(fields)
         sql = generate_clean_sql(profile, "test_dataset", 2024)
         assert 'trim(CAST("nome" AS VARCHAR)) AS nome' in sql
-        assert 'TRY_CAST("valore" AS BIGINT) AS valore' in sql
+        assert 'TRY_CAST("valore" AS DOUBLE) AS valore' in sql
         assert 'TRY_CAST("data" AS DATE) AS data' in sql
         assert "{year}::INTEGER AS anno" in sql

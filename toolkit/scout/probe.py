@@ -39,18 +39,17 @@ __all__ = [
 ]
 
 # ---------------------------------------------------------------------------
-# Protocol-based routing (futuro: dispatcher dedicati per protocollo)
+# Protocol-based routing (dispatcher dedicati per protocollo)
 # ---------------------------------------------------------------------------
-# Quando probe_url_routed riceve un hint protocol, usa questo dict per
-# instradare al dispatcher appropriato. Se il protocollo non è ancora
-# supportato, casca sull'euristico attuale.
-# I dispatcher vivranno in toolkit.scout.probe quando saranno implementati.
+# probe_url_routed(), quando riceve un hint protocol, usa questo dict per
+# instradare al dispatcher appropriato invece di fare auto-detect.
+# I dispatcher sono le funzioni _route_* definite piu' avanti.
 _PROTOCOL_ROUTER: dict[str, str] = {
-    "http": "file",  # file diretto → source_type="file"
-    "ckan": "auto",  # ancora non implementato — usa auto-detect
-    "sdmx": "auto",  # ancora non implementato — usa auto-detect
-    "sparql": "auto",  # ancora non implementato — usa auto-detect
-    "html": "auto",  # ancora non implementato — usa auto-detect
+    "http": "file",
+    "ckan": "ckan",
+    "sdmx": "sdmx",
+    "sparql": "sparql",
+    "html": "html",
 }
 
 # ---------------------------------------------------------------------------
@@ -137,31 +136,37 @@ def probe_url_routed(
 
     Returns dict con source_type, e chiavi specifiche per tipo.
     """
-    # Hint protocol: se noto e ha un dispatcher diretto, usa quello.
-    # Per ora solo "http" ha routing deterministico (file).
-    # Gli altri protocolli cascano sull'euristico attuale finché non
-    # avranno dispatcher dedicati.
+    # Hint protocol: dispatcher deterministico per protocollo.
+    # Salta l'euristica URL/header e usa il router appropriato.
     if protocol in _PROTOCOL_ROUTER:
-        mapped = _PROTOCOL_ROUTER[protocol]
-        if mapped == "file":
-            # File diretto — HEAD probe senza routing ulteriore
-            probe = probe_url_headers(url, timeout=timeout, user_agent=user_agent)
-            return {
+        probe = probe_url_headers(url, timeout=timeout, user_agent=user_agent)
+        final_url = probe["final_url"]
+        result = _base_result(
+            {
                 "requested_url": url,
-                "final_url": probe["final_url"],
+                "final_url": final_url,
                 "status_code": probe["status_code"],
                 "content_type": probe["content_type"],
                 "content_disposition": probe["content_disposition"],
                 "resolved_format": resolve_preview_kind(
                     url, probe["content_type"], probe["content_disposition"]
                 ),
-                "source_type": "file",
-                "ckan_resources": None,
-                "candidate_links": [],
-                "sdmx_info": None,
-                "sparql_info": None,
-            }
+            },
+            "file",  # default, verra' sovrascritto dai router
+        )
 
+        mapped = _PROTOCOL_ROUTER[protocol]
+        if mapped == "file":
+            return result
+        elif mapped == "sdmx":
+            return _route_sdmx(final_url, result, timeout=timeout)
+        elif mapped == "sparql":
+            return _route_sparql(final_url, result, timeout=timeout)
+        elif mapped == "html" or mapped == "ckan":
+            # CKAN viene rilevato dentro _route_html (firme HTML)
+            return _route_html(url, final_url, result, timeout=timeout, user_agent=user_agent)
+
+    # Auto-detect (fallback quando protocol non fornito o sconosciuto)
     probe = probe_url_headers(url, timeout=timeout, user_agent=user_agent)
     content_type = probe["content_type"]
     content_disposition = probe["content_disposition"]

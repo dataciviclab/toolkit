@@ -444,7 +444,17 @@ def _fetch_robots_sitemaps(base_url: str, *, timeout: int = 10) -> tuple[bool, l
     return True, sitemaps
 
 
-def _fetch_and_parse_sitemap(sitemap_url: str, *, timeout: int = 10) -> list[str]:
+def fetch_sitemap_pages(sitemap_url: str, *, timeout: int = 10) -> list[str]:
+    """Fetch e parse una sitemap XML, ritorna lista di URL delle pagine.
+
+    Args:
+        sitemap_url: URL della sitemap (es. ``https://example.gov.it/sitemap.xml``).
+        timeout: Timeout HTTP.
+
+    Returns:
+        Lista di URL delle pagine trovate nella sitemap.
+        Lista vuota se sitemap non raggiungibile o malformata.
+    """
     """Fetch e parse una sitemap XML, ritorna lista di URL delle pagine."""
     client = HttpClient(timeout=timeout)
     result = client.get(sitemap_url)
@@ -537,7 +547,7 @@ def probe_html_portal(
     for sm_path in _common_sitemap_paths:
         sm_url = urljoin(base_url.rstrip("/") + "/", sm_path.lstrip("/"))
         if sm_url not in sitemap_urls:
-            pages = _fetch_and_parse_sitemap(sm_url, timeout=timeout)
+            pages = fetch_sitemap_pages(sm_url, timeout=timeout)
             if pages:
                 sitemap_urls.append(sm_url)
                 profile.sitemap_urls = sitemap_urls
@@ -547,7 +557,7 @@ def probe_html_portal(
     if fetch_sitemap and sitemap_urls:
         for sm_url in sitemap_urls[:3]:  # max 3 sitemap
             if sm_url not in _common_sitemap_paths or not profile.sitemap_pages:
-                pages = _fetch_and_parse_sitemap(sm_url, timeout=timeout)
+                pages = fetch_sitemap_pages(sm_url, timeout=timeout)
                 for p in pages:
                     if p not in profile.sitemap_pages:
                         profile.sitemap_pages.append(p)

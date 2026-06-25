@@ -181,10 +181,13 @@ def mcp_html_extract_links(url: str, timeout: int = 20) -> dict[str, Any]:
     # Backward compat: lista di URL semplici
     links = [dl.url for dl in data_links]
 
-    # Backward compat: conteggio per estensione (lowercase)
+    # Backward compat: conteggio per estensione (lowercase, dal path senza query)
+    from urllib.parse import urlparse
+
     formats: dict[str, int] = {}
     for dl in data_links:
-        ext = dl.url.rsplit(".", 1)[-1].lower() if "." in dl.url else "unknown"
+        path = urlparse(dl.url).path
+        ext = path.rsplit(".", 1)[-1].lower() if "." in path else "unknown"
         formats[ext] = formats.get(ext, 0) + 1
 
     return {

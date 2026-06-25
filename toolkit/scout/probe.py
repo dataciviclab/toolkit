@@ -447,6 +447,10 @@ def _fetch_robots_sitemaps(base_url: str, *, timeout: int = 10) -> tuple[bool, l
 def fetch_sitemap_pages(sitemap_url: str, *, timeout: int = 10) -> list[str]:
     """Fetch e parse una sitemap XML, ritorna lista di URL delle pagine.
 
+    Supporta sia sitemap standard (``<url><loc>``) che sitemap index
+    (``<sitemapindex><sitemap><loc>``). In caso di sitemap index, segue
+    ricorsivamente le sotto-sitemap (max 10).
+
     Args:
         sitemap_url: URL della sitemap (es. ``https://example.gov.it/sitemap.xml``).
         timeout: Timeout HTTP.
@@ -455,27 +459,61 @@ def fetch_sitemap_pages(sitemap_url: str, *, timeout: int = 10) -> list[str]:
         Lista di URL delle pagine trovate nella sitemap.
         Lista vuota se sitemap non raggiungibile o malformata.
     """
-    """Fetch e parse una sitemap XML, ritorna lista di URL delle pagine."""
+    return _fetch_sitemap_recursive(sitemap_url, timeout=timeout, depth=0)
+
+
+def _fetch_sitemap_recursive(
+    sitemap_url: str, *, timeout: int, depth: int, max_depth: int = 10
+) -> list[str]:
+    """Fetch e parse ricorsivo di sitemap, con protezione profondità."""
+    if depth >= max_depth:
+        return []
+
     client = HttpClient(timeout=timeout)
     result = client.get(sitemap_url)
     if not result.is_ok or result.response is None or result.response.status_code >= 400:
         return []
+
     try:
         root = ET.fromstring(result.response.text)
-        # Namespace sitemap standard
         ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-        urls: list[str] = []
-        for url_elem in root.findall(".//sm:url", ns):
-            loc = url_elem.find("sm:loc", ns)
-            if loc is not None and loc.text:
-                urls.append(loc.text.strip())
-        # Fallback: prova senza namespace
-        if not urls:
-            for url_elem in root.findall(".//url"):
-                loc = url_elem.find("loc")
+
+        # Rileva se è sitemap index (<sitemapindex> root)
+        is_index = root.tag.endswith("sitemapindex")
+
+        if is_index:
+            # Sitemap index: contiene <sitemap><loc>...
+            sub_sitemaps: list[str] = []
+            for sm_elem in root.findall(".//sm:sitemap", ns):
+                loc = sm_elem.find("sm:loc", ns)
+                if loc is not None and loc.text:
+                    sub_sitemaps.append(loc.text.strip())
+            # Fallback senza namespace
+            if not sub_sitemaps:
+                for sm_elem in root.findall(".//sitemap"):
+                    loc = sm_elem.find("loc")
+                    if loc is not None and loc.text:
+                        sub_sitemaps.append(loc.text.strip())
+
+            # Segue ricorsivamente ogni sotto-sitemap
+            all_urls: list[str] = []
+            for sub_url in sub_sitemaps[:50]:  # max 50 sotto-sitemap
+                all_urls.extend(_fetch_sitemap_recursive(sub_url, timeout=timeout, depth=depth + 1))
+            return all_urls
+        else:
+            # Sitemap standard: contiene <url><loc>...
+            urls: list[str] = []
+            for url_elem in root.findall(".//sm:url", ns):
+                loc = url_elem.find("sm:loc", ns)
                 if loc is not None and loc.text:
                     urls.append(loc.text.strip())
-        return urls
+            # Fallback senza namespace
+            if not urls:
+                for url_elem in root.findall(".//url"):
+                    loc = url_elem.find("loc")
+                    if loc is not None and loc.text:
+                        urls.append(loc.text.strip())
+            return urls
     except Exception:
         return []
 

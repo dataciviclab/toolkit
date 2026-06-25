@@ -10,7 +10,6 @@ from typing import Any
 
 from toolkit.plugins.sparql import SparqlSource
 from toolkit.scout.http import (
-    extract_candidate_links,
     fetch_ckan_package,
     fetch_html_body,
     list_sdmx_dataflows as _list_sdmx_dataflows,
@@ -18,6 +17,10 @@ from toolkit.scout.http import (
     search_ckan_datasets as _search_ckan_datasets,
 )
 from toolkit.scout.infer import infer_topics
+from toolkit.scout.link_extractor import (
+    extract_data_links,
+    group_links,
+)
 from toolkit.scout.probe import probe_url, probe_url_routed
 
 
@@ -144,11 +147,18 @@ def mcp_ckan_package_show(
 def mcp_html_extract_links(url: str, timeout: int = 20) -> dict[str, Any]:
     """Estrae link a file dati (CSV, JSON, XLSX, ZIP, XML) da una pagina HTML.
 
-    1. Scrive ``fetch_html_body()`` per scaricare la pagina.
-    2. ``extract_candidate_links()`` per estrarre i link ai dati.
+    1. Scarica la pagina via ``fetch_html_body()``.
+    2. Usa ``extract_data_links()`` per estrarre link con metadati (formato,
+       prefisso, anni).
+    3. Usa ``group_links()`` per raggruppare i link in dataset.
 
     Returns:
-        Dict con url, total, formats, links, is_reachable.
+        Dict con:
+        - ``url``, ``is_reachable``, ``http_status``
+        - ``links`` (list[str], backward compat) e ``total``
+        - ``formats`` (dict[str, int], backward compat, lowercase estensione)
+        - ``data_links`` (list[dict] con url, format, title, prefix, years, page_url)
+        - ``groups`` (list[dict] con group_id, prefix, count, year_range, formats)
     """
     try:
         body = fetch_html_body(url, timeout=timeout)
@@ -160,14 +170,21 @@ def mcp_html_extract_links(url: str, timeout: int = 20) -> dict[str, Any]:
             "links": [],
             "total": 0,
             "formats": {},
+            "data_links": [],
+            "groups": [],
         }
 
     html_text = body.get("html_text", "")
-    links = extract_candidate_links(url, html_text)
+    data_links = extract_data_links(url, html_text)
+    groups = group_links(data_links)
 
+    # Backward compat: lista di URL semplici
+    links = [dl.url for dl in data_links]
+
+    # Backward compat: conteggio per estensione (lowercase)
     formats: dict[str, int] = {}
-    for link in links:
-        ext = link.rsplit(".", 1)[-1].lower() if "." in link else "unknown"
+    for dl in data_links:
+        ext = dl.url.rsplit(".", 1)[-1].lower() if "." in dl.url else "unknown"
         formats[ext] = formats.get(ext, 0) + 1
 
     return {
@@ -177,6 +194,28 @@ def mcp_html_extract_links(url: str, timeout: int = 20) -> dict[str, Any]:
         "total": len(links),
         "links": links,
         "formats": formats,
+        "data_links": [
+            {
+                "url": dl.url,
+                "format": dl.format,
+                "title": dl.title,
+                "prefix": dl.prefix,
+                "years": dl.years,
+                "page_url": dl.page_url or url,
+            }
+            for dl in data_links
+        ],
+        "groups": [
+            {
+                "group_id": g.group_id,
+                "prefix": g.prefix,
+                "count": g.count,
+                "year_range": g.year_range,
+                "formats": sorted(g.formats),
+                "title": g.title,
+            }
+            for g in groups
+        ],
     }
 
 

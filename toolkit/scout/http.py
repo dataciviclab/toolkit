@@ -11,9 +11,8 @@ from __future__ import annotations
 import logging
 import re
 import time
-from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import parse_qs, urlparse
 
 from lab_connectors.http import CircuitOpenError, HttpClient
 
@@ -55,27 +54,6 @@ _SDMX_NS = {
 }
 
 _YEAR_RE = re.compile(r"(?<!\d)(19\d{2}|20[012]\d)(?!\d)")
-
-# ---------------------------------------------------------------------------
-# Anchor parser (candidate links da HTML)
-# ---------------------------------------------------------------------------
-
-
-class _AnchorParser(HTMLParser):
-    """Parsa tag <a href=...> da HTML per estrarre link candidati a dati."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.hrefs: list[str] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag.lower() != "a":
-            return
-        for key, value in attrs:
-            if key.lower() == "href" and value:
-                self.hrefs.append(value)
-                return
-
 
 # ---------------------------------------------------------------------------
 # HTTP client factory
@@ -201,6 +179,8 @@ def _filename_from_content_disposition(value: str | None) -> str | None:
 
 # ---------------------------------------------------------------------------
 # Candidate links extraction from HTML (pure, no network)
+# Reindirizzato a link_extractor come contratto centrale.
+# Mantenuto per backward compatibility.
 # ---------------------------------------------------------------------------
 
 
@@ -208,21 +188,13 @@ def extract_candidate_links(base_url: str, html_text: str) -> list[str]:
     """Estrae link a file dati (CSV/XLSX/etc.) da una pagina HTML.
 
     Returns lista di URL assoluti, deduplicati, ordinati per apparizione.
+
+    Nota: reindirizzato a ``toolkit.scout.link_extractor`` come contratto
+    centrale. Questa funzione è mantenuta per backward compatibility.
     """
-    parser = _AnchorParser()
-    parser.feed(html_text)
-    links: list[str] = []
-    seen: set[str] = set()
-    for href in parser.hrefs:
-        lowered = href.lower()
-        if not any(ext in lowered for ext in CANDIDATE_EXTENSIONS):
-            continue
-        absolute = urljoin(base_url, href)
-        if absolute in seen:
-            continue
-        seen.add(absolute)
-        links.append(absolute)
-    return links
+    from toolkit.scout.link_extractor import extract_candidate_links as _extract
+
+    return _extract(base_url, html_text)
 
 
 # ---------------------------------------------------------------------------

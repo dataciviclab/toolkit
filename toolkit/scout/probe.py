@@ -137,45 +137,54 @@ def probe_url_routed(
     Returns dict con source_type, e chiavi specifiche per tipo.
     """
     # Hint protocol: dispatcher deterministico per protocollo.
-    # Salta l'euristica URL/header e usa il router appropriato.
+    # SDMX e SPARQL saltano la HEAD probe (i loro endpoint non
+    # rispondono a HEAD — 405 Method Not Allowed) e vanno direttamente
+    # al router dedicato che usa GET con header corretti.
     if protocol in _PROTOCOL_ROUTER:
-        probe = probe_url_headers(url, timeout=timeout, user_agent=user_agent)
-        final_url = probe["final_url"]
-        result = _base_result(
-            {
-                "requested_url": url,
-                "final_url": final_url,
-                "status_code": probe["status_code"],
-                "content_type": probe["content_type"],
-                "content_disposition": probe["content_disposition"],
-                "resolved_format": resolve_preview_kind(
-                    url, probe["content_type"], probe["content_disposition"]
+        mapped = _PROTOCOL_ROUTER[protocol]
+        if mapped in ("sdmx", "sparql"):
+            # SDMX/SPARQL: nessuna HEAD, routing diretto.
+            # requested_url/final_url sono l'URL ricevuto (nessun redirect).
+            # status_code/content_type non disponibili (HEAD non fatto).
+            route = _route_sdmx if mapped == "sdmx" else _route_sparql
+            return route(
+                url,
+                _base_result(
+                    {"requested_url": url, "final_url": url},
+                    mapped,
                 ),
-            },
-            "file",  # default, verra' sovrascritto dai router
+                timeout=timeout,
+            )
+        # Per "html", "ckan", "http" → HEAD probe normale
+        head = probe_url_headers(url, timeout=timeout, user_agent=user_agent)
+        furl = head["final_url"]
+        base_dict = {
+            "requested_url": url,
+            "final_url": furl,
+            "status_code": head["status_code"],
+            "content_type": head["content_type"],
+            "content_disposition": head["content_disposition"],
+            "resolved_format": resolve_preview_kind(
+                url, head["content_type"], head["content_disposition"]
+            ),
+        }
+        if mapped == "file":
+            return _base_result(base_dict, "file")
+        # html / ckan
+        return _route_html(
+            url, furl, _base_result(base_dict, "html"), timeout=timeout, user_agent=user_agent
         )
 
-        mapped = _PROTOCOL_ROUTER[protocol]
-        if mapped == "file":
-            return result
-        elif mapped == "sdmx":
-            return _route_sdmx(final_url, result, timeout=timeout)
-        elif mapped == "sparql":
-            return _route_sparql(final_url, result, timeout=timeout)
-        elif mapped == "html" or mapped == "ckan":
-            # CKAN viene rilevato dentro _route_html (firme HTML)
-            return _route_html(url, final_url, result, timeout=timeout, user_agent=user_agent)
-
     # Auto-detect (fallback quando protocol non fornito o sconosciuto)
-    probe = probe_url_headers(url, timeout=timeout, user_agent=user_agent)
-    content_type = probe["content_type"]
-    content_disposition = probe["content_disposition"]
-    final_url = probe["final_url"]
+    head = probe_url_headers(url, timeout=timeout, user_agent=user_agent)
+    content_type = head["content_type"]
+    content_disposition = head["content_disposition"]
+    final_url = head["final_url"]
 
     result: dict[str, Any] = {
         "requested_url": url,
         "final_url": final_url,
-        "status_code": probe["status_code"],
+        "status_code": head["status_code"],
         "content_type": content_type,
         "content_disposition": content_disposition,
         "resolved_format": resolve_preview_kind(url, content_type, content_disposition),

@@ -423,3 +423,107 @@ class TestProbeUrlRoutedSparql:
         result = probe_url_routed("https://slow-endpoint.org/sparql", timeout=5)
         assert result["source_type"] == "opaque"
         assert "timeout" in str(result.get("sparql_info", {}).get("error", ""))
+
+
+class TestProbeUrlRoutedProtocolHint:
+    """contract: probe_url_routed(protocol=...) routing deterministico."""
+
+    @pytest.mark.contract
+    def test_protocol_http_returns_file(self, monkeypatch) -> None:
+        """Con protocol='http', source_type='file' senza euristica."""
+        from toolkit.scout.probe import probe_url_routed
+
+        def _mock_headers(url, **kw):
+            return {
+                "status_code": 200,
+                "content_type": "text/plain",
+                "content_disposition": None,
+                "final_url": url,
+            }
+
+        monkeypatch.setattr("toolkit.scout.probe.probe_url_headers", _mock_headers)
+
+        result = probe_url_routed("https://example.org/data.txt", protocol="http")
+        assert result["source_type"] == "file"
+        assert result["status_code"] == 200
+        assert result["ckan_resources"] is None
+        assert result["candidate_links"] == []
+        assert result["sdmx_info"] is None
+        assert result["sparql_info"] is None
+
+    @pytest.mark.contract
+    def test_protocol_none_falls_to_auto_detect(self, monkeypatch) -> None:
+        """Senza protocol, usa auto-detect come prima."""
+        from toolkit.scout.probe import probe_url_routed
+
+        def _mock_headers(url, **kw):
+            return {
+                "status_code": 200,
+                "content_type": "text/html",
+                "content_disposition": None,
+                "final_url": url,
+            }
+
+        monkeypatch.setattr("toolkit.scout.probe.probe_url_headers", _mock_headers)
+
+        result = probe_url_routed("https://example.org/")
+        # URL senza /sparql, content_type=html → _route_html
+        # La route HTML non ha body HTML (mockato) → source_type="html"
+        assert result["source_type"] == "html"
+
+    @pytest.mark.contract
+    def test_protocol_unknown_falls_to_auto_detect(self, monkeypatch) -> None:
+        """Protocol non in _PROTOCOL_ROUTER casca su auto-detect."""
+        from toolkit.scout.probe import probe_url_routed
+
+        def _mock_headers(url, **kw):
+            return {
+                "status_code": 200,
+                "content_type": "text/html",
+                "content_disposition": None,
+                "final_url": url,
+            }
+
+        monkeypatch.setattr("toolkit.scout.probe.probe_url_headers", _mock_headers)
+
+        # "ckan" è in _PROTOCOL_ROUTER ma mapped=None → casca su auto-detect
+        result = probe_url_routed("https://example.org/", protocol="ckan")
+        assert result["source_type"] == "html"  # auto-detect vince
+
+
+class TestMcpProbeUrlRouted:
+    """contract: mcp_probe_url_routed forwarda protocol a probe_url_routed."""
+
+    @pytest.mark.contract
+    def test_protocol_forwarded_to_core(self, monkeypatch) -> None:
+        """mcp_probe_url_routed(protocol=...) deve passare protocol al core."""
+        from toolkit.mcp.scout_ops import mcp_probe_url_routed
+
+        captured_kwargs = {}
+
+        def _mock_probe(url, **kwargs):
+            captured_kwargs.update(kwargs)
+            return {"source_type": "mock"}
+
+        monkeypatch.setattr("toolkit.mcp.scout_ops.probe_url_routed", _mock_probe)
+
+        result = mcp_probe_url_routed("https://example.org/data.csv", protocol="http")
+        assert captured_kwargs.get("protocol") == "http"
+        assert result["source_type"] == "mock"
+
+    @pytest.mark.contract
+    def test_no_protocol_still_works(self, monkeypatch) -> None:
+        """mcp_probe_url_routed senza protocol deve funzionare (backward compat)."""
+        from toolkit.mcp.scout_ops import mcp_probe_url_routed
+
+        captured_kwargs = {}
+
+        def _mock_probe(url, **kwargs):
+            captured_kwargs.update(kwargs)
+            return {"source_type": "mock"}
+
+        monkeypatch.setattr("toolkit.mcp.scout_ops.probe_url_routed", _mock_probe)
+
+        result = mcp_probe_url_routed("https://example.org/")
+        assert "protocol" not in captured_kwargs or captured_kwargs.get("protocol") is None
+        assert result["source_type"] == "mock"

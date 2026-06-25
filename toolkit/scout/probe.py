@@ -39,6 +39,21 @@ __all__ = [
 ]
 
 # ---------------------------------------------------------------------------
+# Protocol-based routing (futuro: dispatcher dedicati per protocollo)
+# ---------------------------------------------------------------------------
+# Quando probe_url_routed riceve un hint protocol, usa questo dict per
+# instradare al dispatcher appropriato. Se il protocollo non è ancora
+# supportato, casca sull'euristico attuale.
+# I dispatcher vivranno in toolkit.scout.probe quando saranno implementati.
+_PROTOCOL_ROUTER: dict[str, str] = {
+    "http": "file",  # file diretto → source_type="file"
+    "ckan": "auto",  # ancora non implementato — usa auto-detect
+    "sdmx": "auto",  # ancora non implementato — usa auto-detect
+    "sparql": "auto",  # ancora non implementato — usa auto-detect
+    "html": "auto",  # ancora non implementato — usa auto-detect
+}
+
+# ---------------------------------------------------------------------------
 # Classic probe_url
 # ---------------------------------------------------------------------------
 
@@ -101,6 +116,7 @@ def probe_url_routed(
     *,
     timeout: int = DEFAULT_TIMEOUT,
     user_agent: str = DEFAULT_USER_AGENT,
+    protocol: str | None = None,
 ) -> dict[str, Any]:
     """Probe arricchito con routing automatico del tipo fonte.
 
@@ -111,8 +127,41 @@ def probe_url_routed(
     - Per SPARQL: esegue una probe query leggera
     - Per HTML: estrae link candidati a dati
 
+    Args:
+        url: URL da probeare.
+        timeout: Timeout HTTP.
+        user_agent: User-Agent.
+        protocol: Hint protocollo dalla registry (ckan, sdmx, sparql, html, http).
+            Se fornito e noto a _PROTOCOL_ROUTER, salta l'euristica e usa
+            il routing deterministico.
+
     Returns dict con source_type, e chiavi specifiche per tipo.
     """
+    # Hint protocol: se noto e ha un dispatcher diretto, usa quello.
+    # Per ora solo "http" ha routing deterministico (file).
+    # Gli altri protocolli cascano sull'euristico attuale finché non
+    # avranno dispatcher dedicati.
+    if protocol in _PROTOCOL_ROUTER:
+        mapped = _PROTOCOL_ROUTER[protocol]
+        if mapped == "file":
+            # File diretto — HEAD probe senza routing ulteriore
+            probe = probe_url_headers(url, timeout=timeout, user_agent=user_agent)
+            return {
+                "requested_url": url,
+                "final_url": probe["final_url"],
+                "status_code": probe["status_code"],
+                "content_type": probe["content_type"],
+                "content_disposition": probe["content_disposition"],
+                "resolved_format": resolve_preview_kind(
+                    url, probe["content_type"], probe["content_disposition"]
+                ),
+                "source_type": "file",
+                "ckan_resources": None,
+                "candidate_links": [],
+                "sdmx_info": None,
+                "sparql_info": None,
+            }
+
     probe = probe_url_headers(url, timeout=timeout, user_agent=user_agent)
     content_type = probe["content_type"]
     content_disposition = probe["content_disposition"]

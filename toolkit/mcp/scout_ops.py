@@ -34,12 +34,20 @@ def mcp_probe_url(url: str, timeout: int = 15) -> dict[str, Any]:
     return probe_url(url, timeout=timeout)
 
 
-def mcp_probe_url_routed(url: str, timeout: int = 15) -> dict[str, Any]:
+def mcp_probe_url_routed(
+    url: str, timeout: int = 15, protocol: str | None = None
+) -> dict[str, Any]:
     """Probe arricchito con routing automatico (CKAN, SDMX, HTML, file).
 
     Chiama ``toolkit.scout.probe.probe_url_routed()``.
+
+    Args:
+        url: URL da probeare.
+        timeout: Timeout HTTP.
+        protocol: Hint protocollo (ckan, sdmx, sparql, html, http).
+            Se fornito, salta l'euristica e usa routing deterministico.
     """
-    return probe_url_routed(url, timeout=timeout)
+    return probe_url_routed(url, timeout=timeout, protocol=protocol)
 
 
 def mcp_probe_url_headers(url: str, timeout: int = 15) -> dict[str, Any]:

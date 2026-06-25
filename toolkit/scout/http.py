@@ -616,6 +616,63 @@ def fetch_ckan_package(
     return None
 
 
+def fetch_ckan_datastore_schema(
+    portal_url: str,
+    resource_id: str,
+    *,
+    timeout: int = DEFAULT_TIMEOUT,
+    client: HttpClient | None = None,
+) -> list[dict[str, Any]] | None:
+    """Fetch CKAN DataStore schema per una risorsa (``datastore_search?limit=0``).
+
+    Restituisce la lista campi ``[{id, type, info: {label, notes}}, ...]``
+    che lo scaffold puo' usare per generare colonne mappate senza scaricare il CSV.
+
+    Args:
+        portal_url: URL del portale CKAN (qualsiasi forma).
+        resource_id: UUID della risorsa.
+        timeout: Timeout HTTP.
+        client: HttpClient opzionale.
+
+    Returns:
+        Lista di dict con ``id``, ``type``, ``info``, oppure ``None``
+        se la risorsa non ha DataStore o la chiamata fallisce.
+    """
+    parsed = urlparse(portal_url)
+    root = f"{parsed.scheme}://{parsed.netloc}"
+    portal_base = _ckan_portal_base(portal_url)
+
+    api_bases: list[str] = [
+        f"{portal_base}/api/3/action/datastore_search",
+    ]
+    api_base_root = f"{root}/api/3/action/datastore_search"
+    if api_base_root != api_bases[0]:
+        api_bases.append(api_base_root)
+    api_bases.append(f"{root}/datastore_search")
+
+    client = client or _mk_client(timeout=timeout)
+    for api_base in api_bases:
+        ds_url = f"{api_base}?resource_id={resource_id}&limit=0"
+        try:
+            result = client.get(ds_url)
+            if not result.is_ok or result.response is None:
+                continue
+            resp = result.response
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+            if not data.get("success"):
+                continue
+            fields = data.get("result", {}).get("fields", [])
+            if not fields:
+                continue
+            # Filtra il campo _id (PK autoincrement interno di CKAN)
+            return [f for f in fields if f.get("id") != "_id"]
+        except Exception:
+            continue
+    return None
+
+
 def search_ckan_datasets(
     portal_url: str,
     query: str = "*:*",
@@ -735,7 +792,12 @@ def list_sdmx_dataflows(
 
 
 def discover_ckan_resources(pkg: dict[str, Any]) -> list[dict[str, Any]]:
-    """Estrae risorse scaricabili da un package CKAN."""
+    """Estrae risorse scaricabili da un package CKAN.
+
+    ``datastore_active`` indica se la risorsa ha DataStore abilitato:
+    lo scaffold puo' usare ``datastore_search?limit=0`` invece di scaricare
+    il CSV per ottenere schema colonne e tipi.
+    """
     resources: list[dict[str, Any]] = pkg.get("resources") or []
     discovered: list[dict[str, Any]] = []
     for res in resources:
@@ -748,6 +810,7 @@ def discover_ckan_resources(pkg: dict[str, Any]) -> list[dict[str, Any]]:
                 "name": res.get("name") or res.get("description") or res.get("id") or "",
                 "format": (res.get("format") or "").lower(),
                 "url": res_url,
+                "datastore_active": bool(res.get("datastore_active")),
             }
         )
     return discovered

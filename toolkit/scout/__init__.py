@@ -58,6 +58,8 @@ from toolkit.scout.infer import (  # noqa: F401
 )
 
 from toolkit.scout.probe import (  # noqa: F401
+    PortalProfile,
+    probe_html_portal,
     probe_url,
     probe_url_routed,
 )

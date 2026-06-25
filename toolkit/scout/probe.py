@@ -12,9 +12,13 @@ Schema a strati:
 
 from __future__ import annotations
 
+import re
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
+from lab_connectors.http import HttpClient
 from toolkit.scout.http import (
     DEFAULT_TIMEOUT,
     DEFAULT_USER_AGENT,
@@ -388,3 +392,201 @@ LIMIT 100"""
     result["candidate_links"] = []
     result["sdmx_info"] = None
     return result
+
+
+# ---------------------------------------------------------------------------
+# Portal profile — probe leggero su portali HTML
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PortalProfile:
+    """Profilo leggero di un portale HTML, ottenuto via probe senza crawl.
+
+    Attributes:
+        base_url: URL base del portale.
+        has_robots_txt: ``/robots.txt`` raggiungibile.
+        sitemap_urls: URLs delle sitemap trovate in robots.txt.
+        sitemap_pages: URLs delle pagine estratte dalla sitemap.
+        rss_feeds: Feed RSS trovati nell'HTML della homepage.
+        has_json_api: Pattern JSON:API rilevato (es. Drupal).
+        homepage_links: Numero di link interni nella homepage.
+    """
+
+    base_url: str
+    has_robots_txt: bool = False
+    sitemap_urls: list[str] = field(default_factory=list)
+    sitemap_pages: list[str] = field(default_factory=list)
+    rss_feeds: list[dict[str, str]] = field(default_factory=list)
+    has_json_api: bool = False
+    homepage_links: int = 0
+
+
+def _fetch_robots_sitemaps(base_url: str, *, timeout: int = 10) -> tuple[bool, list[str]]:
+    """Probe ``/robots.txt`` e estrae direttive ``Sitemap:``.
+
+    Returns:
+        (raggiungibile, lista URL sitemap)
+    """
+    robots_url = urljoin(base_url + "/", "robots.txt")
+    client = HttpClient(timeout=timeout)
+    result = client.get(robots_url)
+    if not result.is_ok or result.response is None or result.response.status_code >= 400:
+        return False, []
+
+    sitemaps: list[str] = []
+    for line in result.response.text.splitlines():
+        line = line.strip()
+        if line.lower().startswith("sitemap:"):
+            url = line.split(":", 1)[1].strip()
+            if url:
+                sitemaps.append(url)
+    return True, sitemaps
+
+
+def _fetch_and_parse_sitemap(sitemap_url: str, *, timeout: int = 10) -> list[str]:
+    """Fetch e parse una sitemap XML, ritorna lista di URL delle pagine."""
+    client = HttpClient(timeout=timeout)
+    result = client.get(sitemap_url)
+    if not result.is_ok or result.response is None or result.response.status_code >= 400:
+        return []
+    try:
+        root = ET.fromstring(result.response.text)
+        # Namespace sitemap standard
+        ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+        urls: list[str] = []
+        for url_elem in root.findall(".//sm:url", ns):
+            loc = url_elem.find("sm:loc", ns)
+            if loc is not None and loc.text:
+                urls.append(loc.text.strip())
+        # Fallback: prova senza namespace
+        if not urls:
+            for url_elem in root.findall(".//url"):
+                loc = url_elem.find("loc")
+                if loc is not None and loc.text:
+                    urls.append(loc.text.strip())
+        return urls
+    except Exception:
+        return []
+
+
+def _scan_html_for_rss(html: str) -> list[dict[str, str]]:
+    """Cerca link a feed RSS/Atom nell'HTML della homepage."""
+    feeds: list[dict[str, str]] = []
+    # Pattern: <link rel="alternate" type="application/rss+xml" href="..." title="...">
+    pattern = re.compile(
+        r'<link\s[^>]*?rel=["\']alternate["\'][^>]*?'
+        r'type=["\']application/(?:rss|atom)\+xml["\'][^>]*?'
+        r'href=["\']([^"\']+)["\'][^>]*?'
+        r'(?:title=["\']([^"\']*)["\'])?',
+        re.IGNORECASE | re.DOTALL,
+    )
+    for match in pattern.finditer(html):
+        feeds.append({"url": match.group(1), "title": match.group(2) or ""})
+    return feeds
+
+
+def _scan_html_for_jsonapi(html: str, base_url: str) -> bool:
+    """Rileva pattern JSON:API (Drupal) nell'HTML o nell'URL."""
+    # Drupal 9+ espone link nel <head>
+    if "jsonapi" in html.lower():
+        return True
+    # Verifica /jsonapi/ nell'URL base
+    parsed = urlparse(base_url)
+    test_url = f"{parsed.scheme}://{parsed.netloc}/jsonapi"
+    client = HttpClient(timeout=5)
+    result = client.get(test_url)
+    if result.is_ok and result.response and result.response.status_code < 400:
+        content_type = (result.response.headers.get("Content-Type") or "").lower()
+        if "json" in content_type or "api" in content_type:
+            return True
+    return False
+
+
+def probe_html_portal(
+    base_url: str,
+    *,
+    timeout: int = 10,
+    fetch_sitemap: bool = True,
+    fetch_homepage: bool = True,
+) -> PortalProfile:
+    """Probe leggero su un portale HTML per scoprire struttura e pagine.
+
+    Esegue una serie di probe a costo fisso (nessun crawl):
+    1. ``/robots.txt`` → estrae URL delle sitemap
+    2. Sitemap XML → lista pagine del portale
+    3. Homepage → cerca feed RSS e pattern JSON:API (Drupal)
+
+    Args:
+        base_url: URL base del portale (es. ``https://dati.istruzione.it``).
+        timeout: Timeout HTTP per ogni chiamata.
+        fetch_sitemap: Se True, scarica e parse le sitemap trovate.
+        fetch_homepage: Se True, scarica la homepage per RSS/API detection.
+
+    Returns:
+        PortalProfile con tutto ciò che è stato scoperto.
+    """
+    profile = PortalProfile(base_url=base_url)
+
+    # 1. robots.txt → sitemap
+    has_robots, sitemap_urls = _fetch_robots_sitemaps(base_url, timeout=timeout)
+    profile.has_robots_txt = has_robots
+
+    # 2. Prova anche sitemap nei path canonici (anche se robots.txt non le elenca)
+    _common_sitemap_paths = ["/sitemap.xml", "/sitemap_index.xml"]
+    for sm_path in _common_sitemap_paths:
+        sm_url = urljoin(base_url.rstrip("/") + "/", sm_path.lstrip("/"))
+        if sm_url not in sitemap_urls:
+            pages = _fetch_and_parse_sitemap(sm_url, timeout=timeout)
+            if pages:
+                sitemap_urls.append(sm_url)
+                profile.sitemap_urls = sitemap_urls
+                profile.sitemap_pages.extend(pages)
+
+    # 3. Sitemap da robots.txt → page URLs
+    if fetch_sitemap and sitemap_urls:
+        for sm_url in sitemap_urls[:3]:  # max 3 sitemap
+            if sm_url not in _common_sitemap_paths or not profile.sitemap_pages:
+                pages = _fetch_and_parse_sitemap(sm_url, timeout=timeout)
+                for p in pages:
+                    if p not in profile.sitemap_pages:
+                        profile.sitemap_pages.append(p)
+
+    # 3. Homepage → RSS + JSON:API + link interni
+    if fetch_homepage:
+        try:
+            body = fetch_html_body(base_url, timeout=timeout)
+            html = body.get("html_text", "")
+            profile.rss_feeds = _scan_html_for_rss(html)
+            profile.has_json_api = _scan_html_for_jsonapi(html, base_url)
+
+            # Conta link interni (stesso dominio)
+            from html.parser import HTMLParser
+
+            class _InternalLinkCounter(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.count = 0
+                    self._domain = urlparse(base_url).netloc.lower()
+
+                def handle_starttag(self, tag, attrs):
+                    if tag.lower() != "a":
+                        return
+                    for key, value in attrs:
+                        if key.lower() == "href" and value:
+                            href = value.strip()
+                            if href and not href.startswith(
+                                ("#", "mailto:", "tel:", "javascript:")
+                            ):
+                                full = urljoin(base_url, href)
+                                if self._domain in urlparse(full).netloc.lower():
+                                    self.count += 1
+                            return
+
+            parser = _InternalLinkCounter()
+            parser.feed(html)
+            profile.homepage_links = parser.count
+        except Exception:
+            pass
+
+    return profile

@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 # ---------------------------------------------------------------------------
 # Costanti
@@ -97,7 +97,7 @@ class LinkGroup:
 
 def _extract_filename(url: str) -> str:
     """Estrae il filename (senza estensione) da un URL."""
-    from urllib.parse import unquote, urlparse
+    from urllib.parse import unquote
 
     path = urlparse(url).path
     # Rimuovi query string

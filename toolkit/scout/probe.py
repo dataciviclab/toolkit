@@ -538,31 +538,52 @@ def probe_html_portal(
     """
     profile = PortalProfile(base_url=base_url)
 
-    # 1. robots.txt → sitemap
-    has_robots, sitemap_urls = _fetch_robots_sitemaps(base_url, timeout=timeout)
-    profile.has_robots_txt = has_robots
+    # Determina la root del dominio (per probe sitemap/robots)
+    parsed = urlparse(base_url)
+    domain_root = f"{parsed.scheme}://{parsed.netloc}"
+    # Path verso cui fare probe: prima il base_url, poi la root del dominio
+    _probe_targets = list(dict.fromkeys([base_url.rstrip("/"), domain_root]))
 
-    # 2. Prova anche sitemap nei path canonici (anche se robots.txt non le elenca)
-    _common_sitemap_paths = ["/sitemap.xml", "/sitemap_index.xml"]
-    for sm_path in _common_sitemap_paths:
-        sm_url = urljoin(base_url.rstrip("/") + "/", sm_path.lstrip("/"))
-        if sm_url not in sitemap_urls:
+    # 1. robots.txt → sitemap (prova sia base_url che domain root)
+    sitemap_urls: list[str] = []
+    for target in _probe_targets:
+        has_robots, urls = _fetch_robots_sitemaps(target, timeout=timeout)
+        if has_robots:
+            profile.has_robots_txt = True
+        for u in urls:
+            if u not in sitemap_urls:
+                sitemap_urls.append(u)
+
+    # 2. Prova sitemap nei path canonici (per ogni target)
+    _common_sitemap_paths = [
+        "/sitemap.xml",
+        "/sitemap_index.xml",
+        "/opendata/sitemap.xml",
+    ]
+    for target in _probe_targets:
+        for sm_path in _common_sitemap_paths:
+            sm_url = urljoin(target + "/", sm_path.lstrip("/"))
+            if sm_url in sitemap_urls:
+                continue
             pages = fetch_sitemap_pages(sm_url, timeout=timeout)
             if pages:
                 sitemap_urls.append(sm_url)
-                profile.sitemap_urls = sitemap_urls
                 profile.sitemap_pages.extend(pages)
 
-    # 3. Sitemap da robots.txt → page URLs
-    if fetch_sitemap and sitemap_urls:
-        for sm_url in sitemap_urls[:3]:  # max 3 sitemap
-            if sm_url not in _common_sitemap_paths or not profile.sitemap_pages:
+    profile.sitemap_urls = list(dict.fromkeys(sitemap_urls))  # dedup
+
+    # 3. Fetch sitemap non ancora parse (quelle da robots.txt)
+    if fetch_sitemap:
+        for sm_url in sitemap_urls:
+            if sm_url not in _common_sitemap_paths:
                 pages = fetch_sitemap_pages(sm_url, timeout=timeout)
                 for p in pages:
                     if p not in profile.sitemap_pages:
                         profile.sitemap_pages.append(p)
 
-    # 3. Homepage → RSS + JSON:API + link interni
+    profile.sitemap_pages = list(dict.fromkeys(profile.sitemap_pages))  # dedup
+
+    # 4. Homepage → RSS + JSON:API + link interni
     if fetch_homepage:
         try:
             body = fetch_html_body(base_url, timeout=timeout)

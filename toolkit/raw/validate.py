@@ -21,9 +21,9 @@ def _looks_like_text(b: bytes) -> bool:
     # If there are many null bytes, it's likely binary
     if not b:
         return True
-    if b.count(b"\x00") > 0:
-        return False
     sample = b[:4096]
+    if sample.count(b"\x00") > 0:
+        return False
     # count non-printable
     non_printable = 0
     for ch in sample:

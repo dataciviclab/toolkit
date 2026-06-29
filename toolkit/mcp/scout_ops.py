@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from toolkit.plugins.sparql import SparqlSource
 from toolkit.scout.http import (
     fetch_ckan_package,
     fetch_html_body,
@@ -235,17 +234,20 @@ def mcp_sparql_query(
 ) -> dict[str, Any]:
     """Esegue una query SPARQL SELECT su un endpoint pubblico.
 
-    Usa ``toolkit.plugins.sparql.SparqlSource``.
+    Usa ``lab_connectors.http.sparql.execute_sparql`` (POST + GET fallback,
+    supporta JSON e SPARQL Results XML).
 
     Returns:
         Dict con results (lista di righe), columns, total_rows, endpoint.
 
     Raises:
         RuntimeError: se la query fallisce o l'endpoint non risponde.
+
     """
-    source = SparqlSource(timeout=timeout)
+    from lab_connectors.http.sparql import execute_sparql
+
     try:
-        csv_bytes, _ = source.fetch(endpoint, query, accept_format="csv")
+        bindings = execute_sparql(endpoint, query, timeout=timeout)
     except Exception as exc:
         return {
             "endpoint": endpoint,
@@ -255,19 +257,24 @@ def mcp_sparql_query(
             "total_rows": 0,
         }
 
-    # Parse CSV bytes into dict rows
-    import csv
-    import io
+    if not bindings:
+        return {
+            "endpoint": endpoint,
+            "columns": [],
+            "total_rows": 0,
+            "results": [],
+        }
 
-    text = csv_bytes.decode("utf-8", errors="replace")
-    reader = csv.DictReader(io.StringIO(text))
-    rows: list[dict[str, str]] = []
-    for i, row in enumerate(reader):
-        if i >= max_rows:
+    columns = list(bindings[0].keys())
+    rows: list[dict[str, Any]] = []
+    for binding in bindings:
+        if len(rows) >= max_rows:
             break
-        rows.append(dict(row))
-
-    columns = reader.fieldnames or []
+        row: dict[str, Any] = {}
+        for col in columns:
+            entry = binding.get(col)
+            row[col] = entry.get("value", "") if isinstance(entry, dict) else ""
+        rows.append(row)
 
     return {
         "endpoint": endpoint,

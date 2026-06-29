@@ -338,3 +338,96 @@ def test_toolkit_preflight_returns_report(monkeypatch: pytest.MonkeyPatch) -> No
     assert result["status"] == "passed"
     assert calls["config"] == "dataset.yml"
     assert calls["years_arg"] == "2024"
+
+
+# ---------------------------------------------------------------------------
+# mcp_sparql_query — flattening SPARQL bindings → righe MCP
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_bindings(*rows: dict[str, str]) -> list[dict[str, dict]]:
+    """Costruisce bindings SPARQL finti (formato {var: {type, value}})."""
+    return [{k: {"type": "literal", "value": v} for k, v in row.items()} for row in rows]
+
+
+def test_mcp_sparql_query_flattens_bindings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Binding SPARQL JSON ({var: {type, value}}) → righe piatte {var: value}."""
+
+    def _fake_sparql(_endpoint: str, _query: str, timeout: int = 60) -> list[dict[str, dict]]:
+        return _make_fake_bindings(
+            {"s": "http://a/1", "p": "pred1", "o": "hello"},
+            {"s": "http://a/2", "p": "pred2", "o": "world"},
+        )
+
+    monkeypatch.setattr("lab_connectors.http.sparql.execute_sparql", _fake_sparql)
+
+    from toolkit.mcp.scout_ops import mcp_sparql_query
+
+    result = mcp_sparql_query("https://e.org/sparql", "SELECT * WHERE {?s ?p ?o} LIMIT 2")
+
+    assert result["columns"] == ["s", "p", "o"]
+    assert result["total_rows"] == 2
+    assert result["results"] == [
+        {"s": "http://a/1", "p": "pred1", "o": "hello"},
+        {"s": "http://a/2", "p": "pred2", "o": "world"},
+    ]
+    assert result["truncated"] is False
+    assert "error" not in result
+
+
+def test_mcp_sparql_query_respects_max_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Il parametro max_rows tronca i risultati e imposta truncated=True."""
+    many = _make_fake_bindings(*[{"x": str(i)} for i in range(50)])
+
+    def _fake_sparql(_endpoint: str, _query: str, timeout: int = 60) -> list[dict[str, dict]]:
+        return many
+
+    monkeypatch.setattr("lab_connectors.http.sparql.execute_sparql", _fake_sparql)
+
+    from toolkit.mcp.scout_ops import mcp_sparql_query
+
+    result = mcp_sparql_query("https://e.org/sparql", "SELECT ?x WHERE {?s ?p ?x}", max_rows=3)
+
+    assert len(result["results"]) == 3
+    assert result["total_rows"] == 3
+    assert result["truncated"] is True
+    assert result["columns"] == ["x"]
+    assert result["results"][0]["x"] == "0"
+    assert result["results"][2]["x"] == "2"
+
+
+def test_mcp_sparql_query_handles_empty_bindings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bindings vuoti → colonne vuote, zero righe, nessun errore."""
+
+    def _fake_sparql(_endpoint: str, _query: str, timeout: int = 60) -> list[dict[str, dict]]:
+        return []
+
+    monkeypatch.setattr("lab_connectors.http.sparql.execute_sparql", _fake_sparql)
+
+    from toolkit.mcp.scout_ops import mcp_sparql_query
+
+    result = mcp_sparql_query("https://e.org/sparql", "SELECT * WHERE {?s ?p ?o}")
+
+    assert result["columns"] == []
+    assert result["total_rows"] == 0
+    assert result["results"] == []
+    assert "error" not in result
+
+
+def test_mcp_sparql_query_handles_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """RuntimeError da execute_sparql → dict con error, risultati vuoti."""
+
+    def _fake_sparql(_endpoint: str, _query: str, timeout: int = 60) -> list[dict[str, dict]]:
+        raise RuntimeError("SPARQL endpoint unreachable")
+
+    monkeypatch.setattr("lab_connectors.http.sparql.execute_sparql", _fake_sparql)
+
+    from toolkit.mcp.scout_ops import mcp_sparql_query
+
+    result = mcp_sparql_query("https://e.org/sparql", "SELECT * WHERE {?s ?p ?o}")
+
+    assert "error" in result
+    assert "SPARQL query failed" in result["error"]
+    assert result["columns"] == []
+    assert result["total_rows"] == 0
+    assert result["results"] == []

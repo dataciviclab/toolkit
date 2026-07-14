@@ -90,8 +90,12 @@ def _sanitize_proxy_url(proxy: str) -> str:
 
 
 def _get_proxy_from_env() -> str | None:
-    """Legge HTTPS_PROXY dall'ambiente (lowercase/uppercase)."""
-    return os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+    """Legge HTTPS_PROXY o BLOCKED_SOURCE_PROXY dall'ambiente."""
+    return (
+        os.environ.get("HTTPS_PROXY")
+        or os.environ.get("https_proxy")
+        or os.environ.get("BLOCKED_SOURCE_PROXY")
+    )
 
 
 def _fetch_via_curl(

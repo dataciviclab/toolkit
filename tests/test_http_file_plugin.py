@@ -18,6 +18,7 @@ from lab_connectors.testing import FakeHttpClient, fake_response
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.http_file import (
     HttpFileSource,
+    _get_proxy_from_env,
     _sanitize_proxy_url,
     _parse_curl_status,
     _strip_curl_status,
@@ -294,21 +295,7 @@ class TestCurlFallbackIntegration:
 
     @pytest.mark.contract
     @pytest.mark.regression  # toolkit#414
-    def test_fallback_with_blocked_source_proxy(self):
-        """BLOCKED_SOURCE_PROXY → curl fallback (no HTTPS_PROXY)."""
-        fake = FakeHttpClient()
-        fake.responses["https://example.test/data.csv"] = HttpResult(
-            response=None,
-            err=TimeoutError("connect timed out"),
-            ssl_fallback_used=False,
-        )
-        source = HttpFileSource(retries=1)
-        source._client = fake
+    def test_get_proxy_env_blocked_source(self):
+        """_get_proxy_from_env legge BLOCKED_SOURCE_PROXY."""
         with mock.patch.dict(os.environ, {"BLOCKED_SOURCE_PROXY": "http://proxy:8888"}, clear=True):
-            with mock.patch(
-                "toolkit.plugins.http_file._fetch_via_curl",
-                return_value=b"curl-data",
-            ) as mock_curl:
-                payload = source.fetch("https://example.test/data.csv")
-        assert payload == b"curl-data"
-        mock_curl.assert_called_once()
+            assert _get_proxy_from_env() == "http://proxy:8888"

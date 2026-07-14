@@ -270,3 +270,27 @@ class TestCurlFallbackIntegration:
         with mock.patch.dict(os.environ, {}, clear=True):
             with pytest.raises(DownloadError, match="fallback failed"):
                 source.fetch("https://example.test/data.csv")
+
+    @pytest.mark.contract
+    @pytest.mark.regression  # toolkit#413
+    def test_fallback_on_timeout_with_proxy(self):
+        """Timeout/ConnError + proxy → curl fallback chiamato (non solo SSL)."""
+        fake = FakeHttpClient()
+        fake.responses["https://example.test/data.csv"] = HttpResult(
+            response=None,
+            err=TimeoutError("connect timed out"),
+            ssl_fallback_used=False,
+        )
+
+        source = HttpFileSource(retries=1)
+        source._client = fake
+
+        with mock.patch.dict(os.environ, {"HTTPS_PROXY": "http://proxy:8888"}):
+            with mock.patch(
+                "toolkit.plugins.http_file._fetch_via_curl",
+                return_value=b"curl-data",
+            ) as mock_curl:
+                payload = source.fetch("https://example.test/data.csv")
+
+        assert payload == b"curl-data"
+        mock_curl.assert_called_once()

@@ -51,15 +51,17 @@ class HttpFileSource:
                 content = truncate_at_line(content, sample_bytes)
             return content
 
-        # Fallback a curl via proxy quando Python requests fallisce con SSL
-        # (noto: GitHub Actions + tinyproxy da SSLV3_ALERT_HANDSHAKE_FAILURE
-        #  con dati.salute.gov.it — curl invece funziona)
-        if result.is_ssl_fallback_failed:
+        # Fallback a curl via proxy quando requests fallisce (SSL o timeout)
+        # (noto: GitHub Actions + proxy HTTP → requests non invia CONNECT,
+        #  curl -x invece funziona. Squid/tinyproxy: stesso comportamento.)
+        if not result.is_ok:
             proxy = _get_proxy_from_env()
             if proxy:
                 logger.warning(
-                    "SSL fallback failed for %s — riprovo con curl via proxy",
+                    "Requests failed for %s (%s) — riprovo con curl via proxy",
                     url,
+                    result.err
+                    or f"HTTP {result.response.status_code if result.response else 'no response'}",
                 )
                 return _fetch_via_curl(url, proxy, self.timeout, self.user_agent, sample_bytes)
 

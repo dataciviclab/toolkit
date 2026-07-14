@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import logging
 import re
-import time
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from lab_connectors.http import CircuitOpenError, HttpClient
+from lab_connectors.http import HttpClient
 
 logger = logging.getLogger("toolkit.scout.http")
 
@@ -24,9 +23,6 @@ logger = logging.getLogger("toolkit.scout.http")
 
 DEFAULT_TIMEOUT = 15
 DEFAULT_USER_AGENT = "dataciviclab-toolkit/scout-url"
-MAX_RETRIES = 2
-RETRY_BACKOFF = 0.5
-
 # Estensioni candidate per file dati
 CANDIDATE_EXTENSIONS = (".csv", ".xlsx", ".xls", ".zip", ".json", ".parquet", ".geojson")
 EXTENDED_EXTENSIONS = CANDIDATE_EXTENSIONS + (".sdmx", ".tds", ".xml")
@@ -212,155 +208,16 @@ def probe_url_headers(
 ) -> dict[str, Any]:
     """HEAD con retry, GET+Range fallback. Ritorna header info + reachability.
 
-    Args:
-        url: URL da probe.
-        timeout: Timeout HTTP (ignorato se client è fornito).
-        user_agent: User-Agent (ignorato se client è fornito).
-        client: HttpClient opzionale. Se fornito, lo usa invece di crearne uno.
-
-    Returns dict: requested_url, final_url, status_code, content_type,
-                  content_disposition, method.
+    Implementato in ``lab_connectors.http.probe`` (evita doppio retry).
+    Questo wrapper mantiene compatibilità con i consumer esistenti.
     """
-    client = client or _mk_client(
-        timeout=timeout, user_agent=user_agent, circuit_threshold=circuit_threshold
-    )
-    last_error: str | None = None
+    from lab_connectors.http.probe import probe_url_headers as _probe
 
-    # HTTPS fallback helper: se l'URL era HTTP e non ha funzionato,
-    # riprova con HTTPS. Il circuit breaker e' per netloc, non per
-    # schema/porta, quindi http://host e https://host condividono lo
-    # stesso circuito. Usiamo un client senza circuit breaker.
-    # Se circuit_error=True, l'unico motivo del fallimento e' il circuito
-    # aperto (non un errore di rete generico).
-    def _try_https(circuit_error: bool = False) -> dict[str, Any]:
-        if url.startswith("http://"):
-            https_url = "https://" + url[7:]
-            fb_client = _mk_client(
-                timeout=timeout,
-                user_agent=user_agent,
-                circuit_threshold=0,
-            )
-            return probe_url_headers(
-                https_url,
-                timeout=timeout,
-                user_agent=user_agent,
-                client=fb_client,
-                circuit_threshold=0,
-            )
-        # URL gia' HTTPS: niente fallback possibile.
-        if circuit_error:
-            raise CircuitOpenError("circuit open")
-        raise RuntimeError(last_error or f"HEAD failed for {url}")
-
-    # Tentativo HEAD con retry
-    for attempt in range(1 + MAX_RETRIES):
-        head_result = client.head(url)
-        if (
-            head_result.is_ok
-            and head_result.response is not None
-            and head_result.response.status_code < 500
-        ):
-            resp = head_result.response
-            ct_len = resp.headers.get("Content-Length")
-            return _build_probe_result(
-                requested_url=url,
-                status_code=resp.status_code,
-                content_type=resp.headers.get("Content-Type"),
-                content_disposition=resp.headers.get("Content-Disposition"),
-                content_length=int(ct_len) if ct_len and ct_len.isdigit() else None,
-                final_url=resp.url,
-                method="head",
-            )
-        if head_result.response is not None and head_result.response.status_code >= 500:
-            last_error = f"server_error_{head_result.response.status_code}"
-        elif head_result.err is not None:
-            if isinstance(head_result.err, CircuitOpenError):
-                return _try_https(circuit_error=True)
-            last_error = type(head_result.err).__name__
-        else:
-            last_error = "head_failed"
-        if attempt < MAX_RETRIES:
-            time.sleep(RETRY_BACKOFF * (attempt + 1))
-            continue
-        break
-
-    # HEAD fallito → GET con Range: bytes=0-0 (stream=True: se server ignora
-    # Range, non scarica l'intero file solo per leggere gli header).
-    for attempt in range(1 + MAX_RETRIES):
-        range_result = client.get(url, headers={"Range": "bytes=0-0"}, stream=True)
-        if range_result.is_ok and range_result.response is not None:
-            resp = range_result.response
-            # Su 206, Content-Length vale 1 (un byte) — la dimensione reale
-            # del file e' in Content-Range: "bytes 0-0/TOTALE".
-            if resp.status_code == 206:
-                cr = resp.headers.get("Content-Range", "")
-                if cr and "/" in cr:
-                    total_str = cr.split("/")[-1].strip()
-                    file_size = int(total_str) if total_str.isdigit() else None
-                else:
-                    file_size = None
-            else:
-                ct_len = resp.headers.get("Content-Length")
-                file_size = int(ct_len) if ct_len and ct_len.isdigit() else None
-            getattr(resp, "close", lambda: None)()
-            if resp.status_code < 400:
-                return _build_probe_result(
-                    requested_url=url,
-                    status_code=resp.status_code,
-                    content_type=resp.headers.get("Content-Type"),
-                    content_disposition=resp.headers.get("Content-Disposition"),
-                    content_length=file_size,
-                    final_url=resp.url,
-                    method="get_range",
-                )
-            if resp.status_code >= 500 and attempt < MAX_RETRIES:
-                last_error = f"server_error_{resp.status_code}"
-                time.sleep(RETRY_BACKOFF * (attempt + 1))
-                continue
-            return _build_probe_result(
-                requested_url=url,
-                status_code=resp.status_code,
-                content_type=resp.headers.get("Content-Type"),
-                content_disposition=resp.headers.get("Content-Disposition"),
-                content_length=file_size,
-                final_url=resp.url,
-                method="get_range",
-            )
-        if range_result.err is not None:
-            if isinstance(range_result.err, CircuitOpenError):
-                return _try_https(circuit_error=True)
-            last_error = type(range_result.err).__name__
-        if attempt < MAX_RETRIES:
-            time.sleep(RETRY_BACKOFF * (attempt + 1))
-            continue
-        break
-
-    # HTTPS fallback finale (dopo HEAD + GET+Range falliti senza circuit breaker)
-    try:
-        return _try_https()
-    except RuntimeError:
-        raise RuntimeError(last_error or f"HEAD failed for {url}")
-
-
-def _build_probe_result(
-    *,
-    requested_url: str,
-    status_code: int,
-    content_type: str | None,
-    content_disposition: str | None,
-    content_length: int | None = None,
-    final_url: str,
-    method: str,
-) -> dict[str, Any]:
-    return {
-        "requested_url": requested_url,
-        "final_url": final_url,
-        "status_code": status_code,
-        "content_type": content_type,
-        "content_disposition": content_disposition,
-        "content_length": content_length,
-        "method": method,
-    }
+    if client is None:
+        client = _mk_client(
+            timeout=timeout, user_agent=user_agent, circuit_threshold=circuit_threshold
+        )
+    return _probe(url, timeout=timeout, user_agent=user_agent, client=client)
 
 
 # ---------------------------------------------------------------------------

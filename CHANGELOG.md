@@ -35,6 +35,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`core/normalize.py` — utility preprocessing centralizzate**: `normalize_number` (normalizza numeri formato italiano), `normalize_columns_map` (mapping colonne via regex), e `decode_bytes`/`decode_csv_bytes` (decodifica multi-encoding con fallback). Rimpiazza 13 copie identiche nei candidate di dataset-incubator (PR #411).
 - **HTTP centralizzato su `lab_connectors.http`**: `http_file`, `ckan`, `sdmx` e `inspect url` ora usano `HttpClient` invece di `requests.get` diretto, con retry, SSL fallback e timeout uniformi (PR #232, #233, #234, #235).
 - `lab-connectors` aggiunto come dipendenza core (git URL in `pyproject.toml`).
 

@@ -17,6 +17,25 @@ from toolkit.core.input_file import RawInputFile
 from toolkit.core.layer_profile import profile_relation
 from toolkit.core.sql_utils import sql_path
 
+_MACROS_PATH = Path(__file__).parent.parent / "sql" / "macros.sql"
+
+
+def _load_standard_macros(con, logger) -> None:
+    """Load the standard toolkit DuckDB macros into the connection.
+
+    Reads ``macros.sql`` from the toolkit package and executes it.
+    All macros use ``CREATE OR REPLACE`` so repeated calls are safe.
+    Silently skipped if ``macros.sql`` is not found (e.g. dev setup).
+    """
+    if not _MACROS_PATH.exists():
+        if logger:
+            logger.debug("Standard macros not found (expected in %s)", _MACROS_PATH)
+        return
+    macros_sql = _MACROS_PATH.read_text(encoding="utf-8")
+    con.execute(macros_sql)
+    if logger:
+        logger.debug("Loaded %d bytes of standard macros from %s", len(macros_sql), _MACROS_PATH)
+
 
 def _normalize_output_profile(output_profile: dict[str, Any] | int) -> dict[str, Any]:
     if isinstance(output_profile, dict):
@@ -42,10 +61,14 @@ def _run_sql(
     If ``sample_rows`` is set, appends ``LIMIT N`` to the SQL query per
     DuckDB syntax (``SELECT * FROM ({query}) AS _smoke LIMIT N``).
 
+    Standard toolkit macros (``normalize_italian_number``, ``decode_flag``,
+    etc.) are automatically loaded at the start of the connection.
+
     Returns:
         tuple of (source, params_used, output_profile)
     """
     with safe_connect() as con:
+        _load_standard_macros(con, logger)
         read_info = read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
         if sample_rows is not None:
             # Strip trailing semicolons: clean.sql spesso termina con ;

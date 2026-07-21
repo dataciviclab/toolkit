@@ -390,7 +390,9 @@ class TestGenerateCleanSql:
             },
         }
         sql = generate_clean_sql(profile, "test", 2024)
-        assert "REPLACE" not in sql
+        # REPLACE non deve apparire nel corpo SQL (solo nei commenti macro)
+        body = "\n".join(line for line in sql.split("\n") if not line.strip().startswith("--"))
+        assert "REPLACE" not in body
         assert "Decimal: ," in sql  # nel commento header
         assert "Encoding: utf-8" in sql
         assert "Delimiter: ;" in sql

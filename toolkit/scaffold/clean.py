@@ -362,6 +362,14 @@ def generate_clean_sql(
         "-- CSV parsing options (delim, columns, encoding, header, skip) "
         "belong in clean.read in dataset.yml."
     )
+    header_parts.append("--")
+    header_parts.append("-- Macro SQL disponibili (caricate automaticamente):")
+    header_parts.append("--   normalize_string(col)       → TRIM + NULL per stringhe vuote")
+    header_parts.append("--   cast_int(col)               → TRY_CAST(col AS INTEGER)")
+    header_parts.append("--   cast_double(col)            → TRY_CAST(col AS DOUBLE)")
+    header_parts.append("--   normalize_italian_number(c) → REPLACE+REPLACE+TRY_CAST")
+    header_parts.append("--   normalize_italian_integer(c)→ REPLACE+REPLACE+TRY_CAST(INT)")
+    header_parts.append("--   decode_flag(col, 'X')       → CASE WHEN col='X' THEN TRUE ELSE FALSE")
     header_parts.append("-- Pass --run to execute raw and clean in one step, or run:")
     header_parts.append("--   toolkit run clean -c dataset.yml")
     header_parts.append("")

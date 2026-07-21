@@ -211,7 +211,9 @@ class TestGenerateCleanSql:
             },
         }
         sql = generate_clean_sql(profile, "candidate", 2024)
-        assert "TRY_CAST" not in sql
+        # TRY_CAST non deve apparire nel corpo SQL (solo nei commenti macro)
+        body = "\n".join(line for line in sql.split("\n") if not line.strip().startswith("--"))
+        assert "TRY_CAST" not in body
         assert '"a"' in sql
         assert '"b"' in sql
         assert '"c"' in sql

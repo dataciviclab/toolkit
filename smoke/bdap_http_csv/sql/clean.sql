@@ -1,30 +1,27 @@
 WITH base AS (
   SELECT
-    TRY_CAST(TRIM(CAST("ANNO" AS VARCHAR)) AS INTEGER) AS anno,
-
-    TRY_CAST(TRIM(CAST("RISPARMIO_PUBBLICO" AS VARCHAR)) AS DOUBLE) AS risparmio_pubblico,
-    TRY_CAST(TRIM(CAST("SALDO_NETTO" AS VARCHAR)) AS DOUBLE) AS saldo_netto,
-    TRY_CAST(TRIM(CAST("INDEBITAMENTO_NETTO" AS VARCHAR)) AS DOUBLE) AS indebitamento_netto,
-    TRY_CAST(TRIM(CAST("RICORSO_MERCATO" AS VARCHAR)) AS DOUBLE) AS ricorso_mercato,
-    TRY_CAST(TRIM(CAST("AVANZO_PRIMARIO" AS VARCHAR)) AS DOUBLE) AS avanzo_primario,
-
-    TRY_CAST(TRIM(CAST("SPESE_CORRENTI" AS VARCHAR)) AS DOUBLE) AS spese_correnti,
-    TRY_CAST(TRIM(CAST("SPESE_INTERESSI" AS VARCHAR)) AS DOUBLE) AS spese_interessi,
-    TRY_CAST(TRIM(CAST("SPESE_CONTO_CAPITALE" AS VARCHAR)) AS DOUBLE) AS spese_conto_capitale,
-    TRY_CAST(TRIM(CAST("SPESE_ACQ_ATT_FINE" AS VARCHAR)) AS DOUBLE) AS spese_acq_att_fin,
-    TRY_CAST(TRIM(CAST("SPESE_RIMBORSO_PRESTITI" AS VARCHAR)) AS DOUBLE) AS spese_rimborso_prestiti,
-    TRY_CAST(TRIM(CAST("SPESE_COMPLESSIVE" AS VARCHAR)) AS DOUBLE) AS spese_complessive,
-    TRY_CAST(TRIM(CAST("SPESE_FINALI" AS VARCHAR)) AS DOUBLE) AS spese_finali,
-    TRY_CAST(TRIM(CAST("SPESE_FIN_NETTO_ATT_FIN" AS VARCHAR)) AS DOUBLE) AS spese_fin_netto_att_fin,
-
-    TRY_CAST(TRIM(CAST("ENTRATE_TRIBUTARIE" AS VARCHAR)) AS DOUBLE) AS entrate_tributarie,
-    TRY_CAST(TRIM(CAST("ENTRATE_EXTRA_TRIBUTARIE" AS VARCHAR)) AS DOUBLE) AS entrate_extra_tributarie,
-    TRY_CAST(TRIM(CAST("ENTR_ALIEN_PATR_RISCOS" AS VARCHAR)) AS DOUBLE) AS entr_alien_patr_riscos,
-    TRY_CAST(TRIM(CAST("RISCOSSIONE_CREDITI" AS VARCHAR)) AS DOUBLE) AS riscossione_crediti,
-    TRY_CAST(TRIM(CAST("ENTR_ACCENSIONE_PRESTITI" AS VARCHAR)) AS DOUBLE) AS entr_accensione_prestiti,
-    TRY_CAST(TRIM(CAST("ENTRATE_FINALI" AS VARCHAR)) AS DOUBLE) AS entrate_finali,
-    TRY_CAST(TRIM(CAST("ENTR_FIN_NETTO_RISCO_CRED" AS VARCHAR)) AS DOUBLE) AS entr_fin_netto_risco_cred,
-    TRY_CAST(TRIM(CAST("ENTRATE_CORRENTI" AS VARCHAR)) AS DOUBLE) AS entrate_correnti
+    cast_int("ANNO") AS anno,
+    cast_double("RISPARMIO_PUBBLICO") AS risparmio_pubblico,
+    cast_double("SALDO_NETTO") AS saldo_netto,
+    cast_double("INDEBITAMENTO_NETTO") AS indebitamento_netto,
+    cast_double("RICORSO_MERCATO") AS ricorso_mercato,
+    cast_double("AVANZO_PRIMARIO") AS avanzo_primario,
+    cast_double("SPESE_CORRENTI") AS spese_correnti,
+    cast_double("SPESE_INTERESSI") AS spese_interessi,
+    cast_double("SPESE_CONTO_CAPITALE") AS spese_conto_capitale,
+    cast_double("SPESE_ACQ_ATT_FINE") AS spese_acq_att_fin,
+    cast_double("SPESE_RIMBORSO_PRESTITI") AS spese_rimborso_prestiti,
+    cast_double("SPESE_COMPLESSIVE") AS spese_complessive,
+    cast_double("SPESE_FINALI") AS spese_finali,
+    cast_double("SPESE_FIN_NETTO_ATT_FIN") AS spese_fin_netto_att_fin,
+    cast_double("ENTRATE_TRIBUTARIE") AS entrate_tributarie,
+    cast_double("ENTRATE_EXTRA_TRIBUTARIE") AS entrate_extra_tributarie,
+    cast_double("ENTR_ALIEN_PATR_RISCOS") AS entr_alien_patr_riscos,
+    cast_double("RISCOSSIONE_CREDITI") AS riscossione_crediti,
+    cast_double("ENTR_ACCENSIONE_PRESTITI") AS entr_accensione_prestiti,
+    cast_double("ENTRATE_FINALI") AS entrate_finali,
+    cast_double("ENTR_FIN_NETTO_RISCO_CRED") AS entr_fin_netto_risco_cred,
+    cast_double("ENTRATE_CORRENTI") AS entrate_correnti
   FROM raw_input
 )
 

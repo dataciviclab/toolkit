@@ -40,7 +40,35 @@ Usa `normalize_rows_to_columns: true` per CSV multi-anno instabili con schema po
 | **Chiavi Geografiche** | Non normalizzare nel `clean.sql` senza documentare in `notes.md`. |
 | **ZIP/XLSX** | Il toolkit non estrae ZIP; usa l'extractor corretto. |
 
-## 6. Validation Gate
+## 6. Standard SQL Macros
+
+Il toolkit carica automaticamente **8 macro DuckDB** in ogni esecuzione del layer CLEAN.
+Sostituiscono i pattern boilerplate (`TRY_CAST`, `REPLACE` per numeri italiani,
+`CASE` per boolean, `TRIM`) con chiamate leggibili.
+
+### Macro disponibili
+
+| Macro | Sostituisce | Frequenza in DI |
+|---|---|---|
+| `normalize_string(col)` | `TRIM(CAST(... AS VARCHAR))` + `''` → `NULL` | 100% |
+| `cast_int(col)` | `TRY_CAST(... AS INTEGER)` | 100% |
+| `cast_bigint(col)` | `TRY_CAST(... AS BIGINT)` | 100% |
+| `cast_double(col)` | `TRY_CAST(... AS DOUBLE)` | 100% |
+| `normalize_italian_number(col)` | `REPLACE(REPLACE(... , '.', ''), ',', '.')` | 40% |
+| `normalize_italian_integer(col)` | Come sopra + `CAST(... AS INTEGER)` | 30% |
+| `decode_flag(col, 'X')` | `CASE WHEN TRIM(col)='X' THEN TRUE ELSE FALSE END` | 30% |
+| `remove_dot_thousands(col)` | `REPLACE(... , '.', '')` su interi | 20% |
+
+### Regole
+
+- **Stile raccomandato**: nei nuovi `clean.sql` usare le macro. Lo scaffold (`toolkit run init`) genera già SQL con macro.
+- **Retrocompatibile**: i `clean.sql` esistenti continuano a funzionare senza modifiche. Le macro sono additive.
+- **Nessuna config**: non serve abilitarle in `dataset.yml` — sono sempre caricate.
+- **Testabili**: `pytest tests/test_macros_sql.py -v` (38 test).
+
+Dettaglio completo: [standard-macros.md](standard-macros.md).
+
+## 7. Validation Gate
 - RAW: `raw_validation.json`
 - CLEAN: `_validate/clean_validation.json`
 - MART: `_validate/mart_validation.json`

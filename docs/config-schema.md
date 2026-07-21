@@ -139,7 +139,7 @@ Note pratiche per `http_post_file`:
 
 | Campo | Tipo | Default |
 |---|---|---|
-| `clean.sql` | `string` | nessuno |
+| `clean.sql` | `string` | nessuno | path al file SQL (usa le macro standard — vedi [standard-macros.md](standard-macros.md)) |
 | `clean.read_mode` | `strict \| fallback \| robust` | `fallback` |
 | `clean.read_source` | `auto \| config_only \| null` | `null` |
 | `clean.read` | `CleanRead \| null` | `null` |
@@ -181,6 +181,11 @@ Note pratiche per `http_post_file`:
 
 Note pratiche:
 
+- **Macro SQL standard**: il toolkit carica automaticamente 8 macro DuckDB
+  (`normalize_string`, `cast_int`, `cast_bigint`, `cast_double`,
+  `normalize_italian_number`, `normalize_italian_integer`, `decode_flag`,
+  `remove_dot_thousands`). Possono essere usate in qualsiasi `clean.sql`
+  senza importazioni né configurazioni. Dettaglio: [standard-macros.md](standard-macros.md).
 - i file `.xlsx` sono supportati nel layer CLEAN via `engine="openpyxl"`
 - i file `.xls` (Excel 97-2003) sono supportati via `engine="xlrd"`
 - RAW conserva il workbook originale senza convertirlo

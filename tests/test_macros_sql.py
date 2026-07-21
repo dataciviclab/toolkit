@@ -20,6 +20,47 @@ pytestmark = pytest.mark.pure_unit
 
 
 # ===========================================================================
+# Package data: le macro devono essere distribuibili via wheel
+# ===========================================================================
+
+
+class TestPackageData:
+    """Contratto: macros.sql e' incluso nel package toolkit (package data).
+
+    Fallisce se il wheel non include ``toolkit/sql/macros.sql``.
+    """
+
+    def test_macros_file_exists_at_source(self) -> None:
+        """Il file esiste nel sorgente (sviluppo / editable install)."""
+        assert _MACROS_PATH.exists(), (
+            f"macros.sql non trovato in {_MACROS_PATH}. "
+            "Serve: pip install -e . per editable install"
+        )
+
+    def test_macros_file_accessible_via_importlib(self) -> None:
+        """Verifica che macros.sql sia accessibile come resource package.
+
+        Questo e' il path che usa il runtime se il toolkit e' installato.
+        """
+        try:
+            from importlib.resources import files as resources_files
+        except ImportError:
+            resources_files = None  # Python <3.9 compat
+
+        if resources_files is not None:
+            try:
+                pkg_files = resources_files("toolkit")
+                macros = pkg_files / "sql" / "macros.sql"
+                assert macros.exists(), (
+                    "importlib.resources non trova macros.sql in toolkit/sql/. "
+                    "Verifica [tool.setuptools.package_data] in pyproject.toml: "
+                    "toolkit = ['sql/*.sql']"
+                )
+            except (ModuleNotFoundError, TypeError):
+                pass  # toolkit non installato come package (es. test sviluppo)
+
+
+# ===========================================================================
 # normalize_italian_number
 # ===========================================================================
 
@@ -76,7 +117,10 @@ class TestNormalizeItalianNumber:
 
 
 class TestNormalizeItalianInteger:
-    """Contratto: come normalize_italian_number ma restituisce INTEGER."""
+    """Contratto: come normalize_italian_number ma restituisce INTEGER.
+
+    DuckDB CAST(DOUBLE AS INTEGER) arrotonda (non tronca).
+    """
 
     def test_simple_integer(self) -> None:
         with safe_connect() as con:
@@ -90,11 +134,18 @@ class TestNormalizeItalianInteger:
             result = con.execute("SELECT normalize_italian_integer('1.234')").fetchone()
         assert result[0] == 1234
 
-    def test_comma_truncates(self) -> None:
+    def test_comma_rounds_down(self) -> None:
         with safe_connect() as con:
             con.execute(_MACROS_SQL)
             result = con.execute("SELECT normalize_italian_integer('5.432,10')").fetchone()
         assert result[0] == 5432
+
+    def test_comma_rounds_up(self) -> None:
+        """CAST(DOUBLE AS INTEGER) arrotonda all'intero piu' vicino."""
+        with safe_connect() as con:
+            con.execute(_MACROS_SQL)
+            result = con.execute("SELECT normalize_italian_integer('5.432,90')").fetchone()
+        assert result[0] == 5433
 
     def test_null_returns_null(self) -> None:
         with safe_connect() as con:
@@ -253,7 +304,12 @@ class TestCastDouble:
 
 
 class TestRemoveDotThousands:
-    """Contratto: rimuove punti migliaia senza toccare decimali standard."""
+    """Contratto: rimuove punti migliaia da interi SOLO.
+
+    ATTENZIONE: rimuove TUTTI i punti. Non usare su numeri con
+    separatore decimale standard (usa cast_double) o italiano
+    (usa normalize_italian_number).
+    """
 
     def test_simple_thousands(self) -> None:
         with safe_connect() as con:
@@ -267,13 +323,15 @@ class TestRemoveDotThousands:
             result = con.execute("SELECT remove_dot_thousands('1.234.567')").fetchone()
         assert result[0] == 1234567.0
 
-    def test_with_italian_decimal_returns_wrong(self) -> None:
-        """Numeri con virgola decimale vanno normalizzati con
-        normalize_italian_number, non remove_dot_thousands."""
+    def test_standard_decimal_gets_mangled(self) -> None:
+        """Precondizione: non usare su numeri con punto decimale standard
+        — il punto viene rimosso e il risultato e' sbagliato.
+        Per questi usa cast_double o normalize_italian_number."""
         with safe_connect() as con:
             con.execute(_MACROS_SQL)
-            result = con.execute("SELECT normalize_italian_number('1.234,56')").fetchone()
-        assert result[0] == 1234.56
+            # 1234.56 → rimuove TUTTI i punti → 123456.0 (volutamente SBAGLIATO)
+            result = con.execute("SELECT remove_dot_thousands('1234.56')").fetchone()
+        assert result[0] == 123456.0
 
     def test_plain_integer(self) -> None:
         with safe_connect() as con:

@@ -19,7 +19,8 @@ CREATE OR REPLACE MACRO normalize_italian_number(val) AS
 
 -- ── normalize_italian_integer ──────────────────────────────────────────────
 -- Come normalize_italian_number ma restituisce INTEGER.
--- "1.234" → 1234, "5.432,10" → 5432 (troncato).
+-- DuckDB CAST(DOUBLE AS INTEGER) arrotonda (5432.90 → 5433).
+-- "1.234" → 1234, "5.432,10" → 5432, "5.432,90" → 5433.
 CREATE OR REPLACE MACRO normalize_italian_integer(val) AS
    TRY_CAST(REPLACE(REPLACE(val::VARCHAR, '.', ''), ',', '.') AS INTEGER);
 
@@ -47,8 +48,12 @@ CREATE OR REPLACE MACRO cast_double(val) AS
    TRY_CAST(val AS DOUBLE);
 
 -- ── remove_dot_thousands ───────────────────────────────────────────────────
--- Rimuove solo i punti migliaia (senza virgola decimale).
--- Utile per numeri con punto migliaia ma punto decimale standard:
+-- Rimuove punti migliaia da numeri interi (senza virgola decimale).
+-- ATTENZIONE: rimuove TUTTI i punti, incluso l'eventuale separatore
+-- decimale standard. Usa SOLO su interi con punti migliaia.
+-- Per numeri con decimali (italiani o standard) usa:
+--   normalize_italian_number()  — formato italiano (virgola)
+--   cast_double()               — formato internazionale (punto)
 -- "1.234" → 1234.0, "1.234.567" → 1234567.0
 CREATE OR REPLACE MACRO remove_dot_thousands(val) AS
    TRY_CAST(REPLACE(val::VARCHAR, '.', '') AS DOUBLE);

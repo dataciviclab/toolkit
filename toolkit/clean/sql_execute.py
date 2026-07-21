@@ -25,12 +25,17 @@ def _load_standard_macros(con, logger) -> None:
 
     Reads ``macros.sql`` from the toolkit package and executes it.
     All macros use ``CREATE OR REPLACE`` so repeated calls are safe.
-    Silently skipped if ``macros.sql`` is not found (e.g. dev setup).
+
+    Raises:
+        FileNotFoundError: se ``macros.sql`` non esiste (toolkit
+            installato senza package data o sviluppo incompleto).
     """
     if not _MACROS_PATH.exists():
-        if logger:
-            logger.debug("Standard macros not found (expected in %s)", _MACROS_PATH)
-        return
+        raise FileNotFoundError(
+            f"Standard macros not found at {_MACROS_PATH}. "
+            "Ensure toolkit is installed with sql/*.sql package data "
+            "(pip install -e . rebuilds the package)."
+        )
     macros_sql = _MACROS_PATH.read_text(encoding="utf-8")
     con.execute(macros_sql)
     if logger:

@@ -19,6 +19,9 @@ coverage.xml
 # Jupyter / Colab
 .ipynb_checkpoints/
 
+# DuckDB temp storage
+.tmp/
+
 # OS
 .DS_Store
 Thumbs.db

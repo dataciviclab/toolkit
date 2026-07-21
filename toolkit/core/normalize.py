@@ -74,8 +74,15 @@ def normalize_number(
 
 
 def _looks_like_number(val: str) -> bool:
-    """True se val e' un numero valido dopo normalizzazione."""
+    """True se val e' un numero valido dopo normalizzazione.
+
+    Richiede almeno una cifra — evita che stringhe non numeriche come ``","``
+    o ``"-,",`` (da empty_values custom) passino la validazione.
+    """
     if not val:
+        return False
+    # Richiede almeno una cifra dopo cleanup
+    if not re.search(r"\d", val):
         return False
     # Ammetti: cifre, singolo punto decimale, leading minus
     has_dot = False
@@ -158,7 +165,8 @@ def decode_bytes(
     Args:
         data: Bytes da decodificare.
         encodings: Tuple di encoding da tentare in ordine.
-            Default: ``("utf-8-sig", "utf-8", "iso-8859-1", "cp1252")``.
+            Default: ``("utf-8-sig", "utf-8", "cp1252", "iso-8859-1")``.
+            ``cp1252`` prima di ``iso-8859-1`` per preservare ``€`` (0x80).
 
     Returns:
         Stringa decodificata.

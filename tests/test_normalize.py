@@ -120,6 +120,30 @@ class TestNormalizeNumber:
     def test_negative_with_thousands(self) -> None:
         assert normalize_number("-1.234,56") == "-1234.56"
 
+    # ── Guard: non-numeric after cleanup ──────────────────────────────
+
+    def test_comma_only_returns_none(self) -> None:
+        ""","" da solo non e' un numero → None."""
+        assert normalize_number(",") is None
+
+    def test_comma_minus_only_returns_none(self) -> None:
+        """ ","" con meno non e' un numero → None."""
+        assert normalize_number("-,") is None
+
+    def test_dot_only_returns_none(self) -> None:
+        """Punto da solo non e' un numero → None."""
+        assert normalize_number(".") is None
+
+    def test_minus_only_custom_empty_values_returns_none(self) -> None:
+        """Meno da solo con empty_values custom non e' un numero → None."""
+        assert normalize_number("-", empty_values=frozenset()) is None
+
+    def test_all_punctuation_returns_none(self) -> None:
+        """Solo punteggiatura senza cifre → None."""
+        assert normalize_number("---") is None
+        assert normalize_number(".,.") is None
+        assert normalize_number("-.-") is None
+
 
 # ===========================================================================
 # normalize_columns_map
@@ -257,7 +281,7 @@ class TestDecodeBytes:
         # EURO SIGN € in cp1252 = 0x80
         data = bytes([0x80])
         result = decode_bytes(data)
-        # cp1252 e' l'ultimo tentativo prima del fallback
+        # cp1252 e' tentato prima di iso-8859-1 per preservare €
         assert result == "€"
 
     def test_iso_8859_1_sequence(self) -> None:

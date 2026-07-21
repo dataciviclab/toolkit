@@ -97,6 +97,9 @@ Documentation = "https://github.com/dataciviclab/toolkit"
 include = ["toolkit*"]
 exclude = ["tests*"]
 
+[tool.setuptools.package-data]
+toolkit = ["sql/*.sql"]
+
 [tool.setuptools.dynamic]
 version = { attr = "toolkit.version.__version__" }
 

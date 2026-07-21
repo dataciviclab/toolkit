@@ -1,13 +1,13 @@
 WITH base AS (
   SELECT
-    TRY_CAST(TRIM(CAST("Anno di Riferimento" AS VARCHAR)) AS INTEGER) AS anno,
-    TRY_CAST(TRIM(CAST("Codice Regione" AS VARCHAR)) AS INTEGER) AS codice_regione,
-    TRIM(CAST("Descrizione Regione" AS VARCHAR)) AS regione,
-    TRY_CAST(TRIM(CAST("Codice Ente SSN" AS VARCHAR)) AS INTEGER) AS codice_ente_ssn,
-    TRIM(CAST("Descrizione Ente" AS VARCHAR)) AS descrizione_ente,
-    TRIM(CAST("Codice Voce Contabile" AS VARCHAR)) AS codice_voce_contabile,
-    TRIM(CAST("Descrizione Voce Contabile" AS VARCHAR)) AS descrizione_voce_contabile,
-    TRY_CAST(TRIM(CAST("Importo Totale" AS VARCHAR)) AS DOUBLE) AS importo_totale
+    cast_int("Anno di Riferimento") AS anno,
+    cast_int("Codice Regione") AS codice_regione,
+    normalize_string("Descrizione Regione") AS regione,
+    cast_int("Codice Ente SSN") AS codice_ente_ssn,
+    normalize_string("Descrizione Ente") AS descrizione_ente,
+    normalize_string("Codice Voce Contabile") AS codice_voce_contabile,
+    normalize_string("Descrizione Voce Contabile") AS descrizione_voce_contabile,
+    cast_double("Importo Totale") AS importo_totale
   FROM raw_input
 )
 

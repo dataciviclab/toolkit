@@ -118,6 +118,31 @@ Il toolkit non gestisce il deployment: scrive nella directory configurata via
 
 ---
 
+## Scrivere clean.sql con le macro standard
+
+Il toolkit fornisce **macro SQL DuckDB** precaricate automaticamente in ogni
+esecuzione del layer CLEAN. Servono a scrivere `clean.sql` senza riscrivere
+ogni volta `TRY_CAST`, `REPLACE` per numeri italiani, `CASE` per flag booleani.
+
+Esempio — invece di:
+
+```sql
+TRY_CAST(REPLACE(REPLACE("Importo"::VARCHAR, '.', ''), ',', '.') AS DOUBLE) AS importo,
+CASE WHEN TRIM("ETS") = 'X' THEN TRUE ELSE FALSE END AS flag_ets,
+TRIM(CAST("Denominazione" AS VARCHAR)) AS denominazione,
+```
+
+si scrive:
+
+```sql
+normalize_italian_number("Importo") AS importo,
+decode_flag("ETS", 'X') AS flag_ets,
+normalize_string("Denominazione") AS denominazione,
+```
+
+Le macro sono caricate automaticamente — **non serve importare nulla**.
+Dettaglio completo: [docs/standard-macros.md](docs/standard-macros.md).
+
 ## Configurazione (`dataset.yml`)
 
 Il cuore del toolkit è un file YAML che descrive il dataset:
@@ -153,6 +178,7 @@ esegue le trasformazioni SQL su DuckDB e produce output in `root/data/`.
 | [advanced-workflows.md](docs/advanced-workflows.md) | Resume, run parziali, profile, debug |
 | [notebook-contract.md](docs/notebook-contract.md) | Come leggere gli output nei notebook |
 | [feature-stability.md](docs/feature-stability.md) | Cosa è stabile, cosa sperimentale, cosa deprecated |
+| [standard-macros.md](docs/standard-macros.md) | Macro SQL predefinite per clean.sql |
 
 ### Plugin sorgente supportati
 

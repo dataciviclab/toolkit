@@ -25,31 +25,20 @@ WITH base AS (
 )
 
 SELECT
-  CAST({year} AS INTEGER) AS anno,
+    cast_int({year}) AS anno,
 
-  CAST(TRIM(regione)  AS VARCHAR) AS regione,
-  CAST(TRIM(provincia) AS VARCHAR) AS provincia,
-  CAST(TRIM(comune)   AS VARCHAR) AS comune,
+    normalize_string(regione) AS regione,
+    normalize_string(provincia) AS provincia,
+    normalize_string(comune) AS comune,
 
-  CAST(
-    NULLIF(
-      REPLACE(
-        REPLACE(
-          REPLACE(TRIM(CAST(pct_rd_raw AS VARCHAR)), '%', ''),
-        '.', ''),
-      ',', '.'),
-    '-')
-    AS DOUBLE
-  ) AS pct_rd,
+    -- Il formato italiano (%, . e ,) viene normalizzato dal toolkit:
+    -- normalize_italian_number gestisce 1.234,56 → 1234.56
+    -- La % viene rimossa manualmente prima della macro
+    normalize_italian_number(
+      REPLACE(normalize_string(pct_rd_raw), '%', '')
+    ) AS pct_rd,
 
-  CAST(
-    NULLIF(
-      REPLACE(
-        REPLACE(TRIM(CAST(ru_tot_t_raw AS VARCHAR)), '.', ''),
-      ',', '.'),
-    '-')
-    AS DOUBLE
-  ) AS ru_tot_t
+    normalize_italian_number(ru_tot_t_raw) AS ru_tot_t
 
 FROM base
 WHERE regione  IS NOT NULL AND TRIM(regione)  <> ''

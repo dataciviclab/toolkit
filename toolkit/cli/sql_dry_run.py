@@ -7,6 +7,7 @@ import duckdb
 from lab_connectors.duckdb import safe_connect
 
 from toolkit.clean.run import load_clean_sql
+from toolkit.clean.sql_execute import _load_standard_macros
 from toolkit.core.config import ensure_dict
 from toolkit.core.paths import resolve_sql_path as _resolve_mart_sql_path
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
@@ -186,6 +187,7 @@ def validate_sql_dry_run(cfg, *, year: int, layers: list[str], dry_run: bool = F
         return
 
     with safe_connect() as con:
+        _load_standard_macros(con, logger=None)
         if cfg.clean.sql:
             _build_clean_preview(
                 cfg, year=year, con=con, support_cfg=ensure_dict(cfg.support), dry_run=dry_run

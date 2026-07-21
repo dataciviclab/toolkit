@@ -215,16 +215,27 @@ def _select_expr(
     sql_type: str,
     out_name: str,
 ) -> str:
-    """Build a SELECT expression for one column with smart transformations.
+    """Build a SELECT expression for one column using standard macros.
 
-    - VARCHAR columns: TRIM with CAST AS VARCHAR (safe for columns sniffed as BIGINT)
-      Comma-decimal numbers are handled by clean.read.decimal in dataset.yml
-      (see propose_clean_read()), not by REPLACE in SQL — DuckDB's read_csv
-      native decimal support is more reliable and avoids DOUBLE→STRING round-trips.
+    Genera espressioni che usano le macro DuckDB standard del toolkit
+    (``normalize_string``, ``cast_bigint``, ``cast_double``) invece di
+    ``TRY_CAST``/``TRIM`` espliciti. Le macro sono caricate
+    automaticamente dal layer CLEAN.
+
+    Per DATE e BOOLEAN continua a usare TRY_CAST diretto (nessuna macro
+    standard per questi tipi).
     """
     if sql_type == "VARCHAR":
-        return f'trim(CAST("{raw_col}" AS VARCHAR)) AS {out_name}'
+        return f'normalize_string("{raw_col}") AS {out_name}'
 
+    macro_map = {
+        "BIGINT": "cast_bigint",
+        "DOUBLE": "cast_double",
+    }
+    if sql_type in macro_map:
+        return f'{macro_map[sql_type]}("{raw_col}") AS {out_name}'
+
+    # DATE, BOOLEAN e altri: TRY_CAST diretto
     return f'TRY_CAST("{raw_col}" AS {sql_type}) AS {out_name}'
 
 
@@ -233,13 +244,11 @@ def _columns_spec(profile: dict[str, Any], year: int) -> tuple[list[str], dict[s
     mapping = profile.get("mapping_suggestions", {})
     if not mapping:
         # Fallback to columns_raw if mapping is empty (e.g. Excel profiling,
-        # or profiling that failed to infer types). Use trim(CAST(... AS VARCHAR))
-        # to safely handle both text and numeric columns.
+        # or profiling that failed to infer types). Use normalize_string()
+        # (standard macro) to handle TEXT columns safely.
         columns_raw = profile.get("columns_raw", [])
         if columns_raw:
-            select_exprs = [
-                f'trim(CAST("{c}" AS VARCHAR)) AS {_snake_case(c)}' for c in columns_raw
-            ]
+            select_exprs = [f'normalize_string("{c}") AS {_snake_case(c)}' for c in columns_raw]
             columns_spec = {c: "VARCHAR" for c in columns_raw}
             return select_exprs, columns_spec
         return ["*"], {}

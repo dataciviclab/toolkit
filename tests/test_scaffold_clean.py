@@ -26,49 +26,49 @@ from toolkit.scaffold.clean import (
 
 
 class TestSelectExpr:
-    """pure_unit: _select_expr sceglie TRIM / REPLACE / TRY_CAST per tipo."""
+    """pure_unit: _select_expr usa le macro standard (normalize_string, cast_bigint, cast_double)."""
 
     @pytest.mark.pure_unit
-    def test_varchar_gets_trim(self) -> None:
-        """VARCHAR columns use TRIM instead of unnecessary TRY_CAST."""
+    def test_varchar_gets_normalize_string(self) -> None:
+        """VARCHAR columns use normalize_string macro."""
         result = _select_expr("Nome", "VARCHAR", "nome")
-        assert result == 'trim(CAST("Nome" AS VARCHAR)) AS nome'
+        assert result == 'normalize_string("Nome") AS nome'
 
     @pytest.mark.pure_unit
-    def test_integer_gets_try_cast(self) -> None:
-        """Integer columns get TRY_CAST to BIGINT."""
+    def test_integer_gets_cast_bigint(self) -> None:
+        """Integer columns get cast_bigint macro."""
         result = _select_expr("Anno", "BIGINT", "anno")
-        assert result == 'TRY_CAST("Anno" AS BIGINT) AS anno'
+        assert result == 'cast_bigint("Anno") AS anno'
 
     @pytest.mark.pure_unit
-    def test_double_gets_try_cast(self) -> None:
-        """Double columns get TRY_CAST to DOUBLE."""
+    def test_double_gets_cast_double(self) -> None:
+        """Double columns get cast_double macro."""
         result = _select_expr("Valore", "DOUBLE", "valore")
-        assert result == 'TRY_CAST("Valore" AS DOUBLE) AS valore'
+        assert result == 'cast_double("Valore") AS valore'
 
     @pytest.mark.pure_unit
-    def test_double_gets_plain_try_cast(self) -> None:
-        """Double columns always get plain TRY_CAST (no REPLACE — handled by clean.read)."""
+    def test_double_gets_plain_cast_double(self) -> None:
+        """Double columns use cast_double (no REPLACE — handled by clean.read)."""
         result = _select_expr("Importo", "DOUBLE", "importo")
-        assert result == 'TRY_CAST("Importo" AS DOUBLE) AS importo'
+        assert result == 'cast_double("Importo") AS importo'
         assert "REPLACE" not in result
 
     @pytest.mark.pure_unit
-    def test_bigint_gets_plain_try_cast(self) -> None:
-        """BIGINT columns always get plain TRY_CAST."""
+    def test_bigint_gets_plain_cast_bigint(self) -> None:
+        """BIGINT columns use cast_bigint."""
         result = _select_expr("Anno", "BIGINT", "anno")
-        assert result == 'TRY_CAST("Anno" AS BIGINT) AS anno'
+        assert result == 'cast_bigint("Anno") AS anno'
         assert "REPLACE" not in result
 
     @pytest.mark.pure_unit
     def test_date_gets_try_cast(self) -> None:
-        """DATE columns get TRY_CAST."""
+        """DATE columns still use TRY_CAST (no standard macro)."""
         result = _select_expr("Data", "DATE", "data")
         assert 'TRY_CAST("Data" AS DATE)' in result
 
     @pytest.mark.pure_unit
     def test_boolean_gets_try_cast(self) -> None:
-        """BOOLEAN columns get TRY_CAST."""
+        """BOOLEAN columns still use TRY_CAST (no standard macro)."""
         result = _select_expr("Attivo", "BOOLEAN", "attivo")
         assert 'TRY_CAST("Attivo" AS BOOLEAN)' in result
 
@@ -270,7 +270,7 @@ class TestColumnsSpec:
 
     @pytest.mark.pure_unit
     def test_mixed_types(self) -> None:
-        """Mapping misto: VARCHAR → TRIM, numerici → TRY_CAST."""
+        """Mapping misto: VARCHAR → normalize_string, numerici → cast_bigint/cast_double."""
         profile: dict[str, Any] = {
             "mapping_suggestions": {
                 "Nome": {"type": "str"},
@@ -279,16 +279,16 @@ class TestColumnsSpec:
             },
         }
         exprs, spec = _columns_spec(profile, 2024)
-        assert 'trim(CAST("Nome" AS VARCHAR)) AS nome' in exprs
-        assert 'TRY_CAST("Anno" AS BIGINT) AS anno' in exprs
-        assert 'TRY_CAST("Valore" AS DOUBLE) AS valore' in exprs
+        assert 'normalize_string("Nome") AS nome' in exprs
+        assert 'cast_bigint("Anno") AS anno' in exprs
+        assert 'cast_double("Valore") AS valore' in exprs
         assert spec["Nome"] == "VARCHAR"
         assert spec["Anno"] == "BIGINT"
         assert spec["Valore"] == "DOUBLE"
 
     @pytest.mark.pure_unit
     def test_comma_decimal(self) -> None:
-        """Con decimal_suggested=',', colonne DOUBLE usano TRY_CAST normale
+        """Con decimal_suggested=',', colonne DOUBLE usano cast_double
         (REPLACE non serve: clean.read.decimal gestito da DuckDB)."""
         profile: dict[str, Any] = {
             "decimal_suggested": ",",
@@ -299,20 +299,20 @@ class TestColumnsSpec:
         }
         exprs, _ = _columns_spec(profile, 2024)
         joined = "\n".join(exprs)
-        assert 'trim(CAST("Nome" AS VARCHAR)) AS nome' in joined
-        assert 'TRY_CAST("Importo" AS DOUBLE)' in joined
+        assert 'normalize_string("Nome") AS nome' in joined
+        assert 'cast_double("Importo")' in joined
         assert "REPLACE" not in joined
 
     @pytest.mark.pure_unit
     def test_no_mapping_fallback(self) -> None:
-        """Senza mapping: CAST(... AS VARCHAR) + TRIM per safety su tipi misti."""
+        """Senza mapping: normalize_string per safety su tipi misti."""
         profile: dict[str, Any] = {
             "mapping_suggestions": {},
             "columns_raw": ["Col1", "Col2"],
         }
         exprs, spec = _columns_spec(profile, 2024)
-        assert 'trim(CAST("Col1" AS VARCHAR)) AS col1' in exprs
-        assert 'trim(CAST("Col2" AS VARCHAR)) AS col2' in exprs
+        assert 'normalize_string("Col1") AS col1' in exprs
+        assert 'normalize_string("Col2") AS col2' in exprs
         assert spec == {"Col1": "VARCHAR", "Col2": "VARCHAR"}
 
     @pytest.mark.pure_unit
@@ -344,8 +344,8 @@ class TestGenerateCleanSql:
         assert "{year}::INTEGER AS anno" in sql
         assert "FROM raw_input" in sql
         assert "WHERE" not in sql
-        assert 'trim(CAST("Nome" AS VARCHAR))' in sql
-        assert 'TRY_CAST("Valore"' in sql
+        assert 'normalize_string("Nome")' in sql
+        assert 'cast_double("Valore")' in sql
 
     @pytest.mark.pure_unit
     def test_with_real_anno_column_adds_where(self) -> None:
@@ -360,9 +360,9 @@ class TestGenerateCleanSql:
         }
         sql = generate_clean_sql(profile, "test_dataset", 2024)
         assert "{year}::INTEGER" not in sql  # non injectato
-        assert 'TRY_CAST("Anno" AS BIGINT) AS anno' in sql
+        assert 'cast_bigint("Anno") AS anno' in sql
         assert 'WHERE try_cast("Anno" AS INTEGER) IS NOT NULL' in sql
-        assert 'trim(CAST("Regione" AS VARCHAR))' in sql
+        assert 'normalize_string("Regione")' in sql
 
     @pytest.mark.pure_unit
     def test_with_anno_di_imposta_adds_where(self) -> None:
@@ -461,8 +461,8 @@ class TestGenerateCleanSqlIntegration:
     """pure_unit: generate_clean_sql produce clean.sql coerente."""
 
     @pytest.mark.pure_unit
-    def test_varchar_gets_trim(self) -> None:
-        """generate_clean_sql applica TRIM alle colonne VARCHAR."""
+    def test_varchar_gets_normalize_string(self) -> None:
+        """generate_clean_sql usa normalize_string per colonne VARCHAR."""
         from toolkit.scaffold.clean import generate_clean_sql
 
         profile: dict[str, Any] = {
@@ -473,9 +473,9 @@ class TestGenerateCleanSqlIntegration:
             },
         }
         sql = generate_clean_sql(profile, "candidate", 2024)
-        assert 'trim(CAST("nome" AS VARCHAR))' in sql
-        assert 'trim(CAST("categoria" AS VARCHAR))' in sql
-        assert 'TRY_CAST("valore" AS DOUBLE)' in sql
+        assert 'normalize_string("nome")' in sql
+        assert 'normalize_string("categoria")' in sql
+        assert 'cast_double("valore")' in sql
 
 
 # ---------------------------------------------------------------------------
@@ -577,7 +577,7 @@ class TestProfileFromDatastore:
 
     @pytest.mark.pure_unit
     def test_generate_clean_sql_from_datastore(self) -> None:
-        """Profile da DataStore produce clean.sql con colonne mappate."""
+        """Profile da DataStore produce clean.sql con macro standard."""
         from toolkit.scaffold.clean import generate_clean_sql, profile_from_datastore
 
         fields = [
@@ -587,7 +587,7 @@ class TestProfileFromDatastore:
         ]
         profile = profile_from_datastore(fields)
         sql = generate_clean_sql(profile, "test_dataset", 2024)
-        assert 'trim(CAST("nome" AS VARCHAR)) AS nome' in sql
-        assert 'TRY_CAST("valore" AS DOUBLE) AS valore' in sql
+        assert 'normalize_string("nome") AS nome' in sql
+        assert 'cast_double("valore") AS valore' in sql
         assert 'TRY_CAST("data" AS DATE) AS data' in sql
         assert "{year}::INTEGER AS anno" in sql

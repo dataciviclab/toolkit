@@ -38,9 +38,14 @@ CREATE OR REPLACE MACRO normalize_string(val) AS
    NULLIF(TRIM(val::VARCHAR), '');
 
 -- ── cast_int ───────────────────────────────────────────────────────────────
--- TRY_CAST a INTEGER con gestione NULL sicura.
+-- TRY_CAST a INTEGER (32-bit). Per numeri grandi usa cast_bigint.
 CREATE OR REPLACE MACRO cast_int(val) AS
    TRY_CAST(val AS INTEGER);
+
+-- ── cast_bigint ────────────────────────────────────────────────────────────
+-- TRY_CAST a BIGINT (64-bit). Usato dallo scaffold per colonne numeriche.
+CREATE OR REPLACE MACRO cast_bigint(val) AS
+   TRY_CAST(val AS BIGINT);
 
 -- ── cast_double ────────────────────────────────────────────────────────────
 -- TRY_CAST a DOUBLE con gestione NULL sicura.

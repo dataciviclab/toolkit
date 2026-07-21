@@ -196,8 +196,8 @@ class TestGenerateCleanSql:
             },
         }
         sql = generate_clean_sql(profile, "candidate", 2024)
-        assert 'TRY_CAST("valore" AS DOUBLE)' in sql
-        assert 'TRY_CAST("anno" AS BIGINT)' in sql
+        assert 'cast_double("valore")' in sql
+        assert 'cast_bigint("anno")' in sql
         assert '"nome"' in sql
         assert "FROM raw_input" in sql
 
@@ -331,8 +331,8 @@ class TestShorthandTypes:
             },
         }
         sql = generate_clean_sql(profile, "candidate", 2024)
-        assert 'TRY_CAST("eta" AS BIGINT)' in sql, f"int type not recognized: {sql}"
-        assert 'TRY_CAST("reddito" AS DOUBLE)' in sql
+        assert 'cast_bigint("eta")' in sql, f"int type not recognized: {sql}"
+        assert 'cast_double("reddito")' in sql
 
 
 # ── Routing SPARQL in probe_url_routed ───────────────────────────────────────

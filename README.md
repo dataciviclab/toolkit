@@ -61,7 +61,7 @@ La CI di `dataset-incubator` carica su GCS dopo ogni run validato.
 | `toolkit inspect paths --config dataset.yml --year 2023` | Path assoluti degli output |
 | `toolkit scout <URL>` | Esplora fonte esterna (HTTP/CKAN/SDMX) |
 
-📖 **Reference completo**: [docs/cli.md](docs/cli.md)
+📖 **Reference completo**: `toolkit --help`
 
 ## Configurazione (`dataset.yml`)
 
@@ -103,8 +103,8 @@ Il toolkit espone un server MCP per agenti AI e IDE:
 | Categoria | Tool |
 |---|---|
 | **Stato completo** | `toolkit_status` |
-| **Ispezione** | `inspect_paths`, `inspect_schema`, `inspect_profile`, `list_runs` |
-| **Scout** | `probe_url`, `ckan_package_show`, `sparql_query` |
+| **Ispezione** | `toolkit_inspect_paths`, `toolkit_inspect_schema`, `toolkit_inspect_profile`, `toolkit_list_runs` |
+| **Scout** | `toolkit_probe_url`, `toolkit_ckan_package_show`, `toolkit_sparql_query` |
 
 Config IDE (`.mcp.json`):
 ```json

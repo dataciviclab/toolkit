@@ -21,12 +21,9 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_inspect_profile",
         "toolkit_list_runs",
         "toolkit_schema_diff",
-        "toolkit_csv_preview",
-        "toolkit_list_candidates",
         "toolkit_layer",
         "toolkit_status",
         "toolkit_probe_url",
-        "toolkit_probe_url_routed",
         "toolkit_ckan_package_show",
         "toolkit_html_extract_links",
         "toolkit_sparql_query",
@@ -123,7 +120,7 @@ def test_toolkit_probe_url_routed_forwards_params(monkeypatch: pytest.MonkeyPatc
         return {"source_type": "ckan"}
 
     monkeypatch.setattr(mcp_server, "probe_url_routed_impl", fake_impl)
-    result = mcp_server.toolkit_probe_url_routed("https://dati.gov.it", timeout=15)
+    result = mcp_server.toolkit_probe_url("https://dati.gov.it", timeout=15, routed=True)
     assert result == {"source_type": "ckan"}
     assert calls == {"url": "https://dati.gov.it", "timeout": 15}
 
@@ -295,31 +292,6 @@ def test_csv_preview_ragged_csv_succeeds_with_robust_read(tmp_path: Path) -> Non
     assert result["robust_read_suggested"] is True
     # Preview still returns data
     assert len(result["preview"]) == 2
-
-
-def test_toolkit_list_candidates_passes_stage_and_filter(monkeypatch: pytest.MonkeyPatch) -> None:
-    """list_candidates must forward stage and status_filter to the impl."""
-    calls: dict[str, object] = {}
-
-    def fake_impl(stage: str, status_filter: str | None) -> list[dict[str, object]]:
-        calls["stage"] = stage
-        calls["status_filter"] = status_filter
-        return [{"slug": "test", "stage": stage, "status": status_filter}]
-
-    monkeypatch.setattr(mcp_server, "list_candidates_impl", fake_impl)
-
-    # Test con status_filter
-    result = mcp_server.toolkit_list_candidates("candidates", "SUCCESS")
-    assert isinstance(result, dict), f"expected dict, got {type(result)}"
-    assert "candidates" in result, f"expected 'candidates' key, got {list(result.keys())}"
-    assert result["candidates"][0]["stage"] == "candidates"
-    assert result["candidates"][0]["status"] == "SUCCESS"
-    assert result["count"] == 1
-    assert calls == {"stage": "candidates", "status_filter": "SUCCESS"}
-
-    # Test con status_filter=None
-    result2 = mcp_server.toolkit_list_candidates("all", None)
-    assert result2["candidates"][0]["status"] is None
 
 
 def test_toolkit_preflight_returns_report(monkeypatch: pytest.MonkeyPatch) -> None:

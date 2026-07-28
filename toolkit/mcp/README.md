@@ -3,7 +3,7 @@
 Server MCP locale, read-only, per ispezionare la pipeline e il catalogo
 dataset del DataCivicLab.
 
-## Tool esposti (18)
+## Tool esposti (15)
 
 ### Catalogo (slug-based — GCS + workspace)
 
@@ -33,15 +33,14 @@ dataset del DataCivicLab.
 - `toolkit_inspect_schema(config_path, layer="clean", year=0)`
 - `toolkit_inspect_profile(config_path, year=0)` — profilo raw (encoding, delim, colonne)
 - `toolkit_list_runs(config_path, year=0, since=None, until=None, status=None, limit=20, cross_year=False)`
-- `toolkit_list_candidates(stage="all", status_filter=None)` — **DEPRECATO**: usa `toolkit_find(source="workspace")`
+- `toolkit_list_candidates` — **RIMOSSO**: usa `toolkit_find(source="workspace")`
 - `toolkit_schema_diff(config_path)` — confronto segnali schema raw cross-year
-- `toolkit_csv_preview(csv_path, limit=20)` — schema + preview CSV via profiler pipeline
 - `toolkit_preflight(config_path, years=None)` — pre-flight check: valida config, verifica fonti, quality score PA
 
 ### Scout fonti
 
-- `toolkit_probe_url(url, timeout=15)` — probe HTTP leggero (HEAD + Range)
-- `toolkit_probe_url_routed(url, timeout=15)` — probe con routing automatico (CKAN, SDMX, HTML, file diretto)
+- `toolkit_probe_url(url, timeout=15, routed=False)` — probe HTTP.
+  `routed=True` attiva routing automatico (CKAN, SDMX, HTML, file diretto)
 - `toolkit_ckan_package_show(endpoint, package_id, timeout=30)` — fetch dataset CKAN
 - `toolkit_html_extract_links(url, timeout=20)` — estrae link dati da HTML
 - `toolkit_sparql_query(endpoint, query, timeout=60, max_rows=500)` — SPARQL SELECT

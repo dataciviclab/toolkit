@@ -11,26 +11,24 @@ Tool catalogo (nuovi, basati su GCS manifest):
 - toolkit_find: cerca dataset pubblicati su GCS per slug/layer
 - toolkit_dataset_overview: schema + conteggio + preview da slug
 
-Tool granulari (mantenuti per backward compat):
+Tool granulari:
 - inspect_paths, inspect_schema, inspect_profile
-- schema_diff, list_runs, list_candidates
+- schema_diff, list_runs
 - csv_preview
-- scout: probe_url, probe_url_routed, ckan, sparql, html
+- scout: probe_url, ckan, sparql, html
+- list_candidates: rimosso (usa toolkit_find source='workspace')
 
 Usa ``lab_connectors.mcp`` per init standardizzato, error handling e logging.
 """
 
 from __future__ import annotations
 
-import threading
 from typing import Any
 
 from lab_connectors.mcp import create_mcp_server, guard_timed
 
 from .toolkit_client import (
-    csv_preview as csv_preview_impl,
     inspect_paths as inspect_paths_impl,
-    list_candidates as list_candidates_impl,
     list_runs as list_runs_impl,
     mcp_ckan_package_show as ckan_package_show_impl,
     mcp_html_extract_links as html_extract_links_impl,
@@ -54,59 +52,15 @@ from .catalog_ops import (
 )
 
 
-class _LazyMCP:
-    """Proxy lazy per FastMCP.
-
-    ``create_mcp_server()`` è chiamato solo al primo uso effettivo
-    (``run()`` o ``list_tools()``). L'import del modulo non richiede
-    il pacchetto ``mcp``, che è una dipendenza opzionale pesante.
-    """
-
-    def __init__(self) -> None:
-        self._instance: Any = None
-        self._lock = threading.Lock()
-        self._tool_registrations: list[tuple[dict[str, Any], Any]] = []
-
-    def _get(self) -> Any:
-        if self._instance is not None:
-            return self._instance
-        with self._lock:
-            if self._instance is not None:
-                return self._instance
-            self._instance = create_mcp_server(
-                name="toolkit",
-                instructions=(
-                    "Server MCP locale, read-only, per ispezionare path risolti, "
-                    "schemi, stato run e preview dati del toolkit. "
-                    "Supporta slug dataset (es. 'terna-electricity-by-source') "
-                    "al posto del path assoluto a dataset.yml."
-                ),
-            )
-            # Re-registra i tool accumulati durante la fase lazy
-            for kwargs, fn in self._tool_registrations:
-                self._instance.tool(**kwargs)(fn)
-            self._tool_registrations.clear()
-        return self._instance
-
-    def tool(self, **kwargs: Any) -> Any:
-        """Registra un tool — in modalità lazy accumula, poi applica."""
-        if self._instance is not None:
-            return self._instance.tool(**kwargs)
-
-        def decorator(fn: Any) -> Any:
-            self._tool_registrations.append((kwargs, fn))
-            return fn
-
-        return decorator
-
-    def run(self) -> None:
-        self._get().run()
-
-    def list_tools(self) -> Any:
-        return self._get().list_tools()
-
-
-mcp = _LazyMCP()
+mcp = create_mcp_server(
+    name="toolkit",
+    instructions=(
+        "Server MCP locale, read-only, per ispezionare path risolti, "
+        "schemi, stato run e preview dati del toolkit. "
+        "Supporta slug dataset (es. 'terna-electricity-by-source') "
+        "al posto del path assoluto a dataset.yml."
+    ),
+)
 
 
 @mcp.tool(
@@ -130,22 +84,6 @@ def toolkit_inspect_schema(config_path: str, layer: str = "clean", year: int = 0
 )
 def toolkit_inspect_profile(config_path: str, year: int = 0) -> dict[str, Any]:
     return guard_timed(raw_profile_impl, "toolkit_inspect_profile", config_path, year or None)
-
-
-@mcp.tool(
-    description="[DEPRECATO] Elenca dataset in sviluppo nel workspace. "
-    "Usa toolkit_find con source='workspace' per la stessa funzionalita' "
-    "con piu' filtri e integrazione GCS.",
-    structured_output=True,
-)
-def toolkit_list_candidates(
-    stage: str = "all",
-    status_filter: str | None = None,
-) -> dict[str, Any]:
-    result = guard_timed(list_candidates_impl, "toolkit_list_candidates", stage, status_filter)
-    if isinstance(result, dict) and "error" in result:
-        return result
-    return {"candidates": result, "count": len(result) if isinstance(result, list) else 0}
 
 
 @mcp.tool(
@@ -184,13 +122,26 @@ def toolkit_list_runs(
 
 
 @mcp.tool(
-    description="Legge un CSV usando la stessa pipeline di profile_raw (sniff_source_file + profile_with_read_cfg). "
-    "Restituisce schema, preview, mapping_suggestions e parametri sniff (delim, encoding, decimal, skip). "
-    "Utile per ispezionare rapidamente il contenuto di un file raw senza runnare la pipeline.",
+    description="Preview remoto di un URL CSV/TSV: colonne, tipi, granularità. "
+    "HEAD + Range GET + sniff + DuckDB profile. Solo CSV/TSV.",
     structured_output=True,
 )
-def toolkit_csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
-    return guard_timed(csv_preview_impl, "toolkit_csv_preview", csv_path, limit)
+def toolkit_preview_url(
+    url: str,
+    known_encoding: str | None = None,
+    known_delim: str | None = None,
+    known_decimal: str | None = None,
+    known_skip: int | None = None,
+) -> dict[str, Any]:
+    return guard_timed(
+        preview_url_impl,
+        "toolkit_preview_url",
+        url,
+        known_encoding=known_encoding,
+        known_delim=known_delim,
+        known_decimal=known_decimal,
+        known_skip=known_skip,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -336,45 +287,17 @@ def toolkit_preflight(config_path: str, years: str | None = None) -> dict[str, A
 
 
 @mcp.tool(
-    description="Preview remoto di un URL CSV/TSV: colonne, tipi, granularità, anni. "
-    "HEAD + Range GET + sniff + DuckDB profile + infer in un colpo solo. "
-    "Solo CSV/TSV. Usa toolkit_probe_url per probe generico.",
+    description="Probe HTTP: reachability, status code, content-type. "
+    "HEAD + GET Range. Nessun body scaricato. "
+    "Con routed=True attiva routing automatico (rileva CKAN, SDMX, HTML, file diretto).",
     structured_output=True,
 )
-def toolkit_preview_url(
-    url: str,
-    known_encoding: str | None = None,
-    known_delim: str | None = None,
-    known_decimal: str | None = None,
-    known_skip: int | None = None,
-) -> dict[str, Any]:
-    return guard_timed(
-        preview_url_impl,
-        "toolkit_preview_url",
-        url,
-        known_encoding=known_encoding,
-        known_delim=known_delim,
-        known_decimal=known_decimal,
-        known_skip=known_skip,
-    )
-
-
-@mcp.tool(
-    description="Probe HTTP leggero: reachability, status code, content-type, content-disposition. "
-    "HEAD + GET Range fallback. Nessun body scaricato.",
-    structured_output=True,
-)
-def toolkit_probe_url(url: str, timeout: int = 15) -> dict[str, Any]:
-    return guard_timed(probe_url_impl, "toolkit_probe_url", url, timeout)
-
-
-@mcp.tool(
-    description="Probe HTTP arricchito con routing automatico: rileva CKAN, SDMX, HTML con link dati, "
-    "o file diretto. Per CKAN scopre risorse via API, per SDMX ricava flow e anni.",
-    structured_output=True,
-)
-def toolkit_probe_url_routed(url: str, timeout: int = 15) -> dict[str, Any]:
-    return guard_timed(probe_url_routed_impl, "toolkit_probe_url_routed", url, timeout)
+def toolkit_probe_url(url: str, timeout: int = 15, routed: bool = False) -> dict[str, Any]:
+    impl = probe_url_routed_impl if routed else probe_url_impl
+    name = "toolkit_probe_url"
+    if routed:
+        return guard_timed(impl, f"{name}_routed", url, timeout)
+    return guard_timed(impl, name, url, timeout)
 
 
 @mcp.tool(

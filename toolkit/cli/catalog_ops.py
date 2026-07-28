@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from lab_connectors.gcs.manifest import MANIFEST_URL, read_manifest
+from lab_connectors.gcs.paths import CLEAN_BUCKET, MART_BUCKET
 
 from toolkit.core.duckdb_shape import parquet_preview
 from toolkit.core.io import read_json_or_none, read_yaml
@@ -33,8 +34,6 @@ from toolkit.core.paths import WORKSPACE_ROOT
 # Costanti
 # ---------------------------------------------------------------------------
 
-CLEAN_BUCKET = "dataciviclab-clean"
-MART_BUCKET = "dataciviclab-mart"
 VALID_LAYERS = frozenset({"clean", "mart"})
 
 LOCAL_BUCKET = "local"  # bucket fittizio per file locali

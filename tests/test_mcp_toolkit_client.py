@@ -43,10 +43,10 @@ def _make_project_smoke(
     Returns:
         (config_path, slug, year).
     """
-    src = Path("project-example")
-    dst = tmp_path / "project-example"
     import shutil
 
+    src = Path(__file__).resolve().parent.parent / "project-example"
+    dst = tmp_path / "project-example"
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     config_path = dst / "dataset.yml"
 
@@ -552,9 +552,14 @@ def _make_candidate(workspace: Path, name: str) -> None:
 def _make_candidate_run(
     workspace: Path, name: str, status: str = "SUCCESS", year: int = 2024, root: str | None = None
 ) -> None:
-    """Crea run record per un candidate."""
+    """Crea run record per un candidate.
+
+    Il path del run usa lo slug normalizzato (underscore),
+    coerente con la risoluzione in CatalogResolver.
+    """
     base = Path(root) if root else workspace / "out"
-    runs_dir = base / "data" / "_runs" / name / str(year)
+    slug = name.replace("-", "_")
+    runs_dir = base / "data" / "_runs" / slug / str(year)
     runs_dir.mkdir(parents=True, exist_ok=True)
     (runs_dir / "run.json").write_text(
         json.dumps(
@@ -592,9 +597,11 @@ def test_list_candidates_sorting(tmp_path, monkeypatch, names, sorted_check):
 
     result = list_candidates(stage="all")
     slugs = [c["slug"] for c in result]
-    for name in names:
-        assert name in slugs
-        item = [c for c in result if c["slug"] == name][0]
+    # Gli slug ora sono normalizzati a underscore (merge con GCS)
+    normalized_names = [n.replace("-", "_") for n in names]
+    for i, slug in enumerate(normalized_names):
+        assert slug in slugs
+        item = [c for c in result if c["slug"] == slug][0]
         assert item["stage"] == "candidates"
         assert item["years"] == [2024]
     if sorted_check:
@@ -607,34 +614,35 @@ def test_list_candidates_resolves_custom_root(tmp_path, monkeypatch):
 
     monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
 
-    name = "test-root-candidate"
-    cand_dir = tmp_path / "dataset-incubator" / "candidates" / name
+    dir_name = "test-root-candidate"
+    slug = "test_root_candidate"  # normalizzato
+    cand_dir = tmp_path / "dataset-incubator" / "candidates" / dir_name
     cand_dir.mkdir(parents=True, exist_ok=True)
     (cand_dir / "dataset.yml").write_text(
-        f'root: "../../custom_out"\nschema_version: 1\ndataset:\n  name: {name}\n  years: [2024]\n',
+        f'root: "../../custom_out"\nschema_version: 1\ndataset:\n  name: {dir_name}\n  years: [2024]\n',
         encoding="utf-8",
     )
 
     custom_root = tmp_path / "dataset-incubator" / "custom_out"
-    clean_dir = custom_root / "data" / "clean" / name / "2024"
+    clean_dir = custom_root / "data" / "clean" / slug / "2024"
     clean_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(clean_dir / f"{name}_2024_clean.parquet")
+    _write_parquet(clean_dir / f"{slug}_2024_clean.parquet")
 
-    mart_dir = custom_root / "data" / "mart" / name / "2024"
+    mart_dir = custom_root / "data" / "mart" / slug / "2024"
     mart_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(mart_dir / f"mart_{name}.parquet")
+    _write_parquet(mart_dir / f"mart_{slug}.parquet")
 
-    _make_candidate_run(tmp_path, name, root=custom_root)
+    _make_candidate_run(tmp_path, slug, root=custom_root)
 
     from toolkit.mcp.discovery import list_candidates
 
-    items = [c for c in list_candidates(stage="all") if c["slug"] == name]
+    items = [c for c in list_candidates(stage="all") if c["slug"] == slug]
     assert len(items) == 1
     item = items[0]
     assert item["has_clean"] is True
     assert item["has_mart"] is True
     assert item["last_run_status"] == "SUCCESS"
-    assert not (tmp_path / "out" / "data" / "clean" / name).exists()
+    assert not (tmp_path / "out" / "data" / "clean" / slug).exists()
 
 
 @pytest.mark.parametrize(

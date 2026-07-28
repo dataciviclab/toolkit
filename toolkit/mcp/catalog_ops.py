@@ -2,8 +2,6 @@
 
 Chiama il backend condiviso ``toolkit.cli.catalog_ops`` e traduce
 eccezioni in ``ToolkitClientError`` per il server MCP.
-
-Pattern identico a ``aggregate_ops.py`` che wrappa ``cli.layer_ops``.
 """
 
 from __future__ import annotations
@@ -15,7 +13,6 @@ from lab_connectors.mcp.errors import ErrorCode
 from toolkit.cli.catalog_ops import CatalogResolver
 from toolkit.mcp.errors import ToolkitClientError
 
-# Istanza condivisa del resolver (lazy init, cache MCP-lifetime)
 _resolver: CatalogResolver | None = None
 
 
@@ -27,29 +24,46 @@ def _get_resolver() -> CatalogResolver:
 
 
 def reset_resolver() -> None:
-    """Resetta il resolver (utile nei test per ricaricare il manifest)."""
+    """Resetta il resolver (utile nei test)."""
     global _resolver
     _resolver = None
 
 
-def mcp_find(query: str = "", layer: str | None = None, limit: int = 15) -> dict[str, Any]:
-    """Cerca dataset nel manifest GCS.
+def mcp_find(
+    query: str = "",
+    layer: str | None = None,
+    limit: int = 15,
+    source: str = "all",
+    stage: str = "all",
+    status_filter: str | None = None,
+) -> dict[str, Any]:
+    """Cerca dataset nel manifest GCS e/o workspace locale.
 
     Args:
         query: Testo da cercare nello slug (case-insensitive).
         layer: ``"clean"``, ``"mart"`` o ``None`` (entrambi).
         limit: Max risultati (default 15). Usa ``0`` per nessun limite.
+        source: ``"gcs"`` (pubblicati), ``"workspace"`` (in sviluppo),
+                ``"all"`` (default, unione).
+        stage: Filtro workspace: ``"candidates"``, ``"support"``, ``"all"``.
+        status_filter: Filtro run status (es. ``"SUCCESS"``).
 
     Returns:
-        Dict con ``datasets`` (lista), ``total_count`` (int totale prima del taglio),
-        e ``truncated`` (bool).
+        Dict con ``datasets``, ``total_count``, ``truncated``.
 
     Raises:
-        ToolkitClientError: se il manifest non e' raggiungibile.
+        ToolkitClientError: se manifest GCS irraggiungibile o parametri invalidi.
     """
     try:
         resolver = _get_resolver()
-        return resolver.list_datasets(query=query, layer=layer, limit=limit)
+        return resolver.list_datasets(
+            query=query,
+            layer=layer,
+            limit=limit,
+            source=source,
+            stage=stage,
+            status_filter=status_filter,
+        )
     except (FileNotFoundError, TimeoutError) as exc:
         raise ToolkitClientError(
             f"Manifest GCS non raggiungibile: {exc}",
@@ -57,7 +71,7 @@ def mcp_find(query: str = "", layer: str | None = None, limit: int = 15) -> dict
         ) from exc
     except ValueError as exc:
         raise ToolkitClientError(
-            f"Errore nel manifest GCS: {exc}",
+            f"Errore parametri: {exc}",
             code=ErrorCode.INVALID_PARAMS,
         ) from exc
 

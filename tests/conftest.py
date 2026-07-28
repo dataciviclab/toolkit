@@ -91,7 +91,7 @@ def project_example(tmp_path: Path) -> Path:
     """
     import shutil
 
-    src = Path("project-example")
+    src = Path(__file__).resolve().parent.parent / "project-example"
     dst = tmp_path / "project-example"
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     return dst
@@ -197,7 +197,8 @@ def mcp_project_example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tupl
     """
     import shutil
 
-    src = Path("project-example")
+    # Path assoluto rispetto a questo file (funziona da qualsiasi CWD)
+    src = Path(__file__).resolve().parent.parent / "project-example"
     dst = tmp_path / "project-example"
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     monkeypatch.setenv("DATACIVICLAB_WORKSPACE", str(tmp_path))

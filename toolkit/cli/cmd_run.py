@@ -8,6 +8,7 @@ import typer
 
 from toolkit.cli.common import dump_cfg_section, load_cfg_and_logger
 from toolkit.domain.common import iter_selected_years
+from toolkit.domain.source_utils import resolve_source as _resolve_source
 from toolkit.cli.sql_dry_run import validate_sql_dry_run
 from toolkit.clean.run import run_clean
 from toolkit.clean.validate import run_clean_validation
@@ -172,30 +173,6 @@ def _probe_fmt(content_type: str | None) -> str:
         return "?"
     base = content_type.split(";")[0].strip().lower()
     return _PROBE_FORMATS.get(base, base)
-
-
-def _resolve_source(src, year: int) -> dict[str, Any]:
-    """Normalizza una fonte raw.sources in dict con stype, name, args, url.
-
-    Condiviso tra _run_probe e preflight_ops.py per evitare duplicazione
-    del parsing di source config (dict vs oggetto).
-    """
-    if isinstance(src, dict):
-        stype = str(src.get("type", "http_file"))
-        args: Any = src.get("args", {})
-        name = str(src.get("name", stype))
-    else:
-        stype = str(getattr(src, "type", "http_file") or "http_file")
-        args = getattr(src, "args", None) or {}
-        name = str(getattr(src, "name", None) or stype)
-
-    raw_url = (args.get("url") if isinstance(args, dict) else getattr(args, "url", "")) or ""
-    return {
-        "stype": stype,
-        "args": args,
-        "name": name,
-        "url": str(raw_url).replace("{year}", str(year)),
-    }
 
 
 def _run_probe(cfg, year: int, logger, pool=None) -> None:

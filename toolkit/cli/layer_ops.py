@@ -14,14 +14,14 @@ vanno aggiunte nei wrapper MCP.
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Any
 
+from lab_connectors.duckdb import safe_connect
 from toolkit.core.config import load_config
 from toolkit.core.duckdb_shape import parquet_preview
-from toolkit.core.io import read_yaml
+from toolkit.core.io import read_json_or_none, read_yaml
 from toolkit.core.paths import RAW_PROFILE, RAW_SUGGESTED_READ
 from toolkit.cli.inspect._helpers import _payload_for_year
 
@@ -204,7 +204,7 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
     suggested_read_yml = profile_path / RAW_SUGGESTED_READ
 
     if raw_profile_json.exists():
-        profile = json.loads(raw_profile_json.read_text(encoding="utf-8"))
+        profile = read_json_or_none(raw_profile_json) or {}
     elif suggested_read_yml.exists():
         raw_yaml = read_yaml(suggested_read_yml)
         clean_section = raw_yaml.get("clean", {}) if isinstance(raw_yaml, dict) else {}
@@ -444,9 +444,7 @@ def layer_sql(
         cte = ", ".join(cte_defs)
         wrapped_sql = f"WITH {cte} {validated_sql}"
 
-        import duckdb
-
-        with duckdb.connect() as conn:
+        with safe_connect() as conn:
             result = conn.execute(wrapped_sql).fetchall()
             columns = [d[0] for d in conn.description]
 
@@ -512,11 +510,10 @@ def _layer_sql_raw(
     if not raw_file.exists():
         raise FileNotFoundError(f"Raw file non trovato: {raw_file}")
 
-    import duckdb
     from toolkit.core.sql_utils import sql_literal as _sq
 
     source = f"read_csv_auto('{_sq(str(raw_file))}')"
-    with duckdb.connect() as con:
+    with safe_connect() as con:
         con.execute(f"CREATE OR REPLACE VIEW data AS SELECT * FROM {source}")
         rows = con.execute(f"SELECT * FROM ({sql}) AS q LIMIT {limit + 1}").fetchall()
         # connection.description riflette le colonne dell'SQL eseguito,

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re as _re
 from pathlib import Path
 from typing import Any
@@ -199,7 +198,7 @@ def validate_promotion(
             summary={"raw_dir": raw_value, "clean_dir": clean_value},
         )
 
-    clean_metadata = json.loads(clean_metadata_path.read_text(encoding="utf-8"))
+    clean_metadata = read_json_or_none(clean_metadata_path) or {}
     input_files = _input_files_from_clean_metadata(raw_path, clean_metadata)
     missing_inputs = [path for path in input_files if not path.exists()]
     if missing_inputs:
@@ -599,7 +598,7 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     )
 
     report = write_validation_json(Path(out_dir) / CLEAN_VALIDATION, result)
-    metadata = json.loads((out_dir / METADATA).read_text(encoding="utf-8"))
+    metadata = read_json_or_none(out_dir / METADATA) or {}
     merge_layer_manifest(
         out_dir,
         metadata_path=METADATA,

@@ -351,14 +351,22 @@ def raw_preview(config_path: str, year: int | None = None, limit: int = 20) -> d
 # ---------------------------------------------------------------------------
 
 
-def _resolve_datasets(datasets: list[str], layer: str, year: int | None) -> dict[str, str]:
+def _resolve_datasets(
+    datasets: list[str],
+    layer: str,
+    year: int | None,
+    table: str | None = None,
+) -> dict[str, str]:
     """Risolve lista slug → dict {slug: parquet_url} via CatalogResolver.
 
     Converte URL ``s3://`` in ``https://storage.googleapis.com/``
     per evitare dipendenza dall'estensione httpfs di DuckDB.
 
-    TODO: centralizzare la conversione in lab_connectors.gcs.paths
-    (``s3_to_https_url``) quando possibile.
+    Args:
+        datasets: Lista slug.
+        layer: ``"clean"`` o ``"mart"``.
+        year: Anno filtro.
+        table: Nome tabella mart (es. ``"mart_top_sa"``). Match sul filename.
 
     Returns:
         Dict slug → url HTTPS del parquet.
@@ -370,7 +378,7 @@ def _resolve_datasets(datasets: list[str], layer: str, year: int | None) -> dict
     resolver = CatalogResolver()
     resolved: dict[str, str] = {}
     for slug in datasets:
-        files = resolver.resolve_slug(slug, layer=layer, year=year)
+        files = resolver.resolve_slug(slug, layer=layer, year=year, table=table)
         if not files:
             raise FileNotFoundError(f"Slug '{slug}' non trovato (layer={layer})")
         url = files[0]["url"]
@@ -388,6 +396,7 @@ def layer_sql(
     limit: int = 20,
     sql: str | None = None,
     mart_index: int = 0,
+    table: str | None = None,
 ) -> dict[str, Any]:
     """Esegue SQL arbitrario su uno o piu' dataset.
 
@@ -395,6 +404,7 @@ def layer_sql(
         config_path: Path a dataset.yml (pipeline mode).
             Mutuamente esclusivo con ``datasets``.
         datasets: Lista slug (catalog mode).
+        table: Nome tabella mart (es ``"mart_top_sa"``).
             Mutuamente esclusivo con ``config_path``.
         layer: ``"raw"``, ``"clean"`` (default) o ``"mart"``.
         year: Anno filtro.
@@ -421,7 +431,7 @@ def layer_sql(
 
     # ---- Catalog mode: risolvi slug → URL parquet ----
     if datasets:
-        resolved = _resolve_datasets(datasets, layer=layer, year=year)
+        resolved = _resolve_datasets(datasets, layer=layer, year=year, table=table)
         # Scope validation: solo i CTE dichiarati
         allowed = set(resolved.keys())
         validated_sql = _validate_sql_scope(sql, allowed)
@@ -542,6 +552,7 @@ def layer_query(
     limit: int = 20,
     sql: str | None = None,
     mart_index: int = 0,
+    table: str | None = None,
 ) -> dict[str, Any]:
     """Query unificata su layer RAW/CLEAN/MART.
 
@@ -593,6 +604,7 @@ def layer_query(
             year=year,
             limit=limit,
             sql=sql,
+            table=table,
         )
 
     if safe_mode == "profile" and safe_layer != "raw":

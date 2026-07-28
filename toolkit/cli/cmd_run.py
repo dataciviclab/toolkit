@@ -981,7 +981,7 @@ def run_full(
                 if not all_passed and fail_on_error_flag:
                     results["status"] = "failed"
 
-                from toolkit.cli.inspect.readiness_ops import (
+                from toolkit.domain.readiness import (
                     review_readiness as _review_readiness,
                 )
 

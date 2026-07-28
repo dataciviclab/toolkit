@@ -55,7 +55,7 @@ def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
 
     Thin wrapper MCP: delega a ``toolkit.cli.inspect.readiness_ops.run_state``.
     """
-    from toolkit.cli.inspect.readiness_ops import run_state as _cli_run_state
+    from toolkit.domain.readiness import run_state as _cli_run_state
 
     try:
         return _cli_run_state(str(_safe_path(str(config_path))), year=year)
@@ -270,7 +270,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
 
     Thin wrapper MCP: delega a ``toolkit.cli.inspect.readiness_ops.summary``.
     """
-    from toolkit.cli.inspect.readiness_ops import summary as _cli_summary
+    from toolkit.domain.readiness import summary as _cli_summary
 
     try:
         return _cli_summary(str(_safe_path(str(config_path))), year=year)
@@ -283,7 +283,7 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
 
     Thin wrapper MCP: delega a ``toolkit.cli.inspect.readiness_ops.review_readiness``.
     """
-    from toolkit.cli.inspect.readiness_ops import review_readiness as _cli_review_readiness
+    from toolkit.domain.readiness import review_readiness as _cli_review_readiness
 
     try:
         return _cli_review_readiness(str(_safe_path(str(config_path))), year=year)

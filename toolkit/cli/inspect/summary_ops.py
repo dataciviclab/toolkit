@@ -17,7 +17,7 @@ from toolkit.core.config import load_config
 from toolkit.core.io import read_json_or_none
 from toolkit.core.paths import METADATA, RAW_PROFILE_DIR, RAW_SUGGESTED_READ, layer_dataset_dir
 from toolkit.core.run_records import get_run_dir, read_run_record
-from toolkit.cli.inspect.readiness_ops import summary as _summary
+from toolkit.domain.readiness import summary as _summary
 
 
 def _print_raw_hints(hints: dict[str, Any]) -> None:

@@ -1,0 +1,227 @@
+"""Helper di dominio per inspect — schema, validazione, coerenza.
+
+Estratto da ``toolkit.cli.inspect._helpers`` per eliminare la dipendenza
+``domain → cli/``. Funzioni di pura logica di dominio.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from toolkit.core.duckdb_shape import parquet_preview, parquet_row_count, parquet_schema
+from toolkit.core.io import read_json_or_none
+from toolkit.core.metadata import read_layer_metadata
+from toolkit.core.paths import RAW_PROFILE, RAW_PROFILE_DIR, layer_year_dir
+from toolkit.profile.raw import sniff_source_file
+
+
+def _raw_primary_file(raw_dir: Path, metadata: dict[str, Any]) -> Path | None:
+    primary_output_file = metadata.get("primary_output_file")
+    if isinstance(primary_output_file, str):
+        candidate = raw_dir / primary_output_file
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
+    root = Path(cfg.root)
+    raw_dir = layer_year_dir(root, "raw", cfg.dataset, year)
+    raw_meta = read_layer_metadata(raw_dir)
+    primary_file = _raw_primary_file(raw_dir, raw_meta)
+
+    profile_hints = raw_meta.get("profile_hints") or {}
+    profile_source = "metadata" if profile_hints else None
+    sniff_error: str | None = None
+
+    if not profile_hints and primary_file is not None:
+        try:
+            profile_hints = sniff_source_file(primary_file)
+            profile_source = "sniff"
+        except Exception as exc:
+            sniff_error = f"{type(exc).__name__}: {exc}"
+
+    columns_preview = list(profile_hints.get("columns_preview") or [])
+    if not columns_preview and profile_hints.get("is_binary_file"):
+        raw_profile_path = raw_dir / RAW_PROFILE_DIR / RAW_PROFILE
+        if raw_profile_path.exists():
+            raw_profile_data = read_json_or_none(raw_profile_path)
+            if raw_profile_data:
+                columns_preview = (
+                    raw_profile_data.get("columns_norm")
+                    or raw_profile_data.get("columns_raw")
+                    or []
+                )
+
+    warnings = list(profile_hints.get("warnings") or [])
+    if sniff_error is not None:
+        warnings.append(f"profile_hint_fallback_failed: {sniff_error}")
+
+    return {
+        "year": year,
+        "raw_dir": str(raw_dir),
+        "raw_exists": raw_dir.exists(),
+        "primary_output_file": raw_meta.get("primary_output_file"),
+        "file_used": profile_hints.get("file_used"),
+        "profile_source": profile_source,
+        "is_binary_file": profile_hints.get("is_binary_file"),
+        "encoding": profile_hints.get("encoding_suggested"),
+        "delim": profile_hints.get("delim_suggested"),
+        "decimal": profile_hints.get("decimal_suggested"),
+        "skip": profile_hints.get("skip_suggested"),
+        "header_line": profile_hints.get("header_line"),
+        "columns_count": len(columns_preview),
+        "columns_preview": columns_preview,
+        "warnings": warnings,
+    }
+
+
+def _compare_schema_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    comparisons: list[dict[str, Any]] = []
+    for previous, current in zip(entries, entries[1:]):
+        previous_columns = set(previous.get("columns_preview") or [])
+        current_columns = set(current.get("columns_preview") or [])
+        comparisons.append(
+            {
+                "from_year": previous["year"],
+                "to_year": current["year"],
+                "from_columns_count": previous.get("columns_count") or 0,
+                "to_columns_count": current.get("columns_count") or 0,
+                "added_columns": sorted(current_columns - previous_columns),
+                "removed_columns": sorted(previous_columns - current_columns),
+                "changed": previous_columns != current_columns,
+            }
+        )
+    return comparisons
+
+
+def _schema_from_parquet(parquet_path: Path) -> dict[str, Any]:
+    if not parquet_path.exists():
+        raise FileNotFoundError(f"Parquet non trovato: {parquet_path}")
+    cols = parquet_schema(parquet_path)
+    if not cols:
+        raise RuntimeError(f"Lettura schema parquet fallita per {parquet_path}")
+    return {"path": str(parquet_path), "column_count": len(cols), "columns": cols}
+
+
+def _read_parquet_row_count(parquet_path: Path | None) -> int | None:
+    if parquet_path is None:
+        return None
+    return parquet_row_count(parquet_path)
+
+
+def _read_parquet_preview(parquet_path: Path, limit: int = 10) -> dict[str, Any]:
+    if not parquet_path.exists():
+        raise FileNotFoundError(f"Parquet non trovato: {parquet_path}")
+    result = parquet_preview(parquet_path, limit=limit)
+    if not result["columns"]:
+        raise RuntimeError(f"Lettura schema parquet fallita per {parquet_path}")
+    return result
+
+
+def _exists(path: str | None) -> bool:
+    """Return True if path is a real file/directory."""
+    if not path:
+        return False
+    return Path(path).exists()
+
+
+def _read_validation_content(path: str | None) -> dict[str, Any] | None:
+    """Read a validation JSON file and return its content, or None if missing."""
+    if not path or not _exists(path):
+        return None
+    return read_json_or_none(Path(path))
+
+
+def _check_run_record_coherence(
+    run_record: dict[str, Any] | None,
+    layers: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Verifica che i layer marcati SUCCESS nel run record abbiano output reali."""
+    hints: list[dict[str, str]] = []
+    if not run_record:
+        return hints
+
+    layers_map = run_record.get("layers") or {}
+    for layer_name, layer_detail in layers_map.items():
+        layer_status = (
+            layer_detail.get("status") if isinstance(layer_detail, dict) else layer_detail
+        )
+        if layer_status != "SUCCESS":
+            continue
+
+        layer_info = layers.get(layer_name, {})
+
+        if layer_name == "clean" and not layer_info.get("output_exists"):
+            hints.append(
+                {
+                    "code": "run_says_clean_success_but_output_missing",
+                    "severity": "blocker",
+                    "message": "run record dice clean SUCCESS ma output file manca",
+                }
+            )
+        elif layer_name == "mart":
+            out_count = layer_info.get("output_count", 0) or 0
+            exists_count = layer_info.get("output_exists_count", 0) or 0
+            if exists_count == 0 and out_count > 0:
+                hints.append(
+                    {
+                        "code": "run_says_mart_success_but_outputs_missing",
+                        "severity": "blocker",
+                        "message": "run record dice mart SUCCESS ma nessun output file presente",
+                    }
+                )
+
+    return hints
+
+
+def _validation_summary_for_layer(
+    layer_dir: Path, validation_filename: str
+) -> dict[str, Any] | None:
+    """Extract summary from a layer's validation JSON."""
+    validation_path = layer_dir / validation_filename
+    content = _read_validation_content(str(validation_path))
+    if not content:
+        return None
+
+    result = {
+        "ok": content.get("ok"),
+        "quality_score": content.get("quality_score"),
+        "quality_verdict": content.get("quality_verdict"),
+        "errors_count": len(content.get("errors", [])),
+        "warnings_count": len(content.get("warnings", [])),
+        "row_count": None,
+        "col_count": None,
+    }
+
+    summary = content.get("summary", {})
+    stats = summary.get("stats", {})
+    result["row_count"] = stats.get("clean_rows") or stats.get("row_count")
+    result["col_count"] = stats.get("clean_cols")
+
+    sections = content.get("sections", {})
+    if result["row_count"] is None and "stats" in sections:
+        result["row_count"] = sections["stats"].get("row_count")
+        result["col_count"] = sections["stats"].get("col_count")
+
+    if "transition" in sections:
+        t = sections["transition"]
+        if "clean_cols" in t:
+            result["col_count"] = t.get("clean_cols")
+        if "raw_row_count" in t:
+            result["raw_row_count"] = t.get("raw_row_count")
+        if "clean_row_count" in t:
+            result["clean_row_count"] = t.get("clean_row_count")
+
+    if result["row_count"] is None:
+        row_counts = summary.get("row_counts", {})
+        if row_counts:
+            first_key = next(iter(row_counts), None)
+            if first_key:
+                result["row_count"] = row_counts[first_key]
+
+    result["columns"] = summary.get("columns")
+    result["rules"] = summary.get("rules")
+
+    return result

@@ -15,7 +15,7 @@ from typing import Any
 from lab_connectors.mcp.errors import ErrorCode
 
 from toolkit.core.config import load_config
-from toolkit.core.paths import WORKSPACE_ROOT
+from toolkit.core.paths import WORKSPACE_ROOT as WORKSPACE_ROOT  # noqa: F401 — re-export per discovery.py
 from toolkit.mcp.errors import ToolkitClientError
 
 

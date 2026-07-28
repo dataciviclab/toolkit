@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("mcp", reason="richiede lab-connectors[mcp]")
+pytest.importorskip("mcp.server.fastmcp", reason="richiede mcp>=1.2 (lab-connectors[mcp])")
 from toolkit.mcp import server as mcp_server
 from toolkit.mcp.errors import ErrorCode, ToolkitClientError
 

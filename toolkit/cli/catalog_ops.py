@@ -226,7 +226,8 @@ def _scan_workspace_configs(
                 resolved_root = workspace / "out"
 
             out_root = resolved_root / "data"
-            dataset_name_for_path = name if name != slug else parent_dir.name
+            # Usa lo slug normalizzato per i path su disco
+            dataset_name_for_path = slug.replace("-", "_") if name == slug else name
             clean_dir = out_root / "clean" / dataset_name_for_path
             mart_dir = out_root / "mart" / dataset_name_for_path
             has_clean = clean_dir.exists() and any(clean_dir.iterdir())
@@ -235,7 +236,10 @@ def _scan_workspace_configs(
                 dataset_name_for_path, runs_root=resolved_root
             )
 
-            results[slug] = {
+            # Normalizza slug: workspace usa trattini, GCS usa underscore
+            # Il merge tra le due viste richiede slug consistenti
+            normalized_slug = slug.replace("-", "_")
+            results[normalized_slug] = {
                 "dataset_name": str(name),
                 "stage": stage_name,
                 "years": [int(y) for y in years] if isinstance(years, list) else [],
@@ -388,9 +392,17 @@ class CatalogResolver:
         # --- Source: workspace ---
         if source in ("workspace", "all"):
             configs = self._load_workspace_configs()
-            for slug, info in configs.items():
+            local_files = self._load_local_parquets()
+
+            # Parquet-only slugs (dataset senza dataset.yml, es. sub-dataset)
+            parquet_only_slugs = {lf["slug"] for lf in local_files} - set(configs)
+
+            # Process config entries
+            for slug in set(configs) | parquet_only_slugs:
                 if query and query.lower() not in slug.lower():
                     continue
+                info = configs.get(slug, {})
+
                 if status_filter is not None and info.get("last_run_status") != status_filter:
                     continue
 
@@ -398,11 +410,11 @@ class CatalogResolver:
                     datasets[slug] = self._empty_entry(slug, info)
                 entry = datasets[slug]
 
-                # Pipeline metadata (sempre dal workspace)
-                self._merge_pipeline_info(entry, info)
+                # Pipeline metadata (dal workspace config, se presente)
+                if info:
+                    self._merge_pipeline_info(entry, info)
 
-                # Clean parquet count (dal workspace)
-                local_files = self._load_local_parquets()
+                # Clean parquet count
                 for lf in local_files:
                     if lf["slug"] == slug and _matches_layer(lf, layer):
                         entry["years"].add(lf["year"])
@@ -410,12 +422,9 @@ class CatalogResolver:
                         entry["total_size_bytes"] += lf.get("size_bytes", 0)
                         entry["has_local"] = True
 
-        # Apply stage filter (solo workspace) — esclude slug senza stage se source≠workspace
+        # Apply stage filter (solo workspace): tieni anche parquet-only
         if source == "workspace":
-            datasets = {s: e for s, e in datasets.items() if e.get("stage")}
-        elif stage and stage != "all" and source != "gcs":
-            # Quando source=all, stage filtra solo se specificato
-            pass  # stage è già filtrato in _scan_workspace_configs
+            datasets = {s: e for s, e in datasets.items() if e.get("stage") or e.get("has_local")}
 
         # Finalizza entry
         result = []

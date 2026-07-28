@@ -38,6 +38,11 @@ from toolkit.mcp.aggregate_ops import (
     dataset_status,
     layer_query,
 )
+
+from toolkit.mcp.catalog_ops import (
+    mcp_dataset_overview,
+    mcp_find,
+)
 from toolkit.mcp.scout_ops import (
     mcp_ckan_package_show,
     mcp_html_extract_links,

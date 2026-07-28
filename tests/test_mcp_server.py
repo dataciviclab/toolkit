@@ -31,6 +31,8 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_sparql_query",
         "toolkit_preview_url",
         "toolkit_preflight",
+        "toolkit_find",
+        "toolkit_dataset_overview",
     }
 
 

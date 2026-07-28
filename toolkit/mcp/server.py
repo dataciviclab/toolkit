@@ -7,6 +7,10 @@ Tool aggregati:
 - toolkit_layer: schema/preview/profile/sql su RAW/CLEAN/MART in un tool
 - toolkit_status: paths + summary + readiness + run_stats + info in un tool
 
+Tool catalogo (nuovi, basati su GCS manifest):
+- toolkit_find: cerca dataset pubblicati su GCS per slug/layer
+- toolkit_dataset_overview: schema + conteggio + preview da slug
+
 Tool granulari (mantenuti per backward compat):
 - inspect_paths, inspect_schema, inspect_profile
 - schema_diff, list_runs, list_candidates
@@ -41,6 +45,11 @@ from .toolkit_client import (
 from .aggregate_ops import (
     dataset_status as dataset_status_impl,
     layer_query as layer_query_impl,
+)
+
+from .catalog_ops import (
+    mcp_dataset_overview as dataset_overview_impl,
+    mcp_find as find_impl,
 )
 
 mcp = create_mcp_server(
@@ -195,6 +204,45 @@ def toolkit_status(
         year=year or None,
         since=since,
         until=until,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Catalog tools (basati su GCS manifest)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description="Cerca dataset pubblicati su GCS per slug, layer (clean/mart) o testo. "
+    "Usa il gcs_manifest.json auto-generato. "
+    "Restituisce slug, layer, anni disponibili, numero file e size totale.",
+    structured_output=True,
+)
+def toolkit_find(
+    query: str = "",
+    layer: str | None = None,
+    limit: int = 15,
+) -> dict[str, Any]:
+    return guard_timed(find_impl, "toolkit_find", query=query, layer=layer, limit=limit)
+
+
+@mcp.tool(
+    description="Overview di un dataset su GCS: schema colonne (DESCRIBE DuckDB), "
+    "conteggio righe e preview dati. Usa il gcs_manifest.json per risolvere "
+    "lo slug al parquet GCS. Accetta slug (es. 'anac_bandi_gara') e anno opzionale.",
+    structured_output=True,
+)
+def toolkit_dataset_overview(
+    slug: str,
+    layer: str = "clean",
+    year: int | None = None,
+) -> dict[str, Any]:
+    return guard_timed(
+        dataset_overview_impl,
+        "toolkit_dataset_overview",
+        slug=slug,
+        layer=layer,
+        year=year,
     )
 
 

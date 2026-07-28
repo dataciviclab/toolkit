@@ -14,7 +14,7 @@ from typing import Any
 
 from lab_connectors.mcp.errors import ErrorCode
 
-from toolkit.cli.layer_ops import layer_query as _layer_query_core
+from toolkit.domain.layer import layer_query as _layer_query_core
 from toolkit.mcp.errors import ToolkitClientError
 
 

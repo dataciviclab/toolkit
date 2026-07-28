@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from toolkit.cli.inspect._helpers import _payload_for_year
+from toolkit.domain.path_resolver import payload_for_year as _payload_for_year
 from toolkit.mcp.types import InspectPathsResult
 from lab_connectors.mcp.errors import ErrorCode
 

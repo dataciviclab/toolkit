@@ -42,7 +42,7 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
 
     Thin wrapper MCP: delega a ``toolkit.cli.layer_ops.raw_profile``.
     """
-    from toolkit.cli.layer_ops import raw_profile as _cli_raw_profile
+    from toolkit.domain.layer import raw_profile as _cli_raw_profile
 
     try:
         return _cli_raw_profile(str(_safe_path(config_path)), year=year)
@@ -318,7 +318,7 @@ def clean_preview(
 
     Thin wrapper MCP: delega a ``toolkit.cli.layer_ops.clean_preview``.
     """
-    from toolkit.cli.layer_ops import clean_preview as _cli_clean_preview
+    from toolkit.domain.layer import clean_preview as _cli_clean_preview
 
     try:
         return _cli_clean_preview(
@@ -343,7 +343,7 @@ def raw_preview(
 
     Thin wrapper MCP: delega a ``toolkit.cli.layer_ops.raw_preview``.
     """
-    from toolkit.cli.layer_ops import raw_preview as _cli_raw_preview
+    from toolkit.domain.layer import raw_preview as _cli_raw_preview
 
     try:
         return _cli_raw_preview(str(_safe_path(config_path)), year=year, limit=limit)

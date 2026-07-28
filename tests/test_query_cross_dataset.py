@@ -41,12 +41,12 @@ class _FakeConn:
 
 def _mock_all(monkeypatch: MonkeyPatch) -> None:
     """Mocka duckdb.connect + _resolve_datasets."""
-    import toolkit.cli.layer_ops as lo
+    import toolkit.domain.layer as dl
 
     def fake_resolve(datasets: list[str], *a, **kw) -> dict[str, str]:
         return {s: f"/tmp/{s}.parquet" for s in datasets}
 
-    monkeypatch.setattr(lo, "_resolve_datasets", fake_resolve)
+    monkeypatch.setattr(dl, "_resolve_datasets", fake_resolve)
     monkeypatch.setattr(duckdb, "connect", lambda *a, **kw: _FakeConn())
 
 
@@ -125,7 +125,7 @@ class TestRawSql:
 
     def test_raw_sql_aggregate(self, monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
         """SQL aggregato su raw — colonne DESCRIBE allineate."""
-        from toolkit.cli.layer_ops import _layer_sql_raw
+        from toolkit.domain.layer import _layer_sql_raw
 
         # Crea un CSV raw finto
         raw_dir = tmp_path / "data" / "raw" / "test_ds" / "2024"
@@ -146,7 +146,7 @@ class TestRawSql:
 
         # Mocka path hints per _resolve_raw_dir
         monkeypatch.setattr(
-            "toolkit.cli.layer_ops._resolve_raw_dir",
+            "toolkit.domain.layer._resolve_raw_dir",
             lambda _cfg, _year: (
                 raw_dir,
                 {

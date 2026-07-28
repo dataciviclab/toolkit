@@ -175,8 +175,24 @@ def resolver_with_local(monkeypatch: pytest.MonkeyPatch) -> CatalogResolver:
     ]
 
     monkeypatch.setattr(
-        "toolkit.cli.catalog_ops._scan_workspace",
+        "toolkit.cli.catalog_ops._scan_workspace_parquets",
         lambda _workspace: fake_local,
+    )
+    # Mock anche scan configs per il dataset locale
+    monkeypatch.setattr(
+        "toolkit.cli.catalog_ops._scan_workspace_configs",
+        lambda _workspace, stage="all": {
+            "mio_dataset_locale": {
+                "dataset_name": "mio_dataset_locale",
+                "stage": "candidates",
+                "years": [2024],
+                "has_clean": True,
+                "has_mart": False,
+                "last_run_status": None,
+                "config_path": "/tmp/fake/dataset.yml",
+                "root": "/tmp/fake",
+            },
+        },
     )
     return resolver
 
@@ -362,6 +378,23 @@ class TestDescribeSlug:
 
 
 class TestLocalMerge:
+    def test_find_gcs_only(self, resolver: CatalogResolver) -> None:
+        """source='gcs' restituisce solo dataset GCS."""
+        res = resolver.list_datasets(source="gcs", limit=0)
+        slugs = {d["slug"] for d in res["datasets"]}
+        assert "anac_bandi_gara" in slugs
+        # locale mock non incluso
+        assert "mio_dataset_locale" not in slugs
+
+    def test_find_workspace_only(self, resolver_with_local: CatalogResolver) -> None:
+        """source='workspace' restituisce solo dataset workspace."""
+        # Usa query vuota per avere tutti
+        res = resolver_with_local.list_datasets(source="workspace", query="", limit=0)
+        slugs = {d["slug"] for d in res["datasets"]}
+        assert "mio_dataset_locale" in slugs
+        # GCS non incluso (source=workspace)
+        assert "anac_bandi_gara" not in slugs
+
     def test_list_includes_local(self, resolver_with_local: CatalogResolver) -> None:
         """list_datasets include dataset dal workspace locale."""
         res = resolver_with_local.list_datasets(query="mio_dataset_locale")
@@ -373,8 +406,8 @@ class TestLocalMerge:
         assert d["layer"] in ("clean",)
 
     def test_list_merges_local_and_gcs(self, resolver_with_local: CatalogResolver) -> None:
-        """list_datasets unisce slug locali e GCS."""
-        res = resolver_with_local.list_datasets(query="", limit=10)
+        """list_datasets unisce slug locali e GCS (source='all')."""
+        res = resolver_with_local.list_datasets(source="all", query="", limit=10)
         slugs = {d["slug"] for d in res["datasets"]}
         assert "anac_bandi_gara" in slugs  # GCS
         assert "mio_dataset_locale" in slugs  # locale
@@ -392,9 +425,9 @@ class TestLocalMerge:
 
         monkeypatch.setattr("toolkit.cli.catalog_ops.read_manifest", _fake_read_manifest)
 
-        # Mock scan locale: stesso slug del GCS (anac_bandi_gara)
+        # Mock scan parquet locale: stesso slug del GCS (anac_bandi_gara)
         monkeypatch.setattr(
-            "toolkit.cli.catalog_ops._scan_workspace",
+            "toolkit.cli.catalog_ops._scan_workspace_parquets",
             lambda _workspace: [
                 {
                     "url": "/tmp/fake/anac_bandi_gara_2024_clean.parquet",
@@ -407,6 +440,11 @@ class TestLocalMerge:
                     "_local": True,
                 },
             ],
+        )
+        # Mock scan configs vuota (non serve per resolve_slug)
+        monkeypatch.setattr(
+            "toolkit.cli.catalog_ops._scan_workspace_configs",
+            lambda _workspace, stage="all": {},
         )
 
         files = resolver.resolve_slug("anac_bandi_gara", year=2024)

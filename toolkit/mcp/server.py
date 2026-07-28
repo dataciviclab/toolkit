@@ -87,9 +87,9 @@ def toolkit_inspect_profile(config_path: str, year: int = 0) -> dict[str, Any]:
 
 
 @mcp.tool(
-    description="Elenca tutti i dataset disponibili in dataset-incubator (candidates e support_datasets). "
-    "Opzionalmente filtra per last_run_status. "
-    "Restituisce un dict con chiave 'candidates' contenente la lista.",
+    description="[DEPRECATO] Elenca dataset in sviluppo nel workspace. "
+    "Usa toolkit_find con source='workspace' per la stessa funzionalita' "
+    "con piu' filtri e integrazione GCS.",
     structured_output=True,
 )
 def toolkit_list_candidates(
@@ -97,10 +97,8 @@ def toolkit_list_candidates(
     status_filter: str | None = None,
 ) -> dict[str, Any]:
     result = guard_timed(list_candidates_impl, "toolkit_list_candidates", stage, status_filter)
-    # Se guard_timed restituisce un errore (dict con chiave "error"), passalo attraverso
     if isinstance(result, dict) and "error" in result:
         return result
-    # Altrimenti wrappa la lista in un dict per structured_output=True
     return {"candidates": result, "count": len(result) if isinstance(result, list) else 0}
 
 
@@ -213,17 +211,32 @@ def toolkit_status(
 
 
 @mcp.tool(
-    description="Cerca dataset pubblicati su GCS per slug, layer (clean/mart) o testo. "
-    "Usa il gcs_manifest.json auto-generato. "
-    "Restituisce slug, layer, anni disponibili, numero file e size totale.",
+    description="Cerca dataset per slug, source, layer (clean/mart) o testo. "
+    "source='gcs' = pubblicati (da gcs_manifest.json), "
+    "source='workspace' = in sviluppo (da dataset.yml + parquet locali), "
+    "source='all' (default) = unione. "
+    "Filtri aggiuntivi: stage (candidates/support), status_filter (SUCCESS/FAILED/DRY_RUN). "
+    "Restituisce slug, layer, anni, file count, size, run_status, flag source.",
     structured_output=True,
 )
 def toolkit_find(
     query: str = "",
     layer: str | None = None,
     limit: int = 15,
+    source: str = "all",
+    stage: str = "all",
+    status_filter: str | None = None,
 ) -> dict[str, Any]:
-    return guard_timed(find_impl, "toolkit_find", query=query, layer=layer, limit=limit)
+    return guard_timed(
+        find_impl,
+        "toolkit_find",
+        query=query,
+        layer=layer,
+        limit=limit,
+        source=source,
+        stage=stage,
+        status_filter=status_filter,
+    )
 
 
 @mcp.tool(

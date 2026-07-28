@@ -371,7 +371,7 @@ def _resolve_datasets(
     Returns:
         Dict slug → url HTTPS del parquet.
     """
-    from toolkit.cli.catalog_ops import CatalogResolver
+    from toolkit.domain.catalog import CatalogResolver
 
     _HTTPS_STORAGE = "https://storage.googleapis.com/"
 

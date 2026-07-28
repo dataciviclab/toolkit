@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from toolkit.cli.catalog_ops import CatalogResolver
+from toolkit.domain.catalog import CatalogResolver
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import WORKSPACE_ROOT  # noqa: F401 — ri-esportato per backward compat test
 

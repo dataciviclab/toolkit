@@ -10,7 +10,7 @@ from typing import Any
 
 from lab_connectors.mcp.errors import ErrorCode
 
-from toolkit.cli.catalog_ops import CatalogResolver
+from toolkit.domain.catalog import CatalogResolver
 from toolkit.mcp.errors import ToolkitClientError
 
 _resolver: CatalogResolver | None = None

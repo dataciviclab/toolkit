@@ -129,7 +129,7 @@ def run_mart_multi_year(
             total_rows += row_count
 
             out = multi_year_dir / f"{name}.parquet"
-            con.execute(f"COPY {name} TO '{out}' (FORMAT PARQUET);")
+            con.execute(f"COPY {name} TO '{out}' (FORMAT PARQUET, COMPRESSION ZSTD);")
 
             written.append(out)
             executed.append(
@@ -299,7 +299,7 @@ def _run_hierarchy_levels(
         total_rows += row_count
 
         out = mart_dir / f"{table_name}.parquet"
-        con.execute(f"COPY \"{table_name}\" TO '{out}' (FORMAT PARQUET);")
+        con.execute(f"COPY \"{table_name}\" TO '{out}' (FORMAT PARQUET, COMPRESSION ZSTD);")
         written.append(out)
 
         executed.append(
@@ -434,7 +434,7 @@ def run_mart(
             total_rows += row_count
 
             out = mart_dir / f"{name}.parquet"
-            con.execute(f"COPY {name} TO '{out}' (FORMAT PARQUET);")
+            con.execute(f"COPY {name} TO '{out}' (FORMAT PARQUET, COMPRESSION ZSTD);")
 
             written.append(out)
             table_profiles[name] = output_profile

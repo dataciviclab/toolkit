@@ -22,6 +22,7 @@ Usa ``lab_connectors.mcp`` per init standardizzato, error handling e logging.
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from lab_connectors.mcp import create_mcp_server, guard_timed
@@ -52,15 +53,60 @@ from .catalog_ops import (
     mcp_find as find_impl,
 )
 
-mcp = create_mcp_server(
-    name="toolkit",
-    instructions=(
-        "Server MCP locale, read-only, per ispezionare path risolti, "
-        "schemi, stato run e preview dati del toolkit. "
-        "Supporta slug dataset (es. 'terna-electricity-by-source') "
-        "al posto del path assoluto a dataset.yml."
-    ),
-)
+
+class _LazyMCP:
+    """Proxy lazy per FastMCP.
+
+    ``create_mcp_server()`` è chiamato solo al primo uso effettivo
+    (``run()`` o ``list_tools()``). L'import del modulo non richiede
+    il pacchetto ``mcp``, che è una dipendenza opzionale pesante.
+    """
+
+    def __init__(self) -> None:
+        self._instance: Any = None
+        self._lock = threading.Lock()
+        self._tool_registrations: list[tuple[dict[str, Any], Any]] = []
+
+    def _get(self) -> Any:
+        if self._instance is not None:
+            return self._instance
+        with self._lock:
+            if self._instance is not None:
+                return self._instance
+            self._instance = create_mcp_server(
+                name="toolkit",
+                instructions=(
+                    "Server MCP locale, read-only, per ispezionare path risolti, "
+                    "schemi, stato run e preview dati del toolkit. "
+                    "Supporta slug dataset (es. 'terna-electricity-by-source') "
+                    "al posto del path assoluto a dataset.yml."
+                ),
+            )
+            # Re-registra i tool accumulati durante la fase lazy
+            for kwargs, fn in self._tool_registrations:
+                self._instance.tool(**kwargs)(fn)
+            self._tool_registrations.clear()
+        return self._instance
+
+    def tool(self, **kwargs: Any) -> Any:
+        """Registra un tool — in modalità lazy accumula, poi applica."""
+        if self._instance is not None:
+            return self._instance.tool(**kwargs)
+
+        def decorator(fn: Any) -> Any:
+            self._tool_registrations.append((kwargs, fn))
+            return fn
+
+        return decorator
+
+    def run(self) -> None:
+        self._get().run()
+
+    def list_tools(self) -> Any:
+        return self._get().list_tools()
+
+
+mcp = _LazyMCP()
 
 
 @mcp.tool(
@@ -154,14 +200,15 @@ def toolkit_csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
 
 @mcp.tool(
     description="Query unificata su RAW/CLEAN/MART: schema, preview, profilo o SQL. "
-    "Sostituisce inspect_schema/inspect_profile/parquet_query "
-    "in un unico tool con parametro mode (schema|preview|profile|sql). "
-    "Esempi: mode=schema (colonne+tipi), mode=preview (anteprima righe), "
-    "mode=profile (diagnostica raw), mode=sql (SQL arbitrario su 'data').",
+    "Due modalita': config_path (pipeline locale) o datasets (catalogo GCS/workspace). "
+    "mode=sql funziona anche su layer=raw (legge CSV via DuckDB). "
+    "Catalog mode (datasets) supporta solo mode='sql'. "
+    "Esempi: mode=sql, datasets=['anac_bandi_gara', 'popolazione_istat']",
     structured_output=True,
 )
 def toolkit_layer(
-    config_path: str,
+    config_path: str | None = None,
+    datasets: list[str] | None = None,
     layer: str = "clean",
     mode: str = "schema",
     year: int = 0,
@@ -172,7 +219,8 @@ def toolkit_layer(
     return guard_timed(
         layer_query_impl,
         "toolkit_layer",
-        config_path,
+        config_path=config_path,
+        datasets=datasets,
         layer=layer,
         mode=mode,
         year=year or None,
@@ -240,15 +288,17 @@ def toolkit_find(
 
 
 @mcp.tool(
-    description="Overview di un dataset su GCS: schema colonne (DESCRIBE DuckDB), "
-    "conteggio righe e preview dati. Usa il gcs_manifest.json per risolvere "
-    "lo slug al parquet GCS. Accetta slug (es. 'anac_bandi_gara') e anno opzionale.",
+    description="Overview di un dataset: schema colonne (DESCRIBE DuckDB), "
+    "conteggio righe e preview dati. "
+    "Parametro source='gcs' (solo pubblicati), 'workspace' (solo sviluppo), "
+    "'all' (default) — entrambi, preferisce locale.",
     structured_output=True,
 )
 def toolkit_dataset_overview(
     slug: str,
     layer: str = "clean",
     year: int | None = None,
+    source: str = "all",
 ) -> dict[str, Any]:
     return guard_timed(
         dataset_overview_impl,
@@ -256,6 +306,7 @@ def toolkit_dataset_overview(
         slug=slug,
         layer=layer,
         year=year,
+        source=source,
     )
 
 

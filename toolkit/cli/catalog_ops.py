@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from lab_connectors.gcs.manifest import MANIFEST_URL, read_manifest
+from lab_connectors.gcs.paths import CLEAN_BUCKET, MART_BUCKET
 
 from toolkit.core.duckdb_shape import parquet_preview
 from toolkit.core.io import read_json_or_none, read_yaml
@@ -33,8 +34,6 @@ from toolkit.core.paths import WORKSPACE_ROOT
 # Costanti
 # ---------------------------------------------------------------------------
 
-CLEAN_BUCKET = "dataciviclab-clean"
-MART_BUCKET = "dataciviclab-mart"
 VALID_LAYERS = frozenset({"clean", "mart"})
 
 LOCAL_BUCKET = "local"  # bucket fittizio per file locali
@@ -524,8 +523,10 @@ class CatalogResolver:
                 continue
             if f["slug"] != slug:
                 continue
-            if year is not None and f["year"] != year:
+            if year is not None and f["year"] is not None and f["year"] != year:
                 continue
+            # year=None nel manifest = file con serie storica completa
+            # mantienilo (il filtro anno va nell'SQL, non nel path)
             matching.append(f)
 
         if not matching:
@@ -533,7 +534,7 @@ class CatalogResolver:
                 f"Slug '{slug}' non trovato (layer={layer or 'any'}, year={year or 'any'})"
             )
 
-        matching.sort(key=lambda f: (0 if _is_local(f) else 1, -(f["year"] or 0), f["path"]))
+        matching.sort(key=lambda f: (0 if _is_local(f) else 1, -(f["year"] or 9999), f["path"]))
         return matching
 
     def describe_slug(
@@ -541,8 +542,33 @@ class CatalogResolver:
         slug: str,
         layer: str = "clean",
         year: int | None = None,
+        source: str = "all",
     ) -> dict[str, Any]:
-        """Schema DuckDB + row count per slug."""
+        """Schema DuckDB + row count per slug.
+
+        Args:
+            slug: Slug del dataset.
+            layer: ``"clean"`` (default) o ``"mart"``.
+            year: Anno specifico o ``None`` (ultimo disponibile).
+            source: ``"gcs"``, ``"workspace"``, ``"all"`` (default).
+
+        Raises:
+            FileNotFoundError: se slug non trovato nella source richiesta.
+        """
+        # Source filter: verifica esistenza prima di risolvere
+        if source == "gcs":
+            manifest = self._load_gcs()
+            gcs_slugs = {f["slug"] for f in manifest.get("files", []) if _is_data_parquet(f)}
+            if slug not in gcs_slugs:
+                raise FileNotFoundError(f"Slug '{slug}' non trovato su GCS (source=gcs)")
+        elif source == "workspace":
+            configs = self._load_workspace_configs()
+            local_slugs = {lf["slug"] for lf in self._load_local_parquets()}
+            if slug not in configs and slug not in local_slugs:
+                raise FileNotFoundError(
+                    f"Slug '{slug}' non trovato nel workspace (source=workspace)"
+                )
+
         files = self.resolve_slug(slug, layer=layer, year=year)
         if not files:
             raise FileNotFoundError(f"Slug '{slug}' non trovato (year={year})")

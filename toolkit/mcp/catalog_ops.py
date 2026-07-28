@@ -80,6 +80,7 @@ def mcp_dataset_overview(
     slug: str,
     layer: str = "clean",
     year: int | None = None,
+    source: str = "all",
 ) -> dict[str, Any]:
     """Overview di un dataset: schema, row count e preview.
 
@@ -87,6 +88,7 @@ def mcp_dataset_overview(
         slug: Slug del dataset.
         layer: ``"clean"`` (default) o ``"mart"``.
         year: Anno specifico o ``None`` (ultimo disponibile).
+        source: ``"gcs"``, ``"workspace"``, ``"all"`` (default).
 
     Returns:
         Dict con slug, year, layer, columns, row_count, preview.
@@ -96,7 +98,7 @@ def mcp_dataset_overview(
     """
     try:
         resolver = _get_resolver()
-        return resolver.describe_slug(slug, layer=layer, year=year)
+        return resolver.describe_slug(slug, layer=layer, year=year, source=source)
     except FileNotFoundError as exc:
         raise ToolkitClientError(
             str(exc),

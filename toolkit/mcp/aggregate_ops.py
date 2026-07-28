@@ -42,7 +42,8 @@ def _get_impls():
 
 
 def layer_query(
-    config_path: str,
+    config_path: str | None = None,
+    datasets: list[str] | None = None,
     layer: str = "clean",
     mode: str = "schema",
     year: int | None = None,
@@ -50,42 +51,42 @@ def layer_query(
     sql: str | None = None,
     mart_index: int = 0,
 ) -> dict[str, Any]:
-    """Query unificata su un layer (RAW/CLEAN/MART).
+    """Query unificata su layer RAW/CLEAN/MART.
 
-    Delega al backend condiviso ``toolkit.cli.layer_ops`` — stessa
-    implementazione della CLI ``toolkit inspect config``.
+    Delega al backend condiviso ``toolkit.cli.layer_ops``.
+
+    Due modalita':
+    - Pipeline: ``config_path`` + layer → dataset locale
+    - Catalogo: ``datasets`` (lista slug) → dataset pubblicati su GCS/workspace
 
     Args:
-        config_path: Path a dataset.yml o slug del dataset.
+        config_path: Path a dataset.yml (pipeline mode).
+        datasets: Lista slug (catalog mode, mut. esclusivo con config_path).
         layer: ``"raw"``, ``"clean"`` (default) o ``"mart"``.
-        mode: Cosa restituire:
-            - ``"schema"`` (default): colonne + tipi.
-            - ``"preview"``: schema + prime N righe.
-            - ``"profile"``: profilo diagnostico RAW (solo layer=raw).
-            - ``"sql"``: SQL arbitrario sul parquet (solo clean/mart).
-        year: Anno del dataset. Se omesso usa l'ultimo anno configurato.
-        limit: Max righe in preview (default 20, solo mode=preview/sql).
-        sql: Query SQL. Il parquet e' disponibile come tabella ``data``.
-            (solo mode=sql).
-        mart_index: Indice della tabella mart (default 0, solo layer=mart).
-
-    Returns:
-        Dict con schema, preview o profilo a seconda del mode.
+        mode: ``"schema"``, ``"preview"``, ``"profile"``, ``"sql"``.
+        year: Anno filtro.
+        limit: Max righe.
+        sql: Query SQL per mode=sql.
+        mart_index: Indice tabella mart (solo pipeline mode).
 
     Raises:
-        ToolkitClientError: se layer/mode non validi, o file non trovato.
+        ToolkitClientError: se parametri invalidi o file non trovato.
     """
-    from pathlib import Path
-    from toolkit.mcp.path_safety import _safe_path
+    # Pipeline mode: risolvi config_path
+    if config_path and not datasets:
+        from pathlib import Path
+        from toolkit.mcp.path_safety import _safe_path
 
-    try:
-        resolved_path: Path = _safe_path(config_path)
-    except ToolkitClientError:
-        resolved_path = Path(config_path)
+        try:
+            resolved_path: Path = _safe_path(config_path)
+        except ToolkitClientError:
+            resolved_path = Path(config_path)
+        config_path = str(resolved_path)
 
     try:
         return _layer_query_core(
-            str(resolved_path),
+            config_path=config_path,
+            datasets=datasets,
             layer=layer,
             mode=mode,
             year=year,

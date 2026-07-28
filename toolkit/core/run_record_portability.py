@@ -9,11 +9,12 @@ Handles:
 
 from __future__ import annotations
 
-import re
 import json
+import re
 from pathlib import Path
 from typing import Any
 
+from toolkit.core.io import read_json_or_none
 from toolkit.core.paths import _to_pure_path, to_root_relative
 
 
@@ -82,7 +83,7 @@ def _migrate_whitelisted_path_fields(
 
 
 def _load_run_record(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = read_json_or_none(path) or {}
     run_dir = path.parent
     root = _root_from_run_dir(run_dir)
     warnings: list[str] = []

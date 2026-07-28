@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +11,7 @@ from toolkit.core.column_rules import (
     check_primary_key,
     check_ranges,
 )
+from toolkit.core.io import read_json_or_none
 from toolkit.core.config_models import MartTableRuleConfig, MartValidationSpec
 from toolkit.core.metadata import merge_layer_manifest
 from toolkit.core.paths import MART_VALIDATION, METADATA, layer_year_dir, to_root_relative
@@ -211,7 +211,7 @@ def run_mart_validation(cfg, year: int, logger, *, sample_mode: bool = False) ->
         declared_tables=declared_tables,
     )
 
-    metadata = json.loads((mart_dir / METADATA).read_text(encoding="utf-8"))
+    metadata = read_json_or_none(mart_dir / METADATA) or {}
     transition_report = check_transitions(
         metadata.get("transition_profiles") or [],
         spec.validate.transition,

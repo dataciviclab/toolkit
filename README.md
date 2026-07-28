@@ -98,14 +98,13 @@ Il toolkit risolve i path relativi, esegue SQL su DuckDB e produce output in `ro
 
 ## Integrazione AI (MCP)
 
-Il toolkit espone **18 tool** MPC per agenti AI e IDE:
+Il toolkit espone **12 tool** MCP per agenti AI e IDE:
 
 | Categoria | Tool |
 |---|---|
 | **Catalogo** | `toolkit_find`, `toolkit_dataset_overview` |
-| **Pipeline (aggregati)** | `toolkit_layer`, `toolkit_status` |
-| **Pipeline (ispezione)** | `toolkit_inspect_paths`, `toolkit_inspect_schema`, `toolkit_inspect_profile`, `toolkit_list_runs`, `toolkit_schema_diff`, `toolkit_csv_preview`, `toolkit_list_candidates` [DEPRECATO], `toolkit_preflight` |
-| **Scout** | `toolkit_probe_url`, `toolkit_probe_url_routed`, `toolkit_ckan_package_show`, `toolkit_html_extract_links`, `toolkit_sparql_query`, `toolkit_preview_url` |
+| **Pipeline** | `toolkit_layer`, `toolkit_status`, `toolkit_schema_diff`, `toolkit_preflight`, `toolkit_list_runs` |
+| **Scout** | `toolkit_probe_url` (con `routed=True`), `toolkit_ckan_package_show`, `toolkit_html_extract_links`, `toolkit_sparql_query`, `toolkit_preview_url` |
 
 Config IDE (`.mcp.json`):
 ```json

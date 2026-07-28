@@ -3,8 +3,9 @@
 Questi tool aggregati delegano al backend condiviso ``toolkit.cli.layer_ops``.
 CLI e MCP condividono la stessa implementazione.
 
-Backward compat: i tool granulari esistenti (toolkit_inspect_schema,
-toolkit_summary, ecc.) restano registrati.
+I tool granulari inspect_paths/schema/profile sono stati rimossi
+come tool MCP (coperti da toolkit_layer e toolkit_status).
+Le funzioni condivise in cli/ restano invariate.
 """
 
 from __future__ import annotations

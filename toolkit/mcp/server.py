@@ -22,6 +22,7 @@ Usa ``lab_connectors.mcp`` per init standardizzato, error handling e logging.
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from lab_connectors.mcp import create_mcp_server, guard_timed
@@ -52,15 +53,60 @@ from .catalog_ops import (
     mcp_find as find_impl,
 )
 
-mcp = create_mcp_server(
-    name="toolkit",
-    instructions=(
-        "Server MCP locale, read-only, per ispezionare path risolti, "
-        "schemi, stato run e preview dati del toolkit. "
-        "Supporta slug dataset (es. 'terna-electricity-by-source') "
-        "al posto del path assoluto a dataset.yml."
-    ),
-)
+
+class _LazyMCP:
+    """Proxy lazy per FastMCP.
+
+    ``create_mcp_server()`` è chiamato solo al primo uso effettivo
+    (``run()`` o ``list_tools()``). L'import del modulo non richiede
+    il pacchetto ``mcp``, che è una dipendenza opzionale pesante.
+    """
+
+    def __init__(self) -> None:
+        self._instance: Any = None
+        self._lock = threading.Lock()
+        self._tool_registrations: list[tuple[dict[str, Any], Any]] = []
+
+    def _get(self) -> Any:
+        if self._instance is not None:
+            return self._instance
+        with self._lock:
+            if self._instance is not None:
+                return self._instance
+            self._instance = create_mcp_server(
+                name="toolkit",
+                instructions=(
+                    "Server MCP locale, read-only, per ispezionare path risolti, "
+                    "schemi, stato run e preview dati del toolkit. "
+                    "Supporta slug dataset (es. 'terna-electricity-by-source') "
+                    "al posto del path assoluto a dataset.yml."
+                ),
+            )
+            # Re-registra i tool accumulati durante la fase lazy
+            for kwargs, fn in self._tool_registrations:
+                self._instance.tool(**kwargs)(fn)
+            self._tool_registrations.clear()
+        return self._instance
+
+    def tool(self, **kwargs: Any) -> Any:
+        """Registra un tool — in modalità lazy accumula, poi applica."""
+        if self._instance is not None:
+            return self._instance.tool(**kwargs)
+
+        def decorator(fn: Any) -> Any:
+            self._tool_registrations.append((kwargs, fn))
+            return fn
+
+        return decorator
+
+    def run(self) -> None:
+        self._get().run()
+
+    def list_tools(self) -> Any:
+        return self._get().list_tools()
+
+
+mcp = _LazyMCP()
 
 
 @mcp.tool(

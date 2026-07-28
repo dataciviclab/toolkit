@@ -12,7 +12,6 @@ Provides read-only diagnostics on config, layers, and run records:
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -20,16 +19,7 @@ from lab_connectors.mcp.errors import ErrorCode
 
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.path_safety import _load_cfg, _safe_path
-from toolkit.core.io import read_yaml
-from toolkit.core.paths import RAW_PROFILE, RAW_SUGGESTED_READ
 from toolkit.core.run_records import get_run_dir_dataset, list_runs as _list_runs_records
-
-
-def _inspect_paths(*args: Any, **kwargs: Any) -> Any:
-    """Lazy import to avoid circular dependency with cli_adapter."""
-    from toolkit.mcp.cli_adapter import inspect_paths as _impl
-
-    return _impl(*args, **kwargs)
 
 
 def show_schema(config_path: str, layer: str = "clean", year: int | None = None) -> dict[str, Any]:
@@ -50,82 +40,14 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
 def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
     """Restituisce il contenuto di _profile/raw_profile.json (o suggested_read.yml come fallback).
 
-    Il profilo contiene encoding, delimitatore, decimal suggestion, nomi colonna,
-    sample rows, missingness e mapping suggestions per il layer raw.
+    Thin wrapper MCP: delega a ``toolkit.cli.layer_ops.raw_profile``.
     """
-    config = _safe_path(config_path)
-    paths = _inspect_paths(str(config), year)
-    raw_dir = Path(paths["paths"]["raw"]["dir"])
-    profile_path = raw_dir / "_profile"
-    raw_profile_json = profile_path / RAW_PROFILE
-    suggested_read_yml = profile_path / RAW_SUGGESTED_READ
+    from toolkit.cli.layer_ops import raw_profile as _cli_raw_profile
 
-    if raw_profile_json.exists():
-        try:
-            profile = json.loads(raw_profile_json.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            raise ToolkitClientError(
-                f"raw_profile.json malformato in {raw_profile_json}: {exc}",
-                code=ErrorCode.ARTIFACT_UNREADABLE,
-            ) from exc
-    elif suggested_read_yml.exists():
-        # Fallback: suggested_read.yml contains the same hints in YAML form
-        try:
-            raw_yaml = read_yaml(suggested_read_yml)
-        except ValueError as exc:
-            raise ToolkitClientError(
-                f"suggested_read.yml non valido in {suggested_read_yml}: {exc}",
-                code=ErrorCode.ARTIFACT_UNREADABLE,
-            ) from exc
-        clean_section = raw_yaml.get("clean", {}) if isinstance(raw_yaml, dict) else {}
-        read_section = clean_section.get("read", {}) if isinstance(clean_section, dict) else {}
-        profile = {
-            "dataset": None,
-            "year": None,
-            "encoding_suggested": read_section.get("encoding"),
-            "delim_suggested": read_section.get("delim"),
-            "decimal_suggested": read_section.get("decimal"),
-            "skip_suggested": read_section.get("skip"),
-            "robust_read_suggested": None,
-            "columns_raw": None,
-            "columns_norm": None,
-            "missingness_top": [],
-            "mapping_suggestions": {},
-            "warnings": [],
-        }
-    else:
-        raise ToolkitClientError(
-            f"Profilo raw non trovato in {profile_path}. "
-            "Nessun file raw_profile.json ne suggested_read.yml.",
-            code=ErrorCode.ARTIFACT_NOT_FOUND,
-        )
-
-    # Ritorna un sottoinsieme leggibile: evita di restituire sample_rows intere
-    # se sono troppe (già incluse nel profilo per reference).
-    return {
-        "dataset": profile.get("dataset"),
-        "year": profile.get("year"),
-        "config_path": str(config_path),
-        "profile_path": str(profile_path),
-        "file_used": profile.get("file_used"),
-        "read_hints": {
-            "encoding": profile.get("encoding_suggested"),
-            "delimiter": profile.get("delim_suggested"),
-            "decimal": profile.get("decimal_suggested"),
-            "skip": profile.get("skip_suggested"),
-            "robust": profile.get("robust_read_suggested"),
-        },
-        "header_line": profile.get("header_line"),
-        "columns": {
-            "raw": profile.get("columns_raw") or [],
-            "normalized": profile.get("columns_norm") or [],
-            "count": len(profile.get("columns_raw") or []),
-        },
-        "missingness_top": profile.get("missingness_top", []),
-        "mapping_suggestions": profile.get("mapping_suggestions", {}),
-        "warnings": profile.get("warnings", []),
-        "profile_exists": True,
-    }
+    try:
+        return _cli_raw_profile(str(_safe_path(config_path)), year=year)
+    except FileNotFoundError as exc:
+        raise ToolkitClientError(str(exc), code=ErrorCode.ARTIFACT_NOT_FOUND) from exc
 
 
 def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
@@ -394,71 +316,22 @@ def clean_preview(
 ) -> dict[str, Any]:
     """Preview dati da un parquet clean o mart.
 
-    Args:
-        config_path: path a dataset.yml o slug del dataset.
-        layer: ``"clean"`` (default) o ``"mart"``.
-        mart_index: indice dell'output mart (default 0), usato solo se layer=mart.
-        year: anno del dataset. Per dataset multi-year, se omesso usa l'ultimo anno.
-        limit: numero massimo di righe in preview (default 10).
-
-    Returns:
-        Schema + preview rows del parquet. Stessa struttura di
-        ``_read_parquet_preview`` con campi aggiuntivi: dataset, year, layer.
+    Thin wrapper MCP: delega a ``toolkit.cli.layer_ops.clean_preview``.
     """
-    config = _safe_path(config_path)
-    paths = _inspect_paths(str(config), year)
+    from toolkit.cli.layer_ops import clean_preview as _cli_clean_preview
 
-    if layer == "clean":
-        parquet_path_str = paths["paths"]["clean"].get("output")
-        if not parquet_path_str:
-            raise ToolkitClientError(
-                "Nessun output clean risolto", code=ErrorCode.PARQUET_NOT_FOUND
-            )
-        parquet_path = Path(parquet_path_str)
-    elif layer == "mart":
-        outputs = paths["paths"]["mart"].get("outputs") or []
-        if not outputs:
-            raise ToolkitClientError("Nessun output mart risolto", code=ErrorCode.PARQUET_NOT_FOUND)
-        if mart_index < 0 or mart_index >= len(outputs):
-            code = ErrorCode.INVALID_PARAMS
-            raise ToolkitClientError(
-                f"Indice mart {mart_index} non valido: {len(outputs)} output disponibili (indice 0-{len(outputs) - 1})",
-                code=code,
-            )
-        parquet_path = Path(outputs[mart_index])
-    else:
-        raise ToolkitClientError(
-            "layer deve essere 'clean' o 'mart'", code=ErrorCode.INVALID_PARAMS
+    try:
+        return _cli_clean_preview(
+            str(_safe_path(config_path)),
+            layer=layer,
+            mart_index=mart_index,
+            year=year,
+            limit=limit,
         )
-
-    # Verifica esistenza output
-    if not parquet_path.exists():
-        raise ToolkitClientError(
-            f"Output {layer} non trovato: {parquet_path}",
-            code=ErrorCode.PARQUET_NOT_FOUND,
-        )
-
-    # Verifica che sia un parquet
-    if parquet_path.suffix not in (".parquet",):
-        raise ToolkitClientError(
-            f"Formato non supportato per preview: {parquet_path.suffix}. "
-            "clean_preview supporta solo file .parquet.",
-            code=ErrorCode.INVALID_PARAMS,
-        )
-
-    from toolkit.mcp._schema_utils import _read_parquet_preview
-
-    result = _read_parquet_preview(parquet_path, limit=limit)
-    result.update(
-        {
-            "dataset": paths.get("dataset"),
-            "year": paths.get("year"),
-            "layer": layer,
-            "config_path": str(config_path),
-            "mart_name": parquet_path.stem if layer == "mart" else None,
-        }
-    )
-    return result
+    except ValueError as exc:
+        raise ToolkitClientError(str(exc), code=ErrorCode.INVALID_PARAMS) from exc
+    except FileNotFoundError as exc:
+        raise ToolkitClientError(str(exc), code=ErrorCode.PARQUET_NOT_FOUND) from exc
 
 
 def raw_preview(
@@ -468,55 +341,14 @@ def raw_preview(
 ) -> dict[str, Any]:
     """Preview del raw file primario di un dataset.
 
-    Wrapper che risolve il raw file dal config_path e chiama ``csv_preview``
-    se il file è un CSV. Per file binari (XLSX) restituisce un messaggio informativo.
-
-    Args:
-        config_path: path a dataset.yml o slug del dataset.
-        year: anno del dataset. Per multi-year, se omesso usa l'ultimo anno.
-        limit: righe massime in preview (default 20).
-
-    Returns:
-        Dict con path, formato, e preview (se CSV) o messaggio (se binario).
+    Thin wrapper MCP: delega a ``toolkit.cli.layer_ops.raw_preview``.
     """
-    from toolkit.mcp._schema_utils import _exists
+    from toolkit.cli.layer_ops import raw_preview as _cli_raw_preview
 
-    config = _safe_path(config_path)
-    paths = _inspect_paths(str(config), year)
-    raw_dir = Path(paths["paths"]["raw"]["dir"])
-    primary_file = (paths.get("raw_hints") or {}).get("primary_output_file")
-    if not primary_file:
-        raise ToolkitClientError(
-            "Nessun primary_output_file nel manifest raw",
-            code=ErrorCode.ARTIFACT_NOT_FOUND,
-        )
-    raw_file = raw_dir / primary_file
-    if not _exists(str(raw_file)):
-        raise ToolkitClientError(
-            f"Raw file non trovato: {raw_file}",
-            code=ErrorCode.ARTIFACT_NOT_FOUND,
-        )
-
-    suffix = raw_file.suffix.lower()
-    if suffix in (".csv", ".tsv", ".txt"):
-        return csv_preview(str(raw_file), limit=limit)
-    elif suffix in (".xlsx", ".xls"):
-        return {
-            "path": str(raw_file),
-            "format": "xlsx",
-            "note": "File binario XLSX. Usa toolkit_inspect_schema(layer='raw') per lo schema delle colonne.",
-            "dataset": paths.get("dataset"),
-            "year": paths.get("year"),
-        }
-    else:
-        return {
-            "path": str(raw_file),
-            "format": suffix.lstrip("."),
-            "note": f"Formato '{suffix}' non supportato per preview raw. "
-            "Usa toolkit_inspect_schema(layer='raw') per lo schema.",
-            "dataset": paths.get("dataset"),
-            "year": paths.get("year"),
-        }
+    try:
+        return _cli_raw_preview(str(_safe_path(config_path)), year=year, limit=limit)
+    except FileNotFoundError as exc:
+        raise ToolkitClientError(str(exc), code=ErrorCode.ARTIFACT_NOT_FOUND) from exc
 
 
 def dataset_info(config_path: str) -> dict[str, Any]:

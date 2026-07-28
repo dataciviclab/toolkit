@@ -171,34 +171,23 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
 def _read_parquet_preview(parquet_path: Path, limit: int = 10) -> dict[str, Any]:
     """Legge schema + prime N righe da un parquet.
 
+    Delega a ``toolkit.core.duckdb_shape.parquet_preview`` — stessa
+    implementazione usata da inspect/_helpers.py.
+
     Returns:
         Dict con columns (lista di {name, type}), row_count, preview.
     """
+    from toolkit.core.duckdb_shape import parquet_preview
+
     if not parquet_path.exists():
         raise FileNotFoundError(f"Parquet non trovato: {parquet_path}")
     if parquet_path.suffix not in (".parquet",):
         raise ValueError(f"Formato non supportato: {parquet_path.suffix}. Solo .parquet.")
 
-    import duckdb
-
-    with duckdb.connect() as conn:
-        describe = conn.execute(f"DESCRIBE SELECT * FROM '{parquet_path}'").fetchall()
-        columns = [{"name": str(row[0]), "type": str(row[1])} for row in describe]
-
-        row_count_row = conn.execute(f"SELECT COUNT(*) FROM '{parquet_path}'").fetchone()
-        row_count = int(row_count_row[0]) if row_count_row else None
-
-        preview_rows = conn.execute(f"SELECT * FROM '{parquet_path}' LIMIT {int(limit)}").fetchall()
-        col_names = [c["name"] for c in columns]
-        preview = [dict(zip(col_names, row)) for row in preview_rows]
-
-    return {
-        "columns": columns,
-        "column_count": len(columns),
-        "row_count": row_count,
-        "preview": preview,
-        "truncated": row_count is not None and row_count > limit,
-    }
+    result = parquet_preview(parquet_path, limit=limit)
+    result.pop("path", None)
+    result.pop("sql", None)
+    return result
 
 
 def clean_preview(

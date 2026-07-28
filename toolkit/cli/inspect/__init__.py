@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import typer
 
-from toolkit.cli.inspect.config_ops import config
-from toolkit.cli.inspect.summary_ops import summary
-from toolkit.cli.inspect.runs_ops import runs
-from toolkit.cli.inspect.paths_ops import paths
-from toolkit.cli.inspect.profile_ops import profile
-
 
 def register(app: typer.Typer) -> None:
-    """Register all inspect subcommands on the parent app."""
+    """Register all inspect subcommands on the parent app.
+
+    Import lazy per evitare circolarita':
+    layer_ops → inspect._helpers → inspect.__init__ → config_ops → layer_ops
+    """
+    from toolkit.cli.inspect.config_ops import config
+    from toolkit.cli.inspect.summary_ops import summary
+    from toolkit.cli.inspect.runs_ops import runs
+    from toolkit.cli.inspect.paths_ops import paths
+    from toolkit.cli.inspect.profile_ops import profile
+
     inspect_app = typer.Typer(no_args_is_help=True, add_completion=False)
     inspect_app.command("config")(config)
     inspect_app.command("summary")(summary)

@@ -43,10 +43,10 @@ def _make_project_smoke(
     Returns:
         (config_path, slug, year).
     """
-    src = Path("project-example")
-    dst = tmp_path / "project-example"
     import shutil
 
+    src = Path(__file__).resolve().parent.parent / "project-example"
+    dst = tmp_path / "project-example"
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     config_path = dst / "dataset.yml"
 

@@ -57,7 +57,7 @@ pip install -e ../lab-connectors
 ```bash
 pytest -m core                    # contratto pubblico e workflow canonico
 pytest -m "core or advanced"      # tutto tranne compat legacy
-pytest                            # tutto (~55 test file)
+pytest                            # tutto (~85+ test file)
 ruff check .
 mypy toolkit/
 ```

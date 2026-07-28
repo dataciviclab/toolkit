@@ -404,8 +404,9 @@ def layer_sql(
         config_path: Path a dataset.yml (pipeline mode).
             Mutuamente esclusivo con ``datasets``.
         datasets: Lista slug (catalog mode).
-        table: Nome tabella mart (es ``"mart_top_sa"``).
             Mutuamente esclusivo con ``config_path``.
+        table: Nome tabella mart (es ``"mart_top_sa"``).
+            Solo per catalog mode, layer=mart.
         layer: ``"raw"``, ``"clean"`` (default) o ``"mart"``.
         year: Anno filtro.
         limit: Max righe.

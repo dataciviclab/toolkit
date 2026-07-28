@@ -1,47 +1,52 @@
 # Toolkit MCP
 
-Server MCP locale, read-only, per ispezionare rapidamente path risolti, schemi e stato run del `toolkit`.
+Server MCP locale, read-only, per ispezionare la pipeline e il catalogo
+dataset del DataCivicLab.
 
-## Tool esposti
+## Tool esposti (18)
 
-### Tool aggregati (raccomandati)
+### Catalogo (slug-based — GCS + workspace)
 
-- `toolkit_layer(config_path, layer="clean", mode="schema", year=0, limit=20, sql=None, mart_index=0)` — query unificata RAW/CLEAN/MART. Mode: `schema` (colonne+tipi), `preview` (anteprima righe), `profile` (diagnostica raw), `sql` (SQL arbitrario su vista `data`)
-- `toolkit_status(config_path, year=0)` — stato completo dataset: paths + summary + readiness + run_stats + info in una chiamata
+- `toolkit_find(query="", source="all", layer=None, limit=15, stage="all", status_filter=None)` —
+  cerca dataset per slug, source, layer. `source="gcs"` = pubblicati,
+  `source="workspace"` = in sviluppo (con run status), `source="all"` (default) = unione.
+  Restituisce `{datasets, total_count, truncated}`.
+- `toolkit_dataset_overview(slug, layer="clean", year=None, source="all")` —
+  schema colonne (DuckDB DESCRIBE) + row count + preview per slug.
+  `source="gcs"` | `"workspace"` | `"all"` (default).
+
+### Tool aggregati (raccomandati per pipeline)
+
+- `toolkit_layer(config_path=None, datasets=None, layer="clean", mode="schema", year=0, limit=20, sql=None, mart_index=0, table=None)` —
+  query unificata RAW/CLEAN/MART. Due modalita':
+  - `config_path` (pipeline): dataset locale da dataset.yml
+  - `datasets` (catalogo): lista slug, risolti via GCS manifest + workspace
+  - `mode`: `schema`, `preview`, `profile` (solo raw), `sql` (SQL su vista `data`)
+  - `layer=raw` con `mode=sql`: legge CSV via DuckDB `read_csv_auto`
+  - `layer=mart` e `table` (es. `"mart_top_sa"`): seleziona tabella mart specifica
+- `toolkit_status(config_path, year=0)` —
+  stato completo dataset: paths + summary + readiness + run_stats + info
 
 ### Tool granulari (ispezione pipeline)
 
-- `toolkit_inspect_paths(config_path, year=0)` — path contract + run metadata (run_file_count, years_seen, latest_run)
+- `toolkit_inspect_paths(config_path, year=0)` — path contract + run metadata
 - `toolkit_inspect_schema(config_path, layer="clean", year=0)`
-- `toolkit_inspect_profile(config_path, year=0)` — profilo raw (encoding, delim, colonne, missingness)
+- `toolkit_inspect_profile(config_path, year=0)` — profilo raw (encoding, delim, colonne)
 - `toolkit_list_runs(config_path, year=0, since=None, until=None, status=None, limit=20, cross_year=False)`
-- `toolkit_list_candidates(stage="all", status_filter=None)` — elenca dataset disponibili in workspace
-- `toolkit_schema_diff(config_path)` — confronto segnali schema raw cross-year (encoding, colonne, ecc.)
+- `toolkit_list_candidates(stage="all", status_filter=None)` — **DEPRECATO**: usa `toolkit_find(source="workspace")`
+- `toolkit_schema_diff(config_path)` — confronto segnali schema raw cross-year
 - `toolkit_csv_preview(csv_path, limit=20)` — schema + preview CSV via profiler pipeline
+- `toolkit_preflight(config_path, years=None)` — pre-flight check: valida config, verifica fonti, quality score PA
 
 ### Scout fonti
 
-- `toolkit_probe_url(url, timeout=15)` — probe HTTP leggero (HEAD + Range): reachability, status code, content-type
-- `toolkit_probe_url_routed(url, timeout=15)` — probe arricchito con routing automatico (rileva CKAN, SDMX, HTML, file diretto)
-- `toolkit_ckan_package_show(endpoint, package_id, timeout=30)` — fetch dataset CKAN via API `package_show`
-- `toolkit_html_extract_links(url, timeout=20)` — estrae link a file dati (CSV, JSON, XLSX, ZIP, XML) da pagina HTML
-- `toolkit_sparql_query(endpoint, query, timeout=60, max_rows=500)` — esegue query SPARQL SELECT su endpoint pubblico
-
-## Boundary
-
-Questo MCP resta nel repo `toolkit` perche' espone solo introspezione tecnica del contract del motore e servizi di base per scouting fonti:
-
-- path contract risolto
-- schema `raw`, `clean`, `mart`
-- stato minimo dei run
-- readiness check per review candidate
-- probe URL, inferenza topic, fetch CKAN/SPARQL/HTML
-
-Non espone:
-
-- `support_resolve`
-- `list_candidates`
-- logica di workspace state o catalogo
+- `toolkit_probe_url(url, timeout=15)` — probe HTTP leggero (HEAD + Range)
+- `toolkit_probe_url_routed(url, timeout=15)` — probe con routing automatico (CKAN, SDMX, HTML, file diretto)
+- `toolkit_ckan_package_show(endpoint, package_id, timeout=30)` — fetch dataset CKAN
+- `toolkit_html_extract_links(url, timeout=20)` — estrae link dati da HTML
+- `toolkit_sparql_query(endpoint, query, timeout=60, max_rows=500)` — SPARQL SELECT
+- `toolkit_preview_url(url, known_encoding=None, known_delim=None, known_decimal=None, known_skip=None)` —
+  preview remoto CSV/TSV (HEAD + Range + sniff + DuckDB)
 
 ## Config workspace
 
@@ -49,21 +54,20 @@ Esempio `.mcp.json`:
 
 ```json
 "toolkit": {
-  "command": "C:\\path\\to\\toolkit\\.venv\\Scripts\\python.exe",
-  "args": [
-    "-m",
-    "toolkit.mcp.server"
-  ]
+  "command": "/path/to/python",
+  "args": ["-m", "toolkit.mcp.server"]
 }
 ```
 
-Sostituire il path del `command` con il Python reale del clone locale che usera' il server.
+Sostituire il path del `command` con il Python reale del clone locale.
 
 ## Note tecniche
 
-- `toolkit_inspect_paths` usa `toolkit inspect paths --json`; arricchito con run_file_count e years_seen dalla CLI
-- `toolkit_inspect_schema`
-  - `raw`: usa `toolkit inspect config --diff --json`
-  - `clean` / `mart`: legge schema reale dei parquet risolti via `inspect paths`
-- `toolkit_schema_diff` confronta segnali schema raw (encoding, delim, colonne) tra tutti gli anni configurati per il dataset; riutilizza la stessa logica di `toolkit inspect config --diff` ma esposto come tool MCP
-- `toolkit_csv_preview` legge un CSV usando la stessa pipeline di `profile_raw` (`sniff_source_file` + `profile_with_read_cfg`); restituisce schema + prime N righe + mapping_suggestions — utile per ispezionare file raw senza runnare la pipeline
+- I tool catalogo usano `gcs_manifest.json` (auto-generato dalla CI,
+  pubblicato su GCS) come fonte di verità per i dataset pubblicati
+- `toolkit_find` unifica GCS + workspace locale (clean parquet + dataset.yml)
+- `list_candidates` è deprecato: l'unificazione è in `toolkit_find(source="workspace")`
+- `toolkit_layer(mode=sql, datasets=[...])` usa DuckDB con CTE multipli
+  e scope validation (blocca DDL, read_parquet, tabelle non consentite)
+- `toolkit_csv_preview` riusa la stessa pipeline di `profile_raw`
+- `toolkit_inspect_paths` usa `toolkit inspect paths --json` internamente

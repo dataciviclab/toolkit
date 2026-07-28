@@ -53,7 +53,7 @@ def mcp_find(query: str = "", layer: str | None = None, limit: int = 15) -> dict
     except (FileNotFoundError, TimeoutError) as exc:
         raise ToolkitClientError(
             f"Manifest GCS non raggiungibile: {exc}",
-            code=ErrorCode.EXTERNAL_SERVICE_ERROR,
+            code=ErrorCode.GCS_UNAVAILABLE,
         ) from exc
     except ValueError as exc:
         raise ToolkitClientError(

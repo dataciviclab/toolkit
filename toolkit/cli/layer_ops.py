@@ -507,10 +507,11 @@ def _layer_sql_raw(
     source = f"read_csv_auto('{_sq(str(raw_file))}')"
     with duckdb.connect() as con:
         con.execute(f"CREATE OR REPLACE VIEW data AS SELECT * FROM {source}")
-        describe = con.execute("DESCRIBE data").fetchall()
-        columns_info = [{"name": str(r[0]), "type": str(r[1])} for r in describe]
         rows = con.execute(f"SELECT * FROM ({sql}) AS q LIMIT {limit + 1}").fetchall()
-        col_names = [c["name"] for c in columns_info]
+        # connection.description riflette le colonne dell'SQL eseguito,
+        # non quelle raw — corretto anche per aggregazioni/alias
+        col_names = [d[0] for d in con.description]
+        columns_info = [{"name": str(d[0]), "type": str(d[1])} for d in con.description]
         preview = [dict(zip(col_names, row)) for row in rows[:limit]]
 
     return {

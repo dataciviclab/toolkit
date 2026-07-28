@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import duckdb
 import pytest
 from pytest import MonkeyPatch
@@ -116,3 +118,58 @@ class TestScopeValidation:
     def test_empty_sql(self) -> None:
         with pytest.raises(ValueError, match="richiede il parametro sql"):
             layer_query(datasets=["ds"], layer="clean", mode="sql", sql="")
+
+
+class TestRawSql:
+    """Test SQL su layer=raw (CSV). Richiede un dataset locale con raw CSV."""
+
+    def test_raw_sql_aggregate(self, monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+        """SQL aggregato su raw — colonne DESCRIBE allineate."""
+        from toolkit.cli.layer_ops import _layer_sql_raw
+
+        # Crea un CSV raw finto
+        raw_dir = tmp_path / "data" / "raw" / "test_ds" / "2024"
+        raw_dir.mkdir(parents=True)
+        csv_file = raw_dir / "data.csv"
+        csv_file.write_text("regione,valore\nLombardia,100\nLazio,50\nLombardia,30\n")
+
+        # Mocka le funzioni che servono a _resolve_raw_dir
+        fake_cfg = type(
+            "cfg",
+            (),
+            {
+                "dataset": "test_ds",
+                "root": str(tmp_path),
+                "years": [2024],
+            },
+        )()
+
+        # Mocka path hints per _resolve_raw_dir
+        monkeypatch.setattr(
+            "toolkit.cli.layer_ops._resolve_raw_dir",
+            lambda _cfg, _year: (
+                raw_dir,
+                {
+                    "raw_hints": {"primary_output_file": "data.csv"},
+                    "dataset": "test_ds",
+                    "year": 2024,
+                },
+            ),
+        )
+
+        result = _layer_sql_raw(
+            config_path="/fake/path.yml",
+            cfg=fake_cfg,
+            year=2024,
+            sql="SELECT regione, SUM(valore) AS tot FROM data GROUP BY regione ORDER BY tot DESC",
+            limit=10,
+        )
+
+        assert result["layer"] == "raw"
+        assert result["row_count"] == 2
+        for row in result["preview"]:
+            assert "regione" in row
+            assert "tot" in row
+        # Verifica primo risultato: Lombardia=130, Lazio=50
+        assert result["preview"][0]["tot"] == 130
+        assert result["preview"][1]["tot"] == 50

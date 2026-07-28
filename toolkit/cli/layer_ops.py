@@ -354,10 +354,18 @@ def raw_preview(config_path: str, year: int | None = None, limit: int = 20) -> d
 def _resolve_datasets(datasets: list[str], layer: str, year: int | None) -> dict[str, str]:
     """Risolve lista slug → dict {slug: parquet_url} via CatalogResolver.
 
+    Converte URL ``s3://`` in ``https://storage.googleapis.com/``
+    per evitare dipendenza dall'estensione httpfs di DuckDB.
+
+    TODO: centralizzare la conversione in lab_connectors.gcs.paths
+    (``s3_to_https_url``) quando possibile.
+
     Returns:
-        Dict slug → url del parquet.
+        Dict slug → url HTTPS del parquet.
     """
     from toolkit.cli.catalog_ops import CatalogResolver
+
+    _HTTPS_STORAGE = "https://storage.googleapis.com/"
 
     resolver = CatalogResolver()
     resolved: dict[str, str] = {}
@@ -365,8 +373,10 @@ def _resolve_datasets(datasets: list[str], layer: str, year: int | None) -> dict
         files = resolver.resolve_slug(slug, layer=layer, year=year)
         if not files:
             raise FileNotFoundError(f"Slug '{slug}' non trovato (layer={layer})")
-        # Prende il primo file (priorita' locale, poi ultimo anno)
-        resolved[slug] = files[0]["url"]
+        url = files[0]["url"]
+        if url.startswith("s3://"):
+            url = _HTTPS_STORAGE + url[5:]  # s3:// < 5 len
+        resolved[slug] = url
     return resolved
 
 

@@ -524,8 +524,10 @@ class CatalogResolver:
                 continue
             if f["slug"] != slug:
                 continue
-            if year is not None and f["year"] != year:
+            if year is not None and f["year"] is not None and f["year"] != year:
                 continue
+            # year=None nel manifest = file con serie storica completa
+            # mantienilo (il filtro anno va nell'SQL, non nel path)
             matching.append(f)
 
         if not matching:
@@ -533,7 +535,7 @@ class CatalogResolver:
                 f"Slug '{slug}' non trovato (layer={layer or 'any'}, year={year or 'any'})"
             )
 
-        matching.sort(key=lambda f: (0 if _is_local(f) else 1, -(f["year"] or 0), f["path"]))
+        matching.sort(key=lambda f: (0 if _is_local(f) else 1, -(f["year"] or 9999), f["path"]))
         return matching
 
     def describe_slug(

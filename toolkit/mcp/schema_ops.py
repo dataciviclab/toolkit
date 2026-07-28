@@ -427,7 +427,7 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
         delim_suggested, encoding_suggested, decimal_suggested, skip_suggested,
         robust_read_suggested
     """
-    from toolkit.cli.inspect.profile_ops import csv_preview as _csv_preview_cli
+    from toolkit.domain.profile import csv_preview as _csv_preview_cli
     from toolkit.mcp.path_safety import _safe_path
 
     path = _safe_path(csv_path)

@@ -204,7 +204,7 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
     suggested_read_yml = profile_path / RAW_SUGGESTED_READ
 
     if raw_profile_json.exists():
-        profile = read_json_or_none(raw_profile_json)
+        profile = read_json_or_none(raw_profile_json) or {}
     elif suggested_read_yml.exists():
         raw_yaml = read_yaml(suggested_read_yml)
         clean_section = raw_yaml.get("clean", {}) if isinstance(raw_yaml, dict) else {}

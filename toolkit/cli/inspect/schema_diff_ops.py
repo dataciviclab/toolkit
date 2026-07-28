@@ -11,7 +11,7 @@ from typing import Any
 
 import typer
 
-from toolkit.cli.common import iter_years
+from toolkit.domain.common import iter_years
 from toolkit.core.config import load_config
 
 from ._helpers import _compare_schema_entries, _raw_schema_payload

@@ -12,7 +12,7 @@ from typing import Any
 
 import typer
 
-from toolkit.cli.common import format_profile_preview, load_layer_profile_summaries
+from toolkit.domain.common import format_profile_preview, load_layer_profile_summaries
 from toolkit.core.config import load_config
 from toolkit.core.io import read_json_or_none
 from toolkit.core.paths import METADATA, RAW_PROFILE_DIR, RAW_SUGGESTED_READ, layer_dataset_dir

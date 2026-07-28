@@ -27,7 +27,7 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
 
     Thin wrapper MCP: delega a ``toolkit.cli.inspect.schema_ops.show_schema``.
     """
-    from toolkit.cli.inspect.schema_ops import show_schema as _cli_show_schema
+    from toolkit.domain.schema import show_schema as _cli_show_schema
 
     try:
         return _cli_show_schema(config_path, layer=layer, year=year)

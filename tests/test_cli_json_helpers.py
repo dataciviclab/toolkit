@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from toolkit.cli import common
 from toolkit.core.io import read_json_or_none
 
 pytestmark = pytest.mark.pure_unit
@@ -29,4 +28,4 @@ def test_common_read_json_returns_payload_on_valid_json(tmp_path: Path) -> None:
     path = tmp_path / "ok.json"
     path.write_text('{"k": 1}', encoding="utf-8")
 
-    assert common._read_json(path) == {"k": 1}
+    assert read_json_or_none(path) == {"k": 1}

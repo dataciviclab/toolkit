@@ -11,5 +11,5 @@ from toolkit.domain.layer import (  # noqa: F401  # re-export per backward compa
     layer_sql,
     raw_preview,
     raw_profile,
-    show_schema,
 )
+from toolkit.domain.schema import show_schema  # noqa: F401  # re-export

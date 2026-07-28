@@ -16,7 +16,8 @@ import typer
 
 from lab_connectors.duckdb import safe_connect
 
-from toolkit.cli.common import dump_cfg_section, iter_selected_years, load_cfg_and_logger
+from toolkit.cli.common import dump_cfg_section, load_cfg_and_logger
+from toolkit.domain.common import iter_selected_years
 from toolkit.core.csv_read import csv_read_option_strings, robust_preset
 from toolkit.core.sql_utils import sql_str
 from toolkit.core.paths import layer_year_dir

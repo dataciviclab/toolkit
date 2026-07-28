@@ -4,7 +4,8 @@ import json
 
 import typer
 
-from toolkit.cli.common import iter_selected_years, load_cfg_and_logger
+from toolkit.cli.common import load_cfg_and_logger
+from toolkit.domain.common import iter_selected_years
 from toolkit.clean.validate import run_clean_validation
 from toolkit.core.dataset_loader import validate_config
 from toolkit.mart.validate import run_mart_validation

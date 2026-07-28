@@ -178,13 +178,6 @@ def _strip_sql_comments_and_strings(sql: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def show_schema(config_path: str, layer: str = "clean", year: int | None = None) -> dict[str, Any]:
-    """Mostra lo schema (colonne + tipi) di raw, clean o mart."""
-    from toolkit.cli.inspect.schema_ops import show_schema as _cli_show_schema
-
-    return _cli_show_schema(config_path, layer=layer, year=year)
-
-
 # ---------------------------------------------------------------------------
 # Profile mode (raw only)
 # ---------------------------------------------------------------------------
@@ -611,7 +604,9 @@ def layer_query(
     # --- Pipeline mode ---
     assert config_path is not None  # garantito dal guard sopra
     if safe_mode == "schema":
-        return show_schema(config_path, layer=safe_layer, year=year)
+        from toolkit.domain.schema import show_schema as _show_schema
+
+        return _show_schema(config_path, layer=safe_layer, year=year)
     if safe_mode == "profile":
         return raw_profile(config_path, year=year)
     if safe_mode == "preview":

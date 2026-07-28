@@ -6,7 +6,7 @@ import json
 
 import typer
 
-from toolkit.cli.common import format_profile_preview, iter_years
+from toolkit.domain.common import format_profile_preview, iter_years
 from toolkit.core.config import load_config
 
 from ._helpers import _payload_for_year

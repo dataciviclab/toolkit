@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from toolkit.cli.common import load_layer_profile_summaries
+from toolkit.domain.common import load_layer_profile_summaries
 from toolkit.domain.inspect_utils import (  # noqa: F401  # re-export
     _check_run_record_coherence,
     _compare_schema_entries,

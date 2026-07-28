@@ -8,7 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from toolkit.cli.common import iter_selected_years, load_cfg_and_logger
+from toolkit.cli.common import load_cfg_and_logger
+from toolkit.domain.common import iter_selected_years
 
 
 def run_preflight(

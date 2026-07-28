@@ -6,7 +6,8 @@ from typing import Any
 
 import typer
 
-from toolkit.cli.common import dump_cfg_section, iter_selected_years, load_cfg_and_logger
+from toolkit.cli.common import dump_cfg_section, load_cfg_and_logger
+from toolkit.domain.common import iter_selected_years
 from toolkit.cli.sql_dry_run import validate_sql_dry_run
 from toolkit.clean.run import run_clean
 from toolkit.clean.validate import run_clean_validation

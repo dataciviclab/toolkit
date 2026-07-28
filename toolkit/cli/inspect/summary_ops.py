@@ -250,15 +250,14 @@ def summary(
     if multi_year_tables:
         my_dir = layer_dataset_dir(cfg.root, "mart", ds_name)
         my_meta = my_dir / METADATA
-        if my_meta.exists():
-            content = json.loads(my_meta.read_text(encoding="utf-8"))
-            my_layer = content.get("layer", "")
-            if my_layer == "mart_multi_year":
-                my_tables = content.get("tables") or []
-                typer.echo("")
-                typer.echo(f"  multi_year_mart: {len(my_tables)} table(s)")
-                for t in my_tables:
-                    typer.echo(f"    - {t.get('name', '?')} years={t.get('years', [])}")
+        content = read_json_or_none(my_meta) or {}
+        my_layer = content.get("layer", "")
+        if my_layer == "mart_multi_year":
+            my_tables = content.get("tables") or []
+            typer.echo("")
+            typer.echo(f"  multi_year_mart: {len(my_tables)} table(s)")
+            for t in my_tables:
+                typer.echo(f"    - {t.get('name', '?')} years={t.get('years', [])}")
 
     _print_layer_profiles(ds_name, yr, layers)
 

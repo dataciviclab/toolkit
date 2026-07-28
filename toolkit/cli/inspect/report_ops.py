@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from toolkit.core.io import read_json_or_none
+from toolkit.core.io import read_json_or_none, write_json_atomic
 from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import (
     CLEAN_VALIDATION,
@@ -406,9 +406,7 @@ def write_run_report(report: dict[str, Any], root: str | Path, dataset: str, yea
     report_dir = root_path / "data" / _REPORT_DIR / dataset
     report_dir.mkdir(parents=True, exist_ok=True)
     report_path = report_dir / f"{year}_{_RUN_REPORT_FILENAME}"
-    import json
-
-    report_path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+    write_json_atomic(report_path, report)
     return report_path
 
 

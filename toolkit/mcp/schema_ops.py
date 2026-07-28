@@ -27,7 +27,7 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
 
     Thin wrapper MCP: delega a ``toolkit.cli.inspect.schema_ops.show_schema``.
     """
-    from toolkit.cli.inspect.schema_ops import show_schema as _cli_show_schema
+    from toolkit.domain.schema import show_schema as _cli_show_schema
 
     try:
         return _cli_show_schema(config_path, layer=layer, year=year)
@@ -42,7 +42,7 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
 
     Thin wrapper MCP: delega a ``toolkit.cli.layer_ops.raw_profile``.
     """
-    from toolkit.cli.layer_ops import raw_profile as _cli_raw_profile
+    from toolkit.domain.layer import raw_profile as _cli_raw_profile
 
     try:
         return _cli_raw_profile(str(_safe_path(config_path)), year=year)
@@ -55,7 +55,7 @@ def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
 
     Thin wrapper MCP: delega a ``toolkit.cli.inspect.readiness_ops.run_state``.
     """
-    from toolkit.cli.inspect.readiness_ops import run_state as _cli_run_state
+    from toolkit.domain.readiness import run_state as _cli_run_state
 
     try:
         return _cli_run_state(str(_safe_path(str(config_path))), year=year)
@@ -270,7 +270,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
 
     Thin wrapper MCP: delega a ``toolkit.cli.inspect.readiness_ops.summary``.
     """
-    from toolkit.cli.inspect.readiness_ops import summary as _cli_summary
+    from toolkit.domain.readiness import summary as _cli_summary
 
     try:
         return _cli_summary(str(_safe_path(str(config_path))), year=year)
@@ -283,7 +283,7 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
 
     Thin wrapper MCP: delega a ``toolkit.cli.inspect.readiness_ops.review_readiness``.
     """
-    from toolkit.cli.inspect.readiness_ops import review_readiness as _cli_review_readiness
+    from toolkit.domain.readiness import review_readiness as _cli_review_readiness
 
     try:
         return _cli_review_readiness(str(_safe_path(str(config_path))), year=year)
@@ -296,7 +296,7 @@ def schema_diff(config_path: str) -> dict[str, Any]:
 
     Thin wrapper MCP: delega a ``toolkit.cli.inspect.schema_diff_ops.schema_diff_payload``.
     """
-    from toolkit.cli.inspect.schema_diff_ops import schema_diff_payload as _payload
+    from toolkit.domain.schema_diff import schema_diff_payload as _payload
 
     try:
         return _payload(config_path)
@@ -318,7 +318,7 @@ def clean_preview(
 
     Thin wrapper MCP: delega a ``toolkit.cli.layer_ops.clean_preview``.
     """
-    from toolkit.cli.layer_ops import clean_preview as _cli_clean_preview
+    from toolkit.domain.layer import clean_preview as _cli_clean_preview
 
     try:
         return _cli_clean_preview(
@@ -343,7 +343,7 @@ def raw_preview(
 
     Thin wrapper MCP: delega a ``toolkit.cli.layer_ops.raw_preview``.
     """
-    from toolkit.cli.layer_ops import raw_preview as _cli_raw_preview
+    from toolkit.domain.layer import raw_preview as _cli_raw_preview
 
     try:
         return _cli_raw_preview(str(_safe_path(config_path)), year=year, limit=limit)
@@ -427,7 +427,7 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
         delim_suggested, encoding_suggested, decimal_suggested, skip_suggested,
         robust_read_suggested
     """
-    from toolkit.cli.inspect.profile_ops import csv_preview as _csv_preview_cli
+    from toolkit.domain.profile import csv_preview as _csv_preview_cli
     from toolkit.mcp.path_safety import _safe_path
 
     path = _safe_path(csv_path)

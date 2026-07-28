@@ -143,8 +143,9 @@ ruff check .                      # lint
 ```
 toolkit/
   toolkit/            # package Python
-    cli/              # comandi CLI (typer)
-    core/             # engine condiviso
+    cli/              # comandi CLI (typer, re-export)
+    core/             # engine condiviso (infrastruttura)
+    domain/           # logica di dominio (orchestrazione)
     raw/ clean/ mart/ # layer pipeline
     plugins/          # plugin sorgente
     mcp/              # server MCP

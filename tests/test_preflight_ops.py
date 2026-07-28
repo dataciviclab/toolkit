@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from toolkit.cli.preflight_ops import run_preflight
+from toolkit.domain.preflight import run_preflight
 
 
 @pytest.fixture

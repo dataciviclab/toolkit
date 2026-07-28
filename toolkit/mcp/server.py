@@ -247,7 +247,7 @@ def toolkit_dataset_overview(
     structured_output=True,
 )
 def toolkit_preflight(config_path: str, years: str | None = None) -> dict[str, Any]:
-    from toolkit.cli.preflight_ops import run_preflight
+    from toolkit.domain.preflight import run_preflight
 
     return guard_timed(run_preflight, "toolkit_preflight", config_path, years_arg=years)
 

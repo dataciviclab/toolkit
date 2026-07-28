@@ -6,7 +6,9 @@ from typing import Any
 
 import typer
 
-from toolkit.cli.common import dump_cfg_section, iter_selected_years, load_cfg_and_logger
+from toolkit.cli.common import dump_cfg_section, load_cfg_and_logger
+from toolkit.domain.common import iter_selected_years
+from toolkit.domain.source_utils import resolve_source as _resolve_source
 from toolkit.cli.sql_dry_run import validate_sql_dry_run
 from toolkit.clean.run import run_clean
 from toolkit.clean.validate import run_clean_validation
@@ -64,7 +66,7 @@ def _write_blocked_report(
     support_datasets: list[dict[str, Any]],
 ) -> None:
     """Scrive un report minimale per un anno non eseguito (candidate bloccato)."""
-    from toolkit.cli.inspect.report_ops import write_run_report
+    from toolkit.domain.report import write_run_report
 
     report = {
         "dataset": dataset,
@@ -171,30 +173,6 @@ def _probe_fmt(content_type: str | None) -> str:
         return "?"
     base = content_type.split(";")[0].strip().lower()
     return _PROBE_FORMATS.get(base, base)
-
-
-def _resolve_source(src, year: int) -> dict[str, Any]:
-    """Normalizza una fonte raw.sources in dict con stype, name, args, url.
-
-    Condiviso tra _run_probe e preflight_ops.py per evitare duplicazione
-    del parsing di source config (dict vs oggetto).
-    """
-    if isinstance(src, dict):
-        stype = str(src.get("type", "http_file"))
-        args: Any = src.get("args", {})
-        name = str(src.get("name", stype))
-    else:
-        stype = str(getattr(src, "type", "http_file") or "http_file")
-        args = getattr(src, "args", None) or {}
-        name = str(getattr(src, "name", None) or stype)
-
-    raw_url = (args.get("url") if isinstance(args, dict) else getattr(args, "url", "")) or ""
-    return {
-        "stype": stype,
-        "args": args,
-        "name": name,
-        "url": str(raw_url).replace("{year}", str(year)),
-    }
 
 
 def _run_probe(cfg, year: int, logger, pool=None) -> None:
@@ -851,7 +829,7 @@ def run_full(
     # ── Pre-flight check ────────────────────────────────────────────────
     # Solo in esecuzione reale (dry-run non fa rete)
     if not dry_flag:
-        from toolkit.cli.preflight_ops import run_preflight as _run_preflight
+        from toolkit.domain.preflight import run_preflight as _run_preflight
 
         preflight = _run_preflight(config, years_arg=years_arg)
         results["preflight"] = {
@@ -981,7 +959,7 @@ def run_full(
                 if not all_passed and fail_on_error_flag:
                     results["status"] = "failed"
 
-                from toolkit.cli.inspect.readiness_ops import (
+                from toolkit.domain.readiness import (
                     review_readiness as _review_readiness,
                 )
 
@@ -1012,7 +990,7 @@ def run_full(
     # Eseguito sempre: anche con candidate bloccato, run fallito, o eccezione.
     try:
         if not dry_flag:
-            from toolkit.cli.inspect.report_ops import (
+            from toolkit.domain.report import (
                 build_run_report,
                 write_run_report,
                 write_dataset_readme,
@@ -1169,7 +1147,7 @@ def run_preflight_cmd(
 
     Non esegue la pipeline — solo diagnostica preventiva.
     """
-    from toolkit.cli.preflight_ops import run_preflight
+    from toolkit.domain.preflight import run_preflight
 
     result = run_preflight(config, years_arg=years)
 

@@ -1,4 +1,4 @@
-"""Catalog resolver condiviso CLI+MCP — fonte unica per dataset discovery.
+"""Catalog resolver — fonte unica per dataset discovery.
 
 Legge ``gcs_manifest.json`` (auto-generato dalla CI), scansiona il workspace
 locale e i dataset.yml per fornire una vista unificata di tutti i dataset
@@ -8,10 +8,6 @@ Supporta tre ``source``:
 - ``"gcs"``: dataset pubblicati su GCS (dal manifest)
 - ``"workspace"``: dataset in sviluppo (da dataset.yml + clean parquet locali)
 - ``"all"`` (default): unione di entrambi
-
-Usato da:
-- CLI (futuro comando ``toolkit catalog ...``)
-- MCP ``toolkit_find`` e ``toolkit_dataset_overview`` (via ``mcp/catalog_ops.py``)
 
 Le funzioni qui NON gestiscono errori MCP (ToolkitClientError) — quelle
 vanno aggiunte nei wrapper MCP.

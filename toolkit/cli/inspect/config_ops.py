@@ -10,7 +10,7 @@ import json
 
 import typer
 
-from toolkit.cli.layer_ops import layer_query
+from toolkit.domain.layer import layer_query
 from toolkit.cli.inspect.schema_diff_ops import schema_diff as _schema_diff, schema_diff_payload
 
 

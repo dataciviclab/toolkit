@@ -13,12 +13,8 @@ from typing import Any
 
 import pytest
 
-from toolkit.cli.catalog_ops import (
-    CatalogResolver,
-    CLEAN_BUCKET,
-    MART_BUCKET,
-    _parse_clean_filename,
-)
+from lab_connectors.gcs.paths import CLEAN_BUCKET, MART_BUCKET
+from toolkit.domain.catalog import CatalogResolver, _parse_clean_filename
 
 pytestmark = pytest.mark.contract
 
@@ -143,7 +139,7 @@ def resolver(monkeypatch: pytest.MonkeyPatch) -> CatalogResolver:
     def _fake_read_manifest(*args: Any, **kwargs: Any) -> dict[str, Any]:
         return _FAKE_MANIFEST
 
-    monkeypatch.setattr("toolkit.cli.catalog_ops.read_manifest", _fake_read_manifest)
+    monkeypatch.setattr("toolkit.domain.catalog.read_manifest", _fake_read_manifest)
     return resolver
 
 
@@ -158,7 +154,7 @@ def resolver_with_local(monkeypatch: pytest.MonkeyPatch) -> CatalogResolver:
     def _fake_read_manifest(*args: Any, **kwargs: Any) -> dict[str, Any]:
         return _FAKE_MANIFEST
 
-    monkeypatch.setattr("toolkit.cli.catalog_ops.read_manifest", _fake_read_manifest)
+    monkeypatch.setattr("toolkit.domain.catalog.read_manifest", _fake_read_manifest)
 
     # Mock della scan locale: restituisce un dataset locale aggiuntivo
     fake_local = [
@@ -175,12 +171,12 @@ def resolver_with_local(monkeypatch: pytest.MonkeyPatch) -> CatalogResolver:
     ]
 
     monkeypatch.setattr(
-        "toolkit.cli.catalog_ops._scan_workspace_parquets",
+        "toolkit.domain.catalog._scan_workspace_parquets",
         lambda _workspace: fake_local,
     )
     # Mock anche scan configs per il dataset locale
     monkeypatch.setattr(
-        "toolkit.cli.catalog_ops._scan_workspace_configs",
+        "toolkit.domain.catalog._scan_workspace_configs",
         lambda _workspace, stage="all": {
             "mio_dataset_locale": {
                 "dataset_name": "mio_dataset_locale",
@@ -350,7 +346,7 @@ class TestDescribeSlug:
         }
 
         monkeypatch.setattr(
-            "toolkit.cli.catalog_ops.parquet_preview", lambda path, limit=5: fake_preview
+            "toolkit.domain.catalog.parquet_preview", lambda path, limit=5: fake_preview
         )
 
         # Default layer="clean"
@@ -423,11 +419,11 @@ class TestLocalMerge:
         def _fake_read_manifest(*args: Any, **kwargs: Any) -> dict[str, Any]:
             return _FAKE_MANIFEST
 
-        monkeypatch.setattr("toolkit.cli.catalog_ops.read_manifest", _fake_read_manifest)
+        monkeypatch.setattr("toolkit.domain.catalog.read_manifest", _fake_read_manifest)
 
         # Mock scan parquet locale: stesso slug del GCS (anac_bandi_gara)
         monkeypatch.setattr(
-            "toolkit.cli.catalog_ops._scan_workspace_parquets",
+            "toolkit.domain.catalog._scan_workspace_parquets",
             lambda _workspace: [
                 {
                     "url": "/tmp/fake/anac_bandi_gara_2024_clean.parquet",
@@ -443,7 +439,7 @@ class TestLocalMerge:
         )
         # Mock scan configs vuota (non serve per resolve_slug)
         monkeypatch.setattr(
-            "toolkit.cli.catalog_ops._scan_workspace_configs",
+            "toolkit.domain.catalog._scan_workspace_configs",
             lambda _workspace, stage="all": {},
         )
 
@@ -466,7 +462,7 @@ class TestLocalMerge:
             "truncated": False,
         }
         monkeypatch.setattr(
-            "toolkit.cli.catalog_ops.parquet_preview", lambda path, limit=5: fake_preview
+            "toolkit.domain.catalog.parquet_preview", lambda path, limit=5: fake_preview
         )
 
         result = resolver_with_local.describe_slug("mio_dataset_locale")
@@ -502,7 +498,7 @@ class TestEdgeCases:
             calls.append(url or "default")
             return _FAKE_MANIFEST
 
-        monkeypatch.setattr("toolkit.cli.catalog_ops.read_manifest", tracking_read_manifest)
+        monkeypatch.setattr("toolkit.domain.catalog.read_manifest", tracking_read_manifest)
 
         r1.list_datasets(query="anac")
         r2.list_datasets(query="anac")
@@ -522,7 +518,7 @@ class TestEdgeCases:
             call_count += 1
             return _FAKE_MANIFEST
 
-        monkeypatch.setattr("toolkit.cli.catalog_ops.read_manifest", counting_manifest)
+        monkeypatch.setattr("toolkit.domain.catalog.read_manifest", counting_manifest)
 
         r = CatalogResolver(manifest_url="http://fake/manifest.json", include_local=False)
 

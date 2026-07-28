@@ -23,7 +23,7 @@ from toolkit.core.config import load_config
 from toolkit.core.duckdb_shape import parquet_preview
 from toolkit.core.io import read_json_or_none, read_yaml
 from toolkit.core.paths import RAW_PROFILE, RAW_SUGGESTED_READ
-from toolkit.cli.inspect._helpers import _payload_for_year
+from toolkit.domain.path_resolver import payload_for_year as _payload_for_year
 
 # ---------------------------------------------------------------------------
 # Costanti
@@ -178,13 +178,6 @@ def _strip_sql_comments_and_strings(sql: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def show_schema(config_path: str, layer: str = "clean", year: int | None = None) -> dict[str, Any]:
-    """Mostra lo schema (colonne + tipi) di raw, clean o mart."""
-    from toolkit.cli.inspect.schema_ops import show_schema as _cli_show_schema
-
-    return _cli_show_schema(config_path, layer=layer, year=year)
-
-
 # ---------------------------------------------------------------------------
 # Profile mode (raw only)
 # ---------------------------------------------------------------------------
@@ -192,7 +185,7 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
 
 def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
     """Legge il profilo raw (raw_profile.json o suggested_read.yml)."""
-    from toolkit.cli.inspect._helpers import _payload_for_year
+    from toolkit.domain.path_resolver import payload_for_year as _payload_for_year
 
     cfg = load_config(config_path)
     if year is None:
@@ -282,7 +275,7 @@ def clean_preview(
     limit: int = 10,
 ) -> dict[str, Any]:
     """Preview dati da un parquet clean o mart."""
-    from toolkit.cli.inspect._helpers import _payload_for_year
+    from toolkit.domain.path_resolver import payload_for_year as _payload_for_year
 
     cfg = load_config(config_path)
     if year is None:
@@ -371,7 +364,7 @@ def _resolve_datasets(
     Returns:
         Dict slug → url HTTPS del parquet.
     """
-    from toolkit.cli.catalog_ops import CatalogResolver
+    from toolkit.domain.catalog import CatalogResolver
 
     _HTTPS_STORAGE = "https://storage.googleapis.com/"
 
@@ -611,7 +604,9 @@ def layer_query(
     # --- Pipeline mode ---
     assert config_path is not None  # garantito dal guard sopra
     if safe_mode == "schema":
-        return show_schema(config_path, layer=safe_layer, year=year)
+        from toolkit.domain.schema import show_schema as _show_schema
+
+        return _show_schema(config_path, layer=safe_layer, year=year)
     if safe_mode == "profile":
         return raw_profile(config_path, year=year)
     if safe_mode == "preview":

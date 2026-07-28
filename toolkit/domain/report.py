@@ -2,8 +2,6 @@
 
 Costruisce un report unico a partire dagli artifact del run
 (run record, validazione, readiness, preflight) e lo persiste su disco.
-
-Implementazione condivisa — non dipende da CLI o MCP.
 """
 
 from __future__ import annotations

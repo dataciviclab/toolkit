@@ -11,13 +11,13 @@ from typing import Any
 
 from toolkit.core.io import read_json_or_none
 
-from toolkit.cli.inspect._helpers import (
+from toolkit.domain.inspect_utils import (
     _check_run_record_coherence,
     _exists,
-    _payload_for_year,
     _read_validation_content,
     _validation_summary_for_layer,
 )
+from toolkit.domain.path_resolver import payload_for_year as _payload_for_year
 from toolkit.core.config import load_config
 from toolkit.core.duckdb_shape import parquet_row_count
 from toolkit.core.paths import (

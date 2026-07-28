@@ -8,7 +8,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from toolkit.cli.common import iter_selected_years, load_cfg_and_logger
+from toolkit.core.config import load_config
+from toolkit.core.dataset_loader import validate_config
+from toolkit.domain.common import iter_selected_years
 
 
 def run_preflight(
@@ -54,7 +56,7 @@ def run_preflight(
                 "status": "passed" | "failed",
             }
     """
-    cfg, logger = load_cfg_and_logger(str(config))
+    cfg = load_config(str(config))
 
     results: dict[str, Any] = {
         "config": str(config),
@@ -67,8 +69,6 @@ def run_preflight(
     }
 
     # ── 1. Config check ────────────────────────────────────────────────
-    from toolkit.core.dataset_loader import validate_config
-
     config_check = validate_config(str(config))
     results["config_check"] = config_check
     if not config_check.get("ok", False):
@@ -81,7 +81,7 @@ def run_preflight(
     # ── 3. Per anno, per fonte ──────────────────────────────────────────
     # Riutilizza _resolve_source di cmd_run per normalizzare le fonti
     # (dict vs oggetto) — stesso parsing di _run_probe.
-    from toolkit.cli.cmd_run import _resolve_source as _norm
+    from toolkit.domain.source_utils import resolve_source as _norm
 
     # Cache URL → risultato probe. Se stesso URL per anni diversi,
     # riusa il risultato invece di rifare la chiamata HTTP.

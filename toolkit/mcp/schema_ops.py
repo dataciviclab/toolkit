@@ -296,7 +296,7 @@ def schema_diff(config_path: str) -> dict[str, Any]:
 
     Thin wrapper MCP: delega a ``toolkit.cli.inspect.schema_diff_ops.schema_diff_payload``.
     """
-    from toolkit.cli.inspect.schema_diff_ops import schema_diff_payload as _payload
+    from toolkit.domain.schema_diff import schema_diff_payload as _payload
 
     try:
         return _payload(config_path)

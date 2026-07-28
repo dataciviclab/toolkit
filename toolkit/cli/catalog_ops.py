@@ -201,9 +201,9 @@ def _scan_workspace_configs(
 
             parent_dir = dataset_yml.parent
             rel_path = parent_dir.relative_to(scan_dir)
-            slug = str(rel_path.as_posix())
+            dir_slug = str(rel_path.as_posix())
             if rel_path.parent == Path("."):
-                slug = parent_dir.name
+                dir_slug = parent_dir.name
 
             # Lettura YAML leggera (senza validazione piena)
             try:
@@ -212,6 +212,9 @@ def _scan_workspace_configs(
                 continue
             if not isinstance(data, dict):
                 continue
+
+            # Slug: dataset.yml > directory name — normalizzato a underscore
+            slug = (data.get("slug") or dir_slug).replace("-", "_")
 
             ds = data.get("dataset", {}) or {}
             name = ds.get("name", slug) if isinstance(ds, dict) else slug
@@ -226,8 +229,8 @@ def _scan_workspace_configs(
                 resolved_root = workspace / "out"
 
             out_root = resolved_root / "data"
-            # Usa lo slug normalizzato per i path su disco
-            dataset_name_for_path = slug.replace("-", "_") if name == slug else name
+            # Il nome del dataset per i path su disco
+            dataset_name_for_path = name if name != slug else dir_slug.replace("-", "_")
             clean_dir = out_root / "clean" / dataset_name_for_path
             mart_dir = out_root / "mart" / dataset_name_for_path
             has_clean = clean_dir.exists() and any(clean_dir.iterdir())
@@ -236,10 +239,7 @@ def _scan_workspace_configs(
                 dataset_name_for_path, runs_root=resolved_root
             )
 
-            # Normalizza slug: workspace usa trattini, GCS usa underscore
-            # Il merge tra le due viste richiede slug consistenti
-            normalized_slug = slug.replace("-", "_")
-            results[normalized_slug] = {
+            results[slug] = {
                 "dataset_name": str(name),
                 "stage": stage_name,
                 "years": [int(y) for y in years] if isinstance(years, list) else [],

@@ -229,8 +229,8 @@ def _scan_workspace_configs(
                 resolved_root = workspace / "out"
 
             out_root = resolved_root / "data"
-            # Il nome del dataset per i path su disco
-            dataset_name_for_path = name if name != slug else dir_slug.replace("-", "_")
+            # I path su disco seguono la convenzione slug (underscore)
+            dataset_name_for_path = slug
             clean_dir = out_root / "clean" / dataset_name_for_path
             mart_dir = out_root / "mart" / dataset_name_for_path
             has_clean = clean_dir.exists() and any(clean_dir.iterdir())
@@ -470,6 +470,10 @@ class CatalogResolver:
             val = info.get(key)
             if val is not None:
                 entry[key] = val
+        # Anni dal workspace config (lista → set per merge con GCS)
+        ws_years = info.get("years", [])
+        if ws_years:
+            entry["years"].update(ws_years)
 
     def _finalize_layer(self, entry: dict[str, Any], layer: str | None) -> None:
         """Calcola il layer effettivo da bucket GCS + flag workspace."""

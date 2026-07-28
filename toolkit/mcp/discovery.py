@@ -10,7 +10,8 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from toolkit.cli.catalog_ops import CatalogResolver
-from toolkit.mcp.path_safety import WORKSPACE_ROOT as WORKSPACE_ROOT  # noqa: F401 — re-export per test backward compat
+from toolkit.mcp.errors import ToolkitClientError
+from toolkit.mcp.path_safety import WORKSPACE_ROOT  # noqa: F401 — ri-esportato per backward compat test
 
 
 def list_candidates(
@@ -20,8 +21,15 @@ def list_candidates(
     """Elenca dataset nel workspace (deprecato: usa toolkit_find source='workspace').
 
     Delega a ``CatalogResolver.list_datasets(source='workspace')``.
+    Usa ``discovery.WORKSPACE_ROOT`` (monkeypatch-safe per test).
     """
-    resolver = CatalogResolver(include_local=True)
-    result = resolver.list_datasets(source="workspace", stage=stage, status_filter=status_filter)
-    # Torna solo la lista per backward compat
+    from lab_connectors.mcp.errors import ErrorCode
+
+    resolver = CatalogResolver(include_local=True, workspace=WORKSPACE_ROOT)
+    try:
+        result = resolver.list_datasets(
+            source="workspace", stage=stage, status_filter=status_filter
+        )
+    except ValueError as exc:
+        raise ToolkitClientError(str(exc), code=ErrorCode.INVALID_PARAMS) from exc
     return result["datasets"]

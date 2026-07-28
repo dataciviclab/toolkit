@@ -15,13 +15,10 @@ from typing import Any
 from lab_connectors.mcp.errors import ErrorCode
 
 from toolkit.core.config import load_config
+from toolkit.core.paths import WORKSPACE_ROOT as WORKSPACE_ROOT  # noqa: F401 — re-export per discovery.py
 from toolkit.mcp.errors import ToolkitClientError
 
 
-TOOLKIT_ROOT = Path(__file__).resolve().parents[2]
-WORKSPACE_ROOT = Path(
-    os.environ.get("DATACIVICLAB_WORKSPACE", str(TOOLKIT_ROOT.parent))
-).expanduser()
 TOOLKIT_PYTHON = Path(os.environ.get("DATACIVICLAB_TOOLKIT_PYTHON", sys.executable))
 
 

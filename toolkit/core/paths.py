@@ -6,6 +6,17 @@ import re
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 
 
+# ---------------------------------------------------------------------------
+# Workspace root — singola fonte di verità
+# ---------------------------------------------------------------------------
+
+_TOOLKIT_ROOT = Path(__file__).resolve().parents[2]
+WORKSPACE_ROOT = Path(
+    os.environ.get("DATACIVICLAB_WORKSPACE", str(_TOOLKIT_ROOT.parent))
+).expanduser()
+TOOLKIT_ROOT = _TOOLKIT_ROOT
+
+
 def _to_pure_path(path: str | os.PathLike[str]) -> PurePath:
     raw = os.fspath(path)
     if "\\" in raw or re.match(r"^[A-Za-z]:[\\/]", raw):

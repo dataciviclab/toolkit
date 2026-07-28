@@ -21,7 +21,6 @@ Python standard (ValueError, FileNotFoundError, RuntimeError).
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -29,6 +28,7 @@ from typing import Any
 from lab_connectors.gcs.manifest import MANIFEST_URL, read_manifest
 
 from toolkit.core.duckdb_shape import parquet_preview
+from toolkit.core.paths import WORKSPACE_ROOT
 
 # ---------------------------------------------------------------------------
 # Costanti
@@ -37,12 +37,6 @@ from toolkit.core.duckdb_shape import parquet_preview
 CLEAN_BUCKET = "dataciviclab-clean"
 MART_BUCKET = "dataciviclab-mart"
 VALID_LAYERS = frozenset({"clean", "mart"})
-
-# Ricaviamo il workspace root come fa path_safety.py
-_TOOLKIT_ROOT = Path(__file__).resolve().parents[2]
-WORKSPACE_ROOT = Path(
-    os.environ.get("DATACIVICLAB_WORKSPACE", str(_TOOLKIT_ROOT.parent))
-).expanduser()
 
 LOCAL_BUCKET = "local"  # bucket fittizio per file locali
 

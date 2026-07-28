@@ -27,14 +27,8 @@ class _FakeConn:
     def __init__(self) -> None:
         self.description = [("n", None, None, None, None, None, None)]
 
-    def execute(self, sql: str) -> _FakeResult:
-        class R:
-            description = [("n", None, None, None, None, None, None)]
-
-            def fetchall(self) -> list[tuple]:
-                return [(5,)]
-
-        return R()
+    def execute(self, sql: str) -> _FakeResult:  # type: ignore[return-value]
+        return _FakeResult()
 
     def __enter__(self) -> _FakeConn:
         return self

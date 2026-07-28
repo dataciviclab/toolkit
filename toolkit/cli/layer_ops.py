@@ -451,49 +451,15 @@ def layer_sql(
         }
 
     # ---- Pipeline mode: config_path ----
+    assert config_path is not None  # mypy: gia' verificato in layer_query
     cfg = load_config(config_path)
     if year is None:
         year = max(cfg.years) if cfg.years else 0
 
     if layer == "raw":
-        # RAW usa il CSV primario via DuckDB read_csv_auto
-        raw_dir, paths = _resolve_raw_dir(cfg, year)
-        primary_file = (paths.get("raw_hints") or {}).get("primary_output_file")
-        if not primary_file:
-            raise FileNotFoundError("Nessun primary_output_file nel manifest raw")
-        raw_file = raw_dir / primary_file
-        if not raw_file.exists():
-            raise FileNotFoundError(f"Raw file non trovato: {raw_file}")
+        return _layer_sql_raw(config_path, cfg, year, sql, limit)
 
-        import duckdb
-        from toolkit.core.sql_utils import sql_literal as _sq
-
-        source = f"read_csv_auto('{_sq(str(raw_file))}')"
-        wrapped_sql = f"SELECT * FROM ({sql}) AS q LIMIT {limit + 1}"
-
-        with duckdb.connect() as conn:
-            conn.execute(f"CREATE OR REPLACE VIEW data AS SELECT * FROM {source}")
-            describe = conn.execute("DESCRIBE data").fetchall()
-            columns_info = [{"name": str(r[0]), "type": str(r[1])} for r in describe]
-
-            result = conn.execute(f"SELECT * FROM ({sql}) AS q LIMIT {limit + 1}").fetchall()
-            col_names = [c["name"] for c in columns_info]
-            preview = [dict(zip(col_names, row)) for row in result[:limit]]
-
-        return {
-            "columns": columns_info,
-            "column_count": len(columns_info),
-            "row_count": len(result),
-            "preview": preview,
-            "truncated": len(result) > limit,
-            "dataset": cfg.dataset,
-            "year": year,
-            "layer": "raw",
-            "config_path": str(config_path),
-            "mode": "sql",
-        }
-
-    elif layer == "clean":
+    if layer == "clean":
         parquet_path = _resolve_clean_path(cfg, year)
     elif layer == "mart":
         parquet_path = _resolve_mart_path(cfg, year, mart_index)
@@ -506,8 +472,8 @@ def layer_sql(
             f"Esegui 'toolkit run all -c {config_path}' per generarlo."
         )
 
-    result = parquet_preview(parquet_path, limit=limit, sql=sql)
-    result.update(
+    preview = parquet_preview(parquet_path, limit=limit, sql=sql)
+    preview.update(
         {
             "dataset": cfg.dataset,
             "year": year,
@@ -516,7 +482,49 @@ def layer_sql(
             "mode": "sql",
         }
     )
-    return result
+    return preview
+
+
+def _layer_sql_raw(
+    config_path: str,
+    cfg: Any,
+    year: int,
+    sql: str,
+    limit: int,
+) -> dict[str, Any]:
+    """Esegue SQL su layer raw (CSV). Estratta per chiarezza tipi."""
+    raw_dir, paths = _resolve_raw_dir(cfg, year)
+    primary_file = (paths.get("raw_hints") or {}).get("primary_output_file")
+    if not primary_file:
+        raise FileNotFoundError("Nessun primary_output_file nel manifest raw")
+    raw_file = raw_dir / primary_file
+    if not raw_file.exists():
+        raise FileNotFoundError(f"Raw file non trovato: {raw_file}")
+
+    import duckdb
+    from toolkit.core.sql_utils import sql_literal as _sq
+
+    source = f"read_csv_auto('{_sq(str(raw_file))}')"
+    with duckdb.connect() as con:
+        con.execute(f"CREATE OR REPLACE VIEW data AS SELECT * FROM {source}")
+        describe = con.execute("DESCRIBE data").fetchall()
+        columns_info = [{"name": str(r[0]), "type": str(r[1])} for r in describe]
+        rows = con.execute(f"SELECT * FROM ({sql}) AS q LIMIT {limit + 1}").fetchall()
+        col_names = [c["name"] for c in columns_info]
+        preview = [dict(zip(col_names, row)) for row in rows[:limit]]
+
+    return {
+        "columns": columns_info,
+        "column_count": len(columns_info),
+        "row_count": len(rows),
+        "preview": preview,
+        "truncated": len(rows) > limit,
+        "dataset": cfg.dataset,
+        "year": year,
+        "layer": "raw",
+        "config_path": str(config_path),
+        "mode": "sql",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -590,6 +598,7 @@ def layer_query(
         raise ValueError(f"mode=profile e' valido solo per layer=raw (ricevuto: layer={layer})")
 
     # --- Pipeline mode ---
+    assert config_path is not None  # garantito dal guard sopra
     if safe_mode == "schema":
         return show_schema(config_path, layer=safe_layer, year=year)
     if safe_mode == "profile":

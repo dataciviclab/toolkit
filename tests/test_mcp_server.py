@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("mcp", reason="richiede lab-connectors[mcp]")
 from toolkit.mcp import server as mcp_server
 from toolkit.mcp.errors import ErrorCode, ToolkitClientError
 
@@ -12,10 +13,7 @@ pytestmark = pytest.mark.contract
 
 
 def test_mcp_server_registers_expected_tools() -> None:
-    pytest.importorskip("mcp", reason="richiede lab-connectors[mcp]")
-    from toolkit.mcp import server as _mcp_server
-
-    tools = asyncio.run(_mcp_server.mcp.list_tools())
+    tools = asyncio.run(mcp_server.mcp.list_tools())
     tool_names = {tool.name for tool in tools}
     assert tool_names == {
         "toolkit_inspect_paths",

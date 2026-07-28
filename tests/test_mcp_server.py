@@ -219,7 +219,7 @@ def test_toolkit_preflight_returns_report(monkeypatch: pytest.MonkeyPatch) -> No
         return {"config": str(config), "sources": [], "years": [2024], "status": "passed"}
 
     monkeypatch.setattr(
-        "toolkit.cli.preflight_ops.run_preflight",
+        "toolkit.domain.preflight.run_preflight",
         fake_preflight,
     )
 

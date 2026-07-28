@@ -505,8 +505,16 @@ class CatalogResolver:
         slug: str,
         layer: str | None = None,
         year: int | None = None,
+        table: str | None = None,
     ) -> list[dict[str, Any]]:
         """Risolve uno slug nei file parquet corrispondenti.
+
+        Args:
+            slug: Slug del dataset.
+            layer: ``"clean"``, ``"mart"`` o ``None`` (entrambi).
+            year: Anno specifico o ``None`` (tutti).
+            table: Nome tabella mart (solo layer=mart).
+                Es. ``"mart_top_sa"`` — match sul filename senza estensione.
 
         Cerca prima nel workspace locale, poi su GCS.
         """
@@ -525,14 +533,19 @@ class CatalogResolver:
                 continue
             if year is not None and f["year"] is not None and f["year"] != year:
                 continue
-            # year=None nel manifest = file con serie storica completa
-            # mantienilo (il filtro anno va nell'SQL, non nel path)
+            if table is not None:
+                # Match sul filename senza estensione
+                fname = f["path"].rsplit("/", 1)[-1]  # ultimo segmento
+                fstem = fname.rsplit(".", 1)[0] if "." in fname else fname
+                if fstem != table:
+                    continue
             matching.append(f)
 
         if not matching:
-            raise FileNotFoundError(
-                f"Slug '{slug}' non trovato (layer={layer or 'any'}, year={year or 'any'})"
-            )
+            parts = [f"layer={layer or 'any'}", f"year={year or 'any'}"]
+            if table:
+                parts.append(f"table={table}")
+            raise FileNotFoundError(f"Slug '{slug}' non trovato ({', '.join(parts)})")
 
         matching.sort(key=lambda f: (0 if _is_local(f) else 1, -(f["year"] or 9999), f["path"]))
         return matching

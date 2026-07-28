@@ -50,6 +50,7 @@ def layer_query(
     limit: int = 20,
     sql: str | None = None,
     mart_index: int = 0,
+    table: str | None = None,
 ) -> dict[str, Any]:
     """Query unificata su layer RAW/CLEAN/MART.
 
@@ -68,6 +69,7 @@ def layer_query(
         limit: Max righe.
         sql: Query SQL per mode=sql.
         mart_index: Indice tabella mart (solo pipeline mode).
+        table: Nome tabella mart (es ``"mart_top_sa"``).
 
     Raises:
         ToolkitClientError: se parametri invalidi o file non trovato.
@@ -93,6 +95,7 @@ def layer_query(
             limit=limit,
             sql=sql,
             mart_index=mart_index,
+            table=table,
         )
     except ValueError as exc:
         raise ToolkitClientError(str(exc), code=ErrorCode.INVALID_PARAMS) from exc

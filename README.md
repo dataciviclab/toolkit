@@ -98,13 +98,14 @@ Il toolkit risolve i path relativi, esegue SQL su DuckDB e produce output in `ro
 
 ## Integrazione AI (MCP)
 
-Il toolkit espone un server MCP per agenti AI e IDE:
+Il toolkit espone **18 tool** MPC per agenti AI e IDE:
 
 | Categoria | Tool |
 |---|---|
-| **Stato completo** | `toolkit_status` |
-| **Ispezione** | `toolkit_inspect_paths`, `toolkit_inspect_schema`, `toolkit_inspect_profile`, `toolkit_list_runs` |
-| **Scout** | `toolkit_probe_url`, `toolkit_ckan_package_show`, `toolkit_sparql_query` |
+| **Catalogo** | `toolkit_find`, `toolkit_dataset_overview` |
+| **Pipeline (aggregati)** | `toolkit_layer`, `toolkit_status` |
+| **Pipeline (ispezione)** | `toolkit_inspect_paths`, `toolkit_inspect_schema`, `toolkit_inspect_profile`, `toolkit_list_runs`, `toolkit_schema_diff`, `toolkit_csv_preview`, `toolkit_list_candidates` [DEPRECATO], `toolkit_preflight` |
+| **Scout** | `toolkit_probe_url`, `toolkit_probe_url_routed`, `toolkit_ckan_package_show`, `toolkit_html_extract_links`, `toolkit_sparql_query`, `toolkit_preview_url` |
 
 Config IDE (`.mcp.json`):
 ```json
@@ -135,7 +136,7 @@ pytest -m core                    # contratto pubblico
 ruff check .                      # lint
 ```
 
-**Test**: 55 file, marker `core` (deve sempre passare), `advanced`, `compat`.
+**Test**: 85+ file, marker `core` (deve sempre passare), `advanced`, `compat`.
 **CI**: `.github/workflows/ci.yml` — Python 3.10–3.12, ruff, coverage ≥70%.
 
 ## Struttura del repo
@@ -149,7 +150,7 @@ toolkit/
     plugins/          # plugin sorgente
     mcp/              # server MCP
     profile/          # profiling RAW
-  tests/              # pytest (55 file)
+  tests/              # pytest (85+ file)
   docs/               # documentazione tecnica
   project-example/    # esempio funzionante
 ```

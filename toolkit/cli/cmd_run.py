@@ -64,7 +64,7 @@ def _write_blocked_report(
     support_datasets: list[dict[str, Any]],
 ) -> None:
     """Scrive un report minimale per un anno non eseguito (candidate bloccato)."""
-    from toolkit.cli.inspect.report_ops import write_run_report
+    from toolkit.domain.report import write_run_report
 
     report = {
         "dataset": dataset,
@@ -1012,7 +1012,7 @@ def run_full(
     # Eseguito sempre: anche con candidate bloccato, run fallito, o eccezione.
     try:
         if not dry_flag:
-            from toolkit.cli.inspect.report_ops import (
+            from toolkit.domain.report import (
                 build_run_report,
                 write_run_report,
                 write_dataset_readme,

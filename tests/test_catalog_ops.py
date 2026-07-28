@@ -13,13 +13,47 @@ from typing import Any
 
 import pytest
 
-from toolkit.cli.catalog_ops import CatalogResolver, CLEAN_BUCKET, MART_BUCKET
+from toolkit.cli.catalog_ops import (
+    CatalogResolver,
+    CLEAN_BUCKET,
+    MART_BUCKET,
+    _parse_clean_filename,
+)
 
 pytestmark = pytest.mark.contract
 
 # ---------------------------------------------------------------------------
 # Helper: manifest finto
 # ---------------------------------------------------------------------------
+
+
+class TestParseCleanFilename:
+    def test_standard(self) -> None:
+        """{slug}_{year}_clean.parquet → (slug, year)."""
+        assert _parse_clean_filename("anac_bandi_gara_2024_clean.parquet") == (
+            "anac_bandi_gara",
+            2024,
+        )
+
+    def test_multi_underscore_slug(self) -> None:
+        """Slug con piu' underscore."""
+        assert _parse_clean_filename("popolazione_istat_comunale_2019_2025_2024_clean.parquet") == (
+            "popolazione_istat_comunale_2019_2025",
+            2024,
+        )
+
+    def test_not_clean(self) -> None:
+        """File che non termina con _clean.parquet → None."""
+        assert _parse_clean_filename("pipeline_run.json") is None
+        assert _parse_clean_filename("data.parquet") is None
+
+    def test_bad_year(self) -> None:
+        """Anno non a 4 cifre → None."""
+        assert _parse_clean_filename("slug_999_clean.parquet") is None
+
+    def test_no_slug(self) -> None:
+        """Solo anno → None."""
+        assert _parse_clean_filename("_2024_clean.parquet") is None
 
 
 def _make_manifest_entry(
@@ -100,13 +134,50 @@ _FAKE_MANIFEST = _make_manifest(
 
 @pytest.fixture
 def resolver(monkeypatch: pytest.MonkeyPatch) -> CatalogResolver:
-    """CatalogResolver con manifest mockato."""
-    resolver = CatalogResolver(manifest_url="http://fake/manifest.json")
+    """CatalogResolver con manifest mockato, senza scan locale."""
+    resolver = CatalogResolver(
+        manifest_url="http://fake/manifest.json",
+        include_local=False,
+    )
 
     def _fake_read_manifest(*args: Any, **kwargs: Any) -> dict[str, Any]:
         return _FAKE_MANIFEST
 
     monkeypatch.setattr("toolkit.cli.catalog_ops.read_manifest", _fake_read_manifest)
+    return resolver
+
+
+@pytest.fixture
+def resolver_with_local(monkeypatch: pytest.MonkeyPatch) -> CatalogResolver:
+    """CatalogResolver con manifest mockato E scan locale mockata."""
+    resolver = CatalogResolver(
+        manifest_url="http://fake/manifest.json",
+        include_local=True,
+    )
+
+    def _fake_read_manifest(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return _FAKE_MANIFEST
+
+    monkeypatch.setattr("toolkit.cli.catalog_ops.read_manifest", _fake_read_manifest)
+
+    # Mock della scan locale: restituisce un dataset locale aggiuntivo
+    fake_local = [
+        {
+            "url": "/tmp/fake/workspace/dataset-incubator/candidates/mio_dataset_locale/data/clean/mio_dataset_locale/2024/mio_dataset_locale_2024_clean.parquet",
+            "slug": "mio_dataset_locale",
+            "bucket": "local",
+            "year": 2024,
+            "path": "dataset-incubator/candidates/mio_dataset_locale/data/clean/mio_dataset_locale/2024/mio_dataset_locale_2024_clean.parquet",
+            "size_bytes": 5000,
+            "updated": "2026-07-28T10:00:00Z",
+            "_local": True,
+        },
+    ]
+
+    monkeypatch.setattr(
+        "toolkit.cli.catalog_ops._scan_workspace",
+        lambda _workspace: fake_local,
+    )
     return resolver
 
 
@@ -283,6 +354,90 @@ class TestDescribeSlug:
         """describe_slug per slug inesistente solleva eccezione."""
         with pytest.raises(FileNotFoundError):
             resolver.describe_slug("slug_che_non_esiste")
+
+
+# ---------------------------------------------------------------------------
+# Local workspace merge
+# ---------------------------------------------------------------------------
+
+
+class TestLocalMerge:
+    def test_list_includes_local(self, resolver_with_local: CatalogResolver) -> None:
+        """list_datasets include dataset dal workspace locale."""
+        res = resolver_with_local.list_datasets(query="mio_dataset_locale")
+        assert len(res["datasets"]) == 1
+        d = res["datasets"][0]
+        assert d["slug"] == "mio_dataset_locale"
+        assert d["has_local"] is True
+        assert d["has_remote"] is False
+        assert d["layer"] in ("clean",)
+
+    def test_list_merges_local_and_gcs(self, resolver_with_local: CatalogResolver) -> None:
+        """list_datasets unisce slug locali e GCS."""
+        res = resolver_with_local.list_datasets(query="", limit=10)
+        slugs = {d["slug"] for d in res["datasets"]}
+        assert "anac_bandi_gara" in slugs  # GCS
+        assert "mio_dataset_locale" in slugs  # locale
+
+    def test_resolve_prefers_local(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """resolve_slug preferisce file locali su stessi slug."""
+        # Crea resolver senza fixture per controllo totale
+        resolver = CatalogResolver(
+            manifest_url="http://fake/manifest.json",
+            include_local=True,
+        )
+
+        def _fake_read_manifest(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            return _FAKE_MANIFEST
+
+        monkeypatch.setattr("toolkit.cli.catalog_ops.read_manifest", _fake_read_manifest)
+
+        # Mock scan locale: stesso slug del GCS (anac_bandi_gara)
+        monkeypatch.setattr(
+            "toolkit.cli.catalog_ops._scan_workspace",
+            lambda _workspace: [
+                {
+                    "url": "/tmp/fake/anac_bandi_gara_2024_clean.parquet",
+                    "slug": "anac_bandi_gara",
+                    "bucket": "local",
+                    "year": 2024,
+                    "path": "anac_bandi_gara/2024/anac_bandi_gara_2024_clean.parquet",
+                    "size_bytes": 999,
+                    "updated": "2026-07-28T10:00:00Z",
+                    "_local": True,
+                },
+            ],
+        )
+
+        files = resolver.resolve_slug("anac_bandi_gara", year=2024)
+        # Il locale deve venire prima (priorita')
+        assert _is_local(files[0]), f"Primo file non locale: {files[0]}"
+        # Deve avere size=999 (locale), non 1000 (GCS)
+        assert files[0]["size_bytes"] == 999
+
+    def test_describe_local_returns_local_flag(
+        self, resolver_with_local: CatalogResolver, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """describe_slug su slug locale include _local=True."""
+        fake_preview = {
+            "path": "/tmp/fake/local.parquet",
+            "column_count": 2,
+            "columns": [{"name": "x", "type": "INTEGER"}],
+            "row_count": 10,
+            "preview": [{"x": 1}],
+            "truncated": False,
+        }
+        monkeypatch.setattr(
+            "toolkit.cli.catalog_ops.parquet_preview", lambda path, limit=5: fake_preview
+        )
+
+        result = resolver_with_local.describe_slug("mio_dataset_locale")
+        assert result["slug"] == "mio_dataset_locale"
+        assert result["_local"] is True
+
+
+def _is_local(file: dict) -> bool:
+    return file.get("_local", False) or file.get("bucket") == "local"
 
 
 # ---------------------------------------------------------------------------

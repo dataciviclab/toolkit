@@ -472,6 +472,28 @@ class TestEdgeCases:
         # Ogni resolver fa la propria chiamata
         assert len(calls) == 2
 
+    def test_gcs_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Due chiamate a list_datasets producono una sola fetch del manifest.
+
+        Regression: _load_gcs deve cacheare il manifest come _load_local.
+        """
+        call_count = 0
+
+        def counting_manifest(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            nonlocal call_count
+            call_count += 1
+            return _FAKE_MANIFEST
+
+        monkeypatch.setattr("toolkit.cli.catalog_ops.read_manifest", counting_manifest)
+
+        r = CatalogResolver(manifest_url="http://fake/manifest.json", include_local=False)
+
+        r.list_datasets()
+        assert call_count == 1, f"Prima chiamata: 1 fetch, ma {call_count}"
+
+        r.list_datasets()
+        assert call_count == 1, f"Seconda chiamata: nessun fetch, ma {call_count}"
+
     def test_truncated_flag_accurate(self, resolver: CatalogResolver) -> None:
         """truncated=True solo quando il limit e' inferiore a total_count."""
         # limit esatto = total_count → non troncato

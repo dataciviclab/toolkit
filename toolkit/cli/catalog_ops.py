@@ -223,7 +223,13 @@ class CatalogResolver:
         self._local_entries: list[dict[str, Any]] | None = None
 
     def _load_gcs(self) -> dict[str, Any]:
-        """Carica (o ricarica) il manifest da GCS."""
+        """Carica (o ricarica) il manifest da GCS.
+
+        Cache per il ciclo di vita del resolver — evita un fetch
+        HTTPS a ogni tool call in sessione MCP.
+        """
+        if self._gcs_manifest is not None:
+            return self._gcs_manifest
         self._gcs_manifest = read_manifest(self._manifest_url)
         return self._gcs_manifest
 

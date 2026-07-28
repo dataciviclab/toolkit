@@ -7,7 +7,7 @@ import pytest
 
 pytest.importorskip("mcp.server.fastmcp", reason="richiede mcp>=1.2 (lab-connectors[mcp])")
 from toolkit.mcp import server as mcp_server
-from toolkit.mcp.errors import ErrorCode, ToolkitClientError
+from toolkit.mcp.errors import ToolkitClientError
 
 pytestmark = pytest.mark.contract
 
@@ -16,9 +16,6 @@ def test_mcp_server_registers_expected_tools() -> None:
     tools = asyncio.run(mcp_server.mcp.list_tools())
     tool_names = {tool.name for tool in tools}
     assert tool_names == {
-        "toolkit_inspect_paths",
-        "toolkit_inspect_schema",
-        "toolkit_inspect_profile",
         "toolkit_list_runs",
         "toolkit_schema_diff",
         "toolkit_layer",
@@ -36,62 +33,9 @@ def test_mcp_server_registers_expected_tools() -> None:
 
 def test_tool_returns_payload_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
     """Through a real tool implementation, guard passes payload through unchanged."""
-
-    def fake_impl(config_path: str, year: int | None) -> dict[str, object]:
-        return {"ok": True, "config_path": config_path, "year": year}
-
-    monkeypatch.setattr(mcp_server, "inspect_paths_impl", fake_impl)
-    result = mcp_server.toolkit_inspect_paths("dataset.yml", 2024)
-    assert result == {"ok": True, "config_path": "dataset.yml", "year": 2024}
-
-
-def test_tool_error_has_error_code_and_message(monkeypatch: pytest.MonkeyPatch) -> None:
-    """ToolkitClientError raised by impl is caught by guard and returned as dict.
-
-    The error dict must have 'error' (code string) and 'message' keys.
-    """
-
-    def raising_impl(config_path: str, year: int | None) -> dict[str, object]:
-        raise ToolkitClientError("config non trovato", code=ErrorCode.CONFIG_NOT_FOUND)
-
-    monkeypatch.setattr(mcp_server, "inspect_paths_impl", raising_impl)
-    result = mcp_server.toolkit_inspect_paths("dataset.yml", 2024)
-
-    assert "error" in result
-    assert "message" in result
-    assert result["error"] == "config_not_found"
-    assert "config non trovato" in result["message"]
-
-
-def test_unexpected_error_becomes_unexpected_with_message(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Any unexpected exception (not ToolkitClientError) is caught by guard and
-    returned as 'unexpected_error' with the original message.
-    """
-
-    def raising_impl(config_path: str, year: int | None) -> dict[str, object]:
-        raise ValueError("unexpected value")
-
-    monkeypatch.setattr(mcp_server, "inspect_paths_impl", raising_impl)
-    result = mcp_server.toolkit_inspect_paths("dataset.yml", 2024)
-
-    assert result["error"] == "unexpected_error"
-    assert "unexpected value" in result["message"]
-
-
-def test_toolkit_inspect_paths_passes_none_when_year_zero(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: dict[str, object] = {}
-
-    def fake_impl(config_path: str, year: int | None) -> dict[str, object]:
-        calls["config_path"] = config_path
-        calls["year"] = year
-        return {"ok": True}
-
-    monkeypatch.setattr(mcp_server, "inspect_paths_impl", fake_impl)
-
-    payload = mcp_server.toolkit_inspect_paths("dataset.yml", 0)
-
-    assert payload == {"ok": True}
-    assert calls == {"config_path": "dataset.yml", "year": None}
+    monkeypatch.setattr(mcp_server, "probe_url_impl", lambda url, timeout: {"ok": True})
+    result = mcp_server.toolkit_probe_url("https://example.gov.it", timeout=15)
+    assert result == {"ok": True}
 
 
 # ---------------------------------------------------------------------------
@@ -173,7 +117,6 @@ def test_toolkit_sparql_query_forwards_params(monkeypatch: pytest.MonkeyPatch) -
 
 def test_toolkit_probe_url_error_has_error_code(monkeypatch: pytest.MonkeyPatch) -> None:
     from lab_connectors.mcp import ErrorCode as LabErrorCode
-    from toolkit.mcp.errors import ToolkitClientError
 
     def failing_impl(url: str, timeout: int) -> dict:
         raise ToolkitClientError("test probe error")
@@ -197,37 +140,8 @@ def test_toolkit_probe_url_returns_payload(monkeypatch: pytest.MonkeyPatch) -> N
     assert result == {"status_code": 200, "content_type": "text/csv"}
 
 
-def test_toolkit_inspect_schema_passes_layer_and_year(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: dict[str, object] = {}
-
-    def fake_impl(config_path: str, layer: str, year: int | None) -> dict[str, object]:
-        calls["config_path"] = config_path
-        calls["layer"] = layer
-        calls["year"] = year
-        return {"layer": layer, "year": year}
-
-    monkeypatch.setattr(mcp_server, "show_schema_impl", fake_impl)
-
-    payload = mcp_server.toolkit_inspect_schema("dataset.yml", "mart", 2024)
-
-    assert payload == {"layer": "mart", "year": 2024}
-    assert calls == {"config_path": "dataset.yml", "layer": "mart", "year": 2024}
-
-
-def test_toolkit_inspect_profile_passes_config_and_year(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: dict[str, object] = {}
-
-    def fake_impl(config_path: str, year: int | None) -> dict[str, object]:
-        calls["config_path"] = config_path
-        calls["year"] = year
-        return {"profile_exists": True}
-
-    monkeypatch.setattr(mcp_server, "raw_profile_impl", fake_impl)
-
-    payload = mcp_server.toolkit_inspect_profile("dataset.yml", 2024)
-
-    assert payload == {"profile_exists": True}
-    assert calls == {"config_path": "dataset.yml", "year": 2024}
+# inspect_schema e inspect_profile rimossi come tool MCP —
+# coperti da toolkit_layer(mode="schema") e toolkit_status
 
 
 def test_csv_preview_returns_profiler_aligned_fields(tmp_path: Path) -> None:

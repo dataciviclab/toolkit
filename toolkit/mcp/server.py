@@ -28,7 +28,6 @@ from typing import Any
 from lab_connectors.mcp import create_mcp_server, guard_timed
 
 from .toolkit_client import (
-    inspect_paths as inspect_paths_impl,
     list_runs as list_runs_impl,
     mcp_ckan_package_show as ckan_package_show_impl,
     mcp_html_extract_links as html_extract_links_impl,
@@ -36,9 +35,7 @@ from .toolkit_client import (
     mcp_probe_url as probe_url_impl,
     mcp_probe_url_routed as probe_url_routed_impl,
     mcp_sparql_query as sparql_query_impl,
-    raw_profile as raw_profile_impl,
     schema_diff as schema_diff_impl,
-    show_schema as show_schema_impl,
 )
 
 from .aggregate_ops import (
@@ -61,29 +58,6 @@ mcp = create_mcp_server(
         "al posto del path assoluto a dataset.yml."
     ),
 )
-
-
-@mcp.tool(
-    description="Mostra il path contract risolto per un dataset config.", structured_output=True
-)
-def toolkit_inspect_paths(config_path: str, year: int = 0) -> dict[str, Any]:
-    return guard_timed(inspect_paths_impl, "toolkit_inspect_paths", config_path, year or None)
-
-
-@mcp.tool(
-    description="Mostra lo schema di raw, clean o mart.",
-    structured_output=True,
-)
-def toolkit_inspect_schema(config_path: str, layer: str = "clean", year: int = 0) -> dict[str, Any]:
-    return guard_timed(show_schema_impl, "toolkit_inspect_schema", config_path, layer, year or None)
-
-
-@mcp.tool(
-    description="Mostra il profilo raw: encoding, delimiter, colonne, missingness e mapping suggestions.",
-    structured_output=True,
-)
-def toolkit_inspect_profile(config_path: str, year: int = 0) -> dict[str, Any]:
-    return guard_timed(raw_profile_impl, "toolkit_inspect_profile", config_path, year or None)
 
 
 @mcp.tool(

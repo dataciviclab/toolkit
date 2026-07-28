@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from toolkit.cli.inspect.report_ops import (
+from toolkit.domain.report import (
     build_dataset_readme,
     write_run_report,
 )
@@ -264,7 +264,7 @@ class TestRunFullFailedReport:
 
         # Mock preflight per saltare check rete
         monkeypatch.setattr(
-            "toolkit.cli.preflight_ops.run_preflight",
+            "toolkit.domain.preflight.run_preflight",
             lambda *args, **kwargs: {
                 "config_check": {"ok": True, "errors": [], "warnings": [], "slug": "test"},
                 "sources": [],
@@ -273,7 +273,7 @@ class TestRunFullFailedReport:
         )
 
         # Mock review_readiness
-        import toolkit.cli.inspect.readiness_ops as _readiness_ops
+        import toolkit.domain.readiness as _readiness_ops
 
         monkeypatch.setattr(
             _readiness_ops,
@@ -340,7 +340,7 @@ class TestFailedReport:
     def test_failed_report_da_step_results_minimi(self, tmp_path: Path) -> None:
         """Con step_results={'run':'failed'}, build_run_report produce status FAILED
         e non solleva eccezioni (tollerante a layers assenti)."""
-        from toolkit.cli.inspect.report_ops import build_run_report
+        from toolkit.domain.report import build_run_report
 
         report = build_run_report(
             config_path="/c.yml",

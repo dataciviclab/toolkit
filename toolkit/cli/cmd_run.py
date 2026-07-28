@@ -829,7 +829,7 @@ def run_full(
     # ── Pre-flight check ────────────────────────────────────────────────
     # Solo in esecuzione reale (dry-run non fa rete)
     if not dry_flag:
-        from toolkit.cli.preflight_ops import run_preflight as _run_preflight
+        from toolkit.domain.preflight import run_preflight as _run_preflight
 
         preflight = _run_preflight(config, years_arg=years_arg)
         results["preflight"] = {
@@ -1147,7 +1147,7 @@ def run_preflight_cmd(
 
     Non esegue la pipeline — solo diagnostica preventiva.
     """
-    from toolkit.cli.preflight_ops import run_preflight
+    from toolkit.domain.preflight import run_preflight
 
     result = run_preflight(config, years_arg=years)
 

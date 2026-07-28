@@ -8,7 +8,7 @@ import duckdb
 import pytest
 from pytest import MonkeyPatch
 
-from toolkit.cli.layer_ops import layer_query
+from toolkit.domain.layer import layer_query
 
 pytestmark = pytest.mark.contract
 

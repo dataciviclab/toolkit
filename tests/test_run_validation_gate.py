@@ -374,14 +374,14 @@ def test_run_full_validates_via_context_not_direct_calls(tmp_path: Path, monkeyp
     # run_full chiama run_preflight all'inizio — mockiamo per evitare
     # che validate_config fallisca su config minimale del test
     monkeypatch.setattr(
-        "toolkit.cli.preflight_ops.run_preflight",
+        "toolkit.domain.preflight.run_preflight",
         lambda *args, **kwargs: {
             "config_check": {"ok": True, "errors": [], "warnings": [], "slug": "test"},
             "sources": [],
             "status": "passed",
         },
     )
-    import toolkit.cli.inspect.readiness_ops as _readiness_ops
+    import toolkit.domain.readiness as _readiness_ops
 
     monkeypatch.setattr(
         _readiness_ops,

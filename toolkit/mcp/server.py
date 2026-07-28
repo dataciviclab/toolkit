@@ -154,14 +154,15 @@ def toolkit_csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
 
 @mcp.tool(
     description="Query unificata su RAW/CLEAN/MART: schema, preview, profilo o SQL. "
-    "Sostituisce inspect_schema/inspect_profile/parquet_query "
-    "in un unico tool con parametro mode (schema|preview|profile|sql). "
-    "Esempi: mode=schema (colonne+tipi), mode=preview (anteprima righe), "
-    "mode=profile (diagnostica raw), mode=sql (SQL arbitrario su 'data').",
+    "Due modalita': config_path (pipeline locale) o datasets (catalogo GCS/workspace). "
+    "mode=sql funziona anche su layer=raw (legge CSV via DuckDB). "
+    "Catalog mode (datasets) supporta solo mode='sql'. "
+    "Esempi: mode=sql, datasets=['anac_bandi_gara', 'popolazione_istat']",
     structured_output=True,
 )
 def toolkit_layer(
-    config_path: str,
+    config_path: str | None = None,
+    datasets: list[str] | None = None,
     layer: str = "clean",
     mode: str = "schema",
     year: int = 0,
@@ -172,7 +173,8 @@ def toolkit_layer(
     return guard_timed(
         layer_query_impl,
         "toolkit_layer",
-        config_path,
+        config_path=config_path,
+        datasets=datasets,
         layer=layer,
         mode=mode,
         year=year or None,

@@ -4,14 +4,18 @@ Usato da:
 - CLI ``toolkit inspect config`` (via ``config_ops.py``)
 - MCP ``toolkit_layer`` (via ``aggregate_ops.py``)
 
+Supporta due modalita' di indirizzamento:
+- ``config_path``: dataset locale (pipeline mode)
+- ``datasets``: lista slug risolti via CatalogResolver (catalog mode)
+
 Le funzioni qui NON gestiscono errori MCP (ToolkitClientError) — quelle
-vanno aggiunte nei wrapper MCP. Le funzioni qui sollevano eccezioni
-Python standard (ValueError, FileNotFoundError).
+vanno aggiunte nei wrapper MCP.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -22,19 +26,40 @@ from toolkit.core.paths import RAW_PROFILE, RAW_SUGGESTED_READ
 from toolkit.cli.inspect._helpers import _payload_for_year
 
 # ---------------------------------------------------------------------------
-# Schemi validi
+# Costanti
 # ---------------------------------------------------------------------------
 
 VALID_LAYERS: set[str] = {"raw", "clean", "mart"}
 VALID_MODES: set[str] = {"schema", "preview", "profile", "sql"}
+SQL_SCOPE_BLOCKED_KEYWORDS = {
+    "ALTER",
+    "ATTACH",
+    "CALL",
+    "COPY",
+    "CREATE",
+    "DELETE",
+    "DETACH",
+    "DROP",
+    "EXPORT",
+    "IMPORT",
+    "INSERT",
+    "INSTALL",
+    "LOAD",
+    "MERGE",
+    "REPLACE",
+    "TRUNCATE",
+    "UPDATE",
+    "VACUUM",
+}
+MAX_ROWS_HARD_CAP = 500
+
 
 # ---------------------------------------------------------------------------
-# Helper path
+# Helper path (pipeline mode)
 # ---------------------------------------------------------------------------
 
 
 def _resolve_clean_path(cfg: Any, year: int) -> Path:
-    """Risolve il path al parquet clean."""
     paths = _payload_for_year(cfg, year)
     parquet_str = paths["paths"]["clean"].get("output")
     if not parquet_str:
@@ -43,7 +68,6 @@ def _resolve_clean_path(cfg: Any, year: int) -> Path:
 
 
 def _resolve_mart_path(cfg: Any, year: int, mart_index: int = 0) -> Path:
-    """Risolve il path al parquet mart (indice)."""
     paths = _payload_for_year(cfg, year)
     outputs = paths["paths"]["mart"].get("outputs") or []
     if not outputs:
@@ -54,10 +78,99 @@ def _resolve_mart_path(cfg: Any, year: int, mart_index: int = 0) -> Path:
 
 
 def _resolve_raw_dir(cfg: Any, year: int) -> tuple[Path, dict[str, Any]]:
-    """Risolve la directory raw e i path info."""
     paths = _payload_for_year(cfg, year)
     raw_dir = Path(paths["paths"]["raw"]["dir"])
     return raw_dir, paths
+
+
+# ---------------------------------------------------------------------------
+# Scope validation (catalog mode)
+# ---------------------------------------------------------------------------
+
+
+def _validate_sql_scope(sql: str, allowed_tables: set[str]) -> str:
+    """Valida che l'SQL utente sia safe e referenzi solo tabelle consentite.
+
+    Args:
+        sql: SQL da validare.
+        allowed_tables: Nomi CTE/tabella consentiti (es ``{"data"}``
+            o ``{"anac_bandi_gara", "popolazione_istat"}``).
+
+    Returns:
+        SQL pulito (stripped).
+
+    Raises:
+        ValueError: se la validazione fallisce.
+    """
+    sql = sql.strip()
+    if not sql:
+        raise ValueError("SQL vuoto")
+
+    # Solo SELECT o WITH consentiti
+    upper = sql.upper().strip()
+    if not (upper.startswith("SELECT") or upper.startswith("WITH")):
+        raise ValueError("Solo query SELECT o WITH sono consentite")
+
+    # Blocca keyword DDL/DML
+    stripped = _strip_sql_comments_and_strings(sql)
+    for kw in SQL_SCOPE_BLOCKED_KEYWORDS:
+        pattern = re.compile(rf"\b{kw}\b", re.IGNORECASE)
+        if pattern.search(stripped):
+            raise ValueError(f"Keyword non consentita nell'SQL: {kw}")
+
+    # Blocca read_parquet/read_csv nell'SQL utente (bypass CTE)
+    blocked_funcs = {"read_parquet", "read_csv", "read_csv_auto"}
+    for func in blocked_funcs:
+        pattern = re.compile(rf"\b{func}\s*\(", re.IGNORECASE)
+        if pattern.search(stripped):
+            raise ValueError(f"Funzione non consentita nell'SQL: {func}")
+
+    # Blocca riferimenti a tabelle non consentite
+    from_pattern = re.compile(
+        r"""
+        \bFROM\b           # FROM keyword
+        \s+                # spazio
+        (?:                # inizio gruppo tabella
+          (?:"|')?         # quoting opzionale
+          (?P<table>       # nome tabella
+            [a-zA-Z_]\w*  # identifier
+          )
+          (?:"|')?         # quoting opzionale
+          (?:\s+(?:AS\s+)?\w+)?  # alias opzionale
+        )
+        """,
+        re.IGNORECASE | re.VERBOSE,
+    )
+    # Cerca anche nei JOIN
+    join_pattern = re.compile(
+        r"""
+        \b(?:LEFT\s+|RIGHT\s+|INNER\s+|OUTER\s+|CROSS\s+|FULL\s+)?JOIN\s+
+        (?:"|')?(?P<table>[a-zA-Z_]\w*)(?:"|')?
+        """,
+        re.IGNORECASE | re.VERBOSE,
+    )
+
+    for pattern in (from_pattern, join_pattern):
+        for match in pattern.finditer(stripped):
+            table = match.group("table")
+            if table.upper() not in {t.upper() for t in allowed_tables}:
+                raise ValueError(
+                    f"Riferimento a tabella non consentita: '{table}'. "
+                    f"Tabelle consentite: {', '.join(sorted(allowed_tables))}"
+                )
+
+    return sql
+
+
+def _strip_sql_comments_and_strings(sql: str) -> str:
+    """Rimuove commenti SQL e stringhe letterali per ispezione."""
+    # Commenti -- e /* */
+    sql = re.sub(r"--[^\n]*", "", sql)
+    sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
+    # Stringhe (sostituisce con spazio)
+    sql = re.sub(r"'[^']*'", " ", sql)
+    sql = re.sub(r'"[^"]*"', " ", sql)
+    return sql
 
 
 # ---------------------------------------------------------------------------
@@ -66,17 +179,7 @@ def _resolve_raw_dir(cfg: Any, year: int) -> tuple[Path, dict[str, Any]]:
 
 
 def show_schema(config_path: str, layer: str = "clean", year: int | None = None) -> dict[str, Any]:
-    """Mostra lo schema (colonne + tipi) di raw, clean o mart.
-
-    Args:
-        config_path: path al dataset.yml.
-        layer: ``"raw"``, ``"clean"`` (default), o ``"mart"``.
-        year: anno. Se ``None`` per dataset multi-year usa l'ultimo.
-
-    Returns:
-        Dict con schema del layer richiesto.
-    """
-    # Riutilizza l'implementazione già condivisa in CLI
+    """Mostra lo schema (colonne + tipi) di raw, clean o mart."""
     from toolkit.cli.inspect.schema_ops import show_schema as _cli_show_schema
 
     return _cli_show_schema(config_path, layer=layer, year=year)
@@ -88,18 +191,7 @@ def show_schema(config_path: str, layer: str = "clean", year: int | None = None)
 
 
 def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
-    """Legge il profilo raw (raw_profile.json o suggested_read.yml).
-
-    Args:
-        config_path: path al dataset.yml.
-        year: anno del dataset. Per multi-year, se omesso usa l'ultimo.
-
-    Returns:
-        Dict con encoding, delim, colonne, mapping_suggestions.
-
-    Raises:
-        FileNotFoundError: se profilo non trovato.
-    """
+    """Legge il profilo raw (raw_profile.json o suggested_read.yml)."""
     from toolkit.cli.inspect._helpers import _payload_for_year
 
     cfg = load_config(config_path)
@@ -169,21 +261,13 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
 
 
 def _read_parquet_preview(parquet_path: Path, limit: int = 10) -> dict[str, Any]:
-    """Legge schema + prime N righe da un parquet.
-
-    Delega a ``toolkit.core.duckdb_shape.parquet_preview`` — stessa
-    implementazione usata da inspect/_helpers.py.
-
-    Returns:
-        Dict con columns (lista di {name, type}), row_count, preview.
-    """
+    """Legge schema + prime N righe da un parquet."""
     from toolkit.core.duckdb_shape import parquet_preview
 
     if not parquet_path.exists():
         raise FileNotFoundError(f"Parquet non trovato: {parquet_path}")
     if parquet_path.suffix not in (".parquet",):
         raise ValueError(f"Formato non supportato: {parquet_path.suffix}. Solo .parquet.")
-
     result = parquet_preview(parquet_path, limit=limit)
     result.pop("path", None)
     result.pop("sql", None)
@@ -197,18 +281,7 @@ def clean_preview(
     year: int | None = None,
     limit: int = 10,
 ) -> dict[str, Any]:
-    """Preview dati da un parquet clean o mart.
-
-    Args:
-        config_path: path a dataset.yml.
-        layer: ``"clean"`` (default) o ``"mart"``.
-        mart_index: indice output mart (default 0).
-        year: anno. Se None per multi-year usa l'ultimo.
-        limit: righe massime (default 10).
-
-    Returns:
-        Schema + preview rows del parquet.
-    """
+    """Preview dati da un parquet clean o mart."""
     from toolkit.cli.inspect._helpers import _payload_for_year
 
     cfg = load_config(config_path)
@@ -236,22 +309,8 @@ def clean_preview(
     return result
 
 
-def raw_preview(
-    config_path: str,
-    year: int | None = None,
-    limit: int = 20,
-) -> dict[str, Any]:
-    """Preview del raw file primario di un dataset (CSV/TSV o XLSX).
-
-    Args:
-        config_path: path a dataset.yml.
-        year: anno. Se None per multi-year usa l'ultimo.
-        limit: righe massime (default 20).
-
-    Returns:
-        Dict con preview del raw file.
-    """
-
+def raw_preview(config_path: str, year: int | None = None, limit: int = 20) -> dict[str, Any]:
+    """Preview del raw file primario di un dataset."""
     cfg = load_config(config_path)
     if year is None:
         year = max(cfg.years) if cfg.years else 0
@@ -266,7 +325,6 @@ def raw_preview(
 
     suffix = raw_file.suffix.lower()
     if suffix in (".csv", ".tsv", ".txt"):
-        # Riutilizza csv_preview da CLI (già condiviso)
         from toolkit.cli.inspect.profile_ops import csv_preview as _csv_preview
 
         return _csv_preview(str(raw_file), limit=limit)
@@ -293,40 +351,144 @@ def raw_preview(
 # ---------------------------------------------------------------------------
 
 
+def _resolve_datasets(datasets: list[str], layer: str, year: int | None) -> dict[str, str]:
+    """Risolve lista slug → dict {slug: parquet_url} via CatalogResolver.
+
+    Returns:
+        Dict slug → url del parquet.
+    """
+    from toolkit.cli.catalog_ops import CatalogResolver
+
+    resolver = CatalogResolver()
+    resolved: dict[str, str] = {}
+    for slug in datasets:
+        files = resolver.resolve_slug(slug, layer=layer, year=year)
+        if not files:
+            raise FileNotFoundError(f"Slug '{slug}' non trovato (layer={layer})")
+        # Prende il primo file (priorita' locale, poi ultimo anno)
+        resolved[slug] = files[0]["url"]
+    return resolved
+
+
 def layer_sql(
-    config_path: str,
-    layer: str,
+    config_path: str | None = None,
+    datasets: list[str] | None = None,
+    layer: str = "clean",
     year: int | None = None,
     limit: int = 20,
     sql: str | None = None,
     mart_index: int = 0,
 ) -> dict[str, Any]:
-    """Esegue SQL arbitrario sul parquet risolto da config_path + layer.
+    """Esegue SQL arbitrario su uno o piu' dataset.
 
     Args:
-        config_path: path a dataset.yml.
-        layer: ``"clean"`` o ``"mart"``.
-        year: anno. Se None per multi-year usa l'ultimo.
-        limit: righe massime (default 20).
-        sql: query SQL. Il parquet è disponibile come tabella ``data``.
-        mart_index: indice tabella mart (default 0).
+        config_path: Path a dataset.yml (pipeline mode).
+            Mutuamente esclusivo con ``datasets``.
+        datasets: Lista slug (catalog mode).
+            Mutuamente esclusivo con ``config_path``.
+        layer: ``"raw"``, ``"clean"`` (default) o ``"mart"``.
+        year: Anno filtro.
+        limit: Max righe.
+        sql: Query SQL. I dati sono disponibili come tabella ``data``
+            (singolo dataset) o CTE col nome slug (multi dataset).
+        mart_index: Indice tabella mart (solo pipeline mode).
 
     Returns:
         Risultato della query SQL.
+
+    Raises:
+        ValueError: se parametri invalidi o SQL non valido.
+        FileNotFoundError: se dataset non trovato.
     """
     if not sql:
         raise ValueError("mode=sql richiede il parametro sql")
+    if config_path and datasets:
+        raise ValueError("Specificare solo uno tra config_path e datasets")
+    if not config_path and not datasets:
+        raise ValueError("Specificare config_path (pipeline) o datasets (catalogo)")
 
+    limit = min(limit, MAX_ROWS_HARD_CAP)
+
+    # ---- Catalog mode: risolvi slug → URL parquet ----
+    if datasets:
+        resolved = _resolve_datasets(datasets, layer=layer, year=year)
+        # Scope validation: solo i CTE dichiarati
+        allowed = set(resolved.keys())
+        validated_sql = _validate_sql_scope(sql, allowed)
+
+        # Costruisci CTE per ogni dataset
+        cte_defs = []
+        for slug, url in resolved.items():
+            cte_defs.append(f"{slug} AS (SELECT * FROM read_parquet(['{url}']))")
+        cte = ", ".join(cte_defs)
+        wrapped_sql = f"WITH {cte} {validated_sql}"
+
+        import duckdb
+
+        with duckdb.connect() as conn:
+            result = conn.execute(wrapped_sql).fetchall()
+            columns = [d[0] for d in conn.description]
+
+        return {
+            "columns": columns,
+            "rows": [dict(zip(columns, row)) for row in result[:limit]],
+            "total_count": len(result),
+            "truncated": len(result) > limit,
+            "datasets": datasets,
+            "layer": layer,
+            "year": year,
+            "mode": "sql",
+        }
+
+    # ---- Pipeline mode: config_path ----
     cfg = load_config(config_path)
     if year is None:
         year = max(cfg.years) if cfg.years else 0
 
-    if layer == "clean":
+    if layer == "raw":
+        # RAW usa il CSV primario via DuckDB read_csv_auto
+        raw_dir, paths = _resolve_raw_dir(cfg, year)
+        primary_file = (paths.get("raw_hints") or {}).get("primary_output_file")
+        if not primary_file:
+            raise FileNotFoundError("Nessun primary_output_file nel manifest raw")
+        raw_file = raw_dir / primary_file
+        if not raw_file.exists():
+            raise FileNotFoundError(f"Raw file non trovato: {raw_file}")
+
+        import duckdb
+        from toolkit.core.sql_utils import sql_literal as _sq
+
+        source = f"read_csv_auto('{_sq(str(raw_file))}')"
+        wrapped_sql = f"SELECT * FROM ({sql}) AS q LIMIT {limit + 1}"
+
+        with duckdb.connect() as conn:
+            conn.execute(f"CREATE OR REPLACE VIEW data AS SELECT * FROM {source}")
+            describe = conn.execute("DESCRIBE data").fetchall()
+            columns_info = [{"name": str(r[0]), "type": str(r[1])} for r in describe]
+
+            result = conn.execute(f"SELECT * FROM ({sql}) AS q LIMIT {limit + 1}").fetchall()
+            col_names = [c["name"] for c in columns_info]
+            preview = [dict(zip(col_names, row)) for row in result[:limit]]
+
+        return {
+            "columns": columns_info,
+            "column_count": len(columns_info),
+            "row_count": len(result),
+            "preview": preview,
+            "truncated": len(result) > limit,
+            "dataset": cfg.dataset,
+            "year": year,
+            "layer": "raw",
+            "config_path": str(config_path),
+            "mode": "sql",
+        }
+
+    elif layer == "clean":
         parquet_path = _resolve_clean_path(cfg, year)
     elif layer == "mart":
         parquet_path = _resolve_mart_path(cfg, year, mart_index)
     else:
-        raise ValueError(f"layer deve essere 'clean' o 'mart', non '{layer}'")
+        raise ValueError(f"layer deve essere 'raw', 'clean' o 'mart', non '{layer}'")
 
     if not parquet_path.exists():
         raise FileNotFoundError(
@@ -353,7 +515,8 @@ def layer_sql(
 
 
 def layer_query(
-    config_path: str,
+    config_path: str | None = None,
+    datasets: list[str] | None = None,
     layer: str = "clean",
     mode: str = "schema",
     year: int | None = None,
@@ -361,27 +524,28 @@ def layer_query(
     sql: str | None = None,
     mart_index: int = 0,
 ) -> dict[str, Any]:
-    """Query unificata su un layer (RAW/CLEAN/MART).
+    """Query unificata su layer RAW/CLEAN/MART.
 
     Args:
-        config_path: Path a dataset.yml.
+        config_path: Path a dataset.yml (pipeline mode).
+        datasets: Lista slug (catalog mode, mut. esclusivo con config_path).
         layer: ``"raw"``, ``"clean"`` (default) o ``"mart"``.
-        mode: Cosa restituire:
-            - ``"schema"`` (default): colonne + tipi.
-            - ``"preview"``: schema + prime N righe.
-            - ``"profile"``: profilo diagnostico RAW (solo layer=raw).
-            - ``"sql"``: SQL arbitrario sul parquet (solo clean/mart).
-        year: Anno del dataset. Se omesso usa l'ultimo anno configurato.
-        limit: Max righe in preview (default 20, solo mode=preview/sql).
-        sql: Query SQL per mode=sql. Il parquet e' disponibile come tabella ``data``.
-        mart_index: Indice della tabella mart (default 0, solo layer=mart).
-
-    Returns:
-        Dict con schema, preview o profilo a seconda del mode.
+        mode: ``"schema"``, ``"preview"``, ``"profile"``, ``"sql"``.
+        year: Anno filtro.
+        limit: Max righe in preview/sql.
+        sql: Query SQL per mode=sql.
+        mart_index: Indice tabella mart (solo pipeline mode).
 
     Raises:
-        ValueError: se layer/mode non validi, o file non trovato.
+        ValueError: se layer/mode non validi.
     """
+    if config_path and datasets:
+        raise ValueError("Specificare solo uno tra config_path e datasets")
+    use_catalog = datasets is not None
+
+    if not use_catalog and not config_path:
+        raise ValueError("Specificare config_path (pipeline) o datasets (catalogo)")
+
     safe_layer = layer.strip().lower()
     safe_mode = mode.strip().lower() if isinstance(mode, str) else mode
 
@@ -395,31 +559,47 @@ def layer_query(
         )
     if safe_mode == "profile" and safe_layer != "raw":
         raise ValueError(f"mode=profile e' valido solo per layer=raw (ricevuto: layer={layer})")
-    if safe_mode == "sql" and safe_layer == "raw":
-        raise ValueError("mode=sql non e' supportato per layer=raw")
+    if safe_mode == "profile" and use_catalog:
+        raise ValueError("mode=profile non supportato in catalog mode (datasets)")
     if safe_mode == "sql" and not sql:
         raise ValueError("mode=sql richiede il parametro sql (es. sql='SELECT * FROM data')")
 
-    # Schema mode
+    # --- Catalog mode: solo SQL supportato ---
+    if use_catalog:
+        if safe_mode != "sql":
+            raise ValueError(
+                f"Catalog mode (datasets) supporta solo mode='sql'. "
+                f"Usa config_path per mode='{safe_mode}'."
+            )
+        return layer_sql(
+            config_path=None,
+            datasets=datasets,
+            layer=safe_layer,
+            year=year,
+            limit=limit,
+            sql=sql,
+        )
+
+    # --- Pipeline mode ---
     if safe_mode == "schema":
         return show_schema(config_path, layer=safe_layer, year=year)
-
-    # Profile mode (raw only)
     if safe_mode == "profile":
         return raw_profile(config_path, year=year)
-
-    # Preview mode
     if safe_mode == "preview":
         if safe_layer == "raw":
             return raw_preview(config_path, year=year, limit=limit)
         return clean_preview(
             config_path, layer=safe_layer, mart_index=mart_index, year=year, limit=limit
         )
-
-    # SQL mode
     if safe_mode == "sql":
         return layer_sql(
-            config_path, layer=safe_layer, year=year, limit=limit, sql=sql, mart_index=mart_index
+            config_path=config_path,
+            datasets=None,
+            layer=safe_layer,
+            year=year,
+            limit=limit,
+            sql=sql,
+            mart_index=mart_index,
         )
 
     raise RuntimeError(f"mode non gestito: {safe_mode}")

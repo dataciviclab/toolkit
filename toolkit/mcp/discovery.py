@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from toolkit.cli.catalog_ops import CatalogResolver
+from toolkit.mcp.path_safety import WORKSPACE_ROOT as WORKSPACE_ROOT  # noqa: F401 — re-export per test backward compat
 
 
 def list_candidates(

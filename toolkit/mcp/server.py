@@ -12,11 +12,8 @@ Tool catalogo (nuovi, basati su GCS manifest):
 - toolkit_dataset_overview: schema + conteggio + preview da slug
 
 Tool granulari:
-- inspect_paths, inspect_schema, inspect_profile
 - schema_diff, list_runs
-- csv_preview
-- scout: probe_url, ckan, sparql, html
-- list_candidates: rimosso (usa toolkit_find source='workspace')
+- scout: probe_url, ckan, sparql, html, preview_url
 
 Usa ``lab_connectors.mcp`` per init standardizzato, error handling e logging.
 """

@@ -56,7 +56,8 @@ def test_toolkit_probe_url_forwards_params(monkeypatch: pytest.MonkeyPatch) -> N
     assert calls == {"url": "https://example.gov.it", "timeout": 30}
 
 
-def test_toolkit_probe_url_routed_forwards_params(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_toolkit_probe_url_with_routed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """toolkit_probe_url con routed=True usa l'implementazione routed."""
     calls: dict = {}
 
     def fake_impl(url: str, timeout: int) -> dict:

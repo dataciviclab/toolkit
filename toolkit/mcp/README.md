@@ -45,8 +45,8 @@ Sostituire il path del `command` con il Python reale del clone locale.
 - I tool catalogo usano `gcs_manifest.json` (auto-generato dalla CI,
   pubblicato su GCS) come fonte di verità per i dataset pubblicati
 - `toolkit_find` unifica GCS + workspace locale (clean parquet + dataset.yml)
-- `list_candidates` è deprecato: l'unificazione è in `toolkit_find(source="workspace")`
+- `list_candidates` è stato rimosso: usa `toolkit_find(source="workspace")`
 - `toolkit_layer(mode=sql, datasets=[...])` usa DuckDB con CTE multipli
   e scope validation (blocca DDL, read_parquet, tabelle non consentite)
-- `toolkit_csv_preview` riusa la stessa pipeline di `profile_raw`
-- `toolkit_inspect_paths` usa `toolkit inspect paths --json` internamente
+- `inspect_paths/schema/profile` sono stati rimossi come tool MCP —
+  coperti da `toolkit_status` e `toolkit_layer(mode="schema")`

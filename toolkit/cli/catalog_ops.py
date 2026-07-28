@@ -543,8 +543,33 @@ class CatalogResolver:
         slug: str,
         layer: str = "clean",
         year: int | None = None,
+        source: str = "all",
     ) -> dict[str, Any]:
-        """Schema DuckDB + row count per slug."""
+        """Schema DuckDB + row count per slug.
+
+        Args:
+            slug: Slug del dataset.
+            layer: ``"clean"`` (default) o ``"mart"``.
+            year: Anno specifico o ``None`` (ultimo disponibile).
+            source: ``"gcs"``, ``"workspace"``, ``"all"`` (default).
+
+        Raises:
+            FileNotFoundError: se slug non trovato nella source richiesta.
+        """
+        # Source filter: verifica esistenza prima di risolvere
+        if source == "gcs":
+            manifest = self._load_gcs()
+            gcs_slugs = {f["slug"] for f in manifest.get("files", []) if _is_data_parquet(f)}
+            if slug not in gcs_slugs:
+                raise FileNotFoundError(f"Slug '{slug}' non trovato su GCS (source=gcs)")
+        elif source == "workspace":
+            configs = self._load_workspace_configs()
+            local_slugs = {lf["slug"] for lf in self._load_local_parquets()}
+            if slug not in configs and slug not in local_slugs:
+                raise FileNotFoundError(
+                    f"Slug '{slug}' non trovato nel workspace (source=workspace)"
+                )
+
         files = self.resolve_slug(slug, layer=layer, year=year)
         if not files:
             raise FileNotFoundError(f"Slug '{slug}' non trovato (year={year})")

@@ -242,15 +242,17 @@ def toolkit_find(
 
 
 @mcp.tool(
-    description="Overview di un dataset su GCS: schema colonne (DESCRIBE DuckDB), "
-    "conteggio righe e preview dati. Usa il gcs_manifest.json per risolvere "
-    "lo slug al parquet GCS. Accetta slug (es. 'anac_bandi_gara') e anno opzionale.",
+    description="Overview di un dataset: schema colonne (DESCRIBE DuckDB), "
+    "conteggio righe e preview dati. "
+    "Parametro source='gcs' (solo pubblicati), 'workspace' (solo sviluppo), "
+    "'all' (default) — entrambi, preferisce locale.",
     structured_output=True,
 )
 def toolkit_dataset_overview(
     slug: str,
     layer: str = "clean",
     year: int | None = None,
+    source: str = "all",
 ) -> dict[str, Any]:
     return guard_timed(
         dataset_overview_impl,
@@ -258,6 +260,7 @@ def toolkit_dataset_overview(
         slug=slug,
         layer=layer,
         year=year,
+        source=source,
     )
 
 

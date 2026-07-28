@@ -567,10 +567,6 @@ def layer_query(
         raise ValueError(
             f"mode deve essere uno tra: {', '.join(sorted(VALID_MODES))} (ricevuto: {mode})"
         )
-    if safe_mode == "profile" and safe_layer != "raw":
-        raise ValueError(f"mode=profile e' valido solo per layer=raw (ricevuto: layer={layer})")
-    if safe_mode == "profile" and use_catalog:
-        raise ValueError("mode=profile non supportato in catalog mode (datasets)")
     if safe_mode == "sql" and not sql:
         raise ValueError("mode=sql richiede il parametro sql (es. sql='SELECT * FROM data')")
 
@@ -589,6 +585,9 @@ def layer_query(
             limit=limit,
             sql=sql,
         )
+
+    if safe_mode == "profile" and safe_layer != "raw":
+        raise ValueError(f"mode=profile e' valido solo per layer=raw (ricevuto: layer={layer})")
 
     # --- Pipeline mode ---
     if safe_mode == "schema":

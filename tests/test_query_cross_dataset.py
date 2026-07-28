@@ -1,0 +1,124 @@
+"""Test contratto per catalog mode in toolkit_layer (cross-dataset SQL)."""
+
+from __future__ import annotations
+
+import duckdb
+import pytest
+from pytest import MonkeyPatch
+
+from toolkit.cli.layer_ops import layer_query
+
+pytestmark = pytest.mark.contract
+
+
+# ---------------------------------------------------------------------------
+# Mock helpers
+# ---------------------------------------------------------------------------
+
+
+class _FakeResult:
+    description = [("n", None, None, None, None, None, None)]
+
+    def fetchall(self) -> list[tuple]:
+        return [(5,)]
+
+
+class _FakeConn:
+    def __init__(self) -> None:
+        self.description = [("n", None, None, None, None, None, None)]
+
+    def execute(self, sql: str) -> _FakeResult:
+        class R:
+            description = [("n", None, None, None, None, None, None)]
+
+            def fetchall(self) -> list[tuple]:
+                return [(5,)]
+
+        return R()
+
+    def __enter__(self) -> _FakeConn:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        pass
+
+
+def _mock_all(monkeypatch: MonkeyPatch) -> None:
+    """Mocka duckdb.connect + _resolve_datasets."""
+    import toolkit.cli.layer_ops as lo
+
+    def fake_resolve(datasets: list[str], *a, **kw) -> dict[str, str]:
+        return {s: f"/tmp/{s}.parquet" for s in datasets}
+
+    monkeypatch.setattr(lo, "_resolve_datasets", fake_resolve)
+    monkeypatch.setattr(duckdb, "connect", lambda *a, **kw: _FakeConn())
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+
+class TestCatalogMode:
+    def test_single_slug(self, monkeypatch: MonkeyPatch) -> None:
+        _mock_all(monkeypatch)
+        r = layer_query(datasets=["ds_a"], layer="clean", mode="sql", sql="SELECT 1")
+        assert r["mode"] == "sql"
+
+    def test_multiple_slugs(self, monkeypatch: MonkeyPatch) -> None:
+        _mock_all(monkeypatch)
+        r = layer_query(
+            datasets=["ds_a", "ds_b"],
+            layer="clean",
+            mode="sql",
+            sql="SELECT COUNT(*) AS n FROM ds_a JOIN ds_b ON 1=1",
+        )
+        assert r["mode"] == "sql"
+
+    def test_invalid_slug(self) -> None:
+        with pytest.raises(FileNotFoundError):
+            layer_query(datasets=["x"], layer="clean", mode="sql", sql="SELECT 1")
+
+    def test_no_params_raises(self) -> None:
+        with pytest.raises(ValueError, match="Specificare"):
+            layer_query(mode="sql", sql="SELECT 1")
+
+    def test_both_params_raises(self) -> None:
+        with pytest.raises(ValueError, match="Specificare"):
+            layer_query(config_path="/tmp/x.yml", datasets=["ds_a"], mode="sql", sql="SELECT 1")
+
+    def test_catalog_mode_rejects_preview(self, monkeypatch: MonkeyPatch) -> None:
+        _mock_all(monkeypatch)
+        with pytest.raises(ValueError, match="Catalog mode"):
+            layer_query(datasets=["ds_a"], mode="schema")
+
+    def test_catalog_mode_rejects_profile(self, monkeypatch: MonkeyPatch) -> None:
+        _mock_all(monkeypatch)
+        with pytest.raises(ValueError, match="Catalog mode"):
+            layer_query(datasets=["ds_a"], mode="profile")
+
+
+class TestScopeValidation:
+    def test_drop_blocked(self, monkeypatch: MonkeyPatch) -> None:
+        _mock_all(monkeypatch)
+        with pytest.raises(ValueError, match="SELECT o WITH"):
+            layer_query(datasets=["ds_a"], mode="sql", sql="DROP TABLE ds_a")
+
+    def test_read_parquet_blocked(self, monkeypatch: MonkeyPatch) -> None:
+        _mock_all(monkeypatch)
+        with pytest.raises(ValueError, match="non consentita"):
+            layer_query(datasets=["ds_a"], mode="sql", sql="SELECT * FROM read_parquet('s3://f')")
+
+    def test_unknown_table_blocked(self, monkeypatch: MonkeyPatch) -> None:
+        _mock_all(monkeypatch)
+        with pytest.raises(ValueError, match="non consentita"):
+            layer_query(datasets=["ds_a"], mode="sql", sql="SELECT * FROM unknown_table")
+
+    def test_insert_blocked(self, monkeypatch: MonkeyPatch) -> None:
+        _mock_all(monkeypatch)
+        with pytest.raises(ValueError, match="SELECT o WITH"):
+            layer_query(datasets=["ds_a"], mode="sql", sql="INSERT INTO ds_a VALUES (1)")
+
+    def test_empty_sql(self) -> None:
+        with pytest.raises(ValueError, match="richiede il parametro sql"):
+            layer_query(datasets=["ds"], layer="clean", mode="sql", sql="")

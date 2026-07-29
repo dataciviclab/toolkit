@@ -262,7 +262,18 @@ class TestRunFullFailedReport:
 
         config_path = self._make_config(tmp_path)
 
-        # Mock preflight per saltare check rete
+        # Mock config check (non valuta raw.sources/support reali)
+        monkeypatch.setattr(
+            "toolkit.domain.preflight.run_config_check",
+            lambda *args, **kwargs: {
+                "ok": True,
+                "errors": [],
+                "warnings": [],
+                "slug": "test",
+            },
+        )
+
+        # Mock source probe per saltare check rete
         monkeypatch.setattr(
             "toolkit.domain.preflight.run_preflight",
             lambda *args, **kwargs: {

@@ -371,6 +371,17 @@ def test_run_full_validates_via_context_not_direct_calls(tmp_path: Path, monkeyp
     monkeypatch.setattr(cmd_run, "run_clean", lambda *args, **kwargs: None)
     monkeypatch.setattr(cmd_run, "run_mart", lambda *args, **kwargs: None)
 
+    # Mock config check per evitare che fallisca su config minimale
+    monkeypatch.setattr(
+        "toolkit.domain.preflight.run_config_check",
+        lambda *args, **kwargs: {
+            "ok": True,
+            "errors": [],
+            "warnings": [],
+            "slug": "test",
+        },
+    )
+
     # run_full chiama run_preflight all'inizio — mockiamo per evitare
     # che validate_config fallisca su config minimale del test
     monkeypatch.setattr(

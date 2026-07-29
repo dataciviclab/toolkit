@@ -399,6 +399,7 @@ def dataset_info(config_path: str) -> dict[str, Any]:
     return {
         "dataset": cfg.dataset if hasattr(cfg, "dataset") else None,
         "config_path": str(config),
+        "source_id": cfg.source_id if hasattr(cfg, "source_id") else None,
         "years": list(cfg.years) if hasattr(cfg, "years") else [],
         "time_coverage": time_cov,
         "source_urls": source_urls,

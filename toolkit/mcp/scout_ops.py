@@ -1,7 +1,10 @@
-"""Scout tools: URL probe, inferenza, CKAN, HTML, SPARQL.
+"""Scout tools — URL probe, CKAN, HTML, SPARQL, preview URL.
 
 Implementazioni thin che chiamano le funzioni di ``toolkit.scout`` e
 ``toolkit.plugins`` e restituiscono dict serializzabili per MCP.
+
+Nota: mcp_infer_topic, mcp_list_ckan_datasets, mcp_list_sdmx_dataflows
+e mcp_probe_url_headers sono state rimosse (mai registrate come tool MCP).
 """
 
 from __future__ import annotations
@@ -11,11 +14,7 @@ from typing import Any
 from toolkit.scout.http import (
     fetch_ckan_package,
     fetch_html_body,
-    list_sdmx_dataflows as _list_sdmx_dataflows,
-    probe_url_headers,
-    search_ckan_datasets as _search_ckan_datasets,
 )
-from toolkit.scout.infer import infer_topics
 from toolkit.scout.link_extractor import (
     extract_data_links,
     group_links,
@@ -50,14 +49,6 @@ def mcp_probe_url_routed(
             Se fornito, salta l'euristica e usa routing deterministico.
     """
     return probe_url_routed(url, timeout=timeout, protocol=protocol)
-
-
-def mcp_probe_url_headers(url: str, timeout: int = 15) -> dict[str, Any]:
-    """Probe HTTP leggero: solo HEAD + Range fallback, nessun body.
-
-    Chiama ``toolkit.scout.http.probe_url_headers()``.
-    """
-    return probe_url_headers(url, timeout=timeout)
 
 
 # ---------------------------------------------------------------------------
@@ -96,19 +87,6 @@ def mcp_preview_url(
         known_skip=known_skip,
     )
     return asdict(result)
-
-
-# ---------------------------------------------------------------------------
-# Topic inference
-# ---------------------------------------------------------------------------
-
-
-def mcp_infer_topic(text: str) -> dict[str, Any]:
-    """Inferisce topic tematici da un testo (18 topic).
-
-    Chiama ``toolkit.scout.infer.infer_topics()``.
-    """
-    return {"topics": infer_topics(text)}
 
 
 # ---------------------------------------------------------------------------
@@ -153,9 +131,7 @@ def mcp_html_extract_links(url: str, timeout: int = 20) -> dict[str, Any]:
 
     Returns:
         Dict con:
-        - ``url``, ``is_reachable``, ``http_status``
-        - ``links`` (list[str], backward compat) e ``total``
-        - ``formats`` (dict[str, int], backward compat, lowercase estensione)
+        - ``url``, ``is_reachable``, ``http_status``, ``total``
         - ``data_links`` (list[dict] con url, format, title, prefix, years, page_url)
         - ``groups`` (list[dict] con group_id, prefix, count, year_range, formats)
     """
@@ -166,9 +142,7 @@ def mcp_html_extract_links(url: str, timeout: int = 20) -> dict[str, Any]:
             "url": url,
             "is_reachable": False,
             "error": str(exc),
-            "links": [],
             "total": 0,
-            "formats": {},
             "data_links": [],
             "groups": [],
         }
@@ -177,25 +151,11 @@ def mcp_html_extract_links(url: str, timeout: int = 20) -> dict[str, Any]:
     data_links = extract_data_links(url, html_text)
     groups = group_links(data_links)
 
-    # Backward compat: lista di URL semplici
-    links = [dl.url for dl in data_links]
-
-    # Backward compat: conteggio per estensione (lowercase, dal path senza query)
-    from urllib.parse import urlparse
-
-    formats: dict[str, int] = {}
-    for dl in data_links:
-        path = urlparse(dl.url).path
-        ext = path.rsplit(".", 1)[-1].lower() if "." in path else "unknown"
-        formats[ext] = formats.get(ext, 0) + 1
-
     return {
         "url": url,
         "is_reachable": True,
         "http_status": body.get("status_code"),
-        "total": len(links),
-        "links": links,
-        "formats": formats,
+        "total": len(data_links),
         "data_links": [
             {
                 "url": dl.url,
@@ -285,67 +245,5 @@ def mcp_sparql_query(
     }
 
 
-# ---------------------------------------------------------------------------
-# CKAN dataset listing
-# ---------------------------------------------------------------------------
-
-
-def mcp_list_ckan_datasets(
-    portal_url: str,
-    query: str | None = None,
-    rows: int = 100,
-    timeout: int = 30,
-) -> dict[str, Any]:
-    """Elenca i dataset di un portale CKAN via API package_search.
-
-    Args:
-        portal_url: URL del portale CKAN (es. ``https://www.dati.gov.it/opendata``).
-        query: Query testuale di ricerca (Solr). Default ``*:*`` (tutti).
-        rows: Numero massimo di dataset da restituire (default 100, max 500).
-        timeout: Timeout HTTP in secondi.
-
-    Returns:
-        Dict con ``portal_url``, ``count`` (totale disponibile), ``returned``,
-        ``datasets`` (lista di dataset con id, name, title, organization, resources_count).
-    """
-    try:
-        result = _search_ckan_datasets(portal_url, query=query or "*:*", rows=rows, timeout=timeout)
-        return {
-            "portal_url": portal_url,
-            "query": query,
-            "count": result["count"],
-            "returned": len(result["datasets"]),
-            "datasets": result["datasets"],
-        }
-    except RuntimeError as exc:
-        return {"portal_url": portal_url, "error": str(exc)}
-
-
-# ---------------------------------------------------------------------------
-# SDMX dataflow listing
-# ---------------------------------------------------------------------------
-
-
-def mcp_list_sdmx_dataflows(
-    agency: str = "IT1",
-    timeout: int = 30,
-) -> dict[str, Any]:
-    """Elenca i dataflow SDMX disponibili per un'agenzia.
-
-    Args:
-        agency: ID dell'agenzia SDMX (default ``IT1`` per ISTAT).
-        timeout: Timeout HTTP in secondi.
-
-    Returns:
-        Dict con ``agency``, ``returned``, ``dataflows`` (lista con id, name,
-        agency_id, version).
-    """
-    try:
-        dataflows = _list_sdmx_dataflows(agency=agency, timeout=timeout)
-        return {
-            "agency": agency,
-            "returned": len(dataflows),
-            "dataflows": dataflows,
-        }
-    except RuntimeError as exc:
-        return {"agency": agency, "error": str(exc)}
+# (mcp_list_ckan_datasets e mcp_list_sdmx_dataflows rimosse —
+#  mai registrate come MCP tool, nessun consumer)

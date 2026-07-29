@@ -15,7 +15,7 @@ import typer
 
 from toolkit.cli.common import dump_cfg_section, load_cfg_and_logger
 from toolkit.domain.common import iter_selected_years
-from toolkit.domain.profile import csv_preview  # noqa: F401  # re-export da rimuovere
+from toolkit.domain.profile import csv_preview
 from toolkit.core.paths import layer_year_dir
 from toolkit.core.config import ToolkitConfig
 from toolkit.profile.raw import profile_raw, write_raw_profile

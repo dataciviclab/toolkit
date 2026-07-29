@@ -104,12 +104,12 @@ class TestGroupLinks:
         assert group_links([]) == []
 
 
-class TestMcpFormatsQueryString:
-    """pure_unit: MCP formats legacy usa path, non URL grezzo."""
+class TestMcpDataLinks:
+    """pure_unit: data_links preserve format e URL pulito."""
 
     @pytest.mark.pure_unit
-    def test_formats_from_path(self, monkeypatch):
-        """URL con query string → formato senza query."""
+    def test_format_and_clean_url(self, monkeypatch):
+        """URL con query string → formato e URL preservati."""
         from toolkit.mcp.scout_ops import mcp_html_extract_links
 
         html = """
@@ -122,5 +122,7 @@ class TestMcpFormatsQueryString:
 
         monkeypatch.setattr("toolkit.mcp.scout_ops.fetch_html_body", mock_fetch)
         result = mcp_html_extract_links("https://ex.it/")
-        assert result["formats"] == {"csv": 1, "zip": 1}
+        assert result["total"] == 2
+        assert len(result["data_links"]) == 2
         assert result["data_links"][0]["format"] == "CSV"
+        assert result["data_links"][0]["url"].startswith("https://ex.it/data.csv")

@@ -318,7 +318,7 @@ def raw_preview(config_path: str, year: int | None = None, limit: int = 20) -> d
 
     suffix = raw_file.suffix.lower()
     if suffix in (".csv", ".tsv", ".txt"):
-        from toolkit.cli.inspect.profile_ops import csv_preview as _csv_preview
+        from toolkit.domain.profile import csv_preview as _csv_preview
 
         return _csv_preview(str(raw_file), limit=limit)
     elif suffix in (".xlsx", ".xls"):

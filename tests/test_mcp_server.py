@@ -125,11 +125,12 @@ def test_toolkit_html_extract_links_forwards_params(monkeypatch: pytest.MonkeyPa
 
     def fake_impl(url: str, timeout: int) -> dict:
         calls.update(url=url, timeout=timeout)
-        return {"total": 2, "links": ["data.csv"]}
+        return {"total": 2, "data_links": [{"url": "https://ex.it/data.csv"}], "groups": []}
 
     monkeypatch.setattr(mcp_server, "html_extract_links_impl", fake_impl)
     result = mcp_server.toolkit_html_extract_links("https://example.gov.it/pagina", timeout=20)
-    assert result == {"total": 2, "links": ["data.csv"]}
+    assert result["total"] == 2
+    assert len(result["data_links"]) == 1
     assert calls == {"url": "https://example.gov.it/pagina", "timeout": 20}
 
 

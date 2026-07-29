@@ -8,8 +8,6 @@ This module is a thin facade. The actual implementation lives in dedicated sub-m
 - schema_ops: show_schema, raw_profile, run_state, summary, review_readiness, schema_diff, ...
 - aggregate_ops: layer_query (toolkit_layer), dataset_status (toolkit_status)
 - scout_ops: probe_url, ckan, sparql, html
-- discovery: list_candidates
-
 Note: run_state is kept here for internal use (tests) but is no longer a registered MCP tool.
 Use inspect_paths (with run_file_count, years_seen) or summary (with latest_run_record) instead.
 """
@@ -17,7 +15,6 @@ Use inspect_paths (with run_file_count, years_seen) or summary (with latest_run_
 from __future__ import annotations
 
 # ruff: noqa: F401
-from toolkit.mcp.discovery import list_candidates
 from toolkit.mcp.errors import ToolkitClientError
 from toolkit.mcp.cli_adapter import inspect_paths
 from toolkit.mcp.schema_ops import (

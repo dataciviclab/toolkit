@@ -130,6 +130,32 @@ class TestLoadDatasetManifest:
         result = load_dataset_manifest(tmp_path)
         assert result["source_id"] == "istat_sdmx"
 
+    def test_tags_default_empty(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {"dataset": {"name": "test"}})
+        result = load_dataset_manifest(tmp_path)
+        assert result["tags"] == []
+
+    def test_tags_parsed(self, tmp_path: Path) -> None:
+        _write_dataset(
+            tmp_path,
+            {"dataset": {"name": "test", "tags": ["sanità", "farmaceutica"]}},
+        )
+        result = load_dataset_manifest(tmp_path)
+        assert result["tags"] == ["sanità", "farmaceutica"]
+
+    def test_category_default_none(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, {"dataset": {"name": "test"}})
+        result = load_dataset_manifest(tmp_path)
+        assert result["category"] is None
+
+    def test_category_parsed(self, tmp_path: Path) -> None:
+        _write_dataset(
+            tmp_path,
+            {"dataset": {"name": "test", "category": "sanità"}},
+        )
+        result = load_dataset_manifest(tmp_path)
+        assert result["category"] == "sanità"
+
     def test_empty_years_default(self, tmp_path: Path) -> None:
         _write_dataset(tmp_path, {"dataset": {"name": "test"}})
         result = load_dataset_manifest(tmp_path)

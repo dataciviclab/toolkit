@@ -110,6 +110,8 @@ def make_config(
         source_id=model.dataset.source_id,
         years=list(model.dataset.years),
         time_coverage=model.dataset.time_coverage,
+        tags=list(model.dataset.tags or []),
+        category=model.dataset.category,
         _model=model,
     )
 

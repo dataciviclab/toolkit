@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 _SAFE_SQL_IDENTIFIER_RE = r"^[A-Za-z_][A-Za-z0-9_]*$"
@@ -104,6 +104,8 @@ class DatasetBlock(BaseModel):
     years: list[int]
     source_id: str | None = None
     time_coverage: TimeCoverage | None = None
+    tags: list[str] = Field(default_factory=list)
+    category: str | None = None
 
 
 class SupportDatasetConfig(BaseModel):

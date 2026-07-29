@@ -585,3 +585,74 @@ def test_mart_required_tables_explicit_subset(tmp_path: Path):
 
     cfg = load_config(yml)
     assert cfg.mart.required_tables == ["table_a"]
+
+
+@pytest.mark.contract
+def test_dataset_tags_default_empty(tmp_path: Path):
+    """dataset.tags defaults to [] when omitted."""
+    yml = tmp_path / "dataset.yml"
+    _yml(yml)
+    cfg = load_config(yml)
+    assert cfg.tags == []
+
+
+@pytest.mark.contract
+def test_dataset_tags_parsed(tmp_path: Path):
+    """dataset.tags è parsato correttamente da YAML lista."""
+    yml = tmp_path / "dataset.yml"
+    _yml_str(
+        yml,
+        "dataset:\n"
+        "  name: demo\n"
+        "  years: [2024]\n"
+        "  tags: [sanità, farmaceutica, spesa-pubblica]\n"
+        "raw: {}\n"
+        "clean: {}\n"
+        "mart: {}",
+    )
+    cfg = load_config(yml)
+    assert cfg.tags == ["sanità", "farmaceutica", "spesa-pubblica"]
+
+
+@pytest.mark.contract
+def test_dataset_category_default_none(tmp_path: Path):
+    """dataset.category defaults to None when omitted."""
+    yml = tmp_path / "dataset.yml"
+    _yml(yml)
+    cfg = load_config(yml)
+    assert cfg.category is None
+
+
+@pytest.mark.contract
+def test_dataset_category_parsed(tmp_path: Path):
+    """dataset.category è parsato correttamente da YAML."""
+    yml = tmp_path / "dataset.yml"
+    _yml_str(
+        yml,
+        "dataset:\n  name: demo\n  years: [2024]\n  category: sanità\nraw: {}\nclean: {}\nmart: {}",
+    )
+    cfg = load_config(yml)
+    assert cfg.category == "sanità"
+
+
+@pytest.mark.policy
+def test_dataset_tags_and_category_with_source_id(tmp_path: Path):
+    """tags e category convivono con source_id e time_coverage."""
+    yml = tmp_path / "dataset.yml"
+    _yml_str(
+        yml,
+        "dataset:\n"
+        "  name: demo\n"
+        "  years: [2024]\n"
+        "  source_id: test_source\n"
+        "  tags: [tag1, tag2]\n"
+        "  category: test-category\n"
+        "raw: {}\n"
+        "clean: {}\n"
+        "mart: {}",
+    )
+    cfg = load_config(yml)
+    assert cfg.dataset == "demo"
+    assert cfg.source_id == "test_source"
+    assert cfg.tags == ["tag1", "tag2"]
+    assert cfg.category == "test-category"

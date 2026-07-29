@@ -39,7 +39,10 @@ class ToolkitConfig:
     time_coverage: TimeCoverage | None
 
     # Internal: the typed model (used by typed properties below)
-    _model: ToolkitConfigModel = field(repr=False, compare=False)
+    _model: ToolkitConfigModel
+
+    tags: list[str] = field(default_factory=list)
+    category: str | None = None
 
     # --- Typed accessors ---
 
@@ -116,5 +119,7 @@ def load_config(
         source_id=model.dataset.source_id,
         years=list(model.dataset.years),
         time_coverage=model.dataset.time_coverage,
+        tags=list(model.dataset.tags or []),
+        category=model.dataset.category,
         _model=model,
     )

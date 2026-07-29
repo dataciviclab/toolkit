@@ -25,6 +25,8 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 |---|---|---|
 | `dataset.name` | `string` | nessuno |
 | `dataset.years` | `list[int]` | nessuno |
+| `dataset.tags` | `list[string]` | `[]` |
+| `dataset.category` | `string \| null` | `null` |
 
 ## raw
 

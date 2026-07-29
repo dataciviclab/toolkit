@@ -407,6 +407,8 @@ def dataset_info(config_path: str) -> dict[str, Any]:
         "has_mart": has_mart,
         "mart_tables": mart_tables,
         "support_datasets": support_list,
+        "tags": list(cfg.tags) if hasattr(cfg, "tags") else [],
+        "category": cfg.category if hasattr(cfg, "category") else None,
     }
 
 

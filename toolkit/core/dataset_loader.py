@@ -51,6 +51,8 @@ def load_dataset_manifest(path: str | Path) -> dict[str, Any]:
         "years": ds.get("years") or [],
         "source_id": ds.get("source_id"),
         "time_coverage": ds.get("time_coverage"),
+        "tags": ds.get("tags") or [],
+        "category": ds.get("category"),
     }
 
     # raw.sources

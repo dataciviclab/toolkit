@@ -55,10 +55,12 @@ def read_macros(sql_path: Path | None = None) -> list[dict[str, Any]]:
     Returns:
         List[dict] con chiavi: name, signature, params[], returns,
         description, example, warning (opzionale), see (opzionale).
+        Lista vuota se il file SQL non esiste (package installato senza
+        package data — il contratto avra' 0 macro).
     """
     path = sql_path or _MACROS_SQL_PATH
     if not path.exists():
-        raise FileNotFoundError(f"Macros SQL file not found: {path}")
+        return []
 
     lines = path.read_text(encoding="utf-8").splitlines()
     macros: list[dict[str, Any]] = []
@@ -86,10 +88,11 @@ def read_macros(sql_path: Path | None = None) -> list[dict[str, Any]]:
             if cm:
                 last_contract_key = cm.group(1)
                 contract_annots[last_contract_key] = cm.group(2).strip()
-            elif last_contract_key and lines[j].startswith("--   "):
-                # Continuazione multi-riga di una annotazione @contract
-                # (indentata con 3 spazi dopo "--")
-                continuation = re.sub(r"^--\s{3}", "", lines[j]).strip()
+            elif last_contract_key and not _RE_MACRO_HEADER.match(lines[j]):
+                # Continuazione multi-riga di una annotazione @contract.
+                # Qualunque riga di commento dopo @contract (senza nuovo
+                # @contract ne' header macro) e' continuazione.
+                continuation = re.sub(r"^--\s*", "", lines[j]).strip()
                 if continuation:
                     contract_annots[last_contract_key] += " " + continuation
             else:

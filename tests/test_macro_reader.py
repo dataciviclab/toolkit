@@ -109,8 +109,8 @@ def test_macro_names_matches() -> None:
 
 
 def test_read_macros_file_not_found(tmp_path: Path) -> None:
-    """File mancante -> FileNotFoundError."""
+    """File mancante -> lista vuota (non blocca il contratto all'import)."""
     from toolkit.core.macro_reader import read_macros
 
-    with pytest.raises(FileNotFoundError):
-        read_macros(tmp_path / "nonexistent.sql")
+    result = read_macros(tmp_path / "nonexistent.sql")
+    assert result == []

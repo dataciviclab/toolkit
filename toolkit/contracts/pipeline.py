@@ -11,6 +11,8 @@ Queste descrivono comportamenti del runtime che non sono auto-estraibili.
 
 from __future__ import annotations
 
+from typing import Any
+
 from toolkit.core.constants import (
     CLEAN_INPUT_VIEW,
     RAW_INPUT_DF_VIEW,
@@ -24,7 +26,7 @@ from toolkit.core.macro_reader import read_macros
 
 # ── Tipi fonte RAW disponibili ────────────────────────────────────────────
 # Corrispondono ai file in toolkit/plugins/.
-_SOURCE_TYPES: list[dict[str, object]] = [
+_SOURCE_TYPES: list[dict[str, Any]] = [
     {
         "type": "http_file",
         "description": "Scarica un file da URL HTTP/HTTPS. Il tipo piu' comune.",
@@ -81,7 +83,7 @@ _SOURCE_TYPES: list[dict[str, object]] = [
 ]
 
 # ── Tipi extractor RAW ───────────────────────────────────────────────────
-_EXTRACTOR_TYPES: list[dict[str, object]] = [
+_EXTRACTOR_TYPES: list[dict[str, Any]] = [
     {
         "type": "identity",
         "description": "Nessuna estrazione: il file e' gia' nel formato giusto.",
@@ -102,7 +104,7 @@ _EXTRACTOR_TYPES: list[dict[str, object]] = [
 
 
 # ── Contratto layer RAW ──────────────────────────────────────────────────
-_RAW_CONTRACT: dict[str, object] = {
+_RAW_CONTRACT: dict[str, Any] = {
     "source_types": _SOURCE_TYPES,
     "extractors": _EXTRACTOR_TYPES,
     "validation": {
@@ -120,10 +122,10 @@ _RAW_CONTRACT: dict[str, object] = {
 # ── Macros: AUTO-GENERATE da macros.sql ───────────────────────────────────
 # Ogni macro in macros.sql con un header "-- ── nome ──" e annotazioni
 # @contract viene parsificata e inclusa qui. Nessuna manutenzione manuale.
-_MACROS: list[dict[str, object]] = read_macros()
+_MACROS: list[dict[str, Any]] = read_macros()
 
 # ── Contratto layer CLEAN ────────────────────────────────────────────────
-_CLEAN_CONTRACT: dict[str, object] = {
+_CLEAN_CONTRACT: dict[str, Any] = {
     "sql_source": {
         "view": RAW_INPUT_VIEW,
         "how_to_use": (
@@ -176,7 +178,7 @@ _CLEAN_CONTRACT: dict[str, object] = {
 }
 
 # ── Contratto layer MART ─────────────────────────────────────────────────
-_MART_CONTRACT: dict[str, object] = {
+_MART_CONTRACT: dict[str, Any] = {
     "sql_source": {
         "view": CLEAN_INPUT_VIEW,
         "how_to_use": (
@@ -204,7 +206,7 @@ _MART_CONTRACT: dict[str, object] = {
 }
 
 # ── Contratto generale pipeline ──────────────────────────────────────────
-_PIPELINE_CONTRACT: dict[str, object] = {
+_PIPELINE_CONTRACT: dict[str, Any] = {
     "layers": [
         {
             "name": "RAW",
@@ -283,7 +285,7 @@ _CLI_COMMANDS: list[dict[str, str]] = [
 ]
 
 # ── Struttura dataset.yml (quick reference) ─────────────────────────────
-_CONFIG_QUICKREF: dict[str, object] = {
+_CONFIG_QUICKREF: dict[str, Any] = {
     "required_top_level_fields": [
         "dataset.name (nome del dataset)",
         "dataset.years (lista anni, es: [2024])",
@@ -323,7 +325,7 @@ mart:
 
 # ── Contratto completo ───────────────────────────────────────────────────
 # Struttura stabile: nuove chiavi sono additive e backward-compatibili.
-CONTRACTS: dict[str, object] = {
+CONTRACTS: dict[str, Any] = {
     "version": "1",
     "pipeline": _PIPELINE_CONTRACT,
     "raw": _RAW_CONTRACT,

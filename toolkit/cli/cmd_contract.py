@@ -7,6 +7,8 @@ Speculare al tool MCP toolkit_contract.
 from __future__ import annotations
 
 import json
+from typing import Any
+
 import typer
 
 
@@ -33,6 +35,7 @@ def contract(
     from toolkit.contracts.pipeline import CONTRACTS
 
     # Risolvi layer
+    data: dict[str, Any]
     if layer == "all":
         data = CONTRACTS
     elif layer == "raw":
@@ -94,7 +97,7 @@ def contract(
         typer.echo("╰────────────────────────────────────────────────────────╯")
 
 
-def _print_raw(raw: dict) -> None:
+def _print_raw(raw: dict[str, Any]) -> None:
     typer.echo("│  ── LAYER RAW ────────────────────────────────────────────")
     typer.echo("│  Tipi fonte disponibili:")
     for src in raw["source_types"]:
@@ -111,7 +114,7 @@ def _print_raw(raw: dict) -> None:
     typer.echo(f"│  Output: {raw.get('output', {}).get('path', '-')}")
 
 
-def _print_clean(clean: dict) -> None:
+def _print_clean(clean: dict[str, Any]) -> None:
     typer.echo("│  ── LAYER CLEAN ──────────────────────────────────────────")
     typer.echo(f"│  View SQL:      {clean['sql_source']['view']}")
     typer.echo(f"│  Year token:    {clean['year_placeholder']['syntax']}")
@@ -132,7 +135,7 @@ def _print_clean(clean: dict) -> None:
         typer.echo(f"│    → {d['recommended_usage']}")
 
 
-def _print_mart(mart: dict) -> None:
+def _print_mart(mart: dict[str, Any]) -> None:
     typer.echo("│  ── LAYER MART ───────────────────────────────────────────")
     typer.echo(f"│  View SQL:      {mart['sql_source']['view']}")
     typer.echo(f"│  Multi-year:    {mart.get('multi_year', {}).get('description', '-')[:70]}")

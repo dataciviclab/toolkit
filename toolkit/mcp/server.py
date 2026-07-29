@@ -252,13 +252,13 @@ def toolkit_dataset_overview(
     "Parametro layer='raw' | 'clean' | 'mart' | 'all' (default).",
     structured_output=True,
 )
-def toolkit_contract(layer: str = "all") -> dict[str, object]:
+def toolkit_contract(layer: str = "all") -> dict[str, Any]:
     from toolkit.contracts.pipeline import CONTRACTS
 
     if layer == "all":
         return CONTRACTS
     if layer in CONTRACTS:
-        return {"layer": layer, **CONTRACTS[layer]}  # type: ignore[misc]
+        return {"layer": layer, **CONTRACTS[layer]}
     return CONTRACTS
 
 

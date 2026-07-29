@@ -148,6 +148,30 @@ def test_contracts_json_serializable() -> None:
     assert len(parsed["clean"]["macros"]) >= 8
 
 
+def test_contracts_source_types_cover_plugins() -> None:
+    """Ogni plugin in toolkit/plugins/ ha una voce in source_types.
+
+    Test di manutenzione: se si aggiunge un plugin, il contratto raw
+    deve essere aggiornato con il nuovo tipo fonte.
+    """
+    from pathlib import Path
+
+    from toolkit.contracts.pipeline import CONTRACTS
+
+    plugins_dir = Path(__file__).parent.parent / "toolkit" / "plugins"
+    plugin_files = sorted(
+        p.stem for p in plugins_dir.glob("*.py") if p.stem not in ("__init__", "_http_utils")
+    )
+
+    contract_types = {s["type"] for s in CONTRACTS["raw"]["source_types"]}
+
+    missing = set(plugin_files) - contract_types
+    assert not missing, (
+        f"Plugin(s) senza corrispondente in source_types: {missing}. "
+        "Aggiungili a toolkit/contracts/pipeline.py _SOURCE_TYPES."
+    )
+
+
 def test_contract_cli_output() -> None:
     """CLI toolkit contract produce output senza errori."""
     from typer.testing import CliRunner
@@ -160,6 +184,11 @@ def test_contract_cli_output() -> None:
     assert "raw_input" in result.output
     assert "clean_input" in result.output
     assert "normalize_italian_number" in result.output
+
+    result_raw = runner.invoke(app, ["contract", "--layer", "raw"])
+    assert result_raw.exit_code == 0
+    assert "http_file" in result_raw.output
+    assert "LAYER RAW" in result_raw.output
 
     result_clean = runner.invoke(app, ["contract", "--layer", "clean"])
     assert result_clean.exit_code == 0

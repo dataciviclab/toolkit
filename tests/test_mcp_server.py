@@ -51,6 +51,12 @@ def test_toolkit_contract_structure() -> None:
     assert "warning" in italian_macro[0]
 
     # Layer-specific queries
+    # Layer-specific queries
+    raw_only = mcp_server.toolkit_contract(layer="raw")
+    assert raw_only["layer"] == "raw"
+    assert "source_types" in raw_only
+    assert any(s["type"] == "http_file" for s in raw_only["source_types"])
+
     clean_only = mcp_server.toolkit_contract(layer="clean")
     assert clean_only["layer"] == "clean"
     assert "sql_source" in clean_only

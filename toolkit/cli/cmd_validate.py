@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import typer
 
@@ -66,7 +67,7 @@ def validate(
         _logging.getLogger("toolkit").setLevel(_logging.CRITICAL + 1)
 
     layers = ["raw", "clean", "mart"] if step == "all" else [step]
-    results: list[dict[str, object]] = []
+    results: list[dict[str, Any]] = []
 
     for yr in selected_years:
         for layer in layers:

@@ -61,6 +61,13 @@ def _print_validation_details(layer_name: str, vpath: Path) -> None:
     content = read_json_or_none(vpath)
     if content is None:
         return
+
+    # Stampa errori e warning dal JSON di validazione
+    for err in content.get("errors") or []:
+        typer.echo(f"    error: {err}")
+    for warn in content.get("warnings") or []:
+        typer.echo(f"    warning: {warn}")
+
     summary = content.get("summary") or {}
     details: list[str] = []
     if layer_name == "clean":

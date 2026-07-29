@@ -79,6 +79,8 @@ def validate(
                     "passed": summary.get("passed"),
                     "errors_count": summary.get("errors_count", 0),
                     "warnings_count": summary.get("warnings_count", 0),
+                    "errors": summary.get("errors", []),
+                    "warnings": summary.get("warnings", []),
                 }
             )
 
@@ -94,6 +96,10 @@ def validate(
         typer.echo(
             f"{icon} {r['year']}/{r['layer']}  errors={r['errors_count']} warnings={r['warnings_count']}"
         )
+        for err in r.get("errors", []):
+            typer.echo(f"    error: {err}")
+        for warn in r.get("warnings", []):
+            typer.echo(f"    warning: {warn}")
 
     if any_failed:
         raise typer.Exit(code=1)

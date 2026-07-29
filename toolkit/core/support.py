@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,62 @@ def resolve_support_payloads(
             }
         )
     return resolved
+
+
+def check_support_path_drift(
+    raw_sql: str,
+    support_payloads: list[dict[str, Any]],
+    sql_label: str = "",
+) -> list[str]:
+    """
+    Scans raw SQL (pre-template-render) for hardcoded path references to
+    support datasets that bypass the ``{support.NAME.mart}`` placeholder
+    contract.
+
+    For each declared support entry, verifies that if the support dataset
+    slug appears in a path-like string literal, the corresponding
+    ``{support.NAME.mart}`` or ``{support.NAME.outputs}`` placeholder is
+    also present in the SQL.
+
+    Returns a list of warning messages (empty = no drift detected).
+    """
+    warnings: list[str] = []
+
+    # Build name -> dataset slug map from resolved payloads
+    name_slug_map: dict[str, str] = {}
+    for payload in support_payloads:
+        slug = payload.get("dataset", "")
+        if slug:
+            name_slug_map[payload["name"]] = slug
+
+    if not name_slug_map:
+        return warnings
+
+    # Find which support names are used via placeholder
+    used_via_placeholder: set[str] = set()
+    for match in re.finditer(r"\{support\.([A-Za-z_][A-Za-z0-9_]*)\.(mart|outputs)\}", raw_sql):
+        used_via_placeholder.add(match.group(1))
+
+    for name, slug in name_slug_map.items():
+        if name in used_via_placeholder:
+            continue
+
+        escaped = re.escape(slug)
+        for str_match in re.finditer(
+            r"""['"](?:[^'"]*""" + escaped + r"""[^'"]*)['"]""",
+            raw_sql,
+        ):
+            text = str_match.group(0)
+            # Filtra falsi positivi: deve sembrare un path (slash, backslash, extension)
+            if not any(c in text for c in ("/", "\\", ".")):
+                continue
+            warnings.append(
+                f"Support dataset '{slug}' referenced via hardcoded path "
+                f"instead of {{support.{name}.mart}}: "
+                f"{'' if not sql_label else sql_label + ' > '}{text[:120]}"
+            )
+
+    return warnings
 
 
 def flatten_support_template_ctx(payloads: list[dict[str, Any]]) -> dict[str, Any]:

@@ -288,6 +288,61 @@ def test_run_dry_run_fails_when_support_outputs_are_only_partially_present(
     assert "DRY_RUN" in result.output
 
 
+@pytest.mark.policy
+def test_run_dry_run_detects_hardcoded_support_path(
+    tmp_path: Path,
+    runner,
+) -> None:
+    """Anti-pattern: mart SQL uses hardcoded path instead of {support.X.mart} → PATH DRIFT warning."""
+    make_standard_sql(tmp_path)
+    root_dir = tmp_path / "out"
+    support_root = tmp_path / "support_out"
+
+    # Crea output parquet al path che il SQL hardcoded andra' a leggere
+    hardcoded_path = root_dir / "data" / "mart" / "lookup_ds" / "2022" / "lookup_table.parquet"
+    hardcoded_path.parent.mkdir(parents=True, exist_ok=True)
+    duckdb.execute(
+        f"COPY (SELECT 7 AS lookup_value) TO '{hardcoded_path.as_posix()}' (FORMAT PARQUET)"
+    )
+
+    # Crea config support con year 2022
+    support_config = tmp_path / "support_dataset.yml"
+    make_dataset_yml(
+        support_config,
+        root=support_root,
+        name="lookup_ds",
+        years=[2022],
+        clean_sql="sql/clean.sql",
+        mart_tables=[("lookup_table", "sql/lookup.sql")],
+    )
+
+    # ANTI-PATTERN: hardcoded mart path instead of {support.lookup.mart}
+    (tmp_path / "sql" / "mart" / "mart_example.sql").write_text(
+        "select * from read_parquet('{root}/data/mart/lookup_ds/{year}/lookup_table.parquet')",
+        encoding="utf-8",
+    )
+
+    config_path = make_dataset_yml(
+        tmp_path / "dataset.yml",
+        root=root_dir,
+        mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
+        extra=(
+            "support:\n"
+            '  - name: "lookup"\n'
+            f'    config: "{support_config.as_posix()}"\n'
+            "    years: [2022]"
+        ),
+    )
+
+    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+
+    # Dry-run succeeds (does NOT block on drift — only warns)
+    assert result.exit_code == 0, f"exit_code={result.exit_code} output={result.output}"
+    assert "PATH DRIFT" in result.output, f"output={result.output}"
+    assert "lookup_ds" in result.output
+    assert "{support.lookup.mart}" in result.output
+
+
 # ── Logger context ──────────────────────────────────────────────────────────
 
 

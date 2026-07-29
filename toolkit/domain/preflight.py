@@ -16,36 +16,14 @@ from toolkit.domain.common import iter_selected_years
 def run_config_check(cfg, config_path: str | Path) -> dict[str, Any]:
     """Config-only validation (zero network I/O).
 
-    Opera sul config object gia' caricato (``ToolkitConfig``) senza
-    rileggere il file YAML. Ritorna lo stesso formato di
-    ``validate_config`` per compatibilita' con i consumer esistenti.
+    Delega i controlli standard a ``validate_config`` (stessa logica,
+    stesso formato) invece di duplicare. Il parametro ``cfg`` e'
+    mantenuto per compatibilita' API (i chiamanti lo hanno gia' caricato).
 
     Returns:
         ``{"ok": bool, "errors": list[str], "warnings": list[str], "slug": str}``
     """
-    errors: list[str] = []
-    warnings: list[str] = []
-
-    if not cfg.dataset:
-        errors.append("'dataset.name' mancante o vuoto")
-
-    if not cfg.years:
-        errors.append("'dataset.years' mancante o vuoto")
-
-    sources = list(cfg.raw.sources or [])
-    support = list(cfg.support or [])
-    if not sources and not support:
-        errors.append("Nessuna 'raw.sources' ne' sezione 'support' — niente da fetchare")
-
-    if sources and not cfg.source_id:
-        warnings.append("'dataset.source_id' non impostato (utile per catalogazione)")
-
-    return {
-        "ok": len(errors) == 0,
-        "errors": errors,
-        "warnings": warnings,
-        "slug": cfg.dataset,
-    }
+    return validate_config(str(config_path))
 
 
 def run_preflight(

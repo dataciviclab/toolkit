@@ -11,7 +11,7 @@ import json
 import typer
 
 from toolkit.domain.layer import layer_query
-from toolkit.cli.inspect.schema_diff_ops import schema_diff as _schema_diff, schema_diff_payload
+from toolkit.domain.schema_diff import schema_diff_payload
 
 
 def config(
@@ -43,15 +43,56 @@ def config(
         toolkit inspect config -c dataset.yml --diff                    # schema-diff raw
     """
     if diff:
+        try:
+            payload = schema_diff_payload(config_path)
+        except (ValueError, FileNotFoundError) as exc:
+            typer.echo(json.dumps({"error": str(exc)}, indent=2))
+            raise typer.Exit(code=1)
+
         if json_output:
-            try:
-                result = schema_diff_payload(config_path)
-            except (ValueError, FileNotFoundError) as exc:
-                typer.echo(json.dumps({"error": str(exc)}, indent=2))
-                raise typer.Exit(code=1)
-            typer.echo(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            typer.echo(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
         else:
-            _schema_diff(config=config_path, as_json=False)
+            typer.echo(f"dataset: {payload['dataset']}")
+            typer.echo(f"config_path: {payload['config_path']}")
+            typer.echo(f"years: {', '.join(str(y) for y in payload['years'])}")
+            typer.echo("")
+            for entry in payload["entries"]:
+                typer.echo(f"year: {entry['year']}")
+                typer.echo(f"  raw_exists: {entry['raw_exists']}")
+                typer.echo(f"  raw_dir: {entry['raw_dir']}")
+                typer.echo(f"  primary_output_file: {entry['primary_output_file']}")
+                typer.echo(f"  profile_source: {entry['profile_source']}")
+                typer.echo(f"  encoding: {entry['encoding']}")
+                typer.echo(f"  delim: {entry['delim']}")
+                typer.echo(f"  decimal: {entry['decimal']}")
+                typer.echo(f"  skip: {entry['skip']}")
+                typer.echo(f"  columns_count: {entry['columns_count']}")
+                typer.echo(f"  header_line: {entry['header_line']}")
+                if entry.get("columns_preview"):
+                    typer.echo("  columns_preview:")
+                    for col in entry["columns_preview"]:
+                        typer.echo(f"    - {col}")
+                if entry.get("warnings"):
+                    typer.echo("  warnings:")
+                    for w in entry["warnings"]:
+                        typer.echo(f"    - {w}")
+                typer.echo("")
+            if payload["comparisons"]:
+                typer.echo("comparisons:")
+                for c in payload["comparisons"]:
+                    typer.echo(f"  {c['from_year']} -> {c['to_year']}:")
+                    typer.echo(f"    counts: {c['from_columns_count']} -> {c['to_columns_count']}")
+                    typer.echo(f"    changed: {c['changed']}")
+                    if c.get("added_columns"):
+                        typer.echo("    added_columns:")
+                        for col in c["added_columns"]:
+                            typer.echo(f"      - {col}")
+                    if c.get("removed_columns"):
+                        typer.echo("    removed_columns:")
+                        for col in c["removed_columns"]:
+                            typer.echo(f"      - {col}")
+            else:
+                typer.echo("comparisons: none")
         return
 
     try:

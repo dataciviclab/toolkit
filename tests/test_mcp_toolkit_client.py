@@ -537,11 +537,11 @@ def test_dataset_info_from_config(
     assert result["raw_sources_count"] >= 1
 
 
-# ── list_candidates ─────────────────────────────────────────────────
+# ── CatalogResolver: workspace discovery ─────────────────────────────
 
 
-def _make_candidate(workspace: Path, name: str) -> None:
-    """Crea un candidate minimale."""
+def _make_candidate_for_resolver(workspace: Path, name: str) -> None:
+    """Crea un candidate minimale nel workspace."""
     cand_dir = workspace / "dataset-incubator" / "candidates" / name
     cand_dir.mkdir(parents=True, exist_ok=True)
     (cand_dir / "dataset.yml").write_text(
@@ -549,14 +549,10 @@ def _make_candidate(workspace: Path, name: str) -> None:
     )
 
 
-def _make_candidate_run(
+def _make_candidate_run_for_resolver(
     workspace: Path, name: str, status: str = "SUCCESS", year: int = 2024, root: str | None = None
 ) -> None:
-    """Crea run record per un candidate.
-
-    Il path del run usa lo slug normalizzato (underscore),
-    coerente con la risoluzione in CatalogResolver.
-    """
+    """Crea run record per un candidate."""
     base = Path(root) if root else workspace / "out"
     slug = name.replace("-", "_")
     runs_dir = base / "data" / "_runs" / slug / str(year)
@@ -584,38 +580,33 @@ def _make_candidate_run(
         (["b-dataset", "a-dataset", "c-dataset"], True),
     ],
 )
-def test_list_candidates_sorting(tmp_path, monkeypatch, names, sorted_check):
-    """list_candidates: discover e ordinamento."""
-    from toolkit.mcp import discovery as _discmod
-
-    monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
+def test_resolver_discover_candidates(tmp_path, names, sorted_check):
+    """CatalogResolver: discover workspace candidates."""
+    from toolkit.domain.catalog import CatalogResolver
 
     for name in names:
-        _make_candidate(tmp_path, name)
+        _make_candidate_for_resolver(tmp_path, name)
 
-    from toolkit.mcp.discovery import list_candidates
-
-    result = list_candidates(stage="all")
-    slugs = [c["slug"] for c in result]
-    # Gli slug ora sono normalizzati a underscore (merge con GCS)
-    normalized_names = [n.replace("-", "_") for n in names]
-    for i, slug in enumerate(normalized_names):
+    resolver = CatalogResolver(include_local=True, workspace=tmp_path)
+    result = resolver.list_datasets(source="workspace", stage="all")
+    datasets = result["datasets"]
+    slugs = [d["slug"] for d in datasets]
+    normalized = [n.replace("-", "_") for n in names]
+    for slug in normalized:
         assert slug in slugs
-        item = [c for c in result if c["slug"] == slug][0]
+        item = [d for d in datasets if d["slug"] == slug][0]
         assert item["stage"] == "candidates"
         assert item["years"] == [2024]
     if sorted_check:
         assert slugs == sorted(slugs)
 
 
-def test_list_candidates_resolves_custom_root(tmp_path, monkeypatch):
-    """list_candidates risolve root custom da dataset.yml."""
-    from toolkit.mcp import discovery as _discmod
-
-    monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
+def test_resolver_custom_root(tmp_path):
+    """CatalogResolver: root custom da dataset.yml."""
+    from toolkit.domain.catalog import CatalogResolver
 
     dir_name = "test-root-candidate"
-    slug = "test_root_candidate"  # normalizzato
+    slug = "test_root_candidate"
     cand_dir = tmp_path / "dataset-incubator" / "candidates" / dir_name
     cand_dir.mkdir(parents=True, exist_ok=True)
     (cand_dir / "dataset.yml").write_text(
@@ -632,11 +623,11 @@ def test_list_candidates_resolves_custom_root(tmp_path, monkeypatch):
     mart_dir.mkdir(parents=True, exist_ok=True)
     _write_parquet(mart_dir / f"mart_{slug}.parquet")
 
-    _make_candidate_run(tmp_path, slug, root=custom_root)
+    _make_candidate_run_for_resolver(tmp_path, slug, root=custom_root)
 
-    from toolkit.mcp.discovery import list_candidates
-
-    items = [c for c in list_candidates(stage="all") if c["slug"] == slug]
+    resolver = CatalogResolver(include_local=True, workspace=tmp_path)
+    result = resolver.list_datasets(source="workspace", stage="all")
+    items = [d for d in result["datasets"] if d["slug"] == slug]
     assert len(items) == 1
     item = items[0]
     assert item["has_clean"] is True
@@ -653,43 +644,36 @@ def test_list_candidates_resolves_custom_root(tmp_path, monkeypatch):
         ("FAILED", 0),
     ],
 )
-def test_list_candidates_status_filter(tmp_path, monkeypatch, status_filter, expected_count):
-    """Filtro per last_run_status."""
-    from toolkit.mcp import discovery as _discmod
+def test_resolver_status_filter(tmp_path, status_filter, expected_count):
+    """CatalogResolver: filtro per last_run_status."""
+    from toolkit.domain.catalog import CatalogResolver
 
-    monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
+    _make_candidate_for_resolver(tmp_path, "candidate-a")
+    _make_candidate_for_resolver(tmp_path, "candidate-b")
+    _make_candidate_run_for_resolver(tmp_path, "candidate-b")  # SUCCESS
 
-    _make_candidate(tmp_path, "candidate-a")
-    _make_candidate(tmp_path, "candidate-b")
-    _make_candidate_run(tmp_path, "candidate-b")  # SUCCESS
-
-    from toolkit.mcp.discovery import list_candidates
-
-    kwargs = {"stage": "candidates"}
+    resolver = CatalogResolver(include_local=True, workspace=tmp_path)
+    kwargs = {"source": "workspace", "stage": "candidates"}
     if status_filter:
         kwargs["status_filter"] = status_filter
-    result = list_candidates(**kwargs)
-    assert len(result) == expected_count
+    result = resolver.list_datasets(**kwargs)
+    assert len(result["datasets"]) == expected_count
 
 
 @pytest.mark.parametrize(
-    "invalid,kwargs,error_match",
+    "kwargs,error_match",
     [
-        ("status", {"status_filter": "INVALID"}, "status_filter"),
-        ("stage", {"stage": "bogus"}, "stage deve essere"),
+        ({"status_filter": "INVALID"}, "status_filter"),
+        ({"stage": "bogus"}, "stage"),
     ],
 )
-def test_list_candidates_invalid_params(tmp_path, monkeypatch, invalid, kwargs, error_match):
-    """Parametri invalidi → errore."""
-    from toolkit.mcp import discovery as _discmod
-    from toolkit.mcp.errors import ToolkitClientError
+def test_resolver_invalid_params(tmp_path, kwargs, error_match):
+    """CatalogResolver: parametri invalidi → ValueError."""
+    from toolkit.domain.catalog import CatalogResolver
 
-    monkeypatch.setattr(_discmod, "WORKSPACE_ROOT", tmp_path)
-
-    from toolkit.mcp.discovery import list_candidates
-
-    with pytest.raises(ToolkitClientError, match=error_match):
-        list_candidates(**kwargs)
+    resolver = CatalogResolver(include_local=True, workspace=tmp_path)
+    with pytest.raises(ValueError, match=error_match):
+        resolver.list_datasets(source="workspace", **kwargs)
 
 
 # ── _safe_path ──────────────────────────────────────────────────────

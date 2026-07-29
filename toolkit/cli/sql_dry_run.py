@@ -217,6 +217,16 @@ def validate_sql_dry_run(cfg, *, year: int, layers: list[str], dry_run: bool = F
     if not any(layer in {"clean", "mart"} for layer in layers):
         return
 
+    # ── Config check (zero network I/O, sempre) ─────────────────────────
+    from toolkit.domain.preflight import run_config_check
+
+    config_check = run_config_check(cfg, cfg.base_dir / "dataset.yml")
+    if not config_check.get("ok", False):
+        for err in config_check.get("errors", []):
+            _logger.error("CONFIG ERR: %s", err)
+    for warn in config_check.get("warnings", []):
+        _logger.warning("CONFIG WARN: %s", warn)
+
     with safe_connect() as con:
         _load_standard_macros(con, logger=None)
         if cfg.clean.sql:

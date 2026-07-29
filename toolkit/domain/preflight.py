@@ -13,6 +13,19 @@ from toolkit.core.dataset_loader import validate_config
 from toolkit.domain.common import iter_selected_years
 
 
+def run_config_check(cfg, config_path: str | Path) -> dict[str, Any]:
+    """Config-only validation (zero network I/O).
+
+    Delega i controlli standard a ``validate_config`` (stessa logica,
+    stesso formato) invece di duplicare. Il parametro ``cfg`` e'
+    mantenuto per compatibilita' API (i chiamanti lo hanno gia' caricato).
+
+    Returns:
+        ``{"ok": bool, "errors": list[str], "warnings": list[str], "slug": str}``
+    """
+    return validate_config(str(config_path))
+
+
 def run_preflight(
     config: str | Path,
     *,

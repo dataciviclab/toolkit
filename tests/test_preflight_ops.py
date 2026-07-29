@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from toolkit.domain.preflight import run_preflight
+from toolkit.domain.preflight import run_config_check, run_preflight
 
 
 @pytest.fixture
@@ -182,3 +182,116 @@ class TestPreflightOps:
 
         # URL diversi → entrambi status success (non cached)
         assert all(s["status"] == "success" for s in csv_sources)
+
+
+# ── run_config_check ─────────────────────────────────────────────────────
+
+
+def _write_minimal_config(path: Path, *, extra: str = "") -> Path:
+    """Scrive un dataset.yml minimale valido."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    content = (
+        f'root: "{path.parent / "out"}"\n'
+        "dataset:\n"
+        '  name: "test_ds"\n'
+        "  years: [2024]\n"
+        "raw:\n"
+        "  sources:\n"
+        '    - name: "src"\n'
+        '      type: "http_file"\n'
+        "      args:\n"
+        '        url: "https://example.org/data.csv"\n'
+        f"{extra}\n"
+    )
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+class TestRunConfigCheck:
+    """Test per run_config_check: validazione locale zero-network."""
+
+    @pytest.mark.policy
+    def test_ok(self, tmp_path: Path) -> None:
+        """Config valido → ok: True."""
+        config_path = _write_minimal_config(tmp_path / "dataset.yml")
+        from toolkit.core.config import load_config
+
+        cfg = load_config(str(config_path))
+        result = run_config_check(cfg, str(config_path))
+        assert result["ok"] is True
+        assert result["errors"] == []
+
+    @pytest.mark.policy
+    def test_missing_name(self, tmp_path: Path) -> None:
+        """dataset.name vuoto → errore."""
+        config_path = tmp_path / "dataset.yml"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(
+            "root: /tmp/out\ndataset:\n  name: ''\n  years: [2024]\nraw: {}\n",
+            encoding="utf-8",
+        )
+        from toolkit.core.config import load_config
+
+        cfg = load_config(str(config_path))
+        result = run_config_check(cfg, str(config_path))
+        assert result["ok"] is False
+        assert any("name" in e for e in result["errors"])
+
+    @pytest.mark.policy
+    def test_empty_years(self, tmp_path: Path) -> None:
+        """dataset.years vuoto → errore."""
+        config_path = tmp_path / "dataset.yml"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(
+            "root: /tmp/out\ndataset:\n  name: 'x'\n  years: []\nraw: {}\n",
+            encoding="utf-8",
+        )
+        from toolkit.core.config import load_config
+
+        cfg = load_config(str(config_path))
+        result = run_config_check(cfg, str(config_path))
+        assert result["ok"] is False
+        assert any("years" in e for e in result["errors"])
+
+    @pytest.mark.policy
+    def test_years_as_strings(self, tmp_path: Path) -> None:
+        """years come stringhe → errore (M2)."""
+        config_path = tmp_path / "dataset.yml"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(
+            "root: /tmp/out\ndataset:\n  name: 'x'\n  years: ['2024']\nraw: {}\n",
+            encoding="utf-8",
+        )
+        from toolkit.core.config import load_config
+
+        cfg = load_config(str(config_path))
+        result = run_config_check(cfg, str(config_path))
+        assert result["ok"] is False
+        assert any("interi" in e for e in result["errors"])
+
+    @pytest.mark.policy
+    def test_no_sources_no_support(self, tmp_path: Path) -> None:
+        """Niente raw.sources ne' support → errore."""
+        config_path = tmp_path / "dataset.yml"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(
+            "root: /tmp/out\ndataset:\n  name: 'x'\n  years: [2024]\nraw: {}\n",
+            encoding="utf-8",
+        )
+        from toolkit.core.config import load_config
+
+        cfg = load_config(str(config_path))
+        result = run_config_check(cfg, str(config_path))
+        assert result["ok"] is False
+        assert any("sources" in e or "support" in e for e in result["errors"])
+
+    @pytest.mark.policy
+    def test_source_id_warning(self, tmp_path: Path) -> None:
+        """Sources presenti ma source_id mancante → warning."""
+        config_path = _write_minimal_config(tmp_path / "dataset.yml")
+        from toolkit.core.config import load_config
+
+        cfg = load_config(str(config_path))
+        result = run_config_check(cfg, str(config_path))
+        assert result["ok"] is True
+        assert any("source_id" in w for w in result["warnings"])

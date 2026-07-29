@@ -826,8 +826,21 @@ def run_full(
         "status": "passed",
     }
 
-    # ── Pre-flight check ────────────────────────────────────────────────
-    # Solo in esecuzione reale (dry-run non fa rete)
+    # ── Config check (sempre, zero network I/O) ─────────────────────────
+    from toolkit.domain.preflight import run_config_check
+
+    config_check = run_config_check(cfg, config)
+    results["config_check"] = config_check
+    if not config_check.get("ok", False):
+        logger.error("Config validation failed — aborting")
+        results["status"] = "failed"
+        if json_output:
+            typer.echo(json.dumps(results, indent=2, default=str))
+        raise typer.Exit(code=1)
+    for warn in config_check.get("warnings", []):
+        logger.warning("Config: %s", warn)
+
+    # ── Source probe (solo in esecuzione reale, fa rete) ─────────────────
     if not dry_flag:
         from toolkit.domain.preflight import run_preflight as _run_preflight
 
@@ -836,12 +849,6 @@ def run_full(
             "config_check": preflight["config_check"],
             "sources": preflight["sources"],
         }
-        if not preflight["config_check"].get("ok", False):
-            logger.error("Config validation failed — aborting")
-            results["status"] = "failed"
-            if json_output:
-                typer.echo(json.dumps(results, indent=2, default=str))
-            raise typer.Exit(code=1)
         if preflight["status"] != "passed":
             logger.warning(
                 "Pre-flight: %d source(s) unreachable (pipeline continua)",

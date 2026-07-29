@@ -12,6 +12,7 @@ from typing import Any
 
 from lab_connectors.duckdb import safe_connect
 
+from toolkit.core.constants import CLEAN_OUT_TABLE
 from toolkit.core.duckdb_read import read_raw_to_relation
 from toolkit.core.input_file import RawInputFile
 from toolkit.core.layer_profile import profile_relation
@@ -79,10 +80,10 @@ def _run_sql(
             # Strip trailing semicolons: clean.sql spesso termina con ;
             stripped = sql_query.rstrip().rstrip(";").rstrip()
             sql_query = f"SELECT * FROM ({stripped}) AS _smoke_sample LIMIT {int(sample_rows)}"
-        con.execute(f"CREATE TABLE clean_out AS {sql_query}")
-        output_profile = profile_relation(con, "clean_out")
+        con.execute(f"CREATE TABLE {CLEAN_OUT_TABLE} AS {sql_query}")
+        output_profile = profile_relation(con, CLEAN_OUT_TABLE)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         con.execute(
-            f"COPY clean_out TO '{sql_path(output_path)}' (FORMAT PARQUET, COMPRESSION ZSTD);"
+            f"COPY {CLEAN_OUT_TABLE} TO '{sql_path(output_path)}' (FORMAT PARQUET, COMPRESSION ZSTD);"
         )
         return read_info.source, read_info.params_used, output_profile

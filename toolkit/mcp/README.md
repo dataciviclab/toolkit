@@ -3,7 +3,7 @@
 Server MCP locale, read-only, per ispezionare la pipeline e il catalogo
 dataset del DataCivicLab.
 
-## Tool esposti (12)
+## Tool esposti (13)
 
 ### Catalogo (slug-based — GCS + workspace)
 
@@ -12,6 +12,10 @@ dataset del DataCivicLab.
 
 ### Pipeline (config-based — dataset.yml locale)
 
+- `toolkit_contract` — **nuovo** contratti pipeline per agenti AI: tipi fonte
+  raw, view names (raw_input/clean_input), macro SQL, regole validazione,
+  formati numerici. Chiamare PRIMA di scrivere dataset.yml/clean.sql/mart.sql
+  con --layer raw|clean|mart|all
 - `toolkit_layer` — query unificata RAW/CLEAN/MART: schema, preview, profile, SQL. Due modalita':
   `config_path` (pipeline locale) o `datasets` (catalogo GCS/workspace)
 - `toolkit_status` — stato completo dataset: paths, summary, readiness, run_stats, info

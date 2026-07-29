@@ -8,12 +8,21 @@
 -- Uso: SELECT normalize_italian_number("colonna") AS importo FROM raw_input
 --
 -- Tutte le macro sono CREATE OR REPLACE — sicure da eseguire più volte.
+--
+-- 📌 Il contratto macro (toolkit/contracts/) e' AUTO-GENERATO da questo file.
+--    Quando aggiungi una macro, aggiungi un commento "-- @contract <chiave>: <valore>"
+--    per ogni informazione che deve finire nel contratto (returns, warning, example, see...).
+--    I test contract verificano che ogni macro abbia un contratto.
 -- =============================================================================
 
 -- ── normalize_italian_number ───────────────────────────────────────────────
 -- Converte un numero in formato italiano (1.234,56 → 1234.56).
 -- Rimuove punti migliaia, converte virgola decimale in punto.
 -- TRY_CAST restituisce NULL se la conversione fallisce.
+-- @contract returns: DOUBLE
+-- @contract warning: NON usare se read.decimal=',' e' configurato in dataset.yml.
+--   DuckDB ha gia' parsato il numero con la virgola decimale: basta CAST(x AS DOUBLE).
+-- @contract see: remove_dot_thousands per interi con punti migliaia (senza virgola decimale).
 CREATE OR REPLACE MACRO normalize_italian_number(val) AS
    TRY_CAST(REPLACE(REPLACE(val::VARCHAR, '.', ''), ',', '.') AS DOUBLE);
 
@@ -21,6 +30,7 @@ CREATE OR REPLACE MACRO normalize_italian_number(val) AS
 -- Come normalize_italian_number ma restituisce INTEGER.
 -- DuckDB CAST(DOUBLE AS INTEGER) arrotonda (5432.90 → 5433).
 -- "1.234" → 1234, "5.432,10" → 5432, "5.432,90" → 5433.
+-- @contract returns: INTEGER
 CREATE OR REPLACE MACRO normalize_italian_integer(val) AS
    TRY_CAST(REPLACE(REPLACE(val::VARCHAR, '.', ''), ',', '.') AS INTEGER);
 
@@ -29,26 +39,36 @@ CREATE OR REPLACE MACRO normalize_italian_integer(val) AS
 -- decode_flag("ETS", 'X') → TRUE se il valore è 'X', FALSE altrimenti.
 -- Lista di valori ammessi: passare come secondo argomento il valore che
 -- rappresenta TRUE (es. 'X', 'S', '1', 'TRUE').
+-- @contract returns: BOOLEAN
+-- @contract example: decode_flag("ETS", 'X') AS is_ets
 CREATE OR REPLACE MACRO decode_flag(val, yes_value) AS
    CASE WHEN TRIM(val::VARCHAR) = yes_value::VARCHAR THEN TRUE ELSE FALSE END;
 
 -- ── normalize_string ───────────────────────────────────────────────────────
 -- Normalizza una stringa: TRIM + converte stringhe vuote in NULL.
+-- @contract returns: VARCHAR
+-- @contract example: normalize_string("Regione") AS regione
 CREATE OR REPLACE MACRO normalize_string(val) AS
    NULLIF(TRIM(val::VARCHAR), '');
 
 -- ── cast_int ───────────────────────────────────────────────────────────────
 -- TRY_CAST a INTEGER (32-bit). Per numeri grandi usa cast_bigint.
+-- @contract returns: INTEGER
+-- @contract example: cast_int("Eta") AS eta
 CREATE OR REPLACE MACRO cast_int(val) AS
    TRY_CAST(val AS INTEGER);
 
 -- ── cast_bigint ────────────────────────────────────────────────────────────
 -- TRY_CAST a BIGINT (64-bit). Usato dallo scaffold per colonne numeriche.
+-- @contract returns: BIGINT
+-- @contract example: cast_bigint("CODICE_FISCALE") AS codice_fiscale
 CREATE OR REPLACE MACRO cast_bigint(val) AS
    TRY_CAST(val AS BIGINT);
 
 -- ── cast_double ────────────────────────────────────────────────────────────
 -- TRY_CAST a DOUBLE con gestione NULL sicura.
+-- @contract returns: DOUBLE
+-- @contract example: cast_double("IMPORTO") AS importo
 CREATE OR REPLACE MACRO cast_double(val) AS
    TRY_CAST(val AS DOUBLE);
 
@@ -60,5 +80,7 @@ CREATE OR REPLACE MACRO cast_double(val) AS
 --   normalize_italian_number()  — formato italiano (virgola)
 --   cast_double()               — formato internazionale (punto)
 -- "1.234" → 1234.0, "1.234.567" → 1234567.0
+-- @contract returns: DOUBLE
+-- @contract example: remove_dot_thousands("POPOLAZIONE") AS popolazione
 CREATE OR REPLACE MACRO remove_dot_thousands(val) AS
    TRY_CAST(REPLACE(val::VARCHAR, '.', '') AS DOUBLE);

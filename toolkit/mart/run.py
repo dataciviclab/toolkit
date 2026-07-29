@@ -7,6 +7,7 @@ from typing import Any
 from lab_connectors.duckdb import safe_connect
 
 from toolkit.core.artifacts import should_write
+from toolkit.core.constants import CLEAN_INPUT_VIEW
 from toolkit.core.config import ensure_dict
 from toolkit.core.layer_profile import (
     compare_layer_profiles,
@@ -33,7 +34,7 @@ from toolkit.core.support import flatten_support_template_ctx, resolve_support_p
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 
 
-_CLEAN_INPUT_TOKEN_RE = re.compile(r"\bclean_input\b", re.IGNORECASE)
+_CLEAN_INPUT_TOKEN_RE = re.compile(rf"\b{CLEAN_INPUT_VIEW}\b", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +232,7 @@ def _run_hierarchy_levels(
         level_name = level_cfg.get("level", "unknown")
         table_name = level_cfg.get("table", f"h_{level_name}")
         grain = level_cfg.get("grain", [])
-        source_table = level_cfg.get("source_table") or "clean_input"
+        source_table = level_cfg.get("source_table") or CLEAN_INPUT_VIEW
 
         if not grain:
             logger.warning("hierarchy level '%s' has no grain columns — skipping", level_name)
@@ -363,11 +364,13 @@ def run_mart(
             # clean_input view
             if len(clean_files) == 1:
                 con.execute(
-                    f"CREATE VIEW clean_input AS SELECT * FROM read_parquet('{_sql_path_quote(clean_files[0])}')"
+                    f"CREATE VIEW {CLEAN_INPUT_VIEW} AS SELECT * FROM read_parquet('{_sql_path_quote(clean_files[0])}')"
                 )
             else:
                 paths = ",".join([f"'{_sql_path_quote(p)}'" for p in clean_files])
-                con.execute(f"CREATE VIEW clean_input AS SELECT * FROM read_parquet([{paths}])")
+                con.execute(
+                    f"CREATE VIEW {CLEAN_INPUT_VIEW} AS SELECT * FROM read_parquet([{paths}])"
+                )
 
         tables = mart_cfg.get("tables") or []
         has_hierarchy = bool(mart_cfg.get("hierarchy"))
@@ -418,7 +421,7 @@ def run_mart(
 
             if not clean_sql_configured and _CLEAN_INPUT_TOKEN_RE.search(sql):
                 raise ValueError(
-                    "MART SQL references clean_input but clean.sql is not configured in dataset.yml"
+                    f"MART SQL references {CLEAN_INPUT_VIEW} but clean.sql is not configured in dataset.yml"
                 )
 
             # Save rendered SQL for audit/debug

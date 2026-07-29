@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+from toolkit.core.constants import RAW_INPUT_VIEW, RAW_INPUT_SOURCE_VIEW
 from toolkit.core.input_file import RawInputFile
 from toolkit.core.read_csv_normalized import _execute_normalized_csv_read
 from toolkit.core.read_excel import _execute_excel_read
@@ -193,7 +194,7 @@ def _execute_csv_read(
 
     if source_columns:
         con.execute(
-            f"CREATE OR REPLACE VIEW raw_input_source AS "
+            f"CREATE OR REPLACE VIEW {RAW_INPUT_SOURCE_VIEW} AS "
             f"SELECT *{inject_sql} FROM read_csv([{paths}], {opt_sql});"
         )
         if trim_whitespace:
@@ -217,11 +218,11 @@ def _execute_csv_read(
         if inject_projection:
             full_projection = f"{projection}, {inject_projection}"
         con.execute(
-            f"CREATE OR REPLACE VIEW raw_input AS SELECT {full_projection} FROM raw_input_source;"
+            f"CREATE OR REPLACE VIEW {RAW_INPUT_VIEW} AS SELECT {full_projection} FROM {RAW_INPUT_SOURCE_VIEW};"
         )
     else:
         con.execute(
-            f"CREATE OR REPLACE VIEW raw_input AS SELECT *{inject_sql} FROM read_csv([{paths}], {opt_sql});"
+            f"CREATE OR REPLACE VIEW {RAW_INPUT_VIEW} AS SELECT *{inject_sql} FROM read_csv([{paths}], {opt_sql});"
         )
     params_used["trim_whitespace"] = bool(trim_whitespace)
     if inject_exprs:
@@ -239,11 +240,13 @@ def _execute_parquet_read(
     if not has_inject:
         if len(raw_paths) == 1:
             con.execute(
-                f"CREATE VIEW raw_input AS SELECT * FROM read_parquet('{sql_path(raw_paths[0])}');"
+                f"CREATE VIEW {RAW_INPUT_VIEW} AS SELECT * FROM read_parquet('{sql_path(raw_paths[0])}');"
             )
         else:
             paths_sql = quote_list(raw_paths)
-            con.execute(f"CREATE VIEW raw_input AS SELECT * FROM read_parquet([{paths_sql}]);")
+            con.execute(
+                f"CREATE VIEW {RAW_INPUT_VIEW} AS SELECT * FROM read_parquet([{paths_sql}]);"
+            )
         return ReadInfo(source="parquet", params_used={})
 
     # Build UNION ALL subqueries with inject_column
@@ -272,7 +275,7 @@ def _execute_parquet_read(
             parts.append(f"SELECT * FROM read_parquet('{path_sql}')")
 
     union_sql = " UNION ALL ".join(parts)
-    con.execute(f"CREATE VIEW raw_input AS {union_sql};")
+    con.execute(f"CREATE VIEW {RAW_INPUT_VIEW} AS {union_sql};")
 
     params: dict[str, Any] = {
         "inject_column": {

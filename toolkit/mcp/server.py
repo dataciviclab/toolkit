@@ -49,8 +49,12 @@ from .catalog_ops import (
 mcp = create_mcp_server(
     name="toolkit",
     instructions=(
-        "Server MCP locale, read-only, per ispezionare path risolti, "
-        "schemi, stato run e preview dati del toolkit. "
+        "Toolkit pipeline server — ispeziona dataset, esegue preview, "
+        "e fornisce contratti per agenti AI.\n\n"
+        "📌 **PRIMA di scrivere clean.sql o mart.sql**: chiama "
+        "toolkit_contract(layer='clean') per view name (raw_input), "
+        "macro disponibili, regole validazione e formati numerici.\n"
+        "Chiama toolkit_contract(layer='mart') per la view mart (clean_input).\n\n"
         "Supporta slug dataset (es. 'terna-electricity-by-source') "
         "al posto del path assoluto a dataset.yml."
     ),
@@ -233,6 +237,29 @@ def toolkit_dataset_overview(
         year=year,
         source=source,
     )
+
+
+# ---------------------------------------------------------------------------
+# Pipeline contracts (AI agent interface)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description="Restituisce i contratti di pipeline del toolkit in formato "
+    "strutturato. Usalo PRIMA di scrivere dataset.yml, clean.sql o mart.sql "
+    "per conoscere tipi fonte raw, view names (raw_input, clean_input), "
+    "macro disponibili, regole di validazione, e formati numerici italiani. "
+    "Parametro layer='raw' | 'clean' | 'mart' | 'all' (default).",
+    structured_output=True,
+)
+def toolkit_contract(layer: str = "all") -> dict[str, object]:
+    from toolkit.contracts.pipeline import CONTRACTS
+
+    if layer == "all":
+        return CONTRACTS
+    if layer in CONTRACTS:
+        return {"layer": layer, **CONTRACTS[layer]}  # type: ignore[misc]
+    return CONTRACTS
 
 
 # ---------------------------------------------------------------------------

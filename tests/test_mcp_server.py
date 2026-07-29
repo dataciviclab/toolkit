@@ -20,6 +20,7 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_schema_diff",
         "toolkit_layer",
         "toolkit_status",
+        "toolkit_contract",
         "toolkit_probe_url",
         "toolkit_ckan_package_show",
         "toolkit_html_extract_links",
@@ -29,6 +30,36 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_find",
         "toolkit_dataset_overview",
     }
+
+
+def test_toolkit_contract_structure() -> None:
+    """toolkit_contract returns stable structure with all required keys."""
+    result = mcp_server.toolkit_contract(layer="all")
+    assert "version" in result
+    assert "pipeline" in result
+    assert "clean" in result
+    assert "mart" in result
+    assert "constants" in result
+    assert "tldr" in result
+
+    # Clean contract has macros with warning rules
+    clean = result["clean"]
+    assert clean["sql_source"]["view"] == "raw_input"
+    assert len(clean["macros"]) >= 8
+    italian_macro = [m for m in clean["macros"] if m["name"] == "normalize_italian_number"]
+    assert len(italian_macro) == 1
+    assert "warning" in italian_macro[0]
+
+    # Layer-specific queries
+    clean_only = mcp_server.toolkit_contract(layer="clean")
+    assert clean_only["layer"] == "clean"
+    assert "sql_source" in clean_only
+    assert clean_only["sql_source"]["view"] == "raw_input"
+
+    mart_only = mcp_server.toolkit_contract(layer="mart")
+    assert mart_only["layer"] == "mart"
+    assert "sql_source" in mart_only
+    assert mart_only["sql_source"]["view"] == "clean_input"
 
 
 def test_tool_returns_payload_on_success(monkeypatch: pytest.MonkeyPatch) -> None:

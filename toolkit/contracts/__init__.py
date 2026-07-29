@@ -50,7 +50,12 @@ __all__ = [
     # Costanti file
     "CLEAN_PARQUET_SUFFIX",
     "METADATA_JSON",
+    # Pipeline contracts (AI agent interface)
+    "CONTRACTS",
 ]
+
+
+from toolkit.contracts.pipeline import CONTRACTS  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Costanti — pattern di file canonici

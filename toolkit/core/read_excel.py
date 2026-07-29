@@ -7,6 +7,9 @@ from typing import Any
 import pandas as pd
 
 
+from toolkit.core.constants import RAW_INPUT_VIEW, RAW_INPUT_DF_VIEW
+
+
 def _normalize_excel_sheet_name(value: Any) -> str | int:
     """Normalize sheet_name config value to a string or integer for pd.read_excel."""
     if value is None:
@@ -93,8 +96,8 @@ def _execute_excel_read(
             params_used = frame_params
 
     combined = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
-    con.register("raw_input_df", combined)
-    con.execute("CREATE OR REPLACE VIEW raw_input AS SELECT * FROM raw_input_df;")
+    con.register(RAW_INPUT_DF_VIEW, combined)
+    con.execute(f"CREATE OR REPLACE VIEW {RAW_INPUT_VIEW} AS SELECT * FROM {RAW_INPUT_DF_VIEW};")
 
     used = dict(params_used or {})
     if used.get("columns") is None:

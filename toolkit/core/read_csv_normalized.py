@@ -6,6 +6,7 @@ from typing import Any
 
 import pandas as pd
 
+from toolkit.core.constants import RAW_INPUT_VIEW, RAW_INPUT_DF_VIEW
 from toolkit.core.read_sql_utils import _parse_column_value
 from toolkit.core.io import normalize_encoding
 
@@ -156,8 +157,8 @@ def _execute_normalized_csv_read(
         _load_normalized_csv_frame(input_file, read_cfg, columns) for input_file in input_files
     ]
     combined = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
-    con.register("raw_input_df", combined)
-    con.execute("CREATE OR REPLACE VIEW raw_input AS SELECT * FROM raw_input_df;")
+    con.register(RAW_INPUT_DF_VIEW, combined)
+    con.execute(f"CREATE OR REPLACE VIEW {RAW_INPUT_VIEW} AS SELECT * FROM {RAW_INPUT_DF_VIEW};")
 
     params_used: dict[str, Any] = {
         "columns": dict(columns),

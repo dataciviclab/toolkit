@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from toolkit.core.constants import CLEAN_INPUT_VIEW, SOURCE_INPUT_VIEW
 from toolkit.core.paths import layer_year_dir
 from toolkit.core.sql_utils import sql_path
 
@@ -81,12 +82,12 @@ def bind_multi_year_view(con, files: list[Path], *, source_layer: str = "clean")
         source_expr = f"read_parquet([{paths}])"
 
     # Views universali (sempre disponibili)
-    con.execute(f"CREATE OR REPLACE VIEW source_input AS SELECT * FROM {source_expr}")
-    con.execute("CREATE OR REPLACE VIEW clean_input AS SELECT * FROM source_input")
-    con.execute("CREATE OR REPLACE VIEW clean AS SELECT * FROM source_input")
+    con.execute(f"CREATE OR REPLACE VIEW {SOURCE_INPUT_VIEW} AS SELECT * FROM {source_expr}")
+    con.execute(f"CREATE OR REPLACE VIEW {CLEAN_INPUT_VIEW} AS SELECT * FROM {SOURCE_INPUT_VIEW}")
+    con.execute(f"CREATE OR REPLACE VIEW clean AS SELECT * FROM {SOURCE_INPUT_VIEW}")
 
     # Views specifiche per source_layer (ex cross_year contract)
     if source_layer == "mart":
-        con.execute("CREATE OR REPLACE VIEW mart_input AS SELECT * FROM source_input")
-        con.execute("CREATE OR REPLACE VIEW mart AS SELECT * FROM source_input")
+        con.execute(f"CREATE OR REPLACE VIEW mart_input AS SELECT * FROM {SOURCE_INPUT_VIEW}")
+        con.execute(f"CREATE OR REPLACE VIEW mart AS SELECT * FROM {SOURCE_INPUT_VIEW}")
         con.execute("CREATE OR REPLACE VIEW mart_all_years AS SELECT * FROM source_input")

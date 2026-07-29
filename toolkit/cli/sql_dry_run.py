@@ -6,6 +6,7 @@ from typing import Any
 import duckdb
 from lab_connectors.duckdb import safe_connect
 
+from toolkit.core.constants import RAW_INPUT_VIEW, CLEAN_INPUT_VIEW
 from toolkit.clean.run import load_clean_sql
 from toolkit.clean.sql_execute import _load_standard_macros
 from toolkit.core.config import ensure_dict
@@ -59,7 +60,7 @@ def _create_placeholder_raw_input_with_columns(
         projection = ", ".join(f"NULL::VARCHAR AS {_quoted_identifier(name)}" for name in columns)
     else:
         projection = "NULL::VARCHAR AS __dry_run_placeholder"
-    con.execute(f"CREATE OR REPLACE VIEW raw_input AS SELECT {projection} LIMIT 0")
+    con.execute(f"CREATE OR REPLACE VIEW {RAW_INPUT_VIEW} AS SELECT {projection} LIMIT 0")
 
 
 def _extract_missing_binder_column(exc: Exception) -> str | None:
@@ -146,7 +147,9 @@ def _validate_mart_sql(
     clean_cfg_ = ensure_dict(cfg.clean)
     mart_cfg_ = ensure_dict(cfg.mart)
     if clean_cfg_.get("sql"):
-        con.execute("CREATE OR REPLACE VIEW clean_input AS SELECT * FROM __dry_run_clean_preview")
+        con.execute(
+            f"CREATE OR REPLACE VIEW {CLEAN_INPUT_VIEW} AS SELECT * FROM __dry_run_clean_preview"
+        )
 
     tables = mart_cfg_.get("tables") or []
     # In dry-run: require_exists=False per non bloccare candidate senza support

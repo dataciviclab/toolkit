@@ -10,6 +10,7 @@ from typing import Any
 
 from lab_connectors.duckdb import safe_connect
 
+from toolkit.core.constants import RAW_INPUT_VIEW
 from toolkit.core.duckdb_read import read_raw_to_relation
 from toolkit.core.layer_profile import profile_relation
 
@@ -27,4 +28,4 @@ def _profile_raw_input(
 ) -> dict[str, Any]:
     with safe_connect() as con:
         read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
-        return profile_relation(con, "raw_input")
+        return profile_relation(con, RAW_INPUT_VIEW)

@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from toolkit.core.support import (
+    check_support_path_drift,
     flatten_support_template_ctx,
     resolve_support_payloads,
     _support_expected_mart_outputs,
@@ -301,6 +302,82 @@ class TestFlattenSupportTemplateCtx:
         ctx = flatten_support_template_ctx(payloads)
         assert ctx["support.empty_support.outputs"] == []
         assert ctx["support.empty_support.mart"] is None
+
+
+# --- check_support_path_drift ---
+
+
+class TestCheckSupportPathDrift:
+    """Unit tests for anti-path-drift detection."""
+
+    _SAMPLE_PAYLOADS = [
+        {"name": "lookup", "dataset": "comuni_master"},
+        {"name": "glossario", "dataset": "opencivitas_glossario"},
+        {"name": "enti", "dataset": "opencivitas_fsc_enti_rso"},
+    ]
+
+    def test_no_payloads_returns_empty(self):
+        assert check_support_path_drift("select 1", []) == []
+
+    def test_correct_placeholder_no_warning(self):
+        sql = "select * from read_parquet('{support.lookup.mart}')"
+        assert check_support_path_drift(sql, self._SAMPLE_PAYLOADS) == []
+
+    def test_correct_outputs_placeholder_no_warning(self):
+        sql = "select * from read_parquet({support.lookup.outputs}, union_by_name=true)"
+        assert check_support_path_drift(sql, self._SAMPLE_PAYLOADS) == []
+
+    def test_hardcoded_path_detected(self):
+        sql = (
+            "select *\nfrom read_parquet('{root}/data/mart/opencivitas_glossario/{year}/t.parquet')"
+        )
+        warnings = check_support_path_drift(sql, self._SAMPLE_PAYLOADS)
+        assert len(warnings) == 1
+        assert "opencivitas_glossario" in warnings[0]
+        assert "{support.glossario.mart}" in warnings[0]
+
+    def test_multiple_hardcoded_paths(self):
+        sql = (
+            "select * from read_parquet('{root}/data/mart/opencivitas_glossario/2022/t.parquet')\n"
+            "union all\n"
+            "select * from read_parquet('{root}/data/clean/comuni_master/2026/t.parquet')"
+        )
+        warnings = check_support_path_drift(sql, self._SAMPLE_PAYLOADS)
+        assert len(warnings) == 2
+        combined = " ".join(warnings)
+        assert "opencivitas_glossario" in combined
+        assert "comuni_master" in combined
+
+    def test_mixed_correct_and_hardcoded(self):
+        """Uses {support.enti.mart} correctly but has hardcoded path for glossario."""
+        sql = (
+            "with enti as (select * from read_parquet('{support.enti.mart}')),\n"
+            "     metadati as (select * from read_parquet('{root}/data/mart/opencivitas_glossario/2022/t.parquet'))\n"
+            "select * from enti"
+        )
+        warnings = check_support_path_drift(sql, self._SAMPLE_PAYLOADS)
+        assert len(warnings) == 1
+        assert "opencivitas_glossario" in warnings[0]
+        assert "enti" not in warnings[0]
+
+    def test_slug_appears_in_variable_not_path(self):
+        """Slug in a column alias or variable name should not trigger false positive."""
+        sql = "select comuni_master as codice from table"
+        assert check_support_path_drift(sql, self._SAMPLE_PAYLOADS) == []
+
+    def test_slug_appears_in_sql_comment(self):
+        """Slug in a SQL comment should not trigger."""
+        sql = """-- comuni_master join table
+        select * from read_parquet('{support.lookup.mart}')"""
+        assert check_support_path_drift(sql, self._SAMPLE_PAYLOADS) == []
+
+    def test_nonexistent_slug_no_warning(self):
+        """Slug not in any payload entry → no check for it."""
+        sql = "select * from read_parquet('{root}/data/mart/unknown_slug/2024/t.parquet')"
+        assert check_support_path_drift(sql, self._SAMPLE_PAYLOADS) == []
+
+    def test_empty_payloads_does_not_raise_on_any_sql(self):
+        assert check_support_path_drift("garbage {{}} path 'slug' test", []) == []
 
 
 # --- Integration: resolve + flatten ---

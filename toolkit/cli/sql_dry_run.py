@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
@@ -11,8 +12,14 @@ from toolkit.clean.run import load_clean_sql
 from toolkit.clean.sql_execute import _load_standard_macros
 from toolkit.core.config import ensure_dict
 from toolkit.core.paths import resolve_sql_path as _resolve_mart_sql_path
-from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
+from toolkit.core.support import (
+    check_support_path_drift,
+    flatten_support_template_ctx,
+    resolve_support_payloads,
+)
 from toolkit.core.template import build_runtime_template_ctx, render_template
+
+_logger = logging.getLogger("toolkit.cli.sql_dry_run")
 
 _QUOTED_IDENTIFIER_RE = re.compile(r'"([^"]+)"')
 _BINDER_MISSING_COLUMN_RE = re.compile(r'Referenced column "([^"]+)" not found in FROM clause')
@@ -93,12 +100,24 @@ def _build_clean_preview(
 
     # Pre-calcola i path attesi del support per gestire IOError in dry-run
     support_paths: list[str] = []
+    support_payloads_drift: list[dict[str, Any]] = []
     if dry_run and support_cfg:
         try:
             sp_payloads = resolve_support_payloads(support_cfg, require_exists=False, smoke=False)
             support_paths = _all_support_expected_paths(sp_payloads)
+            support_payloads_drift = sp_payloads
         except Exception:
             pass
+
+    # Anti-path-drift: verifica che il SQL non referenzi support dataset
+    # via path hardcoded invece di {support.NAME.mart}
+    if support_payloads_drift:
+        raw_sql_text = clean_sql_path.read_text(encoding="utf-8")
+        drift_warnings = check_support_path_drift(
+            raw_sql_text, support_payloads_drift, sql_label=str(clean_sql_path)
+        )
+        for w in drift_warnings:
+            _logger.warning("PATH DRIFT: %s", w)
 
     # Fallback incrementale: se il clean.sql usa colonne raw non quotate e non
     # dichiarate in clean.read.columns, il binder di DuckDB ci dice il nome
@@ -170,7 +189,16 @@ def _validate_mart_sql(
         name = table.get("name")
         sql_ref = table.get("sql")
         sql_path = _resolve_mart_sql_path(sql_ref, base_dir=cfg.base_dir)
-        sql = _normalize_sql(render_template(sql_path.read_text(encoding="utf-8"), template_ctx))
+        raw_sql_text = sql_path.read_text(encoding="utf-8")
+        # Anti-path-drift: verifica che il SQL non referenzi support dataset
+        # via path hardcoded invece di {support.NAME.mart}
+        if support_payloads:
+            drift_warnings = check_support_path_drift(
+                raw_sql_text, support_payloads, sql_label=f"{sql_path} ({name})"
+            )
+            for w in drift_warnings:
+                _logger.warning("PATH DRIFT: %s", w)
+        sql = _normalize_sql(render_template(raw_sql_text, template_ctx))
         try:
             con.execute(f"EXPLAIN SELECT * FROM ({sql}) AS q LIMIT 0")
         except Exception as exc:

@@ -20,9 +20,14 @@ def run_config_check(cfg, config_path: str | Path | None) -> dict[str, Any]:
     stesso formato) invece di duplicare. Il parametro ``cfg`` e'
     mantenuto per compatibilita' API (i chiamanti lo hanno gia' caricato).
 
+    Quando ``config_path`` e' ``None`` (auto-detect, config gia' caricato
+    in ``cfg``), salta la validazione su file e restituisce check OK.
+
     Returns:
         ``{"ok": bool, "errors": list[str], "warnings": list[str], "slug": str}``
     """
+    if config_path is None:
+        return {"ok": True, "errors": [], "warnings": [], "slug": getattr(cfg.dataset, "name", "?")}
     return validate_config(str(config_path))
 
 
@@ -69,10 +74,10 @@ def run_preflight(
                 "status": "passed" | "failed",
             }
     """
-    cfg = load_config(str(config))
+    cfg = load_config(config)
 
     results: dict[str, Any] = {
-        "config": str(config),
+        "config": str(config) if config is not None else None,
         "dataset": cfg.dataset,
         "source_id": cfg.source_id,
         "years": [],
@@ -82,7 +87,11 @@ def run_preflight(
     }
 
     # ── 1. Config check ────────────────────────────────────────────────
-    config_check = validate_config(str(config))
+    config_check = (
+        validate_config(str(config))
+        if config is not None
+        else {"ok": True, "errors": [], "warnings": []}
+    )
     results["config_check"] = config_check
     if not config_check.get("ok", False):
         results["status"] = "failed"

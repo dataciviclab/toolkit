@@ -597,6 +597,7 @@ class RawProfile:
     header_line: Optional[str]
     columns_raw: List[str]
     columns_norm: List[str]
+    row_count: Optional[int]
 
     missingness_top: List[Dict[str, Any]]
     sample_rows: List[Dict[str, Any]]
@@ -672,6 +673,7 @@ def profile_raw(
             header_line=None,
             columns_raw=runtime_result["columns_raw"],
             columns_norm=runtime_result["columns_norm"],
+            row_count=runtime_result.get("row_count"),
             missingness_top=runtime_result["missingness_top"],
             sample_rows=runtime_result["sample_rows"],
             mapping_suggestions=runtime_result["mapping_suggestions"],
@@ -692,6 +694,7 @@ def profile_raw(
             header_line=None,
             columns_raw=[],
             columns_norm=[],
+            row_count=None,
             missingness_top=[],
             sample_rows=[],
             mapping_suggestions={},
@@ -710,6 +713,22 @@ def profile_raw(
 
     # Phase 3: DuckDB runtime profiling
     runtime_result = profile_with_read_cfg(file0, sniff_hints, effective_read_cfg)
+
+    # Count total rows using DuckDB (riusa read_csv options from profiling)
+    row_count: int | None = None
+    try:
+        from lab_connectors.duckdb import safe_connect
+        from toolkit.core.csv_read import csv_read_option_strings
+
+        with safe_connect() as _con:
+            _read_opts = ", ".join(csv_read_option_strings(effective_read_cfg))
+            csv_path = str(file0.resolve())
+            _con.execute(
+                f"CREATE OR REPLACE VIEW _profile_count AS SELECT * FROM read_csv('{csv_path}', {_read_opts})"
+            )
+            row_count = int(_con.execute("SELECT COUNT(*) FROM _profile_count").fetchone()[0])
+    except Exception:
+        pass
 
     # Phase 4: extract raw string values for date-typed columns
     # (DuckDB converts dates to Timestamp, losing the original format).
@@ -734,6 +753,7 @@ def profile_raw(
         header_line=header_line,
         columns_raw=runtime_result["columns_raw"],
         columns_norm=runtime_result["columns_norm"],
+        row_count=row_count,
         missingness_top=runtime_result["missingness_top"],
         sample_rows=runtime_result["sample_rows"],
         mapping_suggestions=runtime_result["mapping_suggestions"],

@@ -21,7 +21,7 @@ from toolkit.core.run_records import get_run_dir, latest_run
 from toolkit.core.support import resolve_support_payloads
 
 
-def _raw_output_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
+def _raw_output_paths(root: Path, dataset: str, year: int) -> dict[str, str | None]:
     raw_dir = layer_year_dir(root, "raw", dataset, year)
     return {
         "dir": str(raw_dir),
@@ -34,7 +34,7 @@ def _clean_output_path(root: Path, dataset: str, year: int) -> Path:
     return layer_year_dir(root, "clean", dataset, year) / f"{dataset}_{year}_clean.parquet"
 
 
-def _clean_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
+def _clean_paths(root: Path, dataset: str, year: int) -> dict[str, str | None]:
     clean_dir = layer_year_dir(root, "clean", dataset, year)
     return {
         "dir": str(clean_dir),

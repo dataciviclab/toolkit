@@ -19,21 +19,21 @@ Ruoli dei file:
 
 - `metadata.json`: payload ricco del layer. Contiene input, output, `config_hash`, summary di validazione e campi specifici del layer.
 - run record in `data/_runs/...`: stato del run (`run_id`, layer, validations, status), utile per `status` e `resume`.
-- `inspect paths --json`: helper read-only per notebook e script locali; restituisce i path assoluti utili del runtime, incluso `latest_run`.
+- `inspect --json` (o `inspect --config dataset.yml --json`): helper read-only per notebook e script locali; restituisce i path assoluti utili del runtime, incluso `latest_run`.
 
 Per evitare duplicazione di path logic nei notebook:
 
 - leggi `dataset.yml`
-- usa `toolkit inspect paths --config dataset.yml --year <year> --json`
+- usa `toolkit inspect --json --config dataset.yml --year <year>`
 - poi apri parquet, metadata, manifest, validation e run record dai path restituiti
 
 Nota pratica:
 
-- `inspect paths` restituisce path assoluti della macchina locale: è pensato per notebook e script nello stesso ambiente, non come formato portabile tra macchine diverse.
+- `inspect --json` restituisce path assoluti della macchina locale: è pensato per notebook e script nello stesso ambiente, non come formato portabile tra macchine diverse.
 
-## Contratto operativo di `inspect paths`
+## Contratto operativo di `inspect --json`
 
-`inspect paths` è il comando da usare quando il problema è:
+`inspect --json` è il comando da usare quando il problema è:
 
 - trovare i path runtime già risolti dal toolkit
 - evitare di ricostruire a mano `root/data/...`
@@ -65,8 +65,8 @@ Output garantito in `--json`:
 
 Regola pratica:
 
-- notebook e script locali: usa sempre `inspect paths --json`
-- CI che deve validare `effective_root` o path contract: usa `inspect paths --json`
+- notebook e script locali: usa sempre `inspect --json`
+- CI che deve validare `effective_root` o path contract: usa `inspect --json`
 - se non passi `--year`, il payload può essere una lista multi-anno
 
 ## Differenza rispetto a `inspect config --diff`
@@ -81,7 +81,7 @@ Serve invece quando vuoi:
 
 In breve:
 
-- `inspect paths`: "dove sono gli artefatti e quale runtime path contract posso usare?"
+- `inspect --json`: "dove sono gli artefatti e quale runtime path contract posso usare?"
 - `inspect config --diff`: "il RAW cambia tra anni e quanto cambia?"
 
 Regola pratica:

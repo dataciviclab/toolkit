@@ -765,8 +765,18 @@ def _execute_pipeline(
 ) -> None:
     """Esegue pre-flight + support + raw → clean → mart.
 
-    Core della pipeline completa. Chiamata sia dal comando ``toolkit run``
-    (default) che da ``run full`` (deprecato).
+    Core della pipeline completa. Chiamata dal comando ``toolkit run``
+    (default) e da ``run_full()`` (deprecato).
+
+    Args:
+        config: Path/slug per dataset.yml, o None per auto-detect CWD.
+        years: Anni separati da virgola, o None per tutti quelli configurati.
+        smoke: Se True, attiva --sample-rows 1000 --sample-bytes 1048576.
+        sample_rows: Limite righe in CLEAN (LIMIT su output SQL).
+        sample_bytes: Limite bytes in RAW (HTTP Range + troncamento).
+        root: Override root output directory.
+        json_output: Se True, stampa report JSON su stdout.
+        dry_run: Se True, solo plan senza esecuzione.
     """
     dry_flag = dry_run if isinstance(dry_run, bool) else False
 

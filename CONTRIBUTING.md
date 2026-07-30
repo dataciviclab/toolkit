@@ -66,13 +66,13 @@ mypy toolkit/
 
 ```bash
 # Run completo su dataset di esempio
-python -m toolkit.cli.app run all --config project-example/dataset.yml
+python -m toolkit.cli.app run --config project-example/dataset.yml
 
 # Validate
 python -m toolkit.cli.app validate all --config project-example/dataset.yml
 
-# Inspect paths
-python -m toolkit.cli.app inspect paths --config project-example/dataset.yml
+# Inspect (default: summary con path info)
+python -m toolkit.cli.app inspect --config project-example/dataset.yml
 
 # Profile RAW (canonico: inspect config)
 python -m toolkit.cli.app inspect config -c project-example/dataset.yml -l raw -m profile
@@ -85,7 +85,7 @@ critica per il rilascio:
 
 | Marker | Cosa copre | Deve sempre passare |
 |---|---|---|
-| `core` | Contratto pubblico e percorso canonico — config, path contract, `run all`, `validate all`, end-to-end RAW→CLEAN→MART, run records, resume | ✅ Sì |
+| `core` | Contratto pubblico e percorso canonico — config, path contract, `run`, `validate all`, end-to-end RAW→CLEAN→MART, run records, resume | ✅ Sì |
 | `advanced` | Comportamenti secondari — read modes, extractors, plugin registry, profiling, artifact policy | ✅ Su release |
 | `compat` | Solo compatibilità legacy e shim di import deprecati | No (può decadere) |
 

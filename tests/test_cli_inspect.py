@@ -249,3 +249,43 @@ class TestInspectTopLevel:
         assert "--json" in output
         assert "config" in output
         assert "runs" in output
+
+
+class TestAutoDetect:
+    """auto-detect config — --config opzionale."""
+
+    @pytest.mark.contract
+    def test_missing_config_fails_from_empty_dir(self, tmp_path):
+        """Senza dataset.yml nella CWD deve fallire con errore chiaro."""
+        import os
+
+        old = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            result = runner.invoke(app, ["inspect"])
+            assert result.exit_code != 0
+            assert "non trovato" in result.output
+        finally:
+            os.chdir(old)
+
+    @pytest.mark.contract
+    def test_auto_detect_from_cwd(self, project_example):
+        """Con dataset.yml nella CWD, --config non serve."""
+        import os
+
+        old = os.getcwd()
+        os.chdir(project_example)
+        try:
+            # run --dry-run deve trovare dataset.yml nella CWD
+            result = runner.invoke(app, ["run", "--dry-run"])
+            assert result.exit_code == 0, result.output
+            assert "Execution Plan" in result.output
+        finally:
+            os.chdir(old)
+
+    @pytest.mark.contract
+    def test_nonexistent_slug_fails(self):
+        """Slug inesistente deve fallire con errore chiaro."""
+        result = runner.invoke(app, ["inspect", "-c", "this-slug-definitely-does-not-exist"])
+        assert result.exit_code != 0
+        assert "Nessun dataset trovato" in result.output

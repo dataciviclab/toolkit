@@ -19,11 +19,11 @@ chiaro tra ogni layer.
 
 ```bash
 pip install -e .[dev]
-toolkit run full -c dataset.yml
-toolkit inspect summary -c dataset.yml
+toolkit run -c dataset.yml
+toolkit inspect -c dataset.yml
 ```
 
-Se `toolkit` non è nel PATH: `python -m toolkit.cli.app run all -c dataset.yml`
+Se `toolkit` non è nel PATH: `python -m toolkit.cli.app run -c dataset.yml`
 
 ## Pipeline: tre livelli
 
@@ -53,13 +53,18 @@ La CI di `dataset-incubator` carica su GCS dopo ogni run validato.
 ## CLI — comandi essenziali
 
 | Comando | Cosa fa |
-|---|---|
-| `toolkit run all --config dataset.yml` | Prima esecuzione completa |
-| `toolkit run clean --config dataset.yml` | Solo layer CLEAN |
-| `toolkit run mart --config dataset.yml` | Solo layer MART |
-| `toolkit inspect summary --config dataset.yml` | Stato ultimo run |
-| `toolkit inspect paths --config dataset.yml --year 2023` | Path assoluti degli output |
+|---|---|---|
+| `toolkit run` | Esecuzione completa RAW→CLEAN→MART |
+| `toolkit run raw` | Solo layer RAW |
+| `toolkit run clean` | Solo layer CLEAN |
+| `toolkit run mart` | Solo layer MART |
+| `toolkit inspect` | Stato ultimo run (riassunto) |
+| `toolkit inspect config --diff` | Schema-diff RAW tra anni |
+| `toolkit inspect runs --resume` | Riprendi run interrotto |
 | `toolkit scout <URL>` | Esplora fonte esterna (HTTP/CKAN/SDMX) |
+
+`--config` è opzionale: se omesso, toolkit cerca `dataset.yml` nella directory corrente.
+Se passi uno slug (es. `terna-electricity-by-source`), lo risolve nel workspace.
 
 📖 **Reference completo**: `toolkit --help`
 
@@ -121,11 +126,11 @@ Config IDE (`.mcp.json`):
 ## FAQ — problemi comuni
 
 | Problema | Soluzione |
-|---|---|
+|---|---|---|
 | `toolkit: command not found` | Usa `python -m toolkit.cli.app` |
 | Run interrotto | `toolkit inspect runs --resume -c dataset.yml` |
 | Schema diverso tra anni | `toolkit inspect config -c dataset.yml --diff` |
-| Dove sono i parquet? | `toolkit inspect paths --config dataset.yml --year <anno>` |
+| Dove sono i parquet? | `toolkit inspect -c dataset.yml` (mostra path nel riassunto) |
 
 ## Sviluppo
 

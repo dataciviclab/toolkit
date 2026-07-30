@@ -75,12 +75,11 @@ def serialize_metadata_path(path: Path | None, rel_root: Path | None) -> str | N
 # ---------------------------------------------------------------------------
 
 # Validation
-RAW_VALIDATION = "raw_validation.json"
-CLEAN_VALIDATION = "_validate/clean_validation.json"
-MART_VALIDATION = "_validate/mart_validation.json"
 
 # Profile (raw only)
 RAW_PROFILE_DIR = "_profile"
+
+
 RAW_PROFILE = "raw_profile.json"  # sotto _profile/
 RAW_SUGGESTED_READ = "suggested_read.yml"  # sotto _profile/
 

@@ -14,17 +14,11 @@ from toolkit.core.io import read_json_or_none
 from toolkit.domain.inspect_utils import (
     _check_run_record_coherence,
     _exists,
-    _read_validation_content,
-    _validation_summary_for_layer,
 )
 from toolkit.domain.path_resolver import payload_for_year as _payload_for_year
 from toolkit.core.config import load_config
 from toolkit.core.duckdb_shape import parquet_row_count
-from toolkit.core.paths import (
-    RAW_VALIDATION,
-    CLEAN_VALIDATION,
-    MART_VALIDATION,
-)
+from toolkit.core.run_records import get_run_dir
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +170,6 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "decimal_suggested": (paths.get("raw_hints") or {}).get("decimal"),
                 "skip_suggested": (paths.get("raw_hints") or {}).get("skip"),
                 "raw_warnings": (paths.get("raw_hints") or {}).get("warnings", []),
-                "validation": _validation_summary_for_layer(raw_dir, RAW_VALIDATION),
                 "run_status": layer_run_statuses.get("raw"),
             },
             "clean": {
@@ -185,7 +178,6 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "output": clean_paths.get("output"),
                 "output_exists": _exists(clean_paths.get("output")),
                 "metadata_exists": _exists(clean_paths.get("metadata")),
-                "validation": _validation_summary_for_layer(clean_dir, CLEAN_VALIDATION),
                 "run_status": layer_run_statuses.get("clean"),
             },
             "mart": {
@@ -196,7 +188,6 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
                 "output_exists_count": len(mart_outputs) - len(missing_mart_outputs),
                 "missing_outputs": missing_mart_outputs,
                 "metadata_exists": _exists(mart_paths.get("metadata")),
-                "validation": _validation_summary_for_layer(mart_dir, MART_VALIDATION),
                 "run_status": layer_run_statuses.get("mart"),
             },
         },
@@ -417,24 +408,27 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
     ok_count = sum(1 for c in checks if c["ok"] is True)
     fail_count = sum(1 for c in checks if c["ok"] is False)
 
-    # --- Extract validation messages from validation JSON ---
-    def _validation_msgs(layer_dir: Path, filename: str, max_items: int = 3) -> dict:
-        """Read first N warning/error messages from a validation JSON."""
-        fpath = str(layer_dir / filename) if layer_dir.exists() else None
-        content = _read_validation_content(fpath)
-        msgs: dict[str, list[str]] = {"errors": [], "warnings": []}
-        if content:
-            msgs["errors"] = content.get("errors", [])[:max_items]
-            msgs["warnings"] = content.get("warnings", [])[:max_items]
-        return msgs
+    # --- Validation messages from run record ---
+    raw_msgs: dict[str, list[str]] = {"errors": [], "warnings": []}
+    clean_msgs: dict[str, list[str]] = {"errors": [], "warnings": []}
+    mart_msgs: dict[str, list[str]] = {"errors": [], "warnings": []}
+    if target_year is not None:
+        run_dir = get_run_dir(cfg.root, cfg.dataset, target_year)
+        if run_dir.exists():
+            try:
+                from toolkit.core.run_records import latest_run as _latest_run
 
-    # --- Validation messages from disk ---
-    raw_dir_path = Path(raw.get("dir", ""))
-    clean_dir_path = Path(clean.get("dir", ""))
-    mart_dir_path = Path(mart.get("dir", ""))
-    raw_msgs = _validation_msgs(raw_dir_path, RAW_VALIDATION)
-    clean_msgs = _validation_msgs(clean_dir_path, CLEAN_VALIDATION)
-    mart_msgs = _validation_msgs(mart_dir_path, MART_VALIDATION)
+                run_record = _latest_run(run_dir)
+                for layer_name, msgs in [
+                    ("raw", raw_msgs),
+                    ("clean", clean_msgs),
+                    ("mart", mart_msgs),
+                ]:
+                    val = (run_record.get("validations") or {}).get(layer_name, {})
+                    msgs["errors"] = (val.get("errors") or [])[:3]
+                    msgs["warnings"] = (val.get("warnings") or [])[:3]
+            except (FileNotFoundError, OSError):
+                pass
 
     # --- Extract rich layer info from summary (already computed) ---
     raw_val = raw.get("validation") or {}

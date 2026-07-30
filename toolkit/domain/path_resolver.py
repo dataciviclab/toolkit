@@ -12,12 +12,9 @@ from typing import Any
 from toolkit.core.config import ensure_dict
 from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import (
-    CLEAN_VALIDATION,
-    MART_VALIDATION,
     METADATA,
     RAW_PROFILE_DIR,
     RAW_SUGGESTED_READ,
-    RAW_VALIDATION,
     layer_year_dir,
 )
 from toolkit.core.run_records import get_run_dir, latest_run
@@ -29,7 +26,7 @@ def _raw_output_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
     return {
         "dir": str(raw_dir),
         "metadata": str(raw_dir / METADATA),
-        "validation": str(raw_dir / RAW_VALIDATION),
+        "validation": None,
     }
 
 
@@ -43,7 +40,7 @@ def _clean_paths(root: Path, dataset: str, year: int) -> dict[str, str]:
         "dir": str(clean_dir),
         "output": str(_clean_output_path(root, dataset, year)),
         "metadata": str(clean_dir / METADATA),
-        "validation": str(clean_dir / CLEAN_VALIDATION),
+        "validation": None,
     }
 
 
@@ -69,7 +66,7 @@ def _mart_paths(
         "dir": str(mart_dir),
         "outputs": [str(path) for path in _mart_output_paths(root, mart_dir, tables)],
         "metadata": str(mart_dir / METADATA),
-        "validation": str(mart_dir / MART_VALIDATION),
+        "validation": None,
     }
 
 

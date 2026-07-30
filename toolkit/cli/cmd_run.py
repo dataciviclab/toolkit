@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import contextlib
 import json
-import logging
 from pathlib import Path
 from time import perf_counter
 from typing import Any
 
 import typer
 
+from toolkit.cli._batch_helpers import (
+    build_row,
+    format_duration,
+    print_table,
+    silence_logger,
+    silence_typer_echo,
+)
 from toolkit.cli.common import dump_cfg_section, load_cfg_and_logger
 from toolkit.domain.common import iter_selected_years
 from toolkit.domain.source_utils import resolve_source as _resolve_source
@@ -784,72 +790,6 @@ def _read_config_list(configs_file: Path) -> list[Path]:
     return config_paths
 
 
-def _format_years(years: list[int] | None) -> str:
-    if not years:
-        return "-"
-    return ",".join(str(year) for year in years)
-
-
-def _format_duration(seconds: float | None) -> str:
-    if seconds is None:
-        return "-"
-    return f"{seconds:.3f}s"
-
-
-def _print_table(rows: list[dict[str, str]], headers: list[str]) -> None:
-    widths = {header: len(header) for header in headers}
-    for row in rows:
-        for header in headers:
-            widths[header] = max(widths[header], len(str(row.get(header, ""))))
-
-    def _render(row: dict[str, str]) -> str:
-        return "  ".join(str(row.get(header, "")).ljust(widths[header]) for header in headers)
-
-    typer.echo("Batch Report")
-    typer.echo(_render({header: header for header in headers}))
-    typer.echo("  ".join("-" * widths[header] for header in headers))
-    for row in rows:
-        typer.echo(_render(row))
-
-
-def _build_row(
-    dataset: str,
-    config_path: str,
-    years: str,
-    step: str,
-    status: str,
-    duration: str,
-) -> dict[str, str]:
-    return {
-        "dataset": dataset,
-        "config": config_path,
-        "years": years,
-        "step": step,
-        "status": status,
-        "duration": duration,
-    }
-
-
-@contextlib.contextmanager
-def _silence_typer_echo() -> Any:
-    """Silenzia typer.echo durante run_year quando --json è attivo."""
-    original_echo = typer.echo
-    typer.echo = lambda *args, **kwargs: None
-    try:
-        yield
-    finally:
-        typer.echo = original_echo
-
-
-def _silence_logger() -> None:
-    """Silenzia il logger 'toolkit' per output JSON pulito su stdout."""
-    lg = logging.getLogger("toolkit")
-    lg.setLevel(logging.CRITICAL + 1)
-    lg.handlers.clear()
-    lg.addHandler(logging.NullHandler())
-    lg.propagate = False
-
-
 def _run_batch(
     batch_file: str,
     step: str = "all",
@@ -895,7 +835,7 @@ def _run_batch(
             if smoke:
                 _cfg0, _logger0 = load_cfg_and_logger(str(config_path))
                 if json_output:
-                    _silence_logger()
+                    silence_logger()
                 cfg, logger = load_cfg_and_logger(
                     str(config_path),
                     root_override=str(_cfg0.root / "smoke"),
@@ -904,14 +844,14 @@ def _run_batch(
                 cfg, logger = load_cfg_and_logger(str(config_path))
 
             if json_output:
-                _silence_logger()
+                silence_logger()
             dataset_label = cfg.dataset
 
             for year in cfg.years:
                 run_started_at = perf_counter()
                 status = "FAILED"
                 try:
-                    _run_ctx = _silence_typer_echo() if json_output else contextlib.nullcontext()
+                    _run_ctx = silence_typer_echo() if json_output else contextlib.nullcontext()
                     with _run_ctx:
                         context = run_year(
                             cfg,
@@ -934,13 +874,13 @@ def _run_batch(
                     )
                 finally:
                     rows.append(
-                        _build_row(
+                        build_row(
                             dataset=dataset_label,
                             config_path=str(config_path),
                             years=str(year),
                             step=step,
                             status=status,
-                            duration=_format_duration(perf_counter() - run_started_at),
+                            duration=format_duration(perf_counter() - run_started_at),
                         )
                     )
         except Exception as exc:
@@ -953,13 +893,13 @@ def _run_batch(
                 }
             )
             rows.append(
-                _build_row(
+                build_row(
                     dataset=dataset_label,
                     config_path=str(config_path),
                     years="-",
                     step=step,
                     status="FAILED",
-                    duration=_format_duration(perf_counter() - config_started_at),
+                    duration=format_duration(perf_counter() - config_started_at),
                 )
             )
 
@@ -979,7 +919,7 @@ def _run_batch(
         typer.echo(json.dumps(report, indent=2, default=str))
     else:
         table_headers = ["dataset", "years", "step", "status", "duration"]
-        _print_table(rows, table_headers)
+        print_table(rows, table_headers)
 
         if failures:
             typer.echo("")

@@ -172,16 +172,23 @@ def check_transitions(
                     )
 
         if transition_cfg.warn_removed_columns and removed:
-            message = f"[transition:{target_name}] columns removed from {source_layer}: {removed}"
-            warning_messages.append(message)
-            structured_warnings.append(
-                {
-                    "kind": "removed_columns",
-                    "target_name": target_name,
-                    "removed_columns": removed,
-                    "message": message,
-                }
-            )
+            # Se rimosse ≈ aggiunte, e' un rename (normale), non un drop
+            added_count = len(profile.get("added_columns", []))
+            net_drop = len(removed) - added_count
+            if net_drop > 0:
+                message = (
+                    f"[transition:{target_name}] columns removed from {source_layer}: "
+                    f"{net_drop} net drop — {removed}"
+                )
+                warning_messages.append(message)
+                structured_warnings.append(
+                    {
+                        "kind": "removed_columns",
+                        "target_name": target_name,
+                        "removed_columns": removed,
+                        "message": message,
+                    }
+                )
 
     return {
         "enabled": (

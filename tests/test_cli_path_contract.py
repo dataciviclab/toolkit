@@ -91,17 +91,8 @@ def test_cli_commands_use_dataset_yml_dir_as_path_base(tmp_path: Path, monkeypat
     )
     assert run_result.exit_code == 0, run_result.output
 
-    validate_result = runner.invoke(
-        app,
-        [
-            "validate",
-            "all",
-            "--config",
-            str(config_path),
-        ],
-    )
-    assert validate_result.exit_code == 0, validate_result.output
-
+    # Validazione gia' eseguita internamente da run — il comando
+    # 'validate' e' stato rimosso (coperto da run --dry-run)
     profile_result = runner.invoke(
         app,
         [

@@ -6,7 +6,6 @@ import pytest
 import yaml
 
 from toolkit.cli.cmd_run import run as run_cmd
-from toolkit.cli.cmd_validate import validate as validate_cmd
 from tests.helpers_assert_paths import (
     assert_file_replaceable,
     assert_golden_path_artifacts,
@@ -26,9 +25,8 @@ def test_smoke_offline_golden_path(smoke_offline: Path) -> None:
     config_path = smoke_offline / "dataset.yml"
     assert config_path.exists(), f"dataset.yml non trovato in {smoke_offline}"
 
-    # Run completa
+    # Run completa (include validazione interna dopo ogni layer)
     run_cmd(step="all", config=str(config_path))
-    validate_cmd(step="all", config=str(config_path))
 
     # Leggi configurazione per sapere anni e tabelle mart
     with open(config_path, encoding="utf-8") as f:

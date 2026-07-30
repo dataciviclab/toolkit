@@ -26,8 +26,9 @@ from tests.helpers_assert_paths import (
 )
 
 from toolkit.clean.run import run_clean
-from toolkit.cli.cmd_validate import validate as validate_cmd
+from toolkit.clean.validate import run_clean_validation
 from toolkit.core.config import load_config
+from toolkit.mart.validate import run_mart_validation
 from toolkit.mart.run import run_mart
 from toolkit.raw.run import run_raw
 
@@ -68,8 +69,10 @@ def test_project_example_deep_metadata(project_example: Path, monkeypatch) -> No
         clean_cfg=cfg.clean,
         output_cfg=cfg.output,
     )
-    validate_cmd(step="clean", config=str(dst / "dataset.yml"))
-    validate_cmd(step="mart", config=str(dst / "dataset.yml"))
+    # Validazione post-esecuzione via API diretta (la CLI `validate`
+    # è stata rimossa perché coperta da run --dry-run)
+    run_clean_validation(cfg, year, logger)
+    run_mart_validation(cfg, year, logger)
 
     # ── Contratti comuni a tutti i metadata ─────────────────────────
     for layer, meta in [

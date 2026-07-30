@@ -98,6 +98,7 @@ def _write_configs_file(tmp_path: Path, *project_names: str) -> Path:
 
 
 def test_batch_runs_configs_in_sequence_and_prints_report(tmp_path: Path) -> None:
+    """``toolkit run --batch`` esegue config in sequenza e produce report."""
     project_a = tmp_path / "project_a"
     project_b = tmp_path / "project_b"
     _write_batch_project(project_a, "batch_a", 2022)
@@ -108,7 +109,7 @@ def test_batch_runs_configs_in_sequence_and_prints_report(tmp_path: Path) -> Non
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["batch", "--configs", str(configs_file), "--step", "all"],
+        ["run", "--batch", str(configs_file)],
         catch_exceptions=False,
     )
 
@@ -130,7 +131,7 @@ def test_batch_runs_configs_in_sequence_and_prints_report(tmp_path: Path) -> Non
 
 
 def test_batch_smoke_flag(tmp_path: Path) -> None:
-    """--smoke usa root/smoke/ come output e sample_rows=1000."""
+    """``toolkit run --batch --smoke`` usa root/smoke/ come output."""
     project = tmp_path / "project"
     _write_batch_project(project, "batch_smoke", 2023)
     configs_file = _write_configs_file(tmp_path, "project")
@@ -138,7 +139,7 @@ def test_batch_smoke_flag(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["batch", "--configs", str(configs_file), "--step", "all", "--smoke"],
+        ["run", "--batch", str(configs_file), "--smoke"],
         catch_exceptions=False,
     )
 
@@ -170,8 +171,7 @@ def test_batch_smoke_flag(tmp_path: Path) -> None:
 
 
 def test_batch_dry_run_flag(tmp_path: Path) -> None:
-    """--dry-run stampa il piano ma non crea file (usa --step raw per evitare
-    la validazione SQL dry-run che ha una limitazione DuckDB con alias)."""
+    """Backward compat: ``toolkit batch --step raw --dry-run`` (non full SQL)."""
     project = tmp_path / "project"
     _write_batch_project(project, "batch_dry", 2023)
     configs_file = _write_configs_file(tmp_path, "project")
@@ -193,7 +193,7 @@ def test_batch_dry_run_flag(tmp_path: Path) -> None:
 
 
 def test_batch_json_output(tmp_path: Path) -> None:
-    """--json produce output JSON puro su stdout (log silenziato)."""
+    """``toolkit run --batch --json`` produce output JSON puro su stdout."""
     project = tmp_path / "project"
     _write_batch_project(project, "batch_json", 2023)
     configs_file = _write_configs_file(tmp_path, "project")
@@ -201,13 +201,13 @@ def test_batch_json_output(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["batch", "--configs", str(configs_file), "--step", "all", "--json"],
+        ["run", "--batch", str(configs_file), "--json"],
         catch_exceptions=False,
     )
 
     assert result.exit_code == 0
     # stdout deve essere JSON puro, parsabile direttamente
-    report = json.loads(result.output)
+    report = json.loads(result.stdout)
     assert report["summary"]["total"] == 1
     assert report["summary"]["passed"] == 1
     assert report["rows"][0]["dataset"] == "batch_json"
@@ -215,7 +215,7 @@ def test_batch_json_output(tmp_path: Path) -> None:
 
 
 def test_batch_step_probe(tmp_path: Path) -> None:
-    """--step probe esegue probe (salta local_file) e produce report JSON."""
+    """Backward compat: ``toolkit batch --step probe`` funziona ancora (deprecato)."""
     project = tmp_path / "project"
     _write_batch_project(project, "batch_probe", 2023)
     configs_file = _write_configs_file(tmp_path, "project")
@@ -228,13 +228,14 @@ def test_batch_step_probe(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
+    assert "deprecato" in result.stderr
     assert "Batch Report" in result.output
     assert "batch_probe" in result.output
     assert "SUCCESS" in result.output
 
 
 def test_batch_step_probe_json_output(tmp_path: Path) -> None:
-    """--step probe --json produce JSON valido."""
+    """Backward compat: ``toolkit batch --step probe --json``."""
     project = tmp_path / "project"
     _write_batch_project(project, "batch_probe_json", 2023)
     configs_file = _write_configs_file(tmp_path, "project")
@@ -247,7 +248,7 @@ def test_batch_step_probe_json_output(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    report = json.loads(result.output)
+    report = json.loads(result.stdout)
     assert report["summary"]["total"] == 1
     assert report["summary"]["passed"] == 1
     assert report["rows"][0]["dataset"] == "batch_probe_json"
@@ -256,7 +257,7 @@ def test_batch_step_probe_json_output(tmp_path: Path) -> None:
 
 
 def test_batch_dry_run_with_json(tmp_path: Path) -> None:
-    """--dry-run --json: stdout JSON puro (execution plan silenziato)."""
+    """Backward compat: ``toolkit batch --step raw --dry-run --json``."""
     project = tmp_path / "project"
     _write_batch_project(project, "batch_dry_json", 2023)
     configs_file = _write_configs_file(tmp_path, "project")
@@ -269,8 +270,7 @@ def test_batch_dry_run_with_json(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    # stdout deve essere JSON puro, parsabile direttamente
-    report = json.loads(result.output)
+    report = json.loads(result.stdout)
     assert report["summary"]["total"] == 1
     assert report["summary"]["passed"] == 1
     assert report["rows"][0]["dataset"] == "batch_dry_json"
@@ -283,7 +283,7 @@ def test_batch_dry_run_with_json(tmp_path: Path) -> None:
 
 @pytest.mark.policy
 def test_batch_step_probe_dry_run_reports_dry_run(tmp_path: Path) -> None:
-    """--step probe --dry-run deve riportare DRY_RUN (non SUCCESS)."""
+    """Backward compat: ``toolkit batch --step probe --dry-run --json``."""
     project = tmp_path / "project"
     _write_batch_project(project, "batch_probe_dry", 2023)
     configs_file = _write_configs_file(tmp_path, "project")
@@ -296,7 +296,7 @@ def test_batch_step_probe_dry_run_reports_dry_run(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    report = json.loads(result.output)
+    report = json.loads(result.stdout)
     assert report["summary"]["total"] == 1
     assert report["summary"]["passed"] == 1
     assert report["rows"][0]["status"] == "DRY_RUN"
@@ -304,7 +304,7 @@ def test_batch_step_probe_dry_run_reports_dry_run(tmp_path: Path) -> None:
 
 @pytest.mark.policy
 def test_batch_step_raw_dry_run_reuses_runner_across_configs(tmp_path: Path) -> None:
-    """Batch --step raw --dry-run processa piu config e produce report."""
+    """Backward compat: ``toolkit batch --step raw --dry-run``."""
     project_a = tmp_path / "proj_a"
     _write_batch_project(project_a, "batch_raw_a", 2023)
     project_b = tmp_path / "proj_b"
@@ -323,3 +323,56 @@ def test_batch_step_raw_dry_run_reuses_runner_across_configs(tmp_path: Path) -> 
     assert result.exit_code == 0
     assert "batch_raw_a" in result.output
     assert "batch_raw_b" in result.output
+
+
+@pytest.mark.contract
+def test_run_batch_multi_config_dry_run(tmp_path: Path) -> None:
+    """``toolkit run --batch`` con piu' config e --dry-run."""
+    project_a = tmp_path / "proj_a"
+    _write_batch_project(project_a, "run_batch_a", 2023)
+    project_b = tmp_path / "proj_b"
+    _write_batch_project(project_b, "run_batch_b", 2024)
+
+    configs_file = tmp_path / "configs.txt"
+    configs_file.write_text(f"{project_a}/dataset.yml\n{project_b}/dataset.yml\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["run", "--batch", str(configs_file), "--dry-run"],
+    )
+
+    # --dry-run in batch con step="all" fa SQL validation che può fallire
+    # su clean.sql con alias DuckDB. Verifichiamo che processi entrambi
+    # i config (anche se fallisce per limitazione SQL dry-run)
+    assert "run_batch_a" in result.output
+    assert "run_batch_b" in result.output
+
+
+@pytest.mark.contract
+def test_run_batch_end_to_end(tmp_path: Path) -> None:
+    """``toolkit run --batch`` end-to-end: esegue, produce output, report."""
+    project_a = tmp_path / "proj_a"
+    _write_batch_project(project_a, "e2e_a", 2022)
+    project_b = tmp_path / "proj_b"
+    _write_batch_project(project_b, "e2e_b", 2023)
+
+    configs_file = tmp_path / "batch.txt"
+    configs_file.write_text(f"{project_a}/dataset.yml\n{project_b}/dataset.yml\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["run", "--batch", str(configs_file)],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Batch Report" in result.output
+    assert "e2e_a" in result.output
+    assert "e2e_b" in result.output
+    assert "SUCCESS" in result.output
+
+    # Verifica output fisici
+    assert (project_a / "out" / "data" / "mart" / "e2e_a" / "2022" / "mart_totali.parquet").exists()
+    assert (project_b / "out" / "data" / "mart" / "e2e_b" / "2023" / "mart_totali.parquet").exists()

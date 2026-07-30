@@ -1,10 +1,10 @@
-"""Tests for toolkit/cli/cmd_batch.py — helper functions and failure cases."""
+"""Tests for batch helper functions (trasferite in cmd_run.py)."""
 
 from pathlib import Path
 
 import pytest
 
-from toolkit.cli.cmd_batch import _format_duration, _format_years, _read_config_list
+from toolkit.cli.cmd_run import _format_duration, _format_years, _read_config_list
 
 pytestmark = pytest.mark.pure_unit
 

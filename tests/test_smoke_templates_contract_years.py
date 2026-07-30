@@ -88,19 +88,18 @@ def test_smoke_years_filter_validate_all_supports_years_filter(
     run_result = runner.invoke(app, ["run", "--config", str(config_path)])
     assert run_result.exit_code == 0, run_result.output
 
-    # Validate con filtro anno
-    validate_result = runner.invoke(
-        app,
-        [
-            "validate",
-            "all",
-            "--config",
-            str(config_path),
-            "--years",
-            str(target_year),
-        ],
-    )
-    assert validate_result.exit_code == 0, validate_result.output
+    # Validazione via API diretta (CLI validate rimossa — coperta da run --dry-run)
+    from toolkit.cli.common import load_cfg_and_logger
+    from toolkit.clean.validate import run_clean_validation
+    from toolkit.mart.validate import run_mart_validation
+
+    _cfg_v, _lg_v = load_cfg_and_logger(str(config_path))
+    for layer_fn, layer_name in [
+        (run_clean_validation, "clean"),
+        (run_mart_validation, "mart"),
+    ]:
+        v = layer_fn(_cfg_v, target_year, _lg_v)
+        assert v.get("passed"), f"{layer_name} validation fallita: {v}"
 
 
 @pytest.mark.policy
@@ -171,19 +170,18 @@ def test_smoke_years_filter_validate_with_year_single(
     run_result = runner.invoke(app, ["run", "--config", str(config_path)])
     assert run_result.exit_code == 0, run_result.output
 
-    # Validate con --year
-    validate_result = runner.invoke(
-        app,
-        [
-            "validate",
-            "all",
-            "--config",
-            str(config_path),
-            "--year",
-            str(target_year),
-        ],
-    )
-    assert validate_result.exit_code == 0, validate_result.output
+    # Validazione via API diretta (CLI validate rimossa)
+    from toolkit.cli.common import load_cfg_and_logger
+    from toolkit.clean.validate import run_clean_validation
+    from toolkit.mart.validate import run_mart_validation
+
+    _cfg_v, _lg_v = load_cfg_and_logger(str(config_path))
+    for layer_fn, layer_name in [
+        (run_clean_validation, "clean"),
+        (run_mart_validation, "mart"),
+    ]:
+        v = layer_fn(_cfg_v, target_year, _lg_v)
+        assert v.get("passed"), f"{layer_name} validation fallita: {v}"
 
 
 @pytest.mark.policy

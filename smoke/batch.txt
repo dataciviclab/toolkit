@@ -1,0 +1,4 @@
+# Batch di smoke test offline — dataset senza dipendenze di rete
+# I path sono relativi alla root del toolkit (CWD = toolkit/).
+smoke/local_file_csv/dataset.yml
+smoke/bdap_ckan_csv/dataset.offline.yml

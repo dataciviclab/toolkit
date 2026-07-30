@@ -5,7 +5,7 @@ Smoke manuale per `http_file` su ZIP pubblico del MEF con extractor `unzip_first
 ## Comandi
 
 ```bash
-py -m toolkit.cli.app run all -c smoke/finanze_http_zip_2023/dataset.yml
+py -m toolkit.cli.app run -c smoke/finanze_http_zip_2023/dataset.yml
 py -m toolkit.cli.app status --dataset finanze_http_zip_2023 --year 2023 --config smoke/finanze_http_zip_2023/dataset.yml
 ```
 

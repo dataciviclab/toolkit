@@ -1,10 +1,11 @@
-"""Tests for toolkit/cli/cmd_batch.py — helper functions and failure cases."""
+"""Tests for batch helper functions."""
 
 from pathlib import Path
 
 import pytest
 
-from toolkit.cli.cmd_batch import _format_duration, _format_years, _read_config_list
+from toolkit.cli._batch_helpers import format_duration, format_years
+from toolkit.cli.cmd_run import _read_config_list
 
 pytestmark = pytest.mark.pure_unit
 
@@ -145,33 +146,33 @@ class TestReadConfigList:
 
 class TestFormatYears:
     def test_none(self) -> None:
-        assert _format_years(None) == "-"
+        assert format_years(None) == "-"
 
     def test_empty_list(self) -> None:
-        assert _format_years([]) == "-"
+        assert format_years([]) == "-"
 
     def test_single_year(self) -> None:
-        assert _format_years([2023]) == "2023"
+        assert format_years([2023]) == "2023"
 
     def test_multiple_years(self) -> None:
-        assert _format_years([2021, 2022, 2023]) == "2021,2022,2023"
+        assert format_years([2021, 2022, 2023]) == "2021,2022,2023"
 
     def test_returns_string(self) -> None:
-        assert isinstance(_format_years([2020]), str)
+        assert isinstance(format_years([2020]), str)
 
 
 class TestFormatDuration:
     def test_none_returns_dash(self) -> None:
-        assert _format_duration(None) == "-"
+        assert format_duration(None) == "-"
 
     def test_seconds_formatted(self) -> None:
-        assert _format_duration(1.234) == "1.234s"
+        assert format_duration(1.234) == "1.234s"
 
     def test_zero(self) -> None:
-        assert _format_duration(0.0) == "0.000s"
+        assert format_duration(0.0) == "0.000s"
 
     def test_rounds_to_3_decimals(self) -> None:
-        assert _format_duration(1.23456789) == "1.235s"
+        assert format_duration(1.23456789) == "1.235s"
 
     def test_returns_string(self) -> None:
-        assert isinstance(_format_duration(1.0), str)
+        assert isinstance(format_duration(1.0), str)

@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 import typer
 
+from toolkit.cli._batch_helpers import (
+    build_row,
+    format_duration,
+    print_table,
+    silence_logger,
+    silence_typer_echo,
+)
 from toolkit.cli.common import dump_cfg_section, load_cfg_and_logger
 from toolkit.domain.common import iter_selected_years
 from toolkit.domain.source_utils import resolve_source as _resolve_source
@@ -749,6 +758,183 @@ def run_init(
 
 
 # ---------------------------------------------------------------------------
+# Batch execution (toolkit run --batch)
+# ---------------------------------------------------------------------------
+
+
+_ALLOWED_BATCH_STEPS = {"probe", "raw", "clean", "mart", "all"}
+
+
+def _read_config_list(configs_file: Path) -> list[Path]:
+    """Read a text file with one dataset.yml path per line."""
+    if not configs_file.exists():
+        raise FileNotFoundError(f"Config list not found: {configs_file}")
+
+    config_paths: list[Path] = []
+    for raw_line in configs_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        config_path = Path(line)
+        if not config_path.is_absolute():
+            cwd_resolved = (Path.cwd() / config_path).resolve()
+            if cwd_resolved.exists():
+                config_path = cwd_resolved
+            else:
+                config_path = (configs_file.parent / config_path).resolve()
+        config_paths.append(config_path)
+
+    if not config_paths:
+        raise ValueError(f"No config paths found in {configs_file}")
+
+    return config_paths
+
+
+def _run_batch(
+    batch_file: str,
+    step: str = "all",
+    years: str | None = None,
+    smoke: bool = False,
+    sample_rows: int | None = None,
+    sample_bytes: int | None = None,
+    root: str | None = None,
+    json_output: bool = False,
+    dry_run: bool = False,
+) -> None:
+    """Esegue piu' config in sequenza e stampa un report aggregato.
+
+    Legge un file di testo con un dataset.yml per riga (righe vuote e commenti
+    con # sono ignorati) e li esegue uno dopo l'altro.
+
+    Args:
+        batch_file: Path al file con lista di dataset.yml.
+        step: Step da eseguire (probe, raw, clean, mart, all). Default ``all``.
+        years: Non usato in batch (ogni config usa i propri anni configurati).
+        smoke: Alias per --sample-rows 1000 --sample-bytes 1048576.
+        sample_rows: Limite righe in CLEAN.
+        sample_bytes: Limite bytes in RAW.
+        root: Override root output.
+        json_output: Output JSON.
+        dry_run: Solo plan senza esecuzione.
+    """
+    dry_flag = dry_run if isinstance(dry_run, bool) else False
+    sample_rows_final = 1000 if smoke else sample_rows
+    sample_bytes_final = 1048576 if smoke else sample_bytes
+
+    configs_file = Path(batch_file)
+    config_paths = _read_config_list(configs_file)
+
+    rows: list[dict[str, str]] = []
+    failures: list[dict[str, str]] = []
+
+    for config_path in config_paths:
+        config_started_at = perf_counter()
+        dataset_label = config_path.stem
+
+        try:
+            if smoke:
+                _cfg0, _logger0 = load_cfg_and_logger(str(config_path))
+                if json_output:
+                    silence_logger()
+                cfg, logger = load_cfg_and_logger(
+                    str(config_path),
+                    root_override=str(_cfg0.root / "smoke"),
+                )
+            else:
+                cfg, logger = load_cfg_and_logger(str(config_path))
+
+            if json_output:
+                silence_logger()
+            dataset_label = cfg.dataset
+
+            for year in cfg.years:
+                run_started_at = perf_counter()
+                status = "FAILED"
+                try:
+                    _run_ctx = silence_typer_echo() if json_output else contextlib.nullcontext()
+                    with _run_ctx:
+                        context = run_year(
+                            cfg,
+                            year,
+                            step=step,
+                            dry_run=dry_flag,
+                            logger=logger,
+                            sample_rows=sample_rows_final,
+                            sample_bytes=sample_bytes_final,
+                        )
+                    status = context.status
+                except Exception as exc:
+                    failures.append(
+                        {
+                            "config": str(config_path),
+                            "dataset": dataset_label,
+                            "years": str(year),
+                            "error": str(exc),
+                        }
+                    )
+                finally:
+                    rows.append(
+                        build_row(
+                            dataset=dataset_label,
+                            config_path=str(config_path),
+                            years=str(year),
+                            step=step,
+                            status=status,
+                            duration=format_duration(perf_counter() - run_started_at),
+                        )
+                    )
+        except Exception as exc:
+            failures.append(
+                {
+                    "config": str(config_path),
+                    "dataset": dataset_label,
+                    "years": "-",
+                    "error": str(exc),
+                }
+            )
+            rows.append(
+                build_row(
+                    dataset=dataset_label,
+                    config_path=str(config_path),
+                    years="-",
+                    step=step,
+                    status="FAILED",
+                    duration=format_duration(perf_counter() - config_started_at),
+                )
+            )
+
+    if json_output:
+        report: dict[str, Any] = {
+            "summary": {
+                "total": len(rows),
+                "passed": sum(1 for r in rows if r["status"] in ("SUCCESS", "DRY_RUN")),
+                "failed": sum(1 for r in rows if r["status"] not in ("SUCCESS", "DRY_RUN")),
+                "duration_seconds": sum(
+                    float(r["duration"].rstrip("s")) for r in rows if r["duration"] != "-"
+                ),
+            },
+            "rows": rows,
+            "failures": failures,
+        }
+        typer.echo(json.dumps(report, indent=2, default=str))
+    else:
+        table_headers = ["dataset", "years", "step", "status", "duration"]
+        print_table(rows, table_headers)
+
+        if failures:
+            typer.echo("")
+            typer.echo("Failures")
+            for failure in failures:
+                typer.echo(
+                    f"- config={failure['config']} dataset={failure['dataset']} "
+                    f"years={failure['years']} error={failure['error']}"
+                )
+
+    if failures:
+        raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
 # Pipeline completa — condivisa tra `toolkit run` (default) e `run full`
 # ---------------------------------------------------------------------------
 
@@ -1109,6 +1295,11 @@ def register(app: typer.Typer) -> None:
         ),
         years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
         year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
+        batch: str | None = typer.Option(
+            None,
+            "--batch",
+            help="File con lista di dataset.yml (uno per riga) — esegue in sequenza",
+        ),
         smoke: bool = typer.Option(
             False, "--smoke", help="Alias per --sample-rows 1000 --sample-bytes 1048576"
         ),
@@ -1124,8 +1315,20 @@ def register(app: typer.Typer) -> None:
         json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
         dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without executing"),
     ):
-        """Esegue la pipeline completa: preflight + support + raw → clean → mart."""
+        """Esegue la pipeline: singolo dataset o batch (--batch)."""
         if ctx.invoked_subcommand is not None:
+            return
+        if batch:
+            _run_batch(
+                batch,
+                years=years,
+                smoke=smoke,
+                sample_rows=sample_rows,
+                sample_bytes=sample_bytes,
+                root=root,
+                json_output=json_output,
+                dry_run=dry_run,
+            )
             return
         # Unifica --year e --years
         years_str = str(year) if year is not None else years

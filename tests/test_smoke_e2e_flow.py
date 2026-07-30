@@ -133,21 +133,20 @@ class TestEndToEndFlow:
         assert (clean_dir / "_validate" / "clean_validation.json").exists()
         assert (mart_dir / "_validate" / "mart_validation.json").exists()
 
-        # --- FASE 3: validate --json ---
-        result = _invoke(
-            [
-                "validate",
-                "all",
-                "--config",
-                str(config_path),
-                "--json",
-            ]
-        )
-        assert result.exit_code == 0, f"validate fallito: {result.output}"
-        val_results = json.loads(result.output)
-        assert len(val_results) == 3  # raw + clean + mart
-        for r in val_results:
-            assert r["passed"] is True, f"{r['layer']} validation fallita: {r}"
+        # --- FASE 3: validazione via API diretta (CLI validate rimossa) ---
+        from toolkit.cli.common import load_cfg_and_logger
+        from toolkit.raw.validate import run_raw_validation
+        from toolkit.clean.validate import run_clean_validation
+        from toolkit.mart.validate import run_mart_validation
+
+        _cfg_val, _lg_val = load_cfg_and_logger(str(config_path))
+        for layer_fn, layer_name in [
+            (lambda c, y, lg: run_raw_validation(c.root, c.dataset, y, lg), "raw"),
+            (run_clean_validation, "clean"),
+            (run_mart_validation, "mart"),
+        ]:
+            v = layer_fn(_cfg_val, year, _lg_val)
+            assert v.get("passed"), f"{layer_name} validation fallita: {v}"
 
         # --- FASE 4: inspect summary --json ---
         result = _invoke(["inspect", "--config", str(config_path), "--json"])

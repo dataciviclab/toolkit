@@ -53,8 +53,9 @@ La CI di `dataset-incubator` carica su GCS dopo ogni run validato.
 ## CLI — comandi essenziali
 
 | Comando | Cosa fa |
-|---|---|---|
-| `toolkit run` | Esecuzione completa RAW→CLEAN→MART |
+|---|---|
+| `toolkit run` | Esecuzione completa RAW→CLEAN→MART (default) |
+| `toolkit run --batch <file>` | Esegue piú dataset in sequenza |
 | `toolkit run raw` | Solo layer RAW |
 | `toolkit run clean` | Solo layer CLEAN |
 | `toolkit run mart` | Solo layer MART |

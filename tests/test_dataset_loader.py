@@ -6,14 +6,10 @@ I test usano dataset.yml minimi per verificare ogni campo.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 import yaml
-from typer.testing import CliRunner
-
-from toolkit.cli.app import app
 
 from toolkit.core.dataset_loader import (
     has_mart_sql,
@@ -307,10 +303,7 @@ class TestValidateConfigCLI:
             },
         )
         cfg = tmp_path / "dataset.yml"
-        runner = CliRunner()
-        result = runner.invoke(app, ["validate", "config", "-c", str(cfg), "--json"])
-        assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = validate_config(str(cfg))
         assert data["ok"] is True
         assert data["slug"] == tmp_path.name
 
@@ -323,31 +316,25 @@ class TestValidateConfigCLI:
             },
         )
         cfg = tmp_path / "dataset.yml"
-        runner = CliRunner()
-        result = runner.invoke(app, ["validate", "config", "-c", str(cfg)])
-        assert result.exit_code == 0
-        assert "configurazione valida" in result.output
+        data = validate_config(str(cfg))
+        assert data["ok"] is True
+        assert data["slug"] == tmp_path.name
 
     def test_invalid_exit_code(self, tmp_path: Path) -> None:
         _write_dataset(tmp_path, {"slug": "no-dataset"})
         cfg = tmp_path / "dataset.yml"
-        runner = CliRunner()
-        result = runner.invoke(app, ["validate", "config", "-c", str(cfg)])
-        assert result.exit_code != 0
-        assert "Sezione 'dataset' mancante" in result.output
+        data = validate_config(str(cfg))
+        assert data["ok"] is False
+        assert any("Sezione 'dataset' mancante" in e for e in data["errors"])
 
     def test_invalid_json(self, tmp_path: Path) -> None:
         _write_dataset(tmp_path, {"slug": "no-dataset"})
         cfg = tmp_path / "dataset.yml"
-        runner = CliRunner()
-        result = runner.invoke(app, ["validate", "config", "-c", str(cfg), "--json"])
-        assert result.exit_code != 0
-        data = json.loads(result.output)
+        data = validate_config(str(cfg))
         assert data["ok"] is False
 
     def test_missing_config_file(self, tmp_path: Path) -> None:
         cfg = tmp_path / "nonexistent.yml"
-        runner = CliRunner()
-        result = runner.invoke(app, ["validate", "config", "-c", str(cfg)])
-        assert result.exit_code != 0
-        assert "non trovato" in result.output
+        data = validate_config(str(cfg))
+        assert data["ok"] is False
+        assert any("non trov" in e for e in data["errors"])

@@ -10,8 +10,20 @@ import json
 
 import typer
 
+from toolkit.core.discovery import resolve_config_path
 from toolkit.domain.layer import layer_query
 from toolkit.domain.schema_diff import schema_diff_payload
+
+
+def _resolve_config(config_path: str | None) -> str | None:
+    """Risolve config_path con auto-detect, restituisce None solo se esplicitamente omesso."""
+    if config_path is None:
+        try:
+            resolved = resolve_config_path(hint=None)
+            return str(resolved)
+        except FileNotFoundError:
+            return None
+    return config_path
 
 
 def config(
@@ -42,6 +54,9 @@ def config(
         toolkit inspect config -c dataset.yml -l clean -m sql --sql "SELECT count(*) FROM data"
         toolkit inspect config -c dataset.yml --diff                    # schema-diff raw
     """
+    # Auto-detect se --config non passato
+    config_path = _resolve_config(config_path)
+
     if diff:
         try:
             payload = schema_diff_payload(config_path)

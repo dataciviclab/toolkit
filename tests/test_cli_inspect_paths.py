@@ -53,10 +53,6 @@ def test_inspect_paths_reports_dataset_repo_layout_from_other_cwd(
         f"clean_output: {project_example / '_smoke_out' / 'data' / 'clean' / 'project_example' / '2022' / 'project_example_2022_clean.parquet'}"
         in result.output
     )
-    assert (
-        f"clean_validation: {project_example / '_smoke_out' / 'data' / 'clean' / 'project_example' / '2022' / '_validate' / 'clean_validation.json'}"
-        in result.output
-    )
     assert "raw_hints:" in result.output
     assert "primary_output_file:" in result.output
     assert "suggested_read_exists: False" in result.output
@@ -87,7 +83,7 @@ def test_inspect_paths_json_is_notebook_friendly(
     assert payload["year"] == 2022
     assert payload["config_path"] == str(config_path)
     assert payload["paths"]["clean"]["output"].endswith("project_example_2022_clean.parquet")
-    assert payload["paths"]["clean"]["validation"].endswith("clean_validation.json")
+    assert payload["paths"]["clean"]["validation"] is None
     assert payload["paths"]["raw"]["metadata"].endswith("metadata.json")
     assert payload["paths"]["mart"]["outputs"]
     assert payload["paths"]["mart"]["metadata"].endswith("metadata.json")

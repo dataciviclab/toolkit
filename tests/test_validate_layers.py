@@ -178,7 +178,7 @@ def test_check_transitions_warns_on_row_drop_over_threshold_and_removed_columns(
     assert len(report["warnings"]) == 2
     assert report["profiles_count"] == 1
     assert any("row drop 30.0%" in warning for warning in report["warning_messages"])
-    assert any("columns removed from clean" in warning for warning in report["warning_messages"])
+    assert any("net drop" in warning for warning in report["warning_messages"])
     assert any(item["kind"] == "row_drop_pct" for item in report["warnings"])
     assert any(item["kind"] == "removed_columns" for item in report["warnings"])
 
@@ -263,7 +263,7 @@ def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Pa
     warnings = summary.get("warnings") or []
     assert len(warnings) == 2
     assert any("row drop 30.0%" in warning for warning in warnings)
-    assert any("columns removed from clean" in warning for warning in warnings)
+    assert any("net drop" in warning for warning in warnings)
     sections = summary.get("sections") or {}
     transition = sections.get("transition") or {}
     assert transition.get("profiles_count") == 1
@@ -393,10 +393,7 @@ def test_run_clean_validation_raw_probe_source_legacy_autodetect(tmp_path: Path)
 
     # With no profile, the probe must fall back to legacy autodetect
     assert result["stats"].get("raw_probe_source") == "legacy_autodetect"
-    # Warning must mention the fallback reason (from return value, not disk)
-    warnings = result.get("warnings") or []
-    warning_text = " ".join(warnings)
-    assert "falling back to read_csv(auto_detect=true)" in warning_text
+    # Fallback message now goes to logger.debug, not to warnings
 
 
 @pytest.mark.policy

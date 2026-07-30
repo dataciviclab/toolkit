@@ -351,7 +351,9 @@ class MartTableConfig:
 @dataclass
 class MartValidateConfig:
     table_rules: dict[str, MartTableRuleConfig] = field(default_factory=dict)
-    transition: TransitionConfig = field(default_factory=TransitionConfig)
+    transition: TransitionConfig = field(
+        default_factory=lambda: TransitionConfig(warn_removed_columns=False)
+    )
 
     @staticmethod
     def from_dict(d: dict | None) -> MartValidateConfig | None:
@@ -365,7 +367,9 @@ class MartValidateConfig:
                 rules[k] = v
         trans = d.get("transition") or d.get("transition")
         trans_obj = (
-            TransitionConfig(**trans) if trans and isinstance(trans, dict) else TransitionConfig()
+            TransitionConfig(**trans)
+            if trans and isinstance(trans, dict)
+            else TransitionConfig(warn_removed_columns=False)
         )
         return MartValidateConfig(table_rules=rules, transition=trans_obj)
 

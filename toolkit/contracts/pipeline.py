@@ -109,7 +109,7 @@ _RAW_CONTRACT: dict[str, Any] = {
     "extractors": _EXTRACTOR_TYPES,
     "validation": {
         "profile": {
-            "description": "Il profilo raw (raw_profile.json) rileva automaticamente encoding, delim, decimal, skip e colonne del CSV.",
+            "description": "Il profilo raw (raw_profile.json) rileva automaticamente encoding, delim, decimal, skip, colonne e row_count del CSV.",
             "known_issue": "La profilazione potrebbe suggerire decimal='.' anche se il CSV usa ','. Va sovrascritto in clean.read.decimal.",
         },
     },
@@ -160,10 +160,22 @@ _CLEAN_CONTRACT: dict[str, Any] = {
         },
         "transition": {
             "description": (
-                "Il monitor di transizione confronta colonne raw vs clean. "
-                "Avvisa se colonne raw spariscono dal clean senza commento "
-                "-- DROP: <motivo>."
+                "Il monitor di transizione confronta raw vs clean. "
+                "Scatta solo se c'e' un **drop netto** di colonne "
+                "(rimosse - aggiunte > 0). Rinomine e selezioni "
+                "non generano falsi positivi."
             ),
+            "configurable_via_dataset_yml": {
+                "clean.validate.promotion.max_row_drop_pct": (
+                    "Soglia % di righe perse (default: None = disabilitato). "
+                    "Es: 15.0 = warning se si perde >15% righe raw→clean."
+                ),
+                "clean.validate.promotion.warn_removed_columns": (
+                    "Attiva/disattiva warning colonne rimosse. "
+                    "Default: true. "
+                    "Il warning scatta solo se net drop > 0."
+                ),
+            },
         },
     },
     "read_params": {
@@ -201,6 +213,22 @@ _MART_CONTRACT: dict[str, Any] = {
         "required_tables": {
             "scope": "mart.required_tables verifica che le tabelle dichiarate siano state prodotte.",
         },
+        "transition": {
+            "description": (
+                "Monitor di transizione clean→mart. "
+                "Disabilitato per default (clean→mart seleziona colonne "
+                "di proposito). Attivabile con mart.validate.transition."
+            ),
+            "configurable_via_dataset_yml": {
+                "mart.validate.transition.max_row_drop_pct": (
+                    "Soglia % di righe perse tra clean e mart. Default: None = disabilitato."
+                ),
+                "mart.validate.transition.warn_removed_columns": (
+                    "Default: false. Imposta a true per vedere le "
+                    "colonne clean non incluse nel mart."
+                ),
+            },
+        },
     },
     "example_file": "project-example/sql/mart/mart_regione_anno.sql",
 }
@@ -212,20 +240,20 @@ _PIPELINE_CONTRACT: dict[str, Any] = {
             "name": "RAW",
             "description": "Download file originale dalla fonte. Profilo: encoding, delim, decimal, colonne.",
             "output": "CSV/parquet in data/raw/<dataset>/<anno>/",
-            "validation": "raw_validation.json",
+            "validation": "inline nel run record (_runs/)",
         },
         {
             "name": "CLEAN",
             "description": "Trasformazione SQL (clean.sql) su raw_input. Output parquet normalizzato.",
             "output": "Parquet in data/clean/<dataset>/<anno>/",
-            "validation": "_validate/clean_validation.json",
+            "validation": "inline nel run record (_runs/)",
             "view": RAW_INPUT_VIEW,
         },
         {
             "name": "MART",
             "description": "Aggregazione SQL (mart.sql) su clean_input. Output parquet per data-explorer/notebook.",
             "output": "Parquet in data/mart/<dataset>/<anno>/",
-            "validation": "_validate/mart_validation.json",
+            "validation": "inline nel run record (_runs/)",
             "view": CLEAN_INPUT_VIEW,
         },
     ],
@@ -297,9 +325,12 @@ _CONFIG_QUICKREF: dict[str, Any] = {
         "clean.read.encoding (encoding CSV, default utf-8, PA spesso cp1252)",
         "clean.read.decimal (separatore decimale, default '.'; usa ',' per italiano)",
         "clean.required_columns (lista colonne OUTPUT attese nel clean)",
+        "clean.validate.promotion.warn_removed_columns (attiva warning colonne rimosse raw→clean, default true)",
+        "clean.validate.promotion.max_row_drop_pct (soglia % righe perse raw→clean, default none)",
         "mart.tables (lista tabelle MART con nome e path SQL)",
         "mart.tables[].years (per tabelle multi-anno)",
         "mart.validate.table_rules (regole per tabella: primary_key, not_null, ranges)",
+        "mart.validate.transition.max_row_drop_pct (soglia % righe perse clean→mart, default none)",
         "raw.sources[].type (http_file, ckan, sdmx, sparql, local_file)",
         "raw.sources[].extractor (identity, unzip_all, unzip_first, unzip_first_csv)",
         "support (lista dataset di supporto, eseguiti prima del candidate)",
@@ -348,6 +379,7 @@ CONTRACTS: dict[str, Any] = {
         "required_columns = nomi OUTPUT del clean, non raw  |  "
         "se decimal=',' basta CAST(x AS DOUBLE)  |  "
         "mart.sql: SELECT ... FROM clean_input  |  "
+        "validazione: inline nel run record (_runs/), non piu' file separati  |  "
         "comandi: toolkit run init / preflight / all / scout / inspect"
     ),
 }

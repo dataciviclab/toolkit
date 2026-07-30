@@ -12,21 +12,6 @@ from __future__ import annotations
 import typer
 
 
-def _deprecated_subcommand(old_name: str, hint: str):
-    """Factory: produce una funzione Typer che mostra deprecation e delega."""
-
-    def wrapper(*args, **kwargs):
-        typer.echo(
-            f"⚠️  'inspect {old_name}' è deprecato, usa '{hint}'",
-            err=True,
-        )
-        # Dopo il warning, esegue il comportamento originale
-        # (la funzione originale fa tutto via Typer, ma qui possiamo
-        # solo mostrare il warning — il comando è già stato avviato)
-
-    return wrapper
-
-
 def register(app: typer.Typer) -> None:
     """Register ``toolkit inspect`` (unico comando con flag di modo)."""
     from toolkit.cli.inspect.config_ops import config as _config

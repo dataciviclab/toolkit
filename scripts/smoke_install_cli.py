@@ -45,9 +45,8 @@ def main() -> int:
         _run([str(toolkit_cmd), "--help"], cwd=repo_root, env=env)
         _run([str(toolkit_cmd), "run", "--help"], cwd=repo_root, env=env)
         _run([str(toolkit_cmd), "inspect", "--help"], cwd=repo_root, env=env)
-        _run([str(toolkit_cmd), "inspect", "--profile", "--help"], cwd=repo_root, env=env)
         _run(
-            [str(toolkit_cmd), "run", "all", "--dry-run", "-c", "examples/dataset_min.yml"],
+            [str(toolkit_cmd), "run", "--dry-run", "-c", "examples/dataset_min.yml"],
             cwd=repo_root,
             env=env,
         )

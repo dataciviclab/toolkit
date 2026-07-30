@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from lab_connectors.mcp.errors import ErrorCode
 
@@ -46,7 +47,7 @@ def _safe_path(config_path: str | Path) -> Path:
         raise ToolkitClientError(str(exc), code=ErrorCode.CONFIG_NOT_FOUND) from exc
 
 
-def _load_cfg(config_path: str | Path) -> tuple[Path, object]:
+def _load_cfg(config_path: str | Path) -> tuple[Path, Any]:
     """Carica config MCP con path safety + error translation."""
     config = _safe_path(str(config_path))
     try:

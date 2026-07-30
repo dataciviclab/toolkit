@@ -7,9 +7,9 @@ from toolkit.core.logging import get_logger
 
 
 def dump_cfg_section(cfg_section: Any) -> Any:
-    """Convert Pydantic model section to dict for functions expecting dict.
+    """Convert config section to dict for functions expecting dict.
 
-    Ordine: model_dump → Mapping (reso com'e') → altra iterabile (lista) → valore nudo.
+    Ordine: model_dump → to_dict (dataclass) → Mapping → altra iterabile → valore nudo.
     Un dict non deve passare per il caso lista, altrimenti ``dump_cfg_section({"a": 1})``
     restituirebbe ``["a"]`` invece di ``{"a": 1}``.
     """
@@ -17,6 +17,12 @@ def dump_cfg_section(cfg_section: Any) -> Any:
         return cfg_section.model_dump(
             mode="python", by_alias=True, exclude_none=True, exclude_unset=True
         )
+    if hasattr(cfg_section, "to_dict"):
+        return cfg_section.to_dict()
+    from dataclasses import asdict
+
+    if hasattr(cfg_section, "__dataclass_fields__"):
+        return {k: v for k, v in asdict(cfg_section).items() if v is not None}
     if isinstance(cfg_section, dict):
         return cfg_section
     if hasattr(cfg_section, "__iter__") and not isinstance(cfg_section, str):

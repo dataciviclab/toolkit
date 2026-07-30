@@ -76,43 +76,23 @@ def make_config(
     Returns a ``ToolkitConfig`` with real Pydantic models — no dict mocks.
     All attribute access (``cfg.clean.sql``, ``cfg.mart.tables``) works.
     """
-    from toolkit.core.config_models import (
-        ToolkitConfigModel,
-        DatasetBlock,
-        RawConfig,
-        CleanConfig,
-        MartConfig,
-    )
+    from toolkit.core.config import PipelineConfig, RawConfig, CleanConfig, MartConfig
 
     _root = root or Path("/tmp/toolkit-test-root")
     _base = base_dir or _root
     _years = years or [2024]
 
-    model = ToolkitConfigModel(
+    return PipelineConfig(
         base_dir=_base,
         root=_root,
         root_source="test",
-        dataset=DatasetBlock(name=dataset, years=_years, source_id=source_id),
-        raw=RawConfig.model_validate(raw or {}),
-        clean=CleanConfig.model_validate(clean or {}),
-        mart=MartConfig.model_validate(mart or {}),
+        dataset=dataset,
+        source_id=source_id,
+        years=_years,
+        raw=RawConfig.from_dict(raw or {}),
+        clean=CleanConfig.from_dict(clean or {}),
+        mart=MartConfig.from_dict(mart or {}),
         support=support or [],
-    )
-
-    from toolkit.core.config import ToolkitConfig
-
-    return ToolkitConfig(
-        base_dir=model.base_dir,
-        schema_version=model.schema_version,
-        root=model.root,
-        root_source=model.root_source,
-        dataset=model.dataset.name,
-        source_id=model.dataset.source_id,
-        years=list(model.dataset.years),
-        time_coverage=model.dataset.time_coverage,
-        tags=list(model.dataset.tags or []),
-        category=model.dataset.category,
-        _model=model,
     )
 
 

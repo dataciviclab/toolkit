@@ -464,7 +464,7 @@ def test_run_clean_align_by_header_integration(tmp_path: Path):
 @pytest.mark.policy
 def test_run_clean_align_by_header_requires_normalize_config():
     """CleanReadConfig con align_by_header=true senza normalize_rows_to_columns alza ValueError."""
-    from toolkit.core.config_models.clean import CleanReadConfig
+    from toolkit.core.config import CleanReadConfig
 
     with pytest.raises(
         ValueError, match="align_by_header=true requires normalize_rows_to_columns=true"

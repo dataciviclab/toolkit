@@ -105,8 +105,19 @@ mart: {}
         cfg = load_config(yml)
 
     assert cfg.clean.read is not None
-    assert cfg.clean.read.model_dump(mode="python", exclude_none=True, exclude_unset=True) == {
+    from dataclasses import asdict
+
+    assert {k: v for k, v in asdict(cfg.clean.read).items() if v is not None} == {
         "source": "auto",
+        "mode": "explicit",
+        "include": [],
+        "glob": "*",
+        "prefer_from_raw_run": True,
+        "allow_ambiguous": False,
+        "header": True,
+        "trim_whitespace": True,
+        "normalize_rows_to_columns": False,
+        "align_by_header": False,
         "columns": {"amount": "DOUBLE"},
         "delim": ";",
     }

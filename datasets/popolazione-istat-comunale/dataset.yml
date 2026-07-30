@@ -1,0 +1,65 @@
+root: "../.."
+schema_version: 1
+
+dataset:
+  name: "popolazione_istat_comunale"
+  source_id: "istat_sdmx"
+  years: [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+
+raw:
+  extractor:
+    type: "unzip_first_csv"
+  sources:
+    - name: "istat_posas_http_zip"
+      type: "http_file"
+      args:
+        url: "https://demo.istat.it/data/posas/POSAS_{year}_it_Comuni.zip"
+        filename: "POSAS_{year}_it_Comuni.zip"
+      primary: true
+
+clean:
+  sql: "sql/clean.sql"
+  read:
+    source: config_only
+    mode: latest
+    header: true
+    skip: 1
+    delim: ";"
+    encoding: "utf-8"
+    trim_whitespace: true
+  required_columns:
+    - "codice_comune"
+    - "comune"
+    - "eta"
+    - "popolazione_residente"
+  validate:
+    not_null:
+      - "codice_comune"
+      - "comune"
+      - "eta"
+    min_rows: 1000
+
+mart:
+  tables:
+    - name: "popolazione_by_comune"
+      sql: "sql/mart.sql"
+    - name: "popolazione_by_eta"
+      sql: "sql/mart_by_eta.sql"
+    - name: "popolazione_by_regione"
+      sql: "sql/mart_by_regione.sql"
+    - name: "popolazione_by_provincia"
+      sql: "sql/mart_by_provincia.sql"
+    - name: "popolazione_indicatori"
+      sql: "sql/mart_indicatori.sql"
+  hierarchy:
+    axis: categorico
+    levels:
+      - level: fascia_eta
+        table: h_fascia
+        grain: [codice_comune, comune, fascia_eta]
+        exclude_metrics: [anno, eta]
+  required_tables: ["popolazione_by_comune", "popolazione_by_eta"]
+  validate: {}
+
+validation:
+  fail_on_error: true

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from toolkit.core.config_models.mart import TransitionConfig
+from toolkit.core.config import TransitionConfig
 from toolkit.core.io import write_json_atomic
 
 

@@ -39,7 +39,7 @@ def _validate_config_cmd(config_arg: str, as_json: bool) -> None:
 
 def validate(
     step: str = typer.Argument(..., help="raw | clean | mart | all | config"),
-    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    config: str | None = typer.Option(None, "--config", "-c", help="Path or slug to dataset.yml"),
     year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output"),
@@ -52,7 +52,7 @@ def validate(
     - ``all``: raw + clean + mart
     """
     if step == "config":
-        _validate_config_cmd(config, as_json)
+        _validate_config_cmd(config or "", as_json)
         return
 
     cfg, logger = load_cfg_and_logger(config)

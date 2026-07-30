@@ -6,14 +6,13 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 |---|---|---|
 | `query` | stable | query SQL su parquet (path o dataset.yml + layer) |
 | `parquet_preview(sql=...)` | stable | API core per SQL arbitrario su parquet |
-| `run all` | stable | percorso canonico |
+| `run` | stable | percorso canonico |
 | `validate all` | stable | percorso canonico |
-| `inspect summary` | stable | percorso canonico |
+| `inspect` | stable | percorso canonico |
 | path contract di `dataset.yml` | stable | percorso canonico |
 | output `raw/clean/mart/_runs` | stable | percorso canonico |
-| `inspect paths` | stable | helper per notebook e repo dataset |
 | `inspect runs --resume` | supported / advanced | debug operativo e recovery |
-| `inspect profile` | supported / advanced | diagnostica su RAW sporchi o ambigui |
+| `inspect config --mode profile` | supported / advanced | diagnostica su RAW sporchi o ambigui |
 | `run raw\|clean\|mart` | supported / advanced | debug e re-run parziali |
 | `scout` | stable | esplorazione URL esterni, probe e routing automatico |
 | `scout --scaffold` | stable | probe + scaffold candidate dataset (dataset.yml, SQL, README) |
@@ -28,7 +27,7 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 Lettura equivalente a livello package:
 
 - core runtime: `toolkit.raw`, `toolkit.clean`, `toolkit.mart`, `toolkit.scout`, `toolkit.cli` (`run`, `validate`, `inspect`)
-- advanced tooling: `inspect runs --resume`, run parziali, `inspect profile`, `inspect config --diff`
+- advanced tooling: `inspect runs --resume`, run parziali, `inspect config --mode profile`, `inspect config --diff`
 - compatibility only: config legacy e alias storici
 
 Sorgenti builtin supportate dal runtime canonico: `local_file`, `http_file`, `http_post_file`, `ckan`, `sdmx`, `sparql`. Il runtime può conservare `.xlsx` e `.xls` in RAW e leggerli in CLEAN — il file originale resta l'artefatto sorgente.

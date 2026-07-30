@@ -151,7 +151,12 @@ def make_dataset_yml(
         "dataset:",
         f'  name: "{name}"',
         f"  years: [{yml_years_str}]",
-        "raw: {}",
+        "raw:",
+        "  sources:",
+        "    - type: local_file",
+        "      args:",
+        '        path: "."',
+        '        filename: "dummy.csv"',
     ]
 
     if clean_sql is not None:

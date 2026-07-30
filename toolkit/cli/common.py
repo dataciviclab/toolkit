@@ -31,7 +31,7 @@ def dump_cfg_section(cfg_section: Any) -> Any:
 
 
 def load_cfg_and_logger(
-    config_path: str,
+    config_path: str | None = None,
     *,
     verbose: bool = False,
     quiet: bool = False,

@@ -17,7 +17,7 @@ from toolkit.core.run_records import get_run_dir, read_run_record
 
 
 def runs(
-    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    config: str | None = typer.Option(None, "--config", "-c", help="Path or slug to dataset.yml"),
     year: int | None = typer.Option(None, "--year", "-y", help="Dataset year (default: first)"),
     resume: bool = typer.Option(False, "--resume", help="Resume latest/failed run"),
     run_id: str | None = typer.Option(None, "--run-id", help="Specific run id (show o resume)"),

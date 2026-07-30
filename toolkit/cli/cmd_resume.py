@@ -105,7 +105,7 @@ def _resolve_resume_start(
 
 
 def resume(
-    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    config: str | None = typer.Option(None, "--config", "-c", help="Path or slug to dataset.yml"),
     year: int | None = typer.Option(None, "--year", "-y", help="Dataset year (default: first)"),
     dataset: str | None = typer.Option(None, "--dataset", help="Dataset name (auto-da-config)"),
     run_id: str | None = typer.Option(None, "--run-id", help="Specific run id"),

@@ -73,7 +73,7 @@ def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
+def summary(config_path: str | None = None, year: int | None = None) -> dict[str, Any]:
     """Layer-level overview with existence checks.
 
     Restituisce una panoramica dei layer raw/clean/mart: path, esistenza,
@@ -209,7 +209,7 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any]:
+def review_readiness(config_path: str | None = None, year: int | None = None) -> dict[str, Any]:
     """Check minimale di readiness per review di intake/run candidate.
 
     Verifica:

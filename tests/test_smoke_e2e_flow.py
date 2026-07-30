@@ -109,7 +109,7 @@ class TestEndToEndFlow:
         year = 2024
 
         # --- FASE 1: run init (scaffold + raw) ---
-        result = _invoke(["run", "init", "--config", str(config_path)])
+        result = _invoke(["run", "raw", "--config", str(config_path)])
         assert result.exit_code == 0, f"run init fallito: {result.output}"
 
         out = tmp_path / "out"
@@ -118,7 +118,7 @@ class TestEndToEndFlow:
         assert (raw_dir / "_profile" / "raw_profile.json").exists()
 
         # --- FASE 2: run full (clean + mart + validate + review) ---
-        result = _invoke(["run", "full", "--config", str(config_path)])
+        result = _invoke(["run", "--config", str(config_path)])
         assert result.exit_code == 0, f"run full fallito: {result.output}"
 
         clean_dir = out / "data" / "clean" / dataset / str(year)
@@ -150,7 +150,7 @@ class TestEndToEndFlow:
             assert r["passed"] is True, f"{r['layer']} validation fallita: {r}"
 
         # --- FASE 4: inspect summary --json ---
-        result = _invoke(["inspect", "summary", "--config", str(config_path), "--json"])
+        result = _invoke(["inspect", "--config", str(config_path), "--json"])
         assert result.exit_code == 0, f"status fallito: {result.output}"
         status_data = json.loads(result.output)
         assert status_data["dataset"] == dataset
@@ -218,7 +218,7 @@ def test_zip_extractor(tmp_path: Path):
         """,
     )
 
-    result = _invoke(["run", "all", "--config", str(project / "dataset.yml")])
+    result = _invoke(["run", "--config", str(project / "dataset.yml")])
     assert result.exit_code == 0, result.output
 
     out = project / "out"
@@ -291,7 +291,7 @@ def test_year_template_in_path(tmp_path: Path):
         """,
     )
 
-    result = _invoke(["run", "all", "--config", str(project / "dataset.yml")])
+    result = _invoke(["run", "--config", str(project / "dataset.yml")])
     assert result.exit_code == 0, result.output
 
     out = project / "out"
@@ -361,7 +361,7 @@ def test_multi_year_mart(tmp_path: Path):
     )
 
     # run all per-year + run mart esplicito fa scattare il multi-year automatico
-    result = _invoke(["run", "all", "--config", str(project / "dataset.yml")])
+    result = _invoke(["run", "--config", str(project / "dataset.yml")])
     assert result.exit_code == 0, result.output
     result = _invoke(["run", "mart", "--config", str(project / "dataset.yml")])
     assert result.exit_code == 0, result.output

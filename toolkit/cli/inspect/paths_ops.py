@@ -13,7 +13,7 @@ from ._helpers import _payload_for_year
 
 
 def paths(
-    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    config: str | None = typer.Option(None, "--config", "-c", help="Path or slug to dataset.yml"),
     year: int | None = typer.Option(None, "--year", help="Dataset year"),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON output for notebooks/scripts"),
 ):

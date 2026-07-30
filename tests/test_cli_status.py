@@ -65,7 +65,7 @@ def test_status_uses_same_run_dir_as_writer(tmp_path: Path, runner, chdir_tmp: P
     )
     make_standard_sql(project_dir)
 
-    run_result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+    run_result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
     assert run_result.exit_code == 0
 
     run_dir = get_run_dir(project_dir / "out", "demo_ds", 2022)
@@ -77,12 +77,8 @@ def test_status_uses_same_run_dir_as_writer(tmp_path: Path, runner, chdir_tmp: P
         app,
         [
             "inspect",
-            "summary",
-            "--dataset",
-            "demo_ds",
             "--year",
             "2022",
-            "--latest",
             "--config",
             str(config_path),
         ],
@@ -130,12 +126,8 @@ def test_status_reports_raw_hints_when_raw_artifacts_exist(
         app,
         [
             "inspect",
-            "summary",
-            "--dataset",
-            "demo_ds",
             "--year",
             "2022",
-            "--latest",
             "--config",
             str(config_path),
         ],
@@ -272,12 +264,8 @@ mart:
         app,
         [
             "inspect",
-            "summary",
-            "--dataset",
-            "demo_ds",
             "--year",
             "2022",
-            "--latest",
             "--config",
             str(config_path),
         ],
@@ -365,12 +353,8 @@ def test_status_reports_layer_profiles_from_metadata(
         app,
         [
             "inspect",
-            "summary",
-            "--dataset",
-            "demo_ds",
             "--year",
             "2022",
-            "--latest",
             "--config",
             str(config_path),
         ],

@@ -13,7 +13,7 @@ from toolkit.domain.common import iter_years
 from toolkit.domain.inspect_utils import _compare_schema_entries, _raw_schema_payload
 
 
-def schema_diff_payload(config_path: str) -> dict[str, Any]:
+def schema_diff_payload(config_path: str | None = None) -> dict[str, Any]:
     """Confronta i segnali di schema RAW tra gli anni configurati.
 
     Args:

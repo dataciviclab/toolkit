@@ -66,7 +66,7 @@ support:
     # comunque grazie a require_exists=False.
     result = runner.invoke(
         app,
-        ["run", "full", "--config", str(cand_yml), "--dry-run", "--years", "2022"],
+        ["run", "--config", str(cand_yml), "--dry-run", "--years", "2022"],
         catch_exceptions=False,
     )
 
@@ -94,6 +94,6 @@ support:
     # Il caricamento del config del support fallisce -> exit non-zero
     result = runner.invoke(
         app,
-        ["run", "full", "--config", str(cand_yml), "--dry-run", "--years", "2022"],
+        ["run", "--config", str(cand_yml), "--dry-run", "--years", "2022"],
     )
     assert result.exit_code != 0

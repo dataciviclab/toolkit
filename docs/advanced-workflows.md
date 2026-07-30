@@ -4,8 +4,8 @@ Questa nota raccoglie i flussi e le opzioni del toolkit che restano supportati, 
 
 Percorso canonico:
 
-- `toolkit run full --config dataset.yml`
-- `toolkit inspect summary -c dataset.yml`
+- `toolkit run --config dataset.yml`
+- `toolkit inspect -c dataset.yml`
 - `toolkit inspect config -c dataset.yml`
 - notebook locali che leggono output e metadata sotto `root/data/...`
 
@@ -19,9 +19,9 @@ Questa categoria include anche tooling di supporto che non va confuso con il run
 
 Regola pratica:
 
-- se stai eseguendo un dataset per la prima volta, parti da `toolkit run all`
+- se stai eseguendo un dataset per la prima volta, parti da `toolkit run`
 - se hai cambiato fonte, anni, extractor, `dataset.yml` o il perimetro del RAW,
-  torna a `toolkit run all`
+  torna a `toolkit run`
 - se hai cambiato `clean.sql` o la logica `clean.read`, riparti da
   `toolkit run clean` e poi `toolkit run mart`
 - se hai toccato solo SQL `mart`, preferisci `toolkit run mart`
@@ -36,9 +36,9 @@ Matrice minima:
 
 | Tipo di modifica | Comando consigliato |
 |---|---|
-| prima esecuzione del dataset | `toolkit run all --config dataset.yml` |
-| cambio fonte o perimetro anni | `toolkit run all --config dataset.yml` |
-| cambio `dataset.yml` con impatto su input/layer | `toolkit run all --config dataset.yml` |
+| prima esecuzione del dataset | `toolkit run --config dataset.yml` |
+| cambio fonte o perimetro anni | `toolkit run --config dataset.yml` |
+| cambio `dataset.yml` con impatto su input/layer | `toolkit run --config dataset.yml` |
 | cambio `clean.sql` o `clean.read` | `toolkit run clean --config dataset.yml` poi `toolkit run mart --config dataset.yml` |
 | cambio solo `mart.sql` | `toolkit run mart --config dataset.yml` |
 | cambio solo tabella multi-anno | `toolkit run mart --config dataset.yml` |
@@ -52,7 +52,7 @@ il layer che stai rieseguendo.
 
 In pratica:
 
-- non trattare `run all` come default per ogni modifica minima
+- non trattare `run` come default per ogni modifica minima
 - non cancellare gli output locali "per pulizia" se non hai cambiato il loro perimetro
 - usa i rerun parziali quando il punto di ingresso corretto è chiaro
 - usa `resume` per recovery, non come scorciatoia generica a metà sviluppo

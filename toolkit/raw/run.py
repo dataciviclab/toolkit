@@ -11,9 +11,8 @@ from toolkit.core.metadata import (
     sha256_bytes,
     write_metadata,
 )
-from toolkit.core.paths import RAW_VALIDATION, RAW_PROFILE, layer_year_dir, to_root_relative
+from toolkit.core.paths import RAW_PROFILE, layer_year_dir, to_root_relative
 from toolkit.core.registry import register_builtin_plugins
-from toolkit.core.validation import write_validation_json
 from toolkit.profile.raw import (
     sniff_source_file,
     profile_raw,
@@ -29,7 +28,6 @@ from toolkit.raw._fetch_utils import (
     _resolve_output_path,
 )
 from toolkit.raw.extractors import get_extractor
-from toolkit.raw.validate import validate_raw_output
 
 
 def run_raw(
@@ -210,39 +208,18 @@ def run_raw(
         metadata_payload["source_id"] = source_id
     write_metadata(out_dir, metadata_payload)
 
-    # --- QA RAW ---
-    result = validate_raw_output(out_dir, files_written)
-    vpath = write_validation_json(out_dir / RAW_VALIDATION, result)
+    # Track output files in metadata (validation is done by run_raw_validation)
     merge_layer_manifest(
         out_dir,
-        validation_path=vpath.name,
         outputs=[
             {"file": f["file"], "sha256": f["sha256"], "bytes": f["bytes"]} for f in files_written
         ],
-        ok=result.ok,
-        errors_count=len(result.errors),
-        warnings_count=len(result.warnings),
         primary_output_file=primary_output_file,
         sources=[
             {"name": entry["name"], "output_file": entry["output_file"]}
             for entry in manifest_sources
         ],
     )
-
-    if result.warnings:
-        logger.warning(
-            f"RAW QA warnings ({dataset} {year}): {len(result.warnings)} -> {vpath.name}"
-        )
-        for w in result.warnings[:10]:
-            logger.warning(f" - {w}")
-
-    if not result.ok:
-        logger.error(f"RAW QA FAILED ({dataset} {year}) -> {vpath}")
-        for e in result.errors[:20]:
-            logger.error(f" - {e}")
-        raise RuntimeError(f"RAW validation failed for {dataset} {year}. See {vpath}")
-    else:
-        logger.info(f"RAW QA OK ({dataset} {year}) -> {vpath.name}")
 
     output_bytes = sum(f.get("bytes", 0) for f in files_written) if files_written else None
     source_urls = list(

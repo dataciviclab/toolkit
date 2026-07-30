@@ -4,12 +4,10 @@ from pathlib import Path
 from typing import Any
 
 from toolkit.core.io import read_json_or_none
-from toolkit.core.metadata import merge_layer_manifest
-from toolkit.core.paths import METADATA, RAW_VALIDATION, layer_year_dir
+from toolkit.core.paths import METADATA, layer_year_dir
 from toolkit.core.validation import (
     ValidationResult,
     build_validation_summary,
-    write_validation_json,
 )
 
 TEXT_EXT = {".csv", ".txt", ".tsv", ".json", ".xml", ".html"}
@@ -121,21 +119,12 @@ def run_raw_validation(root: str | None, dataset: str, year: int, logger) -> dic
         **({"delim": hints["delim_suggested"]} if hints.get("delim_suggested") else {}),
         **result.summary,
     }
-    result = result.__class__(
+    result = ValidationResult(
         ok=result.ok,
         errors=result.errors,
         warnings=result.warnings,
         summary=enriched_summary,
         sections=result.sections,
     )
-    report = write_validation_json(out_dir / RAW_VALIDATION, result)
-    merge_layer_manifest(
-        out_dir,
-        validation_path=report.name,
-        outputs=metadata.get("outputs", []),
-        ok=result.ok,
-        errors_count=len(result.errors),
-        warnings_count=len(result.warnings),
-    )
-    logger.info(f"VALIDATE RAW -> {report} (ok={result.ok})")
+    logger.info(f"VALIDATE RAW -> (ok={result.ok})")
     return build_validation_summary(result)

@@ -80,8 +80,6 @@ def test_artifacts_policy_minimal_behaves_like_standard(project_example: Path, m
     assert (raw_dir / "metadata.json").exists()
     assert (clean_dir / "metadata.json").exists()
     assert (mart_dir / "metadata.json").exists()
-    assert (mart_dir / "metadata.json").exists()
-    assert (mart_dir / "_validate" / "mart_validation.json").exists()
 
 
 def test_artifacts_policy_standard_keeps_expected_artifacts(

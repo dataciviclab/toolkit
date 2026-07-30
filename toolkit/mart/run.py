@@ -22,7 +22,6 @@ from toolkit.core.metadata import (
 )
 from toolkit.core.multi_year_source import bind_multi_year_view, collect_multi_year_files
 from toolkit.core.paths import (
-    MART_VALIDATION,
     layer_dataset_dir,
     layer_year_dir,
     resolve_root,
@@ -498,7 +497,6 @@ def run_mart(
     merge_layer_manifest(
         mart_dir,
         metadata_path=metadata_path.name,
-        validation_path=MART_VALIDATION,
         outputs=outputs,
     )
     total_bytes = sum(p.stat().st_size for p in written if p.exists())

@@ -160,9 +160,9 @@ def assert_golden_path_artifacts(
     """Verifica la struttura completa degli artifact dopo un golden path.
 
     Controlla che per ogni anno esistano:
-    - RAW dir con raw_validation.json
+    - RAW dir con metadata.json
     - CLEAN dir con almeno un parquet e metadata.json
-    - MART dir con ogni tabella dichiarata e mart_validation.json
+    - MART dir con ogni tabella dichiarata
 
     Args:
         mart_tables: Lista di nomi tabelle mart (senza estensione).
@@ -171,10 +171,7 @@ def assert_golden_path_artifacts(
 
     for year in years:
         # RAW
-        raw_dir = assert_raw_dir(root, dataset, year)
-        assert (raw_dir / "raw_validation.json").exists(), (
-            f"raw_validation.json mancante in {raw_dir}"
-        )
+        assert_raw_dir(root, dataset, year)
 
         # CLEAN
         clean_dir = assert_clean_dir(root, dataset, year)
@@ -189,6 +186,3 @@ def assert_golden_path_artifacts(
                 assert (mart_dir / f"{table}.parquet").exists(), (
                     f"MART table {table}.parquet mancante in {mart_dir}"
                 )
-            assert (mart_dir / "_validate" / "mart_validation.json").exists(), (
-                f"mart_validation.json mancante in {mart_dir}"
-            )

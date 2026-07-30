@@ -106,6 +106,13 @@ def build_validation_summary(result: ValidationResult) -> dict[str, Any]:
     }
     if "stats" in result.summary:
         out["stats"] = result.summary["stats"]
+    if result.sections:
+        out["sections"] = {}
+        for key, section in result.sections.items():
+            if isinstance(section, dict):
+                out["sections"][key] = {k: v for k, v in section.items() if k != "warning_messages"}
+            else:
+                out["sections"][key] = section
     return out
 
 

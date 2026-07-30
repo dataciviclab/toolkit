@@ -20,9 +20,7 @@ from toolkit.core.column_rules import (
 from toolkit.clean._helpers import _input_files_from_clean_metadata, _profile_raw_input
 from toolkit.core.config import CleanValidationSpec, RangeRuleConfig, TransitionConfig
 from toolkit.core.layer_profile import compare_layer_profiles
-from toolkit.core.metadata import merge_layer_manifest
 from toolkit.core.paths import (
-    CLEAN_VALIDATION,
     METADATA,
     RAW_PROFILE,
     layer_year_dir,
@@ -33,7 +31,6 @@ from toolkit.core.validation import (
     build_validation_summary,
     check_transitions,
     required_columns_check,
-    write_validation_json,
 )
 from toolkit.quality.pa_csv_quality import assess_quality
 
@@ -593,16 +590,5 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
         sections=merged_sections,
     )
 
-    report = write_validation_json(Path(out_dir) / CLEAN_VALIDATION, result)
-    metadata = read_json_or_none(out_dir / METADATA) or {}
-    merge_layer_manifest(
-        out_dir,
-        metadata_path=METADATA,
-        validation_path="_validate/clean_validation.json",
-        outputs=metadata.get("outputs", []),
-        ok=result.ok,
-        errors_count=len(result.errors),
-        warnings_count=len(result.warnings),
-    )
-    logger.info(f"VALIDATE CLEAN -> {report} (ok={result.ok})")
+    logger.info(f"VALIDATE CLEAN -> (ok={result.ok})")
     return build_validation_summary(result)

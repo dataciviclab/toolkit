@@ -260,21 +260,22 @@ def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Pa
     assert summary["passed"] is True
     assert summary["warnings_count"] == 2
 
-    report = json.loads(
-        (mart_dir / "_validate" / "mart_validation.json").read_text(encoding="utf-8")
-    )
-    assert len(report["warnings"]) == 2
-    assert any("row drop 30.0%" in warning for warning in report["warnings"])
-    assert any("columns removed from clean" in warning for warning in report["warnings"])
-    assert report["transition"]["profiles_count"] == 1
-    assert report["transition"]["warnings_count"] == 2
-    assert report["transition"]["config"] == {
+    warnings = summary.get("warnings") or []
+    assert len(warnings) == 2
+    assert any("row drop 30.0%" in warning for warning in warnings)
+    assert any("columns removed from clean" in warning for warning in warnings)
+    sections = summary.get("sections") or {}
+    transition = sections.get("transition") or {}
+    assert transition.get("profiles_count") == 1
+    assert transition.get("warnings_count") == 2
+    assert transition.get("config") == {
         "max_row_drop_pct": 20.0,
         "warn_removed_columns": True,
         "fail_on_row_drop_exceeded": False,
     }
-    assert any(item["kind"] == "row_drop_pct" for item in report["transition"]["warnings"])
-    assert any(item["kind"] == "removed_columns" for item in report["transition"]["warnings"])
+    transition_warnings = transition.get("warnings") or []
+    assert any(item["kind"] == "row_drop_pct" for item in transition_warnings)
+    assert any(item["kind"] == "removed_columns" for item in transition_warnings)
 
 
 @pytest.mark.policy
@@ -392,12 +393,10 @@ def test_run_clean_validation_raw_probe_source_legacy_autodetect(tmp_path: Path)
 
     # With no profile, the probe must fall back to legacy autodetect
     assert result["stats"].get("raw_probe_source") == "legacy_autodetect"
-    # Warning must mention the fallback reason
-    # build_validation_summary only includes the raw stats, not the full result.warnings
-    # So we check the warning was emitted by inspecting via the ValidationResult if accessible,
-    # or by verifying that the fallback path was taken (raw_probe_source = legacy_autodetect)
-    warning_texts = " ".join(_read_warnings_from_validation_report(clean_dir))
-    assert "falling back to read_csv(auto_detect=true)" in warning_texts
+    # Warning must mention the fallback reason (from return value, not disk)
+    warnings = result.get("warnings") or []
+    warning_text = " ".join(warnings)
+    assert "falling back to read_csv(auto_detect=true)" in warning_text
 
 
 @pytest.mark.policy
@@ -445,7 +444,7 @@ def test_run_clean_validation_raw_probe_source_unavailable_when_no_raw_file(
 
 
 def _read_warnings_from_validation_report(clean_dir: Path) -> list[str]:
-    """Read warnings from the written validation JSON."""
+    """Read warnings from the written validation JSON (legacy, file may not exist)."""
     report_path = clean_dir / "_validate" / "clean_validation.json"
     if report_path.exists():
         data = json.loads(report_path.read_text(encoding="utf-8"))
@@ -687,12 +686,10 @@ def test_run_mart_validation_transition_errors_set_ok_false(tmp_path: Path):
     )
     assert summary["errors_count"] >= 1, "Expected at least 1 transition error"
 
-    # Verifica che il JSON di validazione su disco contenga l'errore
-    report = json.loads(
-        (mart_dir / "_validate" / "mart_validation.json").read_text(encoding="utf-8")
-    )
-    assert len(report.get("errors", [])) >= 1
-    assert any("row drop" in e for e in report["errors"])
+    # Verifica che il summary contenga l'errore
+    errors = summary.get("errors") or []
+    assert len(errors) >= 1
+    assert any("row drop" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------

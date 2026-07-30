@@ -304,17 +304,18 @@ def build_run_report(
     # --- Config hash (da metadata di qualsiasi layer) ---
     config_hash = _collect_config_hash(root_path, dataset, year)
 
-    # --- Validation per layer ---
+    # --- Validation per layer (da memoria, non da disco) ---
+    step_val = (step_results or {}).get("validations") or {}
     layers_report: dict[str, Any] = {}
     for lname in ("raw", "clean", "mart"):
-        val = _read_validation(root_path, lname, dataset, year)
-        warnings = _get_warnings(val)
-        errors = _get_errors(val)
+        val = step_val.get(lname, {})
+        warnings = val.get("warnings", [])
+        errors = val.get("errors", [])
         file_bytes = _collect_output_bytes(root_path, lname, dataset, year)
         layer_status = ((record or {}).get("layers") or {}).get(lname, {}).get("status")
 
         # Distingue layer non presente (es. mart-only: raw/clean assenti) da layer fallito
-        val_ok: bool | None = val.get("ok")
+        val_ok = val.get("passed")
         if val_ok is None and not val and layer_status is None:
             val_ok = None  # layer non eseguito (non è un fallimento)
 

@@ -16,7 +16,6 @@ from toolkit.core.metadata import (
     write_metadata,
 )
 from toolkit.core.paths import (
-    CLEAN_VALIDATION,
     layer_year_dir,
     resolve_root,
     resolve_sql_path,
@@ -296,7 +295,6 @@ def run_clean(
     merge_layer_manifest(
         out_dir,
         metadata_path=metadata_path.name,
-        validation_path=CLEAN_VALIDATION,
         outputs=outputs,
     )
     logger.info(f"CLEAN -> {output_path}")

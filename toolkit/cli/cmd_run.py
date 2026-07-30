@@ -834,7 +834,7 @@ def _build_row(
 def _silence_typer_echo() -> Any:
     """Silenzia typer.echo durante run_year quando --json è attivo."""
     original_echo = typer.echo
-    typer.echo = lambda *args, **kwargs: None  # type: ignore[assignment]
+    typer.echo = lambda *args, **kwargs: None
     try:
         yield
     finally:

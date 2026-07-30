@@ -13,7 +13,7 @@ from toolkit.core.dataset_loader import validate_config
 from toolkit.domain.common import iter_selected_years
 
 
-def run_config_check(cfg, config_path: str | Path) -> dict[str, Any]:
+def run_config_check(cfg, config_path: str | Path | None) -> dict[str, Any]:
     """Config-only validation (zero network I/O).
 
     Delega i controlli standard a ``validate_config`` (stessa logica,
@@ -27,7 +27,7 @@ def run_config_check(cfg, config_path: str | Path) -> dict[str, Any]:
 
 
 def run_preflight(
-    config: str | Path,
+    config: str | Path | None = None,
     *,
     years_arg: str | None = None,
 ) -> dict[str, Any]:

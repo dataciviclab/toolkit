@@ -47,7 +47,7 @@ def _clean_validation_spec(
     max_null_pct: dict[str, float] | None = None,
     min_rows: int | None = None,
 ) -> CleanValidationSpec:
-    return CleanValidationSpec.from_dict(
+    spec = CleanValidationSpec.from_dict(
         {
             "required_columns": required or [],
             "primary_key": primary_key or [],
@@ -57,6 +57,8 @@ def _clean_validation_spec(
             "min_rows": min_rows,
         }
     )
+    assert spec is not None
+    return spec
 
 
 def validate_clean(

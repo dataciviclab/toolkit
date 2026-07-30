@@ -299,12 +299,13 @@ class CleanValidateConfig:
 
 @dataclass
 class CleanConfig:
-    sql: str | None = None
+    sql: str | Path | None = None
     read_mode: str = "fallback"
     read_source: str = "auto"
     read: CleanReadConfig | None = None
     required_columns: list[str] = field(default_factory=list)
     validate: CleanValidateConfig | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
     def from_dict(d: dict | None) -> CleanConfig:
@@ -312,6 +313,8 @@ class CleanConfig:
             return CleanConfig()
         validate = CleanValidateConfig.from_dict(d.get("validate"))
         read = CleanReadConfig.from_dict(d.get("read"))
+        known = {"sql", "read_mode", "read_source", "read", "required_columns", "validate"}
+        extra = {k: v for k, v in d.items() if k not in known}
         return CleanConfig(
             sql=d.get("sql"),
             read_mode=d.get("read_mode", "fallback"),
@@ -321,29 +324,30 @@ class CleanConfig:
                 d.get("required_columns", []), "clean.required_columns"
             ),
             validate=validate,
+            extra=extra,
         )
 
 
 @dataclass
 class MartTableConfig:
     name: str = ""
-    sql: str = ""
+    sql: str | Path = ""
     years: list[int] | None = None
     source_layer: str = "clean"
     source_table: str | None = None
 
     @staticmethod
     def from_dict(d: dict) -> MartTableConfig:
+        sql_val = d.get("sql", "")
         return MartTableConfig(
             name=str(d.get("name", "")),
-            sql=str(d.get("sql", "")),
+            sql=Path(sql_val) if isinstance(sql_val, str) else sql_val,
             years=_ensure_int_list(d.get("years"), "mart.tables[].years") or None,
             source_layer=d.get("source_layer", "clean"),
             source_table=d.get("source_table"),
         )
 
 
-@dataclass
 @dataclass
 class MartValidateConfig:
     table_rules: dict[str, MartTableRuleConfig] = field(default_factory=dict)
@@ -397,6 +401,7 @@ class MartConfig:
     required_tables: list[str] = field(default_factory=list)
     hierarchy: HierarchyConfig | None = None
     validate: MartValidateConfig | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
     def from_dict(d: dict | None) -> MartConfig:
@@ -418,11 +423,14 @@ class MartConfig:
             ]
             hierarchy = HierarchyConfig(axis=hierarchy_raw.get("axis", ""), levels=levels)
         validate = MartValidateConfig.from_dict(d.get("validate"))
+        known = {"tables", "required_tables", "hierarchy", "validate"}
+        extra = {k: v for k, v in d.items() if k not in known}
         return MartConfig(
             tables=tables,
             required_tables=req,
             hierarchy=hierarchy,
             validate=validate,
+            extra=extra,
         )
 
 
@@ -462,6 +470,7 @@ class RawConfig:
     sources: list[RawSourceConfig] = field(default_factory=list)
     output_policy: str = "versioned"
     extractor: dict | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
     def from_dict(d: dict | None) -> RawConfig:
@@ -470,10 +479,13 @@ class RawConfig:
         sources = [
             RawSourceConfig.from_dict(s) for s in (d.get("sources") or []) if isinstance(s, dict)
         ]
+        known = {"sources", "output_policy", "extractor"}
+        extra = {k: v for k, v in d.items() if k not in known}
         return RawConfig(
             sources=sources,
             output_policy=d.get("output_policy", "versioned"),
             extractor=d.get("extractor"),
+            extra=extra,
         )
 
 
@@ -525,8 +537,9 @@ class PipelineConfig:
         return (self.base_dir / p).resolve()
 
 
-# Backward compat name
+# Backward compat aliases
 ToolkitConfig = PipelineConfig
+ToolkitConfigModel = PipelineConfig
 
 
 # ---------------------------------------------------------------------------
@@ -577,7 +590,7 @@ def _normalize_paths(data: dict, base_dir: Path) -> None:
                 if isinstance(val, str):
                     p = Path(val)
                     if not p.is_absolute():
-                        item["config"] = str((base_dir / p).resolve())
+                        item["config"] = (base_dir / p).resolve()
 
 
 def _normalize_section_paths(section: dict, base_dir: Path) -> None:
@@ -590,8 +603,7 @@ def _normalize_section_paths(section: dict, base_dir: Path) -> None:
         if isinstance(value, str) and key in _PATH_KEYS:
             p = Path(value)
             if not p.is_absolute():
-                resolved = (base_dir / p).resolve()
-                section[key] = str(resolved)
+                section[key] = (base_dir / p).resolve()
         elif isinstance(value, list):
             for item in value:
                 if isinstance(item, dict):
@@ -698,7 +710,11 @@ def load_config(
     # Support validation
     support = data.get("support", [])
     if isinstance(support, list):
-        support_names = [s.get("name") for s in support if isinstance(s, dict) and s.get("name")]
+        support_names: list[str] = [
+            str(s["name"])
+            for s in support
+            if isinstance(s, dict) and isinstance(s.get("name"), str)
+        ]
         duplicates = sorted({n for n in support_names if support_names.count(n) > 1})
         if duplicates:
             raise ValueError("support[].name values must be unique: " + ", ".join(duplicates))

@@ -217,15 +217,13 @@ def test_load_config_resolves_relative_paths_from_dataset_dir(tmp_path: Path):
     assert cfg.base_dir == project_dir.resolve()
     assert cfg.root == (project_dir / "out").resolve()
     assert cfg.root_source == "yml"
-    assert cfg.raw.sources[0].args["path"] == str((project_dir / "data" / "raw.csv").resolve())
-    assert cfg.clean.sql == str((project_dir / "sql" / "clean.sql").resolve())
-    assert cfg.mart.tables[0].sql == str((project_dir / "sql" / "mart" / "demo.sql").resolve())
+    assert cfg.raw.sources[0].args["path"] == (project_dir / "data" / "raw.csv").resolve()
+    assert cfg.clean.sql == (project_dir / "sql" / "clean.sql").resolve()
+    assert cfg.mart.tables[0].sql == (project_dir / "sql" / "mart" / "demo.sql").resolve()
     # multi-year mart table path resolution (assorbe ex cross_year)
     multi_year_table = cfg.mart.tables[1]
     assert multi_year_table.name == "demo_multi_year"
-    assert multi_year_table.sql == str(
-        (project_dir / "sql" / "multi_year" / "demo_multi.sql").resolve()
-    )
+    assert multi_year_table.sql == (project_dir / "sql" / "multi_year" / "demo_multi.sql").resolve()
     assert multi_year_table.years == [2022]
     assert multi_year_table.source_layer == "clean"
 
@@ -258,7 +256,7 @@ def test_load_config_resolves_support_config_paths_from_dataset_dir(tmp_path: Pa
     assert len(cfg.support) == 1
     s = cfg.support[0]
     assert s.name == "scuole"
-    assert s.config == str((support_dir / "dataset.yml").resolve())
+    assert s.config == (support_dir / "dataset.yml").resolve()
     assert s.years == [2024]
 
 
@@ -292,7 +290,7 @@ def test_load_config_does_not_transform_non_whitelisted_path_like_fields(tmp_pat
 
     cfg = load_config(yml)
 
-    assert cfg.raw.sources[0].args["path"] == str((project_dir / "data" / "raw.csv").resolve())
+    assert cfg.raw.sources[0].args["path"] == (project_dir / "data" / "raw.csv").resolve()
     assert cfg.raw.sources[0].args["filename"] == "nested/raw.csv"
     # clean.note_path e mart.label_path sono campi extra non modellati nel nuovo sistema
     # (il vecchio Pydantic li accettava per via di extra="allow")
@@ -322,9 +320,7 @@ def test_load_config_preserves_year_template_in_raw_local_file_path(tmp_path: Pa
 
     cfg = load_config(yml)
 
-    assert cfg.raw.sources[0].args["path"] == str(
-        (project_dir / "data" / "raw_{year}.csv").resolve()
-    )
+    assert cfg.raw.sources[0].args["path"] == (project_dir / "data" / "raw_{year}.csv").resolve()
     assert cfg.raw.sources[0].args["filename"] == "raw_{year}.csv"
 
 

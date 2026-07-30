@@ -57,37 +57,6 @@ def _is_mart_only_cfg(cfg) -> bool:
     return not bool(cfg.clean.sql)
 
 
-def _write_blocked_report(
-    config_path: str,
-    year: int,
-    root: str | Path,
-    dataset: str,
-    run_mode: str,
-    support_datasets: list[dict[str, Any]],
-) -> None:
-    """Scrive un report minimale per un anno non eseguito (candidate bloccato)."""
-    from toolkit.domain.report import write_run_report
-
-    report = {
-        "dataset": dataset,
-        "config_path": str(config_path),
-        "year": year,
-        "run_id": None,
-        "run_mode": run_mode,
-        "toolkit_version": None,
-        "status": "BLOCKED",
-        "duration_seconds": None,
-        "config_hash": None,
-        "source_urls": [],
-        "readiness": None,
-        "readiness_checks": {"total": 0, "ok": 0, "fail": 0},
-        "preflight": {},
-        "layers": {},
-        "support_datasets": support_datasets,
-    }
-    write_run_report(report, root, dataset, year)
-
-
 def _validate_execution_plan(cfg, step: str) -> list[str]:
     layers = _planned_layers(step)
 
@@ -999,18 +968,10 @@ def run_full(
                     results["status"] = "failed"
 
     # ── Run report (best-effort: non fa fallire il run) ────────────────────
-    # Eseguito sempre: anche con candidate bloccato, run fallito, o eccezione.
+    # Report non piu' generato su disco — i dati sono nel run record (_runs/)
     try:
         if not dry_flag:
-            from toolkit.domain.report import (
-                build_run_report,
-                write_run_report,
-                write_dataset_readme,
-                _all_reports_for_dataset,
-                _derive_overall_status,
-            )
-
-            run_mode = "smoke" if sample_mode else "full"
+            # run mode not needed anymore
 
             # Raccogli info dai support
             support_info: list[dict[str, Any]] = []
@@ -1031,49 +992,12 @@ def run_full(
                         )
 
             # Anni effettivamente eseguiti (hanno una voce in results["steps"])
-            attempted_years = set(results["steps"].keys())
+            # attempted_years not needed anymore
 
-            # Genera report solo per gli anni tentati (non per quelli saltati
-            # da un'eccezione o da candidate_blocked), per evitare di
-            # riusare artifact di run precedenti.
-            for year in selected_years:
-                sy = str(year)
-                if sy not in attempted_years:
-                    # Anno non eseguito: scrive report BLOCKED esplicito
-                    # solo se il candidate era bloccato da support.
-                    if candidate_blocked:
-                        _write_blocked_report(
-                            config, year, cfg.root, cfg.dataset, run_mode, support_info
-                        )
-                    continue
-
-                step_data = results["steps"][sy]
-                report = build_run_report(
-                    config_path=config,
-                    year=year,
-                    root=cfg.root,
-                    dataset=cfg.dataset,
-                    preflight=results.get("preflight"),
-                    step_results=step_data,
-                    run_mode=run_mode,
-                    support_datasets=support_info,
-                )
-                write_run_report(report, cfg.root, cfg.dataset, year)
-
-            # Leggi TUTTI i report JSON esistenti su disco
-            # e rigenera il README completo con stato aggregato
-            all_reports = _all_reports_for_dataset(cfg.root, cfg.dataset)
-            if all_reports:
-                agg_status = _derive_overall_status(all_reports)
-                write_dataset_readme(
-                    cfg.root,
-                    cfg.dataset,
-                    all_reports,
-                    overall_status=agg_status,
-                    config_path=config,
-                )
-    except Exception as _report_err:
-        logger.warning("Generazione report saltata: %s", _report_err)
+            # Report non piu' generato — i dati sono nel run record (_runs/)
+            pass
+    except Exception:
+        pass
 
     # Rilancia l'eccezione originale del candidate (preserva traceback)
     if _candidate_exc is not None:

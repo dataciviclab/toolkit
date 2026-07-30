@@ -647,14 +647,14 @@ def test_safe_path_not_found(tmp_path):
     from toolkit.mcp.path_safety import _safe_path
     from toolkit.mcp.errors import ToolkitClientError
 
-    with pytest.raises(ToolkitClientError, match="non trovato"):
+    with pytest.raises(ToolkitClientError, match="non trov|Nessun dataset"):
         _safe_path(str(tmp_path / "nonexistent" / "dataset.yml"))
 
     from toolkit.mcp import path_safety as _ps_mod
 
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(_ps_mod, "WORKSPACE_ROOT", tmp_path)
-    with pytest.raises(ToolkitClientError, match="non trovato"):
+    with pytest.raises(ToolkitClientError, match="non trov|Nessun dataset"):
         _safe_path("totally-nonexistent-slug")
     monkeypatch.undo()
 

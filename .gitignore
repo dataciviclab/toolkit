@@ -38,3 +38,5 @@ tmp/
 generated/
 /sql/
 *.py,cover
+data/
+datasets/

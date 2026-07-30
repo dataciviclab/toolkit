@@ -174,15 +174,22 @@ def summary(
         raise typer.Exit(code=1)
 
     s = _summary(config, yr)
-    record = (s.get("run") or {}).get("latest_run_record") or {}
+    layers = s.get("layers", {})
 
+    # Carica il run record (specifico o ultimo)
+    run_dir = get_run_dir(cfg.root, ds_name, yr)
+    record: dict[str, Any] = {}
     if run_id:
-        run_dir = get_run_dir(cfg.root, ds_name, yr)
         specific = read_run_record(run_dir, run_id)
         if specific:
             record = specific
+    elif run_dir.exists():
+        from toolkit.core.run_records import latest_run as _latest_run
 
-    layers = s.get("layers", {})
+        try:
+            record = _latest_run(run_dir) or {}
+        except (FileNotFoundError, OSError):
+            pass
 
     if as_json:
         typer.echo(
@@ -240,18 +247,42 @@ def summary(
     _print_raw_hints(raw_hints)
 
     typer.echo("")
-    typer.echo("layer layer_status         validation_passed errors_count warnings_count")
+    typer.echo("layer  status  righe    colonne  qualità  errori  warning")
     for layer_name in ("raw", "clean", "mart"):
         rs = layer_run_statuses.get(layer_name) or {}
+        rows = rs.get("output_rows") or rs.get("clean_rows") or "·"
+        cols = rs.get("col_count") or "·"
+        quality = rs.get("quality_score") or (
+            rs.get("paqa_score") if layer_name == "clean" else "·"
+        )
+        status_icon = (
+            "✅"
+            if rs.get("validation_passed")
+            else ("❌" if rs.get("validation_passed") is False else "·")
+        )
         typer.echo(
-            f"{layer_name:<5} "
-            f"{str(rs.get('status', 'PENDING')):<20} "
-            f"{str(rs.get('validation_passed')):<17} "
-            f"{str(rs.get('validation_errors', 0)):<12} "
-            f"{str(rs.get('validation_warnings', 0)):<14}"
+            f"{layer_name:<6} "
+            f"{status_icon} "
+            f"{str(rows):<8} "
+            f"{str(cols):<8} "
+            f"{str(quality):<8} "
+            f"{str(rs.get('validation_errors', 0)):<7} "
+            f"{str(rs.get('validation_warnings', 0)):<7}"
         )
 
-    _print_validation_summaries(layers)
+    # Warning messages dal run record
+    if record and record.get("validations"):
+        any_warnings = False
+        for layer_name in ("raw", "clean", "mart"):
+            layer_val = (record.get("validations") or {}).get(layer_name) or {}
+            warnings = layer_val.get("warnings") or []
+            if warnings:
+                if not any_warnings:
+                    typer.echo("")
+                    typer.echo("warnings:")
+                    any_warnings = True
+                for w in warnings[:5]:
+                    typer.echo(f"  {layer_name}: {w[:120]}")
 
     multi_year_tables = [t for t in cfg.mart.tables if t.years]
     if multi_year_tables:

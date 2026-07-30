@@ -136,11 +136,25 @@ def summary(config_path: str, year: int | None = None) -> dict[str, Any]:
         for layer_name in ("raw", "clean", "mart"):
             layer_info = (latest_run_record.get("layers") or {}).get(layer_name, {})
             layer_val = (latest_run_record.get("validations") or {}).get(layer_name, {})
+            metrics = layer_info.get("metrics") or {}
+            stats = (
+                (layer_val.get("stats") or {}) if isinstance(layer_val.get("stats"), dict) else {}
+            )
             layer_run_statuses[layer_name] = {
                 "status": layer_info.get("status", "PENDING"),
                 "validation_passed": layer_val.get("passed"),
                 "validation_errors": layer_val.get("errors_count", 0),
                 "validation_warnings": layer_val.get("warnings_count", 0),
+                "quality_score": layer_val.get("quality_score"),
+                "output_rows": metrics.get("output_rows"),
+                "col_count": metrics.get("col_count"),
+                "output_bytes": metrics.get("output_bytes"),
+                "tables_count": metrics.get("tables_count"),
+                # Da clean validation stats
+                "raw_rows": stats.get("raw_rows"),
+                "clean_rows": stats.get("clean_rows"),
+                "paqa_score": stats.get("paqa_score"),
+                "row_drop_pct": stats.get("row_drop_pct"),
             }
 
     return {

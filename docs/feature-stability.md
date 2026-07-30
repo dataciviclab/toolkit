@@ -7,7 +7,7 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 | `query` | stable | query SQL su parquet (path o dataset.yml + layer) |
 | `parquet_preview(sql=...)` | stable | API core per SQL arbitrario su parquet |
 | `run` | stable | percorso canonico |
-| `validate all` | stable | percorso canonico |
+| `run --batch` | stable | batch esecuzione sequenziale |
 | `inspect` | stable | percorso canonico |
 | path contract di `dataset.yml` | stable | percorso canonico |
 | output `raw/clean/mart/_runs` | stable | percorso canonico |
@@ -26,7 +26,7 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 
 Lettura equivalente a livello package:
 
-- core runtime: `toolkit.raw`, `toolkit.clean`, `toolkit.mart`, `toolkit.scout`, `toolkit.cli` (`run`, `validate`, `inspect`)
+- core runtime: `toolkit.raw`, `toolkit.clean`, `toolkit.mart`, `toolkit.scout`, `toolkit.cli` (`run`, `inspect`, `batch` deprecato)
 - advanced tooling: `inspect runs --resume`, run parziali, `inspect config --mode profile`, `inspect config --diff`
 - compatibility only: config legacy e alias storici
 

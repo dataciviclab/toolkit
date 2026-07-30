@@ -1005,9 +1005,6 @@ def run_full(
             from toolkit.domain.report import (
                 build_run_report,
                 write_run_report,
-                write_dataset_readme,
-                _all_reports_for_dataset,
-                _derive_overall_status,
             )
 
             run_mode = "smoke" if sample_mode else "full"
@@ -1059,19 +1056,6 @@ def run_full(
                     support_datasets=support_info,
                 )
                 write_run_report(report, cfg.root, cfg.dataset, year)
-
-            # Leggi TUTTI i report JSON esistenti su disco
-            # e rigenera il README completo con stato aggregato
-            all_reports = _all_reports_for_dataset(cfg.root, cfg.dataset)
-            if all_reports:
-                agg_status = _derive_overall_status(all_reports)
-                write_dataset_readme(
-                    cfg.root,
-                    cfg.dataset,
-                    all_reports,
-                    overall_status=agg_status,
-                    config_path=config,
-                )
     except Exception as _report_err:
         logger.warning("Generazione report saltata: %s", _report_err)
 

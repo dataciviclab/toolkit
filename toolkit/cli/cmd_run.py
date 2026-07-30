@@ -315,6 +315,8 @@ def run_year(
     run_has_validation_warnings = False
     sample_mode = sample_rows is not None or sample_bytes is not None
 
+    validations: dict[str, dict[str, Any]] = {}
+
     def _execute_layer(layer_name: str, target, *args, **kwargs) -> bool:
         """Esegue un layer e restituisce True se ok, False se fallito.
 
@@ -326,6 +328,7 @@ def run_year(
           warn_only: gli errori di validazione diventano warning, la pipeline continua
         """
         nonlocal run_has_validation_warnings
+        nonlocal validations
 
         layer_logger = bind_logger(base_logger, layer=layer_name)
         context.start_layer(layer_name)
@@ -340,6 +343,7 @@ def run_year(
                 validation_kwargs["sample_mode"] = sample_mode
             summary = _validation_runner(layer_name)(cfg, year, layer_logger, **validation_kwargs)
             context.set_validation(layer_name, summary)
+            validations[layer_name] = summary
             if not summary.get("passed", False):
                 message = f"{layer_name.upper()} validation failed"
                 if validation_mode == "strict" and fail_on_error:
@@ -962,6 +966,7 @@ def run_full(
                 results["steps"][str(year)] = {
                     "run": "ok",
                     "validate": "passed" if all_passed else "failed",
+                    "validations": ctx.validations,
                 }
                 if not all_passed and fail_on_error_flag:
                     results["status"] = "failed"

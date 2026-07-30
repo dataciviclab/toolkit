@@ -84,7 +84,7 @@ def read_layer_metadata(layer_dir: Path) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# merge_layer_manifest — merge validation fields into metadata.json
+# merge_layer_manifest — merge output file info into metadata.json
 # ---------------------------------------------------------------------------
 
 
@@ -92,28 +92,13 @@ def merge_layer_manifest(
     folder: Path,
     *,
     metadata_path: str = METADATA,
-    validation_path: str | None = None,
     outputs: list[dict[str, Any]] | None = None,
-    ok: bool | None = None,
-    errors_count: int | None = None,
-    warnings_count: int | None = None,
     primary_output_file: str | None = None,
     sources: list[Any] | None = None,
 ) -> Path:
     meta = _read_metadata(folder, metadata_path) or {}
     if outputs is not None:
         meta["outputs"] = outputs
-    if validation_path is not None:
-        meta["validation"] = validation_path
-    if ok is not None or errors_count is not None or warnings_count is not None:
-        summary: dict[str, Any] = {}
-        if ok is not None:
-            summary["ok"] = ok
-        if errors_count is not None:
-            summary["errors_count"] = errors_count
-        if warnings_count is not None:
-            summary["warnings_count"] = warnings_count
-        meta["summary"] = summary
     if primary_output_file and not meta.get("primary_output_file"):
         meta["primary_output_file"] = primary_output_file
     if sources and not meta.get("sources"):

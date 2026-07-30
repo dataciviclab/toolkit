@@ -13,15 +13,13 @@ from toolkit.core.column_rules import (
 )
 from toolkit.core.io import read_json_or_none
 from toolkit.core.config import MartTableRuleConfig, MartValidationSpec
-from toolkit.core.metadata import merge_layer_manifest
-from toolkit.core.paths import MART_VALIDATION, METADATA, layer_year_dir, to_root_relative
+from toolkit.core.paths import METADATA, layer_year_dir, to_root_relative
 from toolkit.core.sql_utils import sql_path
 from toolkit.core.validation import (
     ValidationResult,
     build_validation_summary,
     check_transitions,
     required_columns_check,
-    write_validation_json,
 )
 
 
@@ -240,15 +238,5 @@ def run_mart_validation(cfg, year: int, logger, *, sample_mode: bool = False) ->
             sections={"transition": transition_report},
         )
 
-    report = write_validation_json(Path(mart_dir) / MART_VALIDATION, result)
-    merge_layer_manifest(
-        mart_dir,
-        metadata_path=METADATA,
-        validation_path="_validate/mart_validation.json",
-        outputs=metadata.get("outputs", []),
-        ok=result.ok,
-        errors_count=len(result.errors),
-        warnings_count=len(result.warnings),
-    )
-    logger.info(f"VALIDATE MART -> {report} (ok={result.ok})")
+    logger.info(f"VALIDATE MART -> (ok={result.ok})")
     return build_validation_summary(result)

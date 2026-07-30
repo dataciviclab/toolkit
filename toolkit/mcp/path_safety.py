@@ -32,6 +32,9 @@ def _safe_path(config_path: str | Path) -> Path:
     Delega la risoluzione a ``resolve_config_path()`` traducendo
     ``FileNotFoundError`` in ``ToolkitClientError``.
 
+    Per path di file esistenti non-YAML (es. CSV per preview), li
+    restituisce direttamente senza passarli a ``resolve_config_path``.
+
     Args:
         config_path: Path o slug da risolvere.
 
@@ -41,6 +44,9 @@ def _safe_path(config_path: str | Path) -> Path:
     Raises:
         ToolkitClientError: CONFIG_NOT_FOUND se irrisolvibile.
     """
+    p = Path(config_path).expanduser()
+    if p.is_file() and p.suffix not in (".yml", ".yaml"):
+        return p.resolve()
     try:
         return resolve_config_path(hint=config_path)
     except FileNotFoundError as exc:

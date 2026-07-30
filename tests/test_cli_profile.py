@@ -41,13 +41,17 @@ def test_cli_profile_raw_happy_path(project_example: Path, runner, chdir_tmp: Pa
         app,
         [
             "inspect",
+            "config",
+            "--mode",
             "profile",
+            "-l",
+            "raw",
             "--config",
             str(config_path),
         ],
     )
     assert profile_result.exit_code == 0, profile_result.output
-    assert "PROFILE RAW ->" in profile_result.output
+    assert "Encoding:" in profile_result.output
     _assert_profile_written(project_example)
 
 
@@ -58,13 +62,17 @@ def test_inspect_profile_happy_path(project_example: Path, runner, chdir_tmp: Pa
         app,
         [
             "inspect",
+            "config",
+            "--mode",
             "profile",
+            "-l",
+            "raw",
             "--config",
             str(config_path),
         ],
     )
     assert profile_result.exit_code == 0, profile_result.output
-    assert "PROFILE RAW ->" in profile_result.output
+    assert "Encoding:" in profile_result.output
     _assert_profile_written(project_example)
 
 
@@ -73,60 +81,28 @@ def test_inspect_profile_single_year(project_example: Path, runner, chdir_tmp: P
 
     profile_result = runner.invoke(
         app,
-        ["inspect", "profile", "--config", str(config_path), "--year", "2022"],
+        [
+            "inspect",
+            "config",
+            "--mode",
+            "profile",
+            "-l",
+            "raw",
+            "--config",
+            str(config_path),
+            "--year",
+            "2022",
+        ],
     )
     assert profile_result.exit_code == 0, profile_result.output
-    assert "PROFILE RAW ->" in profile_result.output
+    assert "Encoding:" in profile_result.output
     _assert_profile_written(project_example)
 
 
-SIMPLE_CSV = "a,b,c\n1,2,3\n4,5,6\n"
-
-
-def test_inspect_profile_csv_path_text_output(tmp_path: Path, runner, chdir_tmp: Path) -> None:
-    """--csv-path stampa encoding/delim/colonne in output testo."""
-    csv_file = tmp_path / "test.csv"
-    csv_file.write_text(SIMPLE_CSV, encoding="utf-8")
-
-    result = runner.invoke(app, ["inspect", "profile", "--csv-path", str(csv_file)])
-    assert result.exit_code == 0, result.output
-    assert "Encoding:" in result.output
-    assert "Delim:" in result.output
-    assert "Colonne:" in result.output
-    assert "a" in result.output
-    assert "b" in result.output
-
-
-def test_inspect_profile_csv_path_json_output(tmp_path: Path, runner, chdir_tmp: Path) -> None:
-    """--csv-path --json produce JSON parsabile con struttura attesa."""
-    csv_file = tmp_path / "test.csv"
-    csv_file.write_text(SIMPLE_CSV, encoding="utf-8")
-
-    result = runner.invoke(app, ["inspect", "profile", "--csv-path", str(csv_file), "--json"])
-    assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
-    assert payload["column_count"] == 3
-    assert payload["encoding_suggested"] == "utf-8"
-    assert len(payload["columns"]) == 3
-    assert len(payload["preview"]) == 2  # 2 data rows
-
-
-def test_inspect_profile_csv_path_file_not_found(tmp_path: Path, runner, chdir_tmp: Path) -> None:
-    """--csv-path con file inesistente deve fallire con errore leggibile."""
-    result = runner.invoke(app, ["inspect", "profile", "--csv-path", str(tmp_path / "missing.csv")])
-    assert result.exit_code != 0
-    err_text = result.output or str(result.exception or "")
-    assert "CSV non trovato" in err_text or "non trovato" in err_text
-
-
-def test_inspect_profile_csv_path_requires_either_flag(
-    tmp_path: Path, runner, chdir_tmp: Path
-) -> None:
-    """Senza --config e senza --csv-path, deve dare errore."""
-    result = runner.invoke(app, ["inspect", "profile"])
+def test_inspect_config_profile_requires_config(tmp_path: Path, runner, chdir_tmp: Path) -> None:
+    """inspect config --mode profile senza --config deve dare errore."""
+    result = runner.invoke(app, ["inspect", "config", "--mode", "profile"])
     assert result.exit_code != 0, f"Expected failure, got:\n{result.output}"
-    output_clean = result.output.strip()
-    assert "config" in output_clean.lower() and "csv" in output_clean.lower()
 
 
 def test_write_json_atomic_handles_nan(tmp_path: Path) -> None:

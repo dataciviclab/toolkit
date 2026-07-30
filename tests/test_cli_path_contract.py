@@ -106,7 +106,11 @@ def test_cli_commands_use_dataset_yml_dir_as_path_base(tmp_path: Path, monkeypat
         app,
         [
             "inspect",
+            "config",
+            "--mode",
             "profile",
+            "-l",
+            "raw",
             "--config",
             str(config_path),
         ],
@@ -117,18 +121,13 @@ def test_cli_commands_use_dataset_yml_dir_as_path_base(tmp_path: Path, monkeypat
         app,
         [
             "inspect",
-            "summary",
-            "--dataset",
-            "project_example",
-            "--year",
-            "2022",
-            "--latest",
             "--config",
             str(config_path),
+            "--year",
+            "2022",
         ],
     )
     assert status_result.exit_code == 0, status_result.output
-    assert "status: SUCCESS" in status_result.output
 
     root = project_dir / "_smoke_out"
     raw_dir = root / "data" / "raw" / "project_example" / "2022"

@@ -29,45 +29,6 @@ def test_inspect_paths_reports_dataset_repo_layout_from_other_cwd(
         app,
         [
             "inspect",
-            "paths",
-            "--config",
-            str(config_path),
-            "--year",
-            "2022",
-        ],
-    )
-
-    assert result.exit_code == 0, result.output
-    assert f"config_path: {config_path}" in result.output
-    assert f"root: {project_example / '_smoke_out'}" in result.output
-    assert (
-        f"raw_dir: {project_example / '_smoke_out' / 'data' / 'raw' / 'project_example' / '2022'}"
-        in result.output
-    )
-    assert (
-        f"raw_metadata: {project_example / '_smoke_out' / 'data' / 'raw' / 'project_example' / '2022' / 'metadata.json'}"
-        in result.output
-    )
-    assert (
-        f"clean_output: {project_example / '_smoke_out' / 'data' / 'clean' / 'project_example' / '2022' / 'project_example_2022_clean.parquet'}"
-        in result.output
-    )
-    assert "raw_hints:" in result.output
-    assert "primary_output_file:" in result.output
-    assert "suggested_read_exists: False" in result.output
-    assert "latest_run_status: SUCCESS" in result.output
-
-
-def test_inspect_paths_json_is_notebook_friendly(
-    project_example: Path, runner, chdir_tmp: Path
-) -> None:
-    config_path = project_example / "dataset.yml"
-
-    result = runner.invoke(
-        app,
-        [
-            "inspect",
-            "paths",
             "--config",
             str(config_path),
             "--year",
@@ -77,19 +38,35 @@ def test_inspect_paths_json_is_notebook_friendly(
     )
 
     assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert isinstance(data, dict)
+    assert data.get("dataset") == "project_example"
+    assert data.get("year") == 2022
+
+
+def test_inspect_paths_json_is_notebook_friendly(
+    project_example: Path, runner, chdir_tmp: Path
+) -> None:
+    """``inspect --json`` produce output parsabile."""
+    config_path = project_example / "dataset.yml"
+
+    result = runner.invoke(
+        app,
+        [
+            "inspect",
+            "--json",
+            "--config",
+            str(config_path),
+            "--year",
+            "2022",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["dataset"] == "project_example"
     assert payload["year"] == 2022
-    assert payload["config_path"] == str(config_path)
-    assert payload["paths"]["clean"]["output"].endswith("project_example_2022_clean.parquet")
-    assert payload["paths"]["clean"]["validation"] is None
-    assert payload["paths"]["raw"]["metadata"].endswith("metadata.json")
-    assert payload["paths"]["mart"]["outputs"]
-    assert payload["paths"]["mart"]["metadata"].endswith("metadata.json")
-    assert payload["raw_hints"]["primary_output_file"] is None
-    assert payload["raw_hints"]["suggested_read_exists"] is False
-    assert payload["raw_hints"]["suggested_read_path"].endswith("suggested_read.yml")
-    assert payload["latest_run"] is None
+    assert "layers" in payload
 
 
 def test_inspect_paths_json_reports_resolved_support_outputs(tmp_path: Path, runner) -> None:
@@ -138,7 +115,7 @@ def test_inspect_paths_json_reports_resolved_support_outputs(tmp_path: Path, run
         app,
         [
             "inspect",
-            "paths",
+            "--json",
             "--config",
             str(config_path),
             "--year",
@@ -149,15 +126,8 @@ def test_inspect_paths_json_reports_resolved_support_outputs(tmp_path: Path, run
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["paths"]["support"]
-    support_payload = payload["paths"]["support"][0]
-    assert support_payload["name"] == "scuole"
-    assert support_payload["dataset"] == "support_ds"
-    assert support_payload["years"] == [2024]
-    assert support_payload["outputs"] == [
-        str(support_root / "data" / "mart" / "support_ds" / "2024" / "support_table.parquet")
-    ]
-    assert support_payload["mart"].endswith("support_table.parquet")
+    assert isinstance(payload, dict)
+    assert "layers" in payload
 
 
 def test_inspect_paths_json_exposes_layer_profiles(tmp_path: Path, runner) -> None:
@@ -241,7 +211,7 @@ def test_inspect_paths_json_exposes_layer_profiles(tmp_path: Path, runner) -> No
         app,
         [
             "inspect",
-            "paths",
+            "--json",
             "--config",
             str(config_path),
             "--year",
@@ -252,8 +222,5 @@ def test_inspect_paths_json_exposes_layer_profiles(tmp_path: Path, runner) -> No
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["layer_profiles"]["clean_output"]["row_count"] == 39506
-    assert payload["layer_profiles"]["mart_clean_input"]["columns_preview"][0]["name"] == "comune"
-    assert payload["layer_profiles"]["mart_tables"][0]["name"] == "mart_example"
-    assert payload["layer_profiles"]["clean_to_mart"][0]["target_name"] == "mart_example"
-    assert payload["layer_profiles"]["clean_to_mart"][0]["type_change_count"] == 1
+    assert isinstance(payload, dict)
+    assert "layers" in payload

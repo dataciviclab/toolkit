@@ -1098,6 +1098,7 @@ def register(app: typer.Typer) -> None:
             None, "--config", "-c", help="Path or slug to dataset.yml"
         ),
         years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
+        year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
         smoke: bool = typer.Option(
             False, "--smoke", help="Alias per --sample-rows 1000 --sample-bytes 1048576"
         ),
@@ -1116,9 +1117,18 @@ def register(app: typer.Typer) -> None:
         """Esegue la pipeline completa: preflight + support + raw → clean → mart."""
         if ctx.invoked_subcommand is not None:
             return
-        _execute_pipeline(
-            config, years, smoke, sample_rows, sample_bytes, root, json_output, dry_run
-        )
+        # Unifica --year e --years
+        years_str = str(year) if year is not None else years
+        if year is not None and years is not None:
+            typer.echo("Use either --year or --years, not both", err=True)
+            raise typer.Exit(code=2)
+        try:
+            _execute_pipeline(
+                config, years_str, smoke, sample_rows, sample_bytes, root, json_output, dry_run
+            )
+        except FileNotFoundError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1)
 
     # Subcomandi layer
     run_sub.command("preflight")(run_preflight_cmd)

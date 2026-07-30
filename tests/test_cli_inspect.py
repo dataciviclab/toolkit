@@ -110,7 +110,7 @@ class TestInspectConfig:
     @pytest.mark.parametrize("mode", ["schema", "preview", "profile", "sql"])
     def test_config_mode_json_output(self, mode, mock_layer_query):
         """Ogni mode produce JSON parsabile."""
-        args = ["inspect", "config", "-c", CONFIG_PATH, "-m", mode, "--json"]
+        args = ["inspect", "config", "--mode", mode, "-c", CONFIG_PATH, "--json"]
         if mode == "profile":
             args.extend(["-l", "raw"])
         if mode == "sql":
@@ -125,7 +125,7 @@ class TestInspectConfig:
     @pytest.mark.contract
     def test_config_diff_json(self, mock_schema_diff):
         """--diff --json produce JSON parsabile."""
-        result = runner.invoke(app, ["inspect", "config", "-c", CONFIG_PATH, "--diff", "--json"])
+        result = runner.invoke(app, ["inspect", "config", "--diff", "-c", CONFIG_PATH, "--json"])
         assert result.exit_code == 0, result.stdout
         data = json.loads(result.stdout)
         assert isinstance(data, dict)
@@ -134,7 +134,7 @@ class TestInspectConfig:
     @pytest.mark.contract
     def test_config_human_output(self, mock_layer_query):
         """Output testo (senza --json) deve funzionare."""
-        result = runner.invoke(app, ["inspect", "config", "-c", CONFIG_PATH, "-m", "schema"])
+        result = runner.invoke(app, ["inspect", "config", "--mode", "schema", "-c", CONFIG_PATH])
         assert result.exit_code == 0, result.stdout
         assert "Dataset" in result.stdout
         assert "test" in result.stdout
@@ -142,7 +142,7 @@ class TestInspectConfig:
     @pytest.mark.contract
     def test_config_human_preview(self, mock_layer_query):
         """Output testo mode=preview."""
-        result = runner.invoke(app, ["inspect", "config", "-c", CONFIG_PATH, "-m", "preview"])
+        result = runner.invoke(app, ["inspect", "config", "--mode", "preview", "-c", CONFIG_PATH])
         assert result.exit_code == 0, result.stdout
         assert "Righe" in result.stdout
 
@@ -150,7 +150,7 @@ class TestInspectConfig:
     def test_config_human_profile(self, mock_layer_query):
         """Output testo mode=profile."""
         result = runner.invoke(
-            app, ["inspect", "config", "-c", CONFIG_PATH, "-l", "raw", "-m", "profile"]
+            app, ["inspect", "config", "--mode", "profile", "-l", "raw", "-c", CONFIG_PATH]
         )
         assert result.exit_code == 0, result.stdout
         assert "Encoding" in result.stdout
@@ -159,7 +159,7 @@ class TestInspectConfig:
     def test_config_human_sql(self, mock_layer_query):
         """Output testo mode=sql."""
         result = runner.invoke(
-            app, ["inspect", "config", "-c", CONFIG_PATH, "-m", "sql", "--sql", "SELECT 1"]
+            app, ["inspect", "config", "--mode", "sql", "-c", CONFIG_PATH, "--sql", "SELECT 1"]
         )
         assert result.exit_code == 0, result.stdout
         assert "SQL" in result.stdout
@@ -167,46 +167,37 @@ class TestInspectConfig:
     @pytest.mark.contract
     def test_config_missing_arg_fails(self):
         """Senza --config deve fallire."""
-        result = runner.invoke(app, ["inspect", "config"])
+        result = runner.invoke(app, ["inspect", "config", "--mode", "schema"])
         assert result.exit_code != 0
 
 
 class TestInspectSummary:
-    """inspect summary — contratto base."""
+    """inspect (default) — summary."""
 
     @pytest.mark.contract
     def test_help(self):
         """--help mostra i flag principali."""
-        result = runner.invoke(app, ["inspect", "summary", "--help"])
+        result = runner.invoke(app, ["inspect", "--help"])
         output = _strip_ansi(result.stdout)
         assert result.exit_code == 0
         assert "--config" in output
+        assert "--year" in output
         assert "--json" in output
-        assert "--run-id" in output
+        assert "config" in output
+        assert "runs" in output
 
     @pytest.mark.contract
-    def test_missing_config_fails(self):
-        """Senza --config deve fallire."""
-        result = runner.invoke(app, ["inspect", "summary"])
-        assert result.exit_code != 0
+    def test_missing_config_fails(self, tmp_path):
+        """Fuori da un dataset deve fallire."""
+        import os
 
-    @pytest.mark.contract
-    def test_nonexistent_run_id_fails(self, tmp_path):
-        """--run-id inesistente deve fallire con errore."""
-        # Crea un dataset.yml minimale
-        cfg = tmp_path / "dataset.yml"
-        cfg.write_text(
-            "dataset:\n  name: test\n  years: [2024]\n"
-            "raw:\n  sources:\n    - type: local_file\n      args:\n        path: dummy.csv\n"
-            "clean:\n  sql: dummy.sql\n"
-            "mart:\n  tables: []\n",
-            encoding="utf-8",
-        )
-        result = runner.invoke(
-            app, ["inspect", "summary", "-c", str(cfg), "--run-id", "nonexistent"]
-        )
-        # Si aspetta un errore (run non trovato) — exit code != 0
-        assert result.exit_code != 0
+        old = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            result = runner.invoke(app, ["inspect"])
+            assert result.exit_code != 0
+        finally:
+            os.chdir(old)
 
 
 class TestInspectRuns:
@@ -245,16 +236,16 @@ class TestInspectRuns:
 
 
 class TestInspectTopLevel:
-    """inspect help — mostra i 3 subcomandi."""
+    """inspect help — mostra opzioni e subcomandi."""
 
     @pytest.mark.contract
     def test_inspect_help_shows_modes(self):
-        """inspect --help mostra i flag di modo."""
+        """inspect --help mostra opzioni e subcomandi."""
         result = runner.invoke(app, ["inspect", "--help"])
         output = _strip_ansi(result.stdout)
         assert result.exit_code == 0
-        assert "--schema" in output
-        assert "--preview" in output
-        assert "--profile" in output
-        assert "--runs" in output
-        assert "--resume" in output
+        assert "--config" in output
+        assert "--year" in output
+        assert "--json" in output
+        assert "config" in output
+        assert "runs" in output

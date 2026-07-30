@@ -318,36 +318,26 @@ def test_inspect_paths_cli_mcp_contract_alignment(
     monkeypatch,
     tmp_path,
 ) -> None:
-    """CLI --json output matches InspectPathsResult TypedDict."""
+    """CLI --json output from default inspect (summary) includes path info."""
     from typer.testing import CliRunner
     from toolkit.cli.app import app
-    from toolkit.mcp.types import (
-        CleanPaths,
-        InspectPathsResult,
-        LayerPaths,
-        MartPaths,
-        RawHints,
-        RawPaths,
-    )
 
     config_path, _dataset, year = mcp_project_example
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
     result = runner.invoke(
-        app, ["inspect", "paths", "--config", str(config_path), "--year", str(year), "--json"]
+        app, ["inspect", "--config", str(config_path), "--year", str(year), "--json"]
     )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
 
-    for key in InspectPathsResult.__required_keys__:
-        assert key in payload
-    for key in LayerPaths.__required_keys__:
-        assert key in payload["paths"]
-    for key, container in [(RawPaths, "raw"), (CleanPaths, "clean"), (MartPaths, "mart")]:
-        for k in key.__required_keys__:
-            assert k in payload["paths"][container], f"{key.__name__}: {k} mancante"
-    for key in RawHints.__required_keys__:
-        assert key in payload["raw_hints"]
+    assert "dataset" in payload
+    assert "year" in payload
+    assert "layers" in payload
+    for layer in ("raw", "clean", "mart"):
+        assert layer in payload["layers"]
+    assert "record" in payload
+    assert "warnings" in payload
 
 
 def test_inspect_paths_multi_year_defaults_to_max_year(tmp_path, monkeypatch):

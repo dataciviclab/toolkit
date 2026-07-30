@@ -150,7 +150,7 @@ class TestEndToEndFlow:
             assert r["passed"] is True, f"{r['layer']} validation fallita: {r}"
 
         # --- FASE 4: inspect summary --json ---
-        result = _invoke(["inspect", "summary", "--config", str(config_path), "--json"])
+        result = _invoke(["inspect", "--config", str(config_path), "--json"])
         assert result.exit_code == 0, f"status fallito: {result.output}"
         status_data = json.loads(result.output)
         assert status_data["dataset"] == dataset

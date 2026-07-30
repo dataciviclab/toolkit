@@ -208,8 +208,7 @@ def test_smoke_years_filter_year_and_years_mutual_exclusion(
         ],
     )
     assert result.exit_code != 0
-    assert result.exception is not None
-    assert "Use either --year or --years, not both" in str(result.exception)
+    assert "Use either --year or --years, not both" in result.output
 
 
 @pytest.mark.contract

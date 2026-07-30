@@ -19,7 +19,6 @@ def test_inspect_paths_reports_dataset_repo_layout_from_other_cwd(
         app,
         [
             "run",
-            "all",
             "--config",
             str(config_path),
         ],

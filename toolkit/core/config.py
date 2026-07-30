@@ -13,6 +13,8 @@ from typing import Any
 
 import yaml
 
+from toolkit.core.discovery import resolve_config_path
+
 
 class _DictNS(dict):
     """A dict that also supports attribute access (cfg.validation.fail_on_error)."""
@@ -622,7 +624,7 @@ def _normalize_section_paths(section: dict, base_dir: Path) -> None:
 
 
 def load_config(
-    path: str | Path,
+    path: str | Path | None = None,
     *,
     strict_config: bool = False,
     repo_root: str | Path | None = None,
@@ -633,12 +635,16 @@ def load_config(
     Returns a PipelineConfig dataclass with all fields populated.
 
     Args:
-        path: Path to dataset.yml
+        path: Path to dataset.yml. Può essere:
+            - Un path esplicito (``-c dataset.yml``)
+            - Uno slug risolto automaticamente
+            - ``None``: auto-detect da CWD o risalita directory
         strict_config: If True, warns on unknown keys
         repo_root: Optional guardrail to enforce root stays within repo
         root_override: Optional override for output root
     """
-    p = Path(path)
+    resolved = resolve_config_path(path)
+    p = Path(resolved)
     base_dir = p.parent.resolve()
 
     try:

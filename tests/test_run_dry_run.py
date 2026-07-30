@@ -31,7 +31,7 @@ def test_run_dry_run_prints_plan_and_creates_only_run_record(
     )
     root_dir = tmp_path / "out"
 
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+    result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0
     assert "Execution Plan" in result.output
@@ -63,7 +63,7 @@ def test_run_dry_run_fails_on_clean_sql_syntax_error(tmp_path: Path, runner) -> 
         mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
     )
 
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+    result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code != 0
     assert "CLEAN SQL dry-run failed" in str(result.exception)
@@ -87,7 +87,7 @@ def test_run_dry_run_fails_on_mart_sql_binding_error(tmp_path: Path, runner) -> 
         extra='  read:\n    columns:\n      x: "VARCHAR"',
     )
 
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+    result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code != 0
     assert "MART SQL dry-run failed" in str(result.exception)
@@ -109,7 +109,7 @@ def test_run_dry_run_accepts_unquoted_raw_columns_without_read_columns(
         mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
     )
 
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+    result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0
     assert "sql_validation: OK" in result.output
@@ -138,7 +138,7 @@ def test_run_dry_run_accepts_mart_sql_with_root_posix_placeholder(
         mart_tables=[("mart_example", "sql/mart/mart_example.sql")],
     )
 
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+    result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0
     assert "sql_validation: OK" in result.output
@@ -200,7 +200,7 @@ def test_run_dry_run_accepts_mart_sql_with_support_placeholder(
         ),
     )
 
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+    result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0
     assert "sql_validation: OK" in result.output
@@ -238,7 +238,7 @@ def test_run_dry_run_fails_when_support_output_is_missing(
         ),
     )
 
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+    result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0, result.output
     assert "DRY_RUN" in result.output
@@ -282,7 +282,7 @@ def test_run_dry_run_fails_when_support_outputs_are_only_partially_present(
         ),
     )
 
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+    result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0, result.output
     assert "DRY_RUN" in result.output
@@ -334,7 +334,7 @@ def test_run_dry_run_detects_hardcoded_support_path(
         ),
     )
 
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+    result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
 
     # Dry-run succeeds (does NOT block on drift — only warns)
     assert result.exit_code == 0, f"exit_code={result.exit_code} output={result.output}"
@@ -400,10 +400,11 @@ def test_run_dry_run_accepts_mart_only_config(tmp_path: Path, runner) -> None:
 
 
 @pytest.mark.policy
-def test_run_dry_run_all_fails_readably_on_mart_only_config(
+def test_run_dry_run_handles_mart_only_config(
     tmp_path: Path,
     runner,
 ) -> None:
+    """``toolkit run`` (default) gestisce correttamente config mart-only."""
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)
     (mart_sql / "mart_example.sql").write_text("select 1 as value", encoding="utf-8")
@@ -415,10 +416,11 @@ def test_run_dry_run_all_fails_readably_on_mart_only_config(
         mart_tables=[("mart_example", "sql/mart_example.sql")],
     )
 
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+    result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
 
-    assert result.exit_code != 0
-    assert "run all is not supported for mart-only / compose-only configs" in str(result.exception)
+    # Il default run gestisce mart-only senza errori
+    assert result.exit_code == 0, result.output
+    assert "mart" in result.output
 
 
 @pytest.mark.policy
@@ -483,7 +485,8 @@ def test_run_mart_mart_only_ignores_stale_clean_dir(tmp_path: Path, runner) -> N
 
 
 @pytest.mark.policy
-def test_run_all_fails_readably_on_mart_only_config(tmp_path: Path, runner) -> None:
+def test_run_handles_mart_only_config(tmp_path: Path, runner) -> None:
+    """``toolkit run`` esegue mart-only senza errori (compose config)."""
     mart_sql = tmp_path / "compose" / "sql"
     mart_sql.mkdir(parents=True, exist_ok=True)
     (mart_sql / "mart_example.sql").write_text("select 1 as value", encoding="utf-8")
@@ -495,10 +498,10 @@ def test_run_all_fails_readably_on_mart_only_config(tmp_path: Path, runner) -> N
         mart_tables=[("mart_example", "sql/mart_example.sql")],
     )
 
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path)])
+    result = runner.invoke(app, ["run", "--config", str(config_path)])
 
-    assert result.exit_code != 0
-    assert "run all is not supported for mart-only / compose-only configs" in str(result.exception)
+    # Il default run gestisce mart-only (esegue solo step mart)
+    assert result.exit_code == 0, result.output
 
 
 # ── Raw sources ─────────────────────────────────────────────────────────────
@@ -526,7 +529,7 @@ def test_run_all_fails_with_bootstrap_hint_when_clean_sql_missing(
         clean_sql="sql/clean.sql",  # file does not exist
     )
 
-    result = runner.invoke(app, ["run", "all", "--config", str(config_path)])
+    result = runner.invoke(app, ["run", "--config", str(config_path)])
 
     assert result.exit_code != 0
     exc_text = str(result.exception)

@@ -16,7 +16,7 @@ def load_dataset_manifest(path: str | Path) -> dict[str, Any]:
     """Legge ``dataset.yml`` e restituisce un dict con i campi più usati.
 
     Args:
-        path: Path al file ``dataset.yml`` o alla directory che lo contiene.
+        path: Path al file ``dataset.yml``, slug, o directory.
 
     Returns:
         Dict con: ``slug``, ``name``, ``years``, ``source_id``,
@@ -26,12 +26,18 @@ def load_dataset_manifest(path: str | Path) -> dict[str, Any]:
     """
     import yaml
 
-    cfg_path = Path(path)
-    if cfg_path.is_dir():
-        cfg_path = cfg_path / "dataset.yml"
+    from toolkit.core.discovery import resolve_config_path
 
-    if not cfg_path.exists():
-        return {"slug": cfg_path.parent.name, "error": f"dataset.yml non trovato in {cfg_path}"}
+    # Usa la risoluzione centralizzata (CWD → risalita → slug lookup)
+    try:
+        cfg_path = resolve_config_path(hint=str(path) if path else None)
+    except FileNotFoundError:
+        cfg_path = Path(str(path))
+        # Fallback: se è directory prova dataset.yml dentro
+        if cfg_path.is_dir():
+            cfg_path = cfg_path / "dataset.yml"
+        if not cfg_path.exists():
+            return {"slug": cfg_path.parent.name, "error": f"dataset.yml non trovato in {cfg_path}"}
 
     try:
         with cfg_path.open(encoding="utf-8") as f:

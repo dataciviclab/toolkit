@@ -65,7 +65,7 @@ def test_status_uses_same_run_dir_as_writer(tmp_path: Path, runner, chdir_tmp: P
     )
     make_standard_sql(project_dir)
 
-    run_result = runner.invoke(app, ["run", "all", "--config", str(config_path), "--dry-run"])
+    run_result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
     assert run_result.exit_code == 0
 
     run_dir = get_run_dir(project_dir / "out", "demo_ds", 2022)

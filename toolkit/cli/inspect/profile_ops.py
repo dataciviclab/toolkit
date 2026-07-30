@@ -44,7 +44,7 @@ def run_profile(cfg: ToolkitConfig, years: list[int], logger: Logger) -> None:
 
 
 def profile(
-    config: str = typer.Option(None, "--config", "-c", help="Path to dataset.yml"),
+    config: str | None = typer.Option(None, "--config", "-c", help="Path or slug to dataset.yml"),
     csv_path: str | None = typer.Option(
         None, "--csv-path", help="CSV file to preview (instead of --config)"
     ),

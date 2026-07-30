@@ -15,7 +15,6 @@ from toolkit.clean.validate import run_clean_validation
 from toolkit.core.logging import bind_logger, get_logger
 from toolkit.core.paths import RAW_PROFILE, layer_dataset_dir, layer_year_dir
 from toolkit.core.run_context import RunContext
-from toolkit.core.run_records import get_run_dir, latest_run
 from toolkit.mart.run import run_mart, run_mart_multi_year
 from toolkit.mart.validate import run_mart_validation
 from toolkit.raw.run import run_raw
@@ -480,7 +479,7 @@ def _maybe_run_multi_year_mart(
 
 def run(
     step: str,
-    config: str,
+    config: str | None = None,
     years: str | None = None,
     dry_run: bool = False,
     sample_rows: int | None = None,
@@ -549,7 +548,9 @@ def _make_step_cmd(step: str):
     _step = step
 
     def cmd(
-        config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+        config: str | None = typer.Option(
+            None, "--config", "-c", help="Path o slug del dataset.yml"
+        ),
         year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
         years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
         smoke: bool = typer.Option(
@@ -579,7 +580,7 @@ def _make_step_cmd(step: str):
         # isola l'output in {root}/smoke per evitare contaminazione dei dati reali
         sampling_active = sample_rows_final is not None or sample_bytes_final is not None
         root_override_final = root
-        if sampling_active and not root:
+        if sampling_active and not root and config is not None:
             _cfg0, _ = load_cfg_and_logger(config)
             root_override_final = str(_cfg0.root / "smoke")
 
@@ -614,7 +615,7 @@ def _make_step_cmd(step: str):
 
 
 def _run_probe_cmd(
-    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    config: str | None = typer.Option(None, "--config", "-c", help="Path or slug to dataset.yml"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without executing"),
@@ -663,7 +664,7 @@ run_all_cmd = _make_step_cmd("all")
 
 
 def run_init(
-    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    config: str | None = typer.Option(None, "--config", "-c", help="Path or slug to dataset.yml"),
     year: int | None = typer.Option(None, "--year", "-y", help="Single dataset year"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without executing"),
@@ -747,33 +748,25 @@ def run_init(
     typer.echo("Prossimo passo: toolkit run clean -c <config>")
 
 
-def run_full(
-    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
-    years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
-    smoke: bool = typer.Option(
-        False, "--smoke", help="Alias per --sample-rows 1000 --sample-bytes 1048576"
-    ),
-    sample_rows: int | None = typer.Option(
-        None, "--sample-rows", help="Leggi solo N righe in CLEAN (LIMIT N sul output SQL)"
-    ),
-    sample_bytes: int | None = typer.Option(
-        None,
-        "--sample-bytes",
-        help="Scarica solo N bytes in RAW (HTTP Range header + troncamento locale)",
-    ),
-    root: str | None = typer.Option(
-        None, "--root", help="Override root output directory (es. DCL_ROOT)"
-    ),
-    json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Print execution plan without executing"),
-):
-    """Esegue pre-flight + run all (con support dataset) in un unico comando.
+# ---------------------------------------------------------------------------
+# Pipeline completa — condivisa tra `toolkit run` (default) e `run full`
+# ---------------------------------------------------------------------------
 
-    Per dataset che dichiarano support: [] in dataset.yml: i support vengono
-    eseguiti automaticamente prima del candidate (run all per ogni anno).
-    Output: report JSON convalidato.
 
-    Per dataset semplici senza support, usa 'toolkit run all'.
+def _execute_pipeline(
+    config: str | None,
+    years: str | None,
+    smoke: bool,
+    sample_rows: int | None,
+    sample_bytes: int | None,
+    root: str | None,
+    json_output: bool,
+    dry_run: bool,
+) -> None:
+    """Esegue pre-flight + support + raw → clean → mart.
+
+    Core della pipeline completa. Chiamata sia dal comando ``toolkit run``
+    (default) che da ``run full`` (deprecato).
     """
     dry_flag = dry_run if isinstance(dry_run, bool) else False
 
@@ -784,7 +777,7 @@ def run_full(
     # Qualsiasi forma di campionamento isola l'output in {root}/smoke
     sampling_active = sample_rows_final is not None or sample_bytes_final is not None
     root_override_final = root
-    if sampling_active and not root:
+    if sampling_active and not root and config is not None:
         _cfg0, _ = load_cfg_and_logger(config)
         root_override_final = str(_cfg0.root / "smoke")
 
@@ -805,11 +798,17 @@ def run_full(
     config_check = run_config_check(cfg, config)
     results["config_check"] = config_check
     if not config_check.get("ok", False):
-        logger.error("Config validation failed — aborting")
-        results["status"] = "failed"
-        if json_output:
-            typer.echo(json.dumps(results, indent=2, default=str))
-        raise typer.Exit(code=1)
+        # In dry-run il config check è meno severo: config senza fonti va bene
+        if dry_flag:
+            logger.warning(
+                "Config: %s (dry-run, continua)", "; ".join(config_check.get("errors", []))
+            )
+        else:
+            logger.error("Config validation failed — aborting")
+            results["status"] = "failed"
+            if json_output:
+                typer.echo(json.dumps(results, indent=2, default=str))
+            raise typer.Exit(code=1)
     for warn in config_check.get("warnings", []):
         logger.warning("Config: %s", warn)
 
@@ -829,14 +828,10 @@ def run_full(
             )
 
     # Process support datasets (dichiarati in dataset.yml con support:)
-    # Vengono eseguiti prima del candidate cosi' i loro output sono disponibili
-    # per le query MART del candidate (placeholder {support.NAME.mart} ecc.).
-    # In dry-run i support vengono solo annunciati (non eseguiti): la validazione
-    # SQL del candidate usa require_exists=False e non richiede file reali.
     support_entries = cfg.support or []
     if support_entries:
         logger.info(
-            "RUN FULL — processing %d support dataset(s) before candidate",
+            "RUN — processing %d support dataset(s) before candidate",
             len(support_entries),
         )
         for entry in support_entries:
@@ -847,7 +842,6 @@ def run_full(
                 continue
 
             try:
-                # Campionamento attivo: isola output del support in {root}/smoke (come il candidate)
                 if sample_mode:
                     _sup0, _ = load_cfg_and_logger(str(entry.config))
                     support_cfg, support_logger = load_cfg_and_logger(
@@ -859,7 +853,7 @@ def run_full(
             except Exception as exc:
                 logger.error("Support: cannot load config %s: %s", entry.config, exc)
                 results["status"] = "failed"
-                break  # dipendenza non disponibile, abort
+                break
 
             for sy in entry.years:
                 logger.info("Support: running %s year=%s", entry.name, sy)
@@ -876,9 +870,8 @@ def run_full(
                 except Exception as exc:
                     logger.error("Support run failed: %s year=%s — %s", entry.name, sy, exc)
                     results["status"] = "failed"
-                    break  # dipendenza fallita, abort
+                    break
 
-                # all_passed dal RunContext (stessa logica del candidate)
                 all_support_passed = all(
                     ctx.validations.get(layer, {}).get("passed", False)
                     for layer in ("raw", "clean", "mart")
@@ -886,15 +879,12 @@ def run_full(
                 if not all_support_passed:
                     logger.error("Support validation failed: %s year=%s", entry.name, sy)
                     results["status"] = "failed"
-                    break  # dipendenza fallita, abort
+                    break
 
             if results["status"] == "failed":
-                break  # esci dal loop support, vai direttamente al report
+                break
 
-    # Se un support e' fallito, non eseguire il candidate (dipendenza assente)
     candidate_blocked = results["status"] == "failed" and not dry_flag
-
-    # Esecuzione candidate: salva eccezione per rilanciarla DOPO il report.
     _candidate_exc: Exception | None = None
     if not candidate_blocked:
         is_mart_only = _is_mart_only_cfg(cfg)
@@ -902,8 +892,6 @@ def run_full(
         fail_on_error_flag = bool(cfg.validation.fail_on_error)
 
         for year in selected_years:
-            # Registra anno come tentato PRIMA di run_year(), cosi'
-            # anche un'eccezione produce un report FAILED.
             results["steps"][str(year)] = {"run": "running", "validate": "running"}
             try:
                 logger.info("Run %s — year=%s", run_step, year)
@@ -922,7 +910,7 @@ def run_full(
                 results["steps"][str(year)] = {"run": "failed", "validate": "failed"}
                 results["status"] = "failed"
                 _candidate_exc = exc
-                break  # interrompe il loop anni
+                break
 
             if not dry_flag:
                 if is_mart_only:
@@ -951,7 +939,6 @@ def run_full(
                 results["steps"][str(year)]["checks_fail"] = readiness.get("fail_count", 0)
                 results["steps"][str(year)]["layers"] = readiness.get("layers", {})
 
-        # Multi-year mart (solo se il loop anni e' completo)
         if _candidate_exc is None and not dry_flag and _has_multi_year_mart(cfg):
             try:
                 _maybe_run_multi_year_mart(
@@ -967,39 +954,6 @@ def run_full(
                 if fail_on_error_flag:
                     results["status"] = "failed"
 
-    # ── Run report (best-effort: non fa fallire il run) ────────────────────
-    # Report non piu' generato su disco — i dati sono nel run record (_runs/)
-    try:
-        if not dry_flag:
-            # run mode not needed anymore
-
-            # Raccogli info dai support
-            support_info: list[dict[str, Any]] = []
-            if support_entries:
-                for entry in support_entries:
-                    for sy in entry.years:
-                        sup_run_dir = get_run_dir(Path(cfg.root), entry.name, sy)
-                        try:
-                            sup_rec = latest_run(sup_run_dir)
-                        except (FileNotFoundError, OSError):
-                            sup_rec = None
-                        support_info.append(
-                            {
-                                "name": entry.name,
-                                "year": sy,
-                                "status": (sup_rec or {}).get("status"),
-                            }
-                        )
-
-            # Anni effettivamente eseguiti (hanno una voce in results["steps"])
-            # attempted_years not needed anymore
-
-            # Report non piu' generato — i dati sono nel run record (_runs/)
-            pass
-    except Exception:
-        pass
-
-    # Rilancia l'eccezione originale del candidate (preserva traceback)
     if _candidate_exc is not None:
         raise _candidate_exc
 
@@ -1054,27 +1008,37 @@ def run_full(
                 f"       readiness: {s.get('readiness', '?')}  ({s.get('checks_ok', 0)}/{s.get('checks', 0)})"
             )
 
-            # Warning/error recap per layer (compacto)
-            _any_msgs = False
-            for lname in ("raw", "clean", "mart"):
-                ln = lyrs.get(lname) or {}
-                msgs = ln.get("validation_msgs") or {}
-                for kind, label in [("warnings", "⚠"), ("errors", "🔴")]:
-                    items = msgs.get(kind) or []
-                    for msg in items[:3]:
-                        if not _any_msgs:
-                            typer.echo("")
-                            _any_msgs = True
-                        typer.echo(f"       {lname} {label} {msg[:120]}")
-            if _any_msgs:
-                typer.echo("")
-
     if results["status"] != "passed":
         raise typer.Exit(code=1)
 
 
+def run_full(
+    config: str | None = None,
+    years: str | None = None,
+    smoke: bool = False,
+    sample_rows: int | None = None,
+    sample_bytes: int | None = None,
+    root: str | None = None,
+    json_output: bool = False,
+    dry_run: bool = False,
+) -> None:
+    """Backward compat: esegue pipeline completa.
+
+    Chiamata programmatica (non CLI) — il comando CLI ``toolkit run full``
+    non è più registrato. Usa ``toolkit run``.
+    """
+    import warnings
+
+    warnings.warn(
+        "run_full() è deprecato, usa toolkit.run o _execute_pipeline()",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    _execute_pipeline(config, years, smoke, sample_rows, sample_bytes, root, json_output, dry_run)
+
+
 def run_preflight_cmd(
-    config: str = typer.Option(..., "--config", "-c", help="Path to dataset.yml"),
+    config: str | None = typer.Option(None, "--config", "-c", help="Path or slug to dataset.yml"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
     json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
 ):
@@ -1120,13 +1084,46 @@ def run_preflight_cmd(
 
 
 def register(app: typer.Typer) -> None:
-    run_sub = typer.Typer(no_args_is_help=True, add_completion=False)
-    run_sub.command("probe")(_run_probe_cmd)
+    """Register ``toolkit run`` command group.
+
+    ``toolkit run`` (default) → pipeline completa con preflight + support.
+    Subcommands: preflight, raw, clean, mart.
+    """
+    run_sub = typer.Typer(no_args_is_help=False, add_completion=False)
+
+    @run_sub.callback(invoke_without_command=True)
+    def run_default(
+        ctx: typer.Context,
+        config: str | None = typer.Option(
+            None, "--config", "-c", help="Path or slug to dataset.yml"
+        ),
+        years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
+        smoke: bool = typer.Option(
+            False, "--smoke", help="Alias per --sample-rows 1000 --sample-bytes 1048576"
+        ),
+        sample_rows: int | None = typer.Option(
+            None, "--sample-rows", help="Leggi solo N righe in CLEAN"
+        ),
+        sample_bytes: int | None = typer.Option(
+            None, "--sample-bytes", help="Scarica solo N bytes in RAW"
+        ),
+        root: str | None = typer.Option(
+            None, "--root", help="Override root output directory (es. DCL_ROOT)"
+        ),
+        json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
+        dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without executing"),
+    ):
+        """Esegue la pipeline completa: preflight + support + raw → clean → mart."""
+        if ctx.invoked_subcommand is not None:
+            return
+        _execute_pipeline(
+            config, years, smoke, sample_rows, sample_bytes, root, json_output, dry_run
+        )
+
+    # Subcomandi layer
+    run_sub.command("preflight")(run_preflight_cmd)
     run_sub.command("raw")(run_raw_cmd)
     run_sub.command("clean")(run_clean_cmd)
     run_sub.command("mart")(run_mart_cmd)
-    run_sub.command("all")(run_all_cmd)
-    run_sub.command("full")(run_full)
-    run_sub.command("preflight")(run_preflight_cmd)
-    run_sub.command("init")(run_init)
-    app.add_typer(run_sub, name="run", help="Esegue la pipeline RAW → CLEAN → MART per un dataset.")
+
+    app.add_typer(run_sub, name="run", help="Esegue la pipeline per un dataset.")

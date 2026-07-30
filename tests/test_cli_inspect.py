@@ -248,11 +248,13 @@ class TestInspectTopLevel:
     """inspect help — mostra i 3 subcomandi."""
 
     @pytest.mark.contract
-    def test_inspect_help_shows_subcommands(self):
-        """inspect --help mostra config, summary, runs."""
+    def test_inspect_help_shows_modes(self):
+        """inspect --help mostra i flag di modo."""
         result = runner.invoke(app, ["inspect", "--help"])
         output = _strip_ansi(result.stdout)
         assert result.exit_code == 0
-        assert "config" in output
-        assert "summary" in output
-        assert "runs" in output
+        assert "--schema" in output
+        assert "--preview" in output
+        assert "--profile" in output
+        assert "--runs" in output
+        assert "--resume" in output

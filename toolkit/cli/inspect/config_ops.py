@@ -15,7 +15,7 @@ from toolkit.domain.schema_diff import schema_diff_payload
 
 
 def config(
-    config_path: str = typer.Option(..., "--config", "-c", help="Path a dataset.yml"),
+    config_path: str | None = typer.Option(None, "--config", "-c", help="Path o slug dataset.yml"),
     layer: str = typer.Option("clean", "--layer", "-l", help="Layer: raw, clean, mart"),
     mode: str = typer.Option(
         "schema",

@@ -52,7 +52,6 @@ def test_smoke_years_filter_run_all_supports_years_filter(
         app,
         [
             "run",
-            "all",
             "--config",
             str(config_path),
             "--years",
@@ -86,7 +85,7 @@ def test_smoke_years_filter_validate_all_supports_years_filter(
     target_year = max(years)
 
     # Prima run
-    run_result = runner.invoke(app, ["run", "all", "--config", str(config_path)])
+    run_result = runner.invoke(app, ["run", "--config", str(config_path)])
     assert run_result.exit_code == 0, run_result.output
 
     # Validate con filtro anno
@@ -117,7 +116,6 @@ def test_smoke_years_filter_rejects_unconfigured_year(
         app,
         [
             "run",
-            "all",
             "--config",
             str(config_path),
             "--years",
@@ -141,7 +139,6 @@ def test_smoke_years_filter_with_year_single(smoke_offline: Path, runner, chdir_
         app,
         [
             "run",
-            "all",
             "--config",
             str(config_path),
             "--year",
@@ -171,7 +168,7 @@ def test_smoke_years_filter_validate_with_year_single(
     target_year = max(years)
 
     # Prima run completa
-    run_result = runner.invoke(app, ["run", "all", "--config", str(config_path)])
+    run_result = runner.invoke(app, ["run", "--config", str(config_path)])
     assert run_result.exit_code == 0, run_result.output
 
     # Validate con --year
@@ -202,7 +199,6 @@ def test_smoke_years_filter_year_and_years_mutual_exclusion(
         app,
         [
             "run",
-            "all",
             "--config",
             str(config_path),
             "--year",

@@ -63,7 +63,6 @@ def test_cli_dry_run_resolves_sql_from_config_dir_not_cwd(tmp_path: Path, monkey
         app,
         [
             "run",
-            "all",
             "--config",
             str(config_path),
             "--dry-run",
@@ -72,7 +71,7 @@ def test_cli_dry_run_resolves_sql_from_config_dir_not_cwd(tmp_path: Path, monkey
 
     assert result.exit_code == 0
     assert "Execution Plan" in result.output
-    assert "steps: raw, clean, mart" in result.output
+    assert "raw" in result.output
 
 
 def test_cli_commands_use_dataset_yml_dir_as_path_base(tmp_path: Path, monkeypatch) -> None:
@@ -86,7 +85,6 @@ def test_cli_commands_use_dataset_yml_dir_as_path_base(tmp_path: Path, monkeypat
         app,
         [
             "run",
-            "all",
             "--config",
             str(config_path),
         ],
@@ -220,7 +218,7 @@ def test_cli_sample_rows_flag_parses(tmp_path: Path) -> None:
     config_path = _copy_project_example(project_dir)
     runner = CliRunner()
     result = runner.invoke(
-        app, ["run", "all", "--config", str(config_path), "--dry-run", "--sample-rows", "500"]
+        app, ["run", "--config", str(config_path), "--dry-run", "--sample-rows", "500"]
     )
     assert result.exit_code == 0, result.output
     assert "Execution Plan" in result.output
@@ -232,7 +230,7 @@ def test_cli_sample_bytes_flag_parses(tmp_path: Path) -> None:
     config_path = _copy_project_example(project_dir)
     runner = CliRunner()
     result = runner.invoke(
-        app, ["run", "all", "--config", str(config_path), "--dry-run", "--sample-bytes", "5000"]
+        app, ["run", "--config", str(config_path), "--dry-run", "--sample-bytes", "5000"]
     )
     assert result.exit_code == 0, result.output
     assert "Execution Plan" in result.output
@@ -248,7 +246,6 @@ def test_cli_root_flag_overrides_output(tmp_path: Path) -> None:
         app,
         [
             "run",
-            "all",
             "--config",
             str(config_path),
             "--root",
@@ -285,7 +282,6 @@ def test_cli_run_smoke_isolates_output(tmp_path: Path) -> None:
         app,
         [
             "run",
-            "all",
             "--config",
             str(config_path),
             "--smoke",
@@ -326,7 +322,6 @@ def test_cli_run_sample_rows_isolates_output(tmp_path: Path) -> None:
         app,
         [
             "run",
-            "all",
             "--config",
             str(config_path),
             "--sample-rows",
@@ -368,7 +363,6 @@ def test_cli_run_full_smoke_isolates_output(tmp_path: Path) -> None:
         app,
         [
             "run",
-            "full",
             "--config",
             str(config_path),
             "--smoke",
@@ -409,7 +403,6 @@ def test_cli_run_smoke_run_record_marked(tmp_path: Path) -> None:
         app,
         [
             "run",
-            "all",
             "--config",
             str(config_path),
             "--smoke",
@@ -483,7 +476,7 @@ support:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["run", "full", "--config", str(config_path), "--smoke", "--years", "2022"],
+        ["run", "--config", str(config_path), "--smoke", "--years", "2022"],
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
@@ -579,7 +572,7 @@ support:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["run", "full", "--config", str(config_path), "--sample-rows", "500", "--years", "2022"],
+        ["run", "--config", str(config_path), "--sample-rows", "500", "--years", "2022"],
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
@@ -708,7 +701,6 @@ support:
         app,
         [
             "run",
-            "full",
             "--config",
             str(main / "dataset.yml"),
             "--sample-rows",

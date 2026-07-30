@@ -230,22 +230,20 @@ def run_raw(
         )
     )
 
-    # Calcola righe/colonne del primary output (riusa csv_quick_shape da toolit.core)
+    # Legge righe/colonne dal raw_profile appena scritto (se disponibile)
     output_rows = None
     col_count = None
-    if primary_output_path.exists() and primary_output_path.suffix.lower() in {
-        ".csv",
-        ".tsv",
-        ".txt",
-    }:
-        try:
-            from toolkit.core.duckdb_shape import csv_quick_shape
+    try:
+        profile_dir = out_dir / "_profile"
+        profile_path = profile_dir / RAW_PROFILE
+        if profile_path.exists():
+            from toolkit.core.io import read_json_or_none as _read_json
 
-            shape = csv_quick_shape(str(primary_output_path))
-            output_rows = shape.get("row_count_estimate")
-            col_count = shape.get("column_count")
-        except Exception:
-            pass
+            prof = _read_json(profile_path) or {}
+            output_rows = prof.get("row_count")
+            col_count = len(prof.get("columns_raw", [])) if prof.get("columns_raw") else None
+    except Exception:
+        pass
 
     return {
         "output_bytes": output_bytes,

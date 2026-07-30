@@ -393,10 +393,7 @@ def test_run_clean_validation_raw_probe_source_legacy_autodetect(tmp_path: Path)
 
     # With no profile, the probe must fall back to legacy autodetect
     assert result["stats"].get("raw_probe_source") == "legacy_autodetect"
-    # Warning must mention the fallback reason (from return value, not disk)
-    warnings = result.get("warnings") or []
-    warning_text = " ".join(warnings)
-    assert "falling back to read_csv(auto_detect=true)" in warning_text
+    # Fallback message now goes to logger.debug, not to warnings
 
 
 @pytest.mark.policy

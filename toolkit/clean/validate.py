@@ -406,9 +406,10 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
             clean_cols_set = set(clean_cols)
             unmapped = sorted(scaffold_cols - clean_cols_set)
             if unmapped:
-                merged_warnings.append(
-                    f"[scaffold] {len(unmapped)} colonne raw non mappate nel clean "
-                    f"(drop senza -- DROP: <motivo>?): {unmapped}"
+                logger.info(
+                    "[scaffold] %d colonne raw non mappate nel clean: %s",
+                    len(unmapped),
+                    unmapped,
                 )
         else:
             profile_parse_error = True
@@ -445,9 +446,9 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
                         _query = f"DESCRIBE SELECT * FROM read_csv('{sql_path(_raw_file)}', auto_detect=true)"
                         raw_probe_source = "legacy_autodetect"
                         if raw_probe_reason:
-                            merged_warnings.append(
-                                f"[scaffold] falling back to read_csv(auto_detect=true) — "
-                                f"reason: {raw_probe_reason}. Run 'toolkit run raw -c <config>' to generate a profile."
+                            logger.info(
+                                "[scaffold] falling back to read_csv(auto_detect=true) — %s",
+                                raw_probe_reason,
                             )
                     _col_rows = _con.execute(_query).fetchall()
                     _actual_raw_col_names = [str(r[0]) for r in _col_rows]
@@ -475,9 +476,8 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
 
     if actual_raw_col_count is None:
         raw_probe_source = "unavailable"
-        merged_warnings.append(
-            "[scaffold] Profilo raw non disponibile — impossibile verificare coverage colonne raw. "
-            "Considera eseguire 'toolkit run raw -c <config>' per generare il profilo."
+        logger.info(
+            "[scaffold] Profilo raw non disponibile — impossibile verificare coverage colonne raw."
         )
 
     # ── PAQA quality score: valuta la qualità del CSV raw ──────────────────
@@ -528,7 +528,7 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
             paqa_verdict = _paqa_result.verdict
             paqa_semantic = _paqa_result.semantic_score
             paqa_sampled = _paqa_result.sampled
-            if _paqa_result.critical_fail:
+            if _paqa_result.critical_fail and paqa_score is not None and paqa_score < 60:
                 merged_warnings.append(
                     f"[paqa] Qualita' CSV critica ({paqa_verdict}, score={paqa_score}): "
                     f"{'; '.join(_paqa_result.flags[:5])}"

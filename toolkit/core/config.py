@@ -93,7 +93,7 @@ class RangeRuleConfig:
 @dataclass
 class TransitionConfig:
     max_row_drop_pct: float | None = None
-    warn_removed_columns: bool = True
+    warn_removed_columns: bool = False
     fail_on_row_drop_exceeded: bool = True
 
     def __post_init__(self) -> None:

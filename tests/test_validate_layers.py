@@ -8,7 +8,7 @@ import pytest
 
 from toolkit.raw.validate import validate_raw_output
 from toolkit.clean.validate import validate_clean, run_clean_validation, validate_promotion
-from toolkit.core.config_models import TransitionConfig
+from toolkit.core.config import TransitionConfig
 from toolkit.core.validation import check_transitions
 from toolkit.mart.validate import run_mart_validation, validate_mart
 from toolkit.core.validation import write_validation_json
@@ -456,31 +456,37 @@ def _read_warnings_from_validation_report(clean_dir: Path) -> list[str]:
 @pytest.mark.policy
 def test_ensure_dict_preserves_validate_alias() -> None:
     """Verify ensure_dict converts validate_config -> validate (by_alias=True)."""
-    from toolkit.core.config import ensure_dict
-    from toolkit.core.config_models import ToolkitConfigModel
+    from toolkit.core.config import PipelineConfig, CleanConfig, MartConfig
 
-    model = ToolkitConfigModel(
+    cfg = PipelineConfig(
         base_dir=Path("/tmp"),
         root=Path("/tmp/out"),
         root_source="test",
-        dataset={"name": "test", "years": [2024]},
-        clean={
-            "sql": "sql/clean.sql",
-            "validate": {
-                "primary_key": "id",
-                "not_null": "val",
-                "ranges": {"a": {"min": 0, "max": 100}},
-            },
-        },
-        mart={
-            "tables": [{"name": "m1", "sql": "sql/mart/m1.sql"}],
-            "validate": {
-                "transition": {"max_row_drop_pct": 10},
-            },
-        },
+        dataset="test",
+        years=[2024],
+        clean=CleanConfig.from_dict(
+            {
+                "sql": "sql/clean.sql",
+                "validate": {
+                    "primary_key": "id",
+                    "not_null": "val",
+                    "ranges": {"a": {"min": 0, "max": 100}},
+                },
+            }
+        ),
+        mart=MartConfig.from_dict(
+            {
+                "tables": [{"name": "m1", "sql": "sql/mart/m1.sql"}],
+                "validate": {
+                    "transition": {"max_row_drop_pct": 10},
+                },
+            }
+        ),
     )
 
-    clean_dict = ensure_dict(model.clean)
+    from toolkit.cli.common import dump_cfg_section
+
+    clean_dict = dump_cfg_section(cfg.clean)
     assert "validate" in clean_dict, (
         f"expected 'validate' key in clean_dict, got keys: {list(clean_dict.keys())}"
     )
@@ -489,7 +495,7 @@ def test_ensure_dict_preserves_validate_alias() -> None:
     assert v["not_null"] == ["val"]
     assert v["ranges"]["a"]["min"] == 0
 
-    mart_dict = ensure_dict(model.mart)
+    mart_dict = dump_cfg_section(cfg.mart)
     assert "validate" in mart_dict, (
         f"expected 'validate' key in mart_dict, got keys: {list(mart_dict.keys())}"
     )
@@ -552,8 +558,6 @@ def test_validate_promotion_fallback_row_count_when_profile_has_null(tmp_path: P
         "outputs": [f"{dataset}_{year}_clean.parquet"],
     }
     (clean_dir / "metadata.json").write_text(json.dumps(clean_meta), encoding="utf-8")
-
-    from toolkit.core.config_models import TransitionConfig
 
     transition = TransitionConfig(max_row_drop_pct=10, fail_on_row_drop_exceeded=True)
 

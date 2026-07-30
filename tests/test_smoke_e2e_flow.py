@@ -162,6 +162,7 @@ class TestEndToEndFlow:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.smoke
 def test_zip_extractor(tmp_path: Path):
     """Pipeline con fonte raw in ZIP + extractor unzip_first_csv."""
     project = tmp_path / "zip_project"
@@ -233,6 +234,7 @@ def test_zip_extractor(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.smoke
 def test_year_template_in_path(tmp_path: Path):
     """local_file con {year} nel path raw risolto correttamente."""
     project = tmp_path / "tpl_project"
@@ -305,6 +307,7 @@ def test_year_template_in_path(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.smoke
 def test_multi_year_mart(tmp_path: Path):
     """Tabelle MART con years esplicito producono output aggregato a livello dataset."""
     project = tmp_path / "my_project"

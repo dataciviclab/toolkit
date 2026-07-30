@@ -1,104 +1,620 @@
-"""Config loading and typed access.
+"""Pipeline configuration — loaded from dataset.yml.
 
-ToolkitConfig exposes typed attribute access to the underlying Pydantic
-config models (cfg.raw.sources, cfg.clean.sql, etc.) and provides
-ensure_dict() for the runner layer that still expects plain dicts.
+Replaces the previous Pydantic-based config_models (24 models, 9 files, ~1.100 righe)
+with simple dataclasses in a single file (~280 righe).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import os
+from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any
 
-from toolkit.core.config_models import (
-    CleanConfig,
-    ConfigPolicy,
-    GlobalValidationConfig,
-    MartConfig,
-    OutputConfig,
-    RawConfig,
-    SupportDatasetConfig,
-    TimeCoverage,
-    ToolkitConfigModel,
-    ensure_str_list as _ensure_str_list,
-    load_config_model,
-    parse_bool as _parse_bool,
-)
+import yaml
 
 
-@dataclass(frozen=True)
-class ToolkitConfig:
-    base_dir: Path
-    schema_version: int
-    root: Path
-    root_source: str
-    dataset: str
-    source_id: str | None
-    years: list[int]
-    time_coverage: TimeCoverage | None
+class _DictNS(dict):
+    """A dict that also supports attribute access (cfg.validation.fail_on_error)."""
 
-    # Internal: the typed model (used by typed properties below)
-    _model: ToolkitConfigModel
+    def __getattr__(self, name: str) -> object:
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name)
 
-    tags: list[str] = field(default_factory=list)
-    category: str | None = None
+    def __setattr__(self, name: str, value: object) -> None:
+        self[name] = value
 
-    # --- Typed accessors ---
 
-    @property
-    def raw(self) -> RawConfig:
-        return self._model.raw
+def _dict2ns(d: dict) -> _DictNS:
+    """Convert a nested dict to _DictNS for attribute access."""
+    result = _DictNS()
+    for k, v in d.items():
+        if isinstance(v, dict):
+            result[k] = _dict2ns(v)
+        else:
+            result[k] = v
+    return result
 
-    @property
-    def clean(self) -> CleanConfig:
-        return self._model.clean
 
-    @property
-    def mart(self) -> MartConfig:
-        return self._model.mart
-
-    @property
-    def config(self) -> ConfigPolicy:
-        return self._model.config
-
-    @property
-    def validation(self) -> GlobalValidationConfig:
-        return self._model.validation
-
-    @property
-    def output(self) -> OutputConfig:
-        return self._model.output
-
-    @property
-    def support(self) -> list[SupportDatasetConfig]:
-        return list(self._model.support)
-
-    def resolve(self, rel_path: str | Path) -> Path:
-        p = Path(rel_path)
-        return p if p.is_absolute() else (self.base_dir / p)
+# ---------------------------------------------------------------------------
+# Coercion helpers
+# ---------------------------------------------------------------------------
 
 
 def parse_bool(value: Any, field_name: str) -> bool:
-    return _parse_bool(value, field_name)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in {0, 1}:
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y"}:
+            return True
+        if normalized in {"false", "0", "no", "n"}:
+            return False
+    raise ValueError(f"{field_name} must be a boolean-like value: true/false, 1/0, yes/no")
 
 
 def ensure_str_list(value: Any, field_name: str) -> list[str]:
-    return _ensure_str_list(value, field_name)
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        if not all(isinstance(item, str) for item in value):
+            raise ValueError(f"{field_name} must be a string or a list of strings")
+        return list(value)
+    raise ValueError(f"{field_name} must be a string or a list of strings")
+
+
+def _ensure_int_list(value: Any, field_name: str) -> list[int]:
+    if value is None:
+        return []
+    if isinstance(value, int):
+        return [value]
+    if isinstance(value, list):
+        return [int(v) for v in value]
+    raise ValueError(f"{field_name} must be an int or a list of ints")
+
+
+# ---------------------------------------------------------------------------
+# Config dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RangeRuleConfig:
+    min: float | None = None
+    max: float | None = None
+
+
+@dataclass
+class TransitionConfig:
+    max_row_drop_pct: float | None = None
+    warn_removed_columns: bool = True
+    fail_on_row_drop_exceeded: bool = True
+
+    def __post_init__(self) -> None:
+        self.warn_removed_columns = parse_bool(
+            self.warn_removed_columns, "transition.warn_removed_columns"
+        )
+        self.fail_on_row_drop_exceeded = parse_bool(
+            self.fail_on_row_drop_exceeded, "transition.fail_on_row_drop_exceeded"
+        )
+
+
+@dataclass
+class CleanValidationSpec:
+    """Validation rules extracted from clean section of dataset.yml."""
+
+    required_columns: list[str] = field(default_factory=list)
+    primary_key: list[str] = field(default_factory=list)
+    not_null: list[str] = field(default_factory=list)
+    ranges: dict[str, RangeRuleConfig] = field(default_factory=dict)
+    max_null_pct: dict[str, float] = field(default_factory=dict)
+    min_rows: int | None = None
+    promotion: TransitionConfig | None = None
+
+    @staticmethod
+    def from_dict(d: dict | None) -> CleanValidationSpec | None:
+        if not d:
+            return None
+        ranges = {}
+        for k, v in (d.get("ranges") or {}).items():
+            if isinstance(v, dict):
+                ranges[k] = RangeRuleConfig(
+                    **{kk: vv for kk, vv in v.items() if kk in ("min", "max")}
+                )
+            else:
+                ranges[k] = v
+        promote = d.get("promotion") or d.get("transition")
+        return CleanValidationSpec(
+            required_columns=ensure_str_list(d.get("required_columns", []), "required_columns"),
+            primary_key=ensure_str_list(d.get("primary_key", []), "primary_key"),
+            not_null=ensure_str_list(d.get("not_null", []), "not_null"),
+            ranges=ranges,
+            max_null_pct=d.get("max_null_pct", {}),
+            min_rows=d.get("min_rows"),
+            promotion=TransitionConfig(**promote)
+            if promote and isinstance(promote, dict)
+            else None,
+        )
+
+
+@dataclass
+class MartTableRuleConfig:
+    required_columns: list[str] = field(default_factory=list)
+    not_null: list[str] = field(default_factory=list)
+    primary_key: list[str] = field(default_factory=list)
+    ranges: dict[str, RangeRuleConfig] = field(default_factory=dict)
+    max_null_pct: dict[str, float] = field(default_factory=dict)
+    min_rows: int | None = None
+
+    @staticmethod
+    def from_dict(d: dict | None) -> MartTableRuleConfig | None:
+        if not d:
+            return None
+        ranges = {}
+        for k, v in (d.get("ranges") or {}).items():
+            if isinstance(v, dict):
+                ranges[k] = RangeRuleConfig(
+                    **{kk: vv for kk, vv in v.items() if kk in ("min", "max")}
+                )
+            else:
+                ranges[k] = v
+        return MartTableRuleConfig(
+            required_columns=ensure_str_list(d.get("required_columns", []), "required_columns"),
+            not_null=ensure_str_list(d.get("not_null", []), "not_null"),
+            primary_key=ensure_str_list(d.get("primary_key", []), "primary_key"),
+            ranges=ranges,
+            max_null_pct=d.get("max_null_pct", {}),
+            min_rows=d.get("min_rows"),
+        )
+
+
+@dataclass
+class MartValidationSpec:
+    required_tables: list[str] = field(default_factory=list)
+    table_rules: dict[str, MartTableRuleConfig] = field(default_factory=dict)
+    transition: TransitionConfig = field(default_factory=TransitionConfig)
+
+    @staticmethod
+    def from_dict(d: dict | None) -> MartValidationSpec | None:
+        if not d:
+            return None
+        rules = {}
+        for k, v in (d.get("table_rules") or {}).items():
+            if isinstance(v, dict):
+                rules[k] = MartTableRuleConfig.from_dict(v) or MartTableRuleConfig()
+            else:
+                rules[k] = v
+        trans = d.get("transition") or d.get("transition")
+        trans_obj = (
+            TransitionConfig(**trans) if trans and isinstance(trans, dict) else TransitionConfig()
+        )
+        return MartValidationSpec(
+            required_tables=ensure_str_list(d.get("required_tables", []), "required_tables"),
+            table_rules=rules,
+            transition=trans_obj,
+        )
+
+
+@dataclass
+class CleanReadConfig:
+    source: str = "auto"
+    mode: str = "explicit"
+    include: list[str] = field(default_factory=list)
+    glob: str = "*"
+    prefer_from_raw_run: bool = True
+    allow_ambiguous: bool = False
+    delim: str | None = None
+    header: bool = True
+    encoding: str | None = None
+    decimal: str | None = None
+    thousands: str | None = None
+    skip: int | None = None
+    auto_detect: bool | None = None
+    quote: str | None = None
+    escape: str | None = None
+    comment: str | None = None
+    ignore_errors: bool | None = None
+    dateformat: str | None = None
+    timestampformat: str | None = None
+    strict_mode: bool | None = None
+    null_padding: bool | None = None
+    parallel: bool | None = None
+    nullstr: str | list[str] | None = None
+    columns: dict[str, str] | None = None
+    normalize_rows_to_columns: bool = False
+    align_by_header: bool = False
+    trim_whitespace: bool = True
+    sample_size: int | None = None
+    sheet_name: str | int | None = None
+
+    def __post_init__(self) -> None:
+        if self.align_by_header and not self.normalize_rows_to_columns:
+            raise ValueError("align_by_header=true requires normalize_rows_to_columns=true")
+
+    @staticmethod
+    def from_dict(d: dict | None) -> CleanReadConfig | None:
+        if not d:
+            return None
+        return CleanReadConfig(**d)
+
+
+@dataclass
+class CleanValidateConfig:
+    """Validation rules inside clean section — corresponds to clean.validate.* in YAML."""
+
+    primary_key: list[str] = field(default_factory=list)
+    not_null: list[str] = field(default_factory=list)
+    ranges: dict[str, RangeRuleConfig] = field(default_factory=dict)
+    max_null_pct: dict[str, float] = field(default_factory=dict)
+    min_rows: int | None = None
+    promotion: TransitionConfig | None = None
+
+    @staticmethod
+    def from_dict(d: dict | None) -> CleanValidateConfig | None:
+        if not d:
+            return None
+        ranges = {}
+        for k, v in (d.get("ranges") or {}).items():
+            if isinstance(v, dict):
+                ranges[k] = RangeRuleConfig(
+                    **{kk: vv for kk, vv in v.items() if kk in ("min", "max")}
+                )
+            else:
+                ranges[k] = v
+        promote = d.get("promotion") or d.get("transition")
+        return CleanValidateConfig(
+            primary_key=ensure_str_list(d.get("primary_key", []), "primary_key"),
+            not_null=ensure_str_list(d.get("not_null", []), "not_null"),
+            ranges=ranges,
+            max_null_pct=d.get("max_null_pct", {}),
+            min_rows=d.get("min_rows"),
+            promotion=TransitionConfig(**promote)
+            if promote and isinstance(promote, dict)
+            else None,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Replacement for old Pydantic model_dump()."""
+        result: dict[str, Any] = {}
+        if self.primary_key:
+            result["primary_key"] = self.primary_key
+        if self.not_null:
+            result["not_null"] = self.not_null
+        if self.ranges:
+            result["ranges"] = {k: {"min": r.min, "max": r.max} for k, r in self.ranges.items()}
+        if self.max_null_pct:
+            result["max_null_pct"] = self.max_null_pct
+        if self.min_rows is not None:
+            result["min_rows"] = self.min_rows
+        if self.promotion:
+            result["promotion"] = asdict(self.promotion)
+        return result
+
+
+@dataclass
+class CleanConfig:
+    sql: str | Path | None = None
+    read_mode: str = "fallback"
+    read_source: str = "auto"
+    read: CleanReadConfig | None = None
+    required_columns: list[str] = field(default_factory=list)
+    validate: CleanValidateConfig | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @staticmethod
+    def from_dict(d: dict | None) -> CleanConfig:
+        if not d:
+            return CleanConfig()
+        validate = CleanValidateConfig.from_dict(d.get("validate"))
+        read = CleanReadConfig.from_dict(d.get("read"))
+        known = {"sql", "read_mode", "read_source", "read", "required_columns", "validate"}
+        extra = {k: v for k, v in d.items() if k not in known}
+        return CleanConfig(
+            sql=d.get("sql"),
+            read_mode=d.get("read_mode", "fallback"),
+            read_source=d.get("read_source", "auto"),
+            read=read,
+            required_columns=ensure_str_list(
+                d.get("required_columns", []), "clean.required_columns"
+            ),
+            validate=validate,
+            extra=extra,
+        )
+
+
+@dataclass
+class MartTableConfig:
+    name: str = ""
+    sql: str | Path = ""
+    years: list[int] | None = None
+    source_layer: str = "clean"
+    source_table: str | None = None
+
+    @staticmethod
+    def from_dict(d: dict) -> MartTableConfig:
+        sql_val = d.get("sql", "")
+        return MartTableConfig(
+            name=str(d.get("name", "")),
+            sql=Path(sql_val) if isinstance(sql_val, str) else sql_val,
+            years=_ensure_int_list(d.get("years"), "mart.tables[].years") or None,
+            source_layer=d.get("source_layer", "clean"),
+            source_table=d.get("source_table"),
+        )
+
+
+@dataclass
+class MartValidateConfig:
+    table_rules: dict[str, MartTableRuleConfig] = field(default_factory=dict)
+    transition: TransitionConfig = field(default_factory=TransitionConfig)
+
+    @staticmethod
+    def from_dict(d: dict | None) -> MartValidateConfig | None:
+        if not d:
+            return None
+        rules = {}
+        for k, v in (d.get("table_rules") or {}).items():
+            if isinstance(v, dict):
+                rules[k] = MartTableRuleConfig.from_dict(v) or MartTableRuleConfig()
+            else:
+                rules[k] = v
+        trans = d.get("transition") or d.get("transition")
+        trans_obj = (
+            TransitionConfig(**trans) if trans and isinstance(trans, dict) else TransitionConfig()
+        )
+        return MartValidateConfig(table_rules=rules, transition=trans_obj)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Replacement for old Pydantic model_dump()."""
+        from dataclasses import asdict
+
+        result: dict[str, Any] = {}
+        if self.table_rules:
+            result["table_rules"] = {name: asdict(rule) for name, rule in self.table_rules.items()}
+        result["transition"] = asdict(self.transition)
+        return result
+
+
+@dataclass
+class HierarchyLevel:
+    level: str = ""
+    table: str = ""
+    grain: list[str] = field(default_factory=list)
+    source_table: str | None = None
+    exclude_metrics: list[str] = field(default_factory=list)
+
+
+@dataclass
+class HierarchyConfig:
+    axis: str = ""
+    levels: list[HierarchyLevel] = field(default_factory=list)
+
+
+@dataclass
+class MartConfig:
+    tables: list[MartTableConfig] = field(default_factory=list)
+    required_tables: list[str] = field(default_factory=list)
+    hierarchy: HierarchyConfig | None = None
+    validate: MartValidateConfig | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @staticmethod
+    def from_dict(d: dict | None) -> MartConfig:
+        if not d:
+            return MartConfig()
+        tables = [
+            MartTableConfig.from_dict(t) for t in (d.get("tables") or []) if isinstance(t, dict)
+        ]
+        req = ensure_str_list(d.get("required_tables", []), "mart.required_tables")
+        if not req and tables:
+            req = [t.name for t in tables]
+        hierarchy_raw = d.get("hierarchy")
+        hierarchy = None
+        if hierarchy_raw and isinstance(hierarchy_raw, dict):
+            levels = [
+                HierarchyLevel(**lvl)
+                for lvl in (hierarchy_raw.get("levels") or [])
+                if isinstance(lvl, dict)
+            ]
+            hierarchy = HierarchyConfig(axis=hierarchy_raw.get("axis", ""), levels=levels)
+        validate = MartValidateConfig.from_dict(d.get("validate"))
+        known = {"tables", "required_tables", "hierarchy", "validate"}
+        extra = {k: v for k, v in d.items() if k not in known}
+        return MartConfig(
+            tables=tables,
+            required_tables=req,
+            hierarchy=hierarchy,
+            validate=validate,
+            extra=extra,
+        )
+
+
+@dataclass
+class RawSourceConfig:
+    name: str | None = None
+    type: str = "http_file"
+    year: int | None = None
+    args: dict = field(default_factory=dict)
+    primary: bool = False
+    inject_column: dict[str, str] | None = None
+    # Client config (flattened from old client: {})
+    timeout: int | None = None
+    retries: int | None = None
+    user_agent: str | None = None
+    headers: dict[str, str] | None = None
+
+    @staticmethod
+    def from_dict(d: dict) -> RawSourceConfig:
+        client = d.get("client") or {}
+        return RawSourceConfig(
+            name=d.get("name"),
+            type=d.get("type", "http_file"),
+            year=d.get("year"),
+            args=d.get("args", {}),
+            primary=parse_bool(d.get("primary", False), "raw.sources[].primary"),
+            inject_column=d.get("inject_column"),
+            timeout=client.get("timeout") if isinstance(client, dict) else None,
+            retries=client.get("retries") if isinstance(client, dict) else None,
+            user_agent=client.get("user_agent") if isinstance(client, dict) else None,
+            headers=client.get("headers") if isinstance(client, dict) else None,
+        )
+
+
+@dataclass
+class RawConfig:
+    sources: list[RawSourceConfig] = field(default_factory=list)
+    output_policy: str = "versioned"
+    extractor: dict | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @staticmethod
+    def from_dict(d: dict | None) -> RawConfig:
+        if not d:
+            return RawConfig()
+        sources = [
+            RawSourceConfig.from_dict(s) for s in (d.get("sources") or []) if isinstance(s, dict)
+        ]
+        known = {"sources", "output_policy", "extractor"}
+        extra = {k: v for k, v in d.items() if k not in known}
+        return RawConfig(
+            sources=sources,
+            output_policy=d.get("output_policy", "versioned"),
+            extractor=d.get("extractor"),
+            extra=extra,
+        )
+
+
+# ---------------------------------------------------------------------------
+# PipelineConfig — the unified config object
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PipelineConfig:
+    """Unified pipeline configuration loaded from dataset.yml."""
+
+    root: Path = Path(".")
+    base_dir: Path = Path(".")
+    root_source: str = "dataset"
+
+    # Dataset identity
+    dataset: str = ""
+    source_id: str | None = None
+    years: list[int] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    category: str | None = None
+
+    # Pipeline sections
+    raw: RawConfig = field(default_factory=RawConfig)
+    clean: CleanConfig = field(default_factory=CleanConfig)
+    mart: MartConfig = field(default_factory=MartConfig)
+    support: list[dict] = field(default_factory=list)
+
+    # Global settings
+    validation: dict = field(default_factory=lambda: {"fail_on_error": True, "mode": "strict"})
+    output: dict = field(default_factory=lambda: {"artifacts": "standard"})
+
+    def __post_init__(self) -> None:
+        # Ensure validation and output support both dict and dot access
+        if isinstance(self.validation, dict):
+            validation_defaults = {"fail_on_error": True, "mode": "strict"}
+            validation_defaults.update(self.validation)
+            self.validation = _dict2ns(validation_defaults)
+        if isinstance(self.output, dict):
+            output_defaults = {"artifacts": "standard"}
+            output_defaults.update(self.output)
+            self.output = _dict2ns(output_defaults)
+
+    def resolve(self, rel_path: str | Path) -> Path:
+        p = Path(rel_path)
+        if p.is_absolute():
+            return p
+        return (self.base_dir / p).resolve()
+
+
+# Backward compat aliases
+ToolkitConfig = PipelineConfig
+ToolkitConfigModel = PipelineConfig
+
+
+# ---------------------------------------------------------------------------
+# ensure_dict — convert config sections to plain dicts for runner layers
+# ---------------------------------------------------------------------------
 
 
 def ensure_dict(cfg: Any) -> Any:
-    """Convert Pydantic model to dict, preserving aliases.
+    """Convert a config section to a plain dict for runner layers.
 
-    Uses by_alias=True so that fields like validate_config are serialized
-    as "validate" (matching the YAML alias). Excludes unset fields to
-    keep the dict lean — consumers use .get(key, default) for missing keys.
+    Handles dataclasses, old Pydantic models, dicts, and lists.
     """
+    if hasattr(cfg, "to_dict"):
+        return cfg.to_dict()
+    if hasattr(cfg, "__dataclass_fields__"):
+        return {k: v for k, v in asdict(cfg).items() if v is not None}
     if hasattr(cfg, "model_dump"):
-        return cfg.model_dump(mode="python", by_alias=True, exclude_none=True, exclude_unset=True)
+        return cfg.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
     if isinstance(cfg, list):
         return [ensure_dict(item) for item in cfg]
+    if isinstance(cfg, dict):
+        return cfg
     return cfg
+
+
+# ---------------------------------------------------------------------------
+# Path normalization
+# ---------------------------------------------------------------------------
+
+
+_PATH_KEYS = {"sql", "config", "path"}
+
+
+def _normalize_paths(data: dict, base_dir: Path) -> None:
+    """Convert relative paths in config sections to absolute.
+
+    Mutates data in-place. This matches the old config_models path normalization.
+    """
+    for section in ("raw", "clean", "mart"):
+        section_data = data.get(section)
+        if isinstance(section_data, dict):
+            _normalize_section_paths(section_data, base_dir)
+    support = data.get("support")
+    if isinstance(support, list):
+        for item in support:
+            if isinstance(item, dict) and "config" in item:
+                val = item["config"]
+                if isinstance(val, str):
+                    p = Path(val)
+                    if not p.is_absolute():
+                        item["config"] = (base_dir / p).resolve()
+
+
+def _normalize_section_paths(section: dict, base_dir: Path) -> None:
+    """Normalize paths in a section dict (raw, clean, or mart).
+
+    Handles nested structures: plain values, lists of dicts, nested dicts.
+    Normalized paths are stored as Path objects (matching old Pydantic behavior).
+    """
+    for key, value in list(section.items()):
+        if isinstance(value, str) and key in _PATH_KEYS:
+            p = Path(value)
+            if not p.is_absolute():
+                section[key] = (base_dir / p).resolve()
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    _normalize_section_paths(item, base_dir)
+        elif isinstance(value, dict):
+            _normalize_section_paths(value, base_dir)
+
+
+# ---------------------------------------------------------------------------
+# Loader
+# ---------------------------------------------------------------------------
 
 
 def load_config(
@@ -107,19 +623,194 @@ def load_config(
     strict_config: bool = False,
     repo_root: str | Path | None = None,
     root_override: str | Path | None = None,
-) -> ToolkitConfig:
-    model = load_config_model(path, strict_config=strict_config, repo_root=repo_root)
-    effective_root = Path(root_override).expanduser().resolve() if root_override else model.root
-    return ToolkitConfig(
-        base_dir=model.base_dir,
-        schema_version=model.schema_version,
-        root=effective_root,
-        root_source="--root" if root_override else model.root_source,
-        dataset=model.dataset.name,
-        source_id=model.dataset.source_id,
-        years=list(model.dataset.years),
-        time_coverage=model.dataset.time_coverage,
-        tags=list(model.dataset.tags or []),
-        category=model.dataset.category,
-        _model=model,
+) -> PipelineConfig:
+    """Load and normalize toolkit config from dataset.yml.
+
+    Returns a PipelineConfig dataclass with all fields populated.
+
+    Args:
+        path: Path to dataset.yml
+        strict_config: If True, warns on unknown keys
+        repo_root: Optional guardrail to enforce root stays within repo
+        root_override: Optional override for output root
+    """
+    p = Path(path)
+    base_dir = p.parent.resolve()
+
+    try:
+        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise ValueError(f"Cannot read YAML: {e}") from e
+
+    if not isinstance(data, dict):
+        raise ValueError("dataset.yml must be a YAML mapping.")
+
+    # Unknown keys warning (if strict)
+    if strict_config:
+        _check_unknown_keys(data, strict=strict_config, path=p)
+
+    # Root resolution — root_source labels match old test expectations
+    root_source: str
+    root_raw = data.get("root")
+    if root_raw:
+        root = Path(str(root_raw))
+        if not root.is_absolute():
+            root = (base_dir / root).resolve()
+        root_source = "yml"
+    else:
+        env_root = os.environ.get("DCL_ROOT")
+        tool_outdir = os.environ.get("TOOLKIT_OUTDIR")
+        if env_root:
+            root = Path(env_root).resolve()
+            root_source = "env:DCL_ROOT"
+        elif tool_outdir:
+            root = Path(tool_outdir).resolve()
+            root_source = "env:TOOLKIT_OUTDIR"
+        else:
+            root = base_dir
+            root_source = "base_dir_fallback"
+
+    if root_override:
+        root = Path(root_override).expanduser().resolve()
+        root_source = "--root"
+
+    # Repo root guardrail
+    if repo_root is not None:
+        repo_root_path = Path(repo_root).expanduser().resolve()
+        if not repo_root_path.is_dir():
+            raise ValueError(f"repo_root does not exist or is not a directory: {repo_root_path}")
+        try:
+            root.relative_to(repo_root_path)
+        except ValueError:
+            raise ValueError(
+                f"Resolved root {root} is not within repo_root {repo_root_path}"
+            ) from None
+
+    # Dataset block
+    dataset_block = data.get("dataset", {})
+    if not isinstance(dataset_block, dict):
+        raise ValueError("dataset must be a mapping.")
+
+    # Check only for missing keys (empty values like '' or [] are validated later)
+    if "name" not in dataset_block:
+        raise ValueError("Required field missing or invalid: dataset.name (string).")
+    name = dataset_block["name"]
+
+    if "years" not in dataset_block:
+        raise ValueError("dataset.years must be a non-empty list, e.g. [2022, 2023].")
+    years_raw = dataset_block["years"]
+    try:
+        years = [int(y) for y in years_raw]
+    except (TypeError, ValueError):
+        raise ValueError("dataset.years must contain integers.")
+
+    # Path normalization: convert relative paths in raw/clean/mart/support to absolute
+    _normalize_paths(data, base_dir)
+
+    # Support validation
+    support = data.get("support", [])
+    if isinstance(support, list):
+        support_names: list[str] = [
+            str(s["name"])
+            for s in support
+            if isinstance(s, dict) and isinstance(s.get("name"), str)
+        ]
+        duplicates = sorted({n for n in support_names if support_names.count(n) > 1})
+        if duplicates:
+            raise ValueError("support[].name values must be unique: " + ", ".join(duplicates))
+
+    # Convert support entries to dict-like objects with attribute access
+    support_objects = [_dict2ns(s) if isinstance(s, dict) else s for s in support]
+
+    return PipelineConfig(
+        root=root,
+        base_dir=base_dir,
+        root_source=root_source,
+        dataset=name,
+        source_id=dataset_block.get("source_id"),
+        years=years,
+        tags=ensure_str_list(dataset_block.get("tags", []), "dataset.tags"),
+        category=dataset_block.get("category"),
+        raw=RawConfig.from_dict(data.get("raw")),
+        clean=CleanConfig.from_dict(data.get("clean")),
+        mart=MartConfig.from_dict(data.get("mart")),
+        support=support_objects,
+        validation=data.get("validation", {"fail_on_error": True, "mode": "strict"}),
+        output=data.get("output", {"artifacts": "standard"}),
     )
+
+
+# ---------------------------------------------------------------------------
+# Backward-compat aliases for types previously exported from config_models
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ConfigPolicy:
+    """Empty policy config — kept for backward compat."""
+
+    pass
+
+
+@dataclass
+class DatasetBlock:
+    """Dataset identity block — kept for backward compat.
+
+    Note: In the new config, dataset name/years/tags are directly on PipelineConfig.
+    """
+
+    name: str = ""
+    years: list[int] = field(default_factory=list)
+    source_id: str | None = None
+    time_coverage: Any = None
+    tags: list[str] = field(default_factory=list)
+    category: str | None = None
+
+
+@dataclass
+class TimeCoverage:
+    mode: str = "full_series"
+    start_year: int = 2020
+    end_year: int = 2024
+
+
+@dataclass
+class OutputConfig:
+    artifacts: str = "standard"
+
+
+@dataclass
+class SupportDatasetConfig:
+    name: str = ""
+    config: Path = Path(".")
+    years: list[int] = field(default_factory=list)
+
+
+@dataclass
+class GlobalValidationConfig:
+    fail_on_error: bool = True
+    mode: str = "strict"
+
+
+def _check_unknown_keys(data: dict, *, strict: bool, path: Path) -> None:
+    """Basic unknown key check for strict mode."""
+    allowed = {
+        "root",
+        "schema_version",
+        "dataset",
+        "raw",
+        "clean",
+        "mart",
+        "support",
+        "config",
+        "validation",
+        "output",
+    }
+    unknown = set(data.keys()) - allowed
+    if unknown:
+        msg = f"Unknown top-level config keys: {', '.join(sorted(unknown))}"
+        if strict:
+            raise ValueError(msg)
+        import logging
+
+        logging.getLogger("toolkit.core.config").warning("%s in %s", msg, path)

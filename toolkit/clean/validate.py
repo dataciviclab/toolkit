@@ -18,7 +18,7 @@ from toolkit.core.column_rules import (
     check_ranges,
 )
 from toolkit.clean._helpers import _input_files_from_clean_metadata, _profile_raw_input
-from toolkit.core.config_models import CleanValidationSpec, RangeRuleConfig, TransitionConfig
+from toolkit.core.config import CleanValidationSpec, RangeRuleConfig, TransitionConfig
 from toolkit.core.layer_profile import compare_layer_profiles
 from toolkit.core.metadata import merge_layer_manifest
 from toolkit.core.paths import (
@@ -47,18 +47,18 @@ def _clean_validation_spec(
     max_null_pct: dict[str, float] | None = None,
     min_rows: int | None = None,
 ) -> CleanValidationSpec:
-    return CleanValidationSpec.model_validate(
+    spec = CleanValidationSpec.from_dict(
         {
-            "required_columns": required,
-            "validate": {
-                "primary_key": primary_key,
-                "not_null": not_null,
-                "ranges": ranges or {},
-                "max_null_pct": max_null_pct or {},
-                "min_rows": min_rows,
-            },
+            "required_columns": required or [],
+            "primary_key": primary_key or [],
+            "not_null": not_null or [],
+            "ranges": dict(ranges) if ranges else {},
+            "max_null_pct": max_null_pct or {},
+            "min_rows": min_rows,
         }
     )
+    assert spec is not None
+    return spec
 
 
 def validate_clean(
@@ -95,12 +95,11 @@ def validate_clean(
         min_rows=min_rows,
     )
     required = spec.required_columns
-    rules = spec.validate
-    primary_key = rules.primary_key
-    not_null = rules.not_null
-    ranges = rules.ranges
-    max_null_pct = rules.max_null_pct
-    min_rows = rules.min_rows
+    primary_key = spec.primary_key
+    not_null = spec.not_null
+    ranges = spec.ranges
+    max_null_pct = spec.max_null_pct
+    min_rows = spec.min_rows
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -268,21 +267,20 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     out_dir = layer_year_dir(cfg.root, "clean", cfg.dataset, year)
     parquet = out_dir / f"{cfg.dataset}_{year}_clean.parquet"
 
-    spec = CleanValidationSpec.model_validate(
+    validate_rules = cfg.clean.validate.to_dict() if cfg.clean.validate else {}
+    spec = CleanValidationSpec.from_dict(
         {
             "required_columns": cfg.clean.required_columns,
-            "validate": cfg.clean.validate.model_dump(
-                mode="python", by_alias=True, exclude_none=True, exclude_unset=True
-            ),
+            **validate_rules,
         }
     )
 
     # ── Sensible defaults (prima di validate_clean) ────────────────────────
     # min_rows: default 1 se non configurato (parquet vuoto = errore)
     if sample_mode:
-        spec.validate.min_rows = None
-    elif spec.validate.min_rows is None:
-        spec.validate.min_rows = 1
+        spec.min_rows = None
+    elif spec.min_rows is None:
+        spec.min_rows = 1
 
     # NOT NULL inference: colonne con 0% null nel raw diventano not_null impliciti.
     # Leggiamo il raw profile e facciamo una pre-DESCRIBE del parquet clean
@@ -323,10 +321,10 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
                     if _norm in _clean_set:
                         _inferred.append(_norm)
                 if _inferred:
-                    _explicit = set(spec.validate.not_null)
+                    _explicit = set(spec.not_null)
                     _new_inferred = [c for c in _inferred if c not in _explicit]
                     if _new_inferred:
-                        spec.validate.not_null = list(_explicit) + _new_inferred
+                        spec.not_null = list(_explicit) + _new_inferred
                         _safe_debug = getattr(logger, "debug", lambda *a, **kw: None)
                         _safe_debug(
                             "[sensible] NOT NULL inferito per %d colonne "
@@ -343,11 +341,11 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
         parquet,
         required=spec.required_columns,
         root=cfg.root,
-        primary_key=spec.validate.primary_key,
-        not_null=spec.validate.not_null,
-        ranges=spec.validate.ranges,
-        max_null_pct=spec.validate.max_null_pct,
-        min_rows=spec.validate.min_rows,
+        primary_key=spec.primary_key,
+        not_null=spec.not_null,
+        ranges=spec.ranges,
+        max_null_pct=spec.max_null_pct,
+        min_rows=spec.min_rows,
     )
 
     # column type sanity check (non bloccante, solo warning)
@@ -366,7 +364,7 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     # In sample mode la transizione non e' rappresentativa:
     # il sample raw e' troncato a N byte, il clean a sample_rows righe.
     # Disabilitiamo il row drop check, lasciamo warn_removed_columns attivo.
-    transition = spec.validate.promotion
+    transition = spec.promotion or TransitionConfig()
     if sample_mode:
         transition = TransitionConfig(
             max_row_drop_pct=None,
@@ -552,13 +550,11 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
         k: v
         for k, v in {
             "required": spec.required_columns or [],
-            "primary_key": spec.validate.primary_key or [],
-            "not_null": spec.validate.not_null or [],
-            "ranges": {
-                c: {"min": r.min, "max": r.max} for c, r in (spec.validate.ranges or {}).items()
-            },
-            "max_null_pct": spec.validate.max_null_pct or {},
-            "min_rows": spec.validate.min_rows,
+            "primary_key": spec.primary_key or [],
+            "not_null": spec.not_null or [],
+            "ranges": {c: {"min": r.min, "max": r.max} for c, r in (spec.ranges or {}).items()},
+            "max_null_pct": spec.max_null_pct or {},
+            "min_rows": spec.min_rows,
         }.items()
         if v not in ([], {}, None)
     }

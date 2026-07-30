@@ -12,7 +12,7 @@ from toolkit.core.column_rules import (
     check_ranges,
 )
 from toolkit.core.io import read_json_or_none
-from toolkit.core.config_models import MartTableRuleConfig, MartValidationSpec
+from toolkit.core.config import MartTableRuleConfig, MartValidationSpec
 from toolkit.core.metadata import merge_layer_manifest
 from toolkit.core.paths import MART_VALIDATION, METADATA, layer_year_dir, to_root_relative
 from toolkit.core.sql_utils import sql_path
@@ -48,16 +48,17 @@ def validate_mart(
         ranges:
           col: {min: 0, max: 100}
     """
-    spec = MartValidationSpec.model_validate(
-        {
-            "required_tables": required_tables,
-            "validate": {
+    spec = (
+        MartValidationSpec.from_dict(
+            {
+                "required_tables": required_tables,
                 "table_rules": table_rules or {},
-            },
-        }
+            }
+        )
+        or MartValidationSpec()
     )
     required_tables = spec.required_tables
-    table_rules = spec.validate.table_rules
+    table_rules = spec.table_rules
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -189,32 +190,34 @@ def run_mart_validation(cfg, year: int, logger, *, sample_mode: bool = False) ->
     mart_dir = layer_year_dir(cfg.root, "mart", cfg.dataset, year)
 
     declared_tables = [t.name for t in cfg.mart.tables if t.name]
-    spec = MartValidationSpec.model_validate(
-        {
-            "required_tables": cfg.mart.required_tables,
-            "validate": cfg.mart.validate.model_dump(
-                mode="python", by_alias=True, exclude_none=True, exclude_unset=True
-            ),
-        }
+    validate_rules = cfg.mart.validate.to_dict() if cfg.mart.validate else {}
+    spec = (
+        MartValidationSpec.from_dict(
+            {
+                "required_tables": cfg.mart.required_tables,
+                **validate_rules,
+            }
+        )
+        or MartValidationSpec()
     )
 
     # In sample mode, min_rows non e' applicabile (campione non rappresentativo).
     if sample_mode:
-        for rule in spec.validate.table_rules.values():
+        for rule in spec.table_rules.values():
             rule.min_rows = None
 
     result = validate_mart(
         mart_dir,
         required_tables=spec.required_tables,
         root=cfg.root,
-        table_rules=spec.validate.table_rules,
+        table_rules=spec.table_rules,
         declared_tables=declared_tables,
     )
 
     metadata = read_json_or_none(mart_dir / METADATA) or {}
     transition_report = check_transitions(
         metadata.get("transition_profiles") or [],
-        spec.validate.transition,
+        spec.transition,
     )
     has_warnings = bool(transition_report["warning_messages"])
     has_errors = bool(transition_report["error_messages"])

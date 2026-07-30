@@ -13,12 +13,9 @@ from typing import Any
 from toolkit.core.io import read_json_or_none, write_json_atomic
 from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import (
-    CLEAN_VALIDATION,
-    MART_VALIDATION,
     METADATA,
     RAW_PROFILE,
     RAW_PROFILE_DIR,
-    RAW_VALIDATION,
     layer_year_dir,
 )
 from toolkit.core.run_records import get_run_dir, latest_run
@@ -26,38 +23,6 @@ from toolkit.core.run_records import get_run_dir, latest_run
 _REPORT_DIR = "_reports"
 _RUN_REPORT_FILENAME = "run_report.json"
 _DATASET_README = "README.md"
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _read_validation(root: Path, layer: str, dataset: str, year: int) -> dict[str, Any]:
-    """Legge il validation JSON di un layer, restituendo dict vuoto se non presente."""
-    val_map = {
-        "raw": RAW_VALIDATION,
-        "clean": CLEAN_VALIDATION,
-        "mart": MART_VALIDATION,
-    }
-    val_name = val_map.get(layer)
-    if not val_name:
-        return {}
-    val_path = layer_year_dir(root, layer, dataset, year) / val_name
-    if val_path.exists():
-        return read_json_or_none(val_path) or {}
-    val_path2 = layer_year_dir(root, layer, dataset, year) / "_validate" / val_name
-    if val_path2.exists():
-        return read_json_or_none(val_path2) or {}
-    return {}
-
-
-def _get_warnings(validation: dict[str, Any]) -> list[str]:
-    return validation.get("warnings", [])
-
-
-def _get_errors(validation: dict[str, Any]) -> list[str]:
-    return validation.get("errors", [])
 
 
 def _get_run_record(root: Path, dataset: str, year: int) -> dict[str, Any] | None:

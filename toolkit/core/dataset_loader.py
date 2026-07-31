@@ -138,6 +138,15 @@ def validate_config(path: str | Path) -> dict[str, Any]:
     if sources and not manifest.get("source_id"):
         warnings.append("'dataset.source_id' non impostato (utile per catalogazione)")
 
+    if not manifest.get("tags"):
+        warnings.append(
+            "'dataset.tags' non impostato (standard candidate: lista kebab-case descrittiva)"
+        )
+    if not manifest.get("category"):
+        warnings.append(
+            "'dataset.category' non impostato (standard candidate: tema — vedi docs/candidate-standard.md)"
+        )
+
     return {
         "ok": len(errors) == 0,
         "errors": errors,

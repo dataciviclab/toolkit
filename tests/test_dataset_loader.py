@@ -284,6 +284,37 @@ class TestValidateConfig:
         assert result["ok"] is True
         assert any("source_id" in w for w in result["warnings"])
 
+    def test_warns_missing_tags_and_category(self, tmp_path: Path) -> None:
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test", "years": [2023], "source_id": "openga"},
+                "raw": {"sources": [{"name": "src1"}]},
+            },
+        )
+        result = validate_config(tmp_path)
+        assert result["ok"] is True
+        assert any("tags" in w for w in result["warnings"])
+        assert any("category" in w for w in result["warnings"])
+
+    def test_no_warn_when_tags_category_present(self, tmp_path: Path) -> None:
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {
+                    "name": "test",
+                    "years": [2023],
+                    "source_id": "openga",
+                    "tags": ["giustizia"],
+                    "category": "giustizia",
+                },
+                "raw": {"sources": [{"name": "src1"}]},
+            },
+        )
+        result = validate_config(tmp_path)
+        assert result["ok"] is True
+        assert not any("tags" in w or "category" in w for w in result["warnings"])
+
     def test_invalid_yaml(self, tmp_path: Path) -> None:
         (tmp_path / "dataset.yml").write_text("invalid: [")
         result = validate_config(tmp_path)

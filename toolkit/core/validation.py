@@ -104,8 +104,13 @@ def build_validation_summary(result: ValidationResult) -> dict[str, Any]:
             },
         ],
     }
-    if "stats" in result.summary:
-        out["stats"] = result.summary["stats"]
+    # Summary completo della validazione (stats + columns + rules) come blocco
+    # unico. Sostituisce il vecchio campo appiattito ``stats`` (mantenuto come
+    # fallback per i run record gia' scritti prima di questa migrazione).
+    if result.summary:
+        out["summary"] = result.summary
+        if "stats" in result.summary:
+            out["stats"] = result.summary["stats"]
     if result.sections:
         out["sections"] = {}
         for key, section in result.sections.items():

@@ -124,15 +124,26 @@ def summary(config_path: str | None = None, year: int | None = None) -> dict[str
     if latest_run_path and not _exists(latest_run_path):
         warnings.append("latest_run_record_missing")
 
-    # Estrai layer run status dal run record (se presente)
+    # Estrai layer run status + validation completa dal run record (se presente)
     layer_run_statuses: dict[str, dict[str, Any]] = {}
+    layer_validations: dict[str, dict[str, Any]] = {}
     if latest_run_record:
         for layer_name in ("raw", "clean", "mart"):
             layer_info = (latest_run_record.get("layers") or {}).get(layer_name, {})
             layer_val = (latest_run_record.get("validations") or {}).get(layer_name, {})
             metrics = layer_info.get("metrics") or {}
+            # Summary completo (stats+columns+rules) con fallback su stats
+            # appiattito per run record scritti prima della migrazione.
+            layer_summary = (
+                (layer_val.get("summary") or {})
+                if isinstance(layer_val.get("summary"), dict)
+                else {}
+            )
             stats = (
-                (layer_val.get("stats") or {}) if isinstance(layer_val.get("stats"), dict) else {}
+                (layer_summary.get("stats") or layer_val.get("stats") or {})
+                if isinstance(layer_summary.get("stats"), dict)
+                or isinstance(layer_val.get("stats"), dict)
+                else {}
             )
             layer_run_statuses[layer_name] = {
                 "status": layer_info.get("status", "PENDING"),
@@ -150,6 +161,10 @@ def summary(config_path: str | None = None, year: int | None = None) -> dict[str
                 "paqa_score": stats.get("paqa_score"),
                 "row_drop_pct": stats.get("row_drop_pct"),
             }
+            # Espone la validation completa del run record per i consumer
+            # (review_readiness legge columns/rules/row_count da qui).
+            if layer_val:
+                layer_validations[layer_name] = layer_val
 
     return {
         "dataset": paths.get("dataset"),
@@ -171,6 +186,7 @@ def summary(config_path: str | None = None, year: int | None = None) -> dict[str
                 "skip_suggested": (paths.get("raw_hints") or {}).get("skip"),
                 "raw_warnings": (paths.get("raw_hints") or {}).get("warnings", []),
                 "run_status": layer_run_statuses.get("raw"),
+                "validation": layer_validations.get("raw"),
             },
             "clean": {
                 "dir": str(clean_dir),
@@ -179,6 +195,7 @@ def summary(config_path: str | None = None, year: int | None = None) -> dict[str
                 "output_exists": _exists(clean_paths.get("output")),
                 "metadata_exists": _exists(clean_paths.get("metadata")),
                 "run_status": layer_run_statuses.get("clean"),
+                "validation": layer_validations.get("clean"),
             },
             "mart": {
                 "dir": str(mart_dir),
@@ -189,6 +206,7 @@ def summary(config_path: str | None = None, year: int | None = None) -> dict[str
                 "missing_outputs": missing_mart_outputs,
                 "metadata_exists": _exists(mart_paths.get("metadata")),
                 "run_status": layer_run_statuses.get("mart"),
+                "validation": layer_validations.get("mart"),
             },
         },
         "run": {
@@ -231,6 +249,14 @@ def review_readiness(config_path: str | None = None, year: int | None = None) ->
 
     checks: list[dict[str, Any]] = []
 
+    # ── Helper: legge campi dal blocco summary con fallback su top-level ──
+    def _val_field(validation: dict[str, Any], name: str) -> Any:
+        """Campo da validation.summary (nuovo) o validation top-level (legacy)."""
+        summary_block = validation.get("summary") or {}
+        if isinstance(summary_block, dict) and name in summary_block:
+            return summary_block.get(name)
+        return validation.get(name)
+
     # --- Config check ---
     checks.append(
         {
@@ -262,7 +288,7 @@ def review_readiness(config_path: str | None = None, year: int | None = None) ->
     # --- Clean layer ---
     clean = s.get("layers", {}).get("clean", {})
     clean_val = clean.get("validation") or {}
-    clean_rows = clean_val.get("row_count")
+    clean_rows = _val_field(clean_val, "row_count")
     # Fallback: se validation non disponibile, leggi dal parquet diretto
     if clean_rows is None:
         clean_path_str = clean.get("output")
@@ -287,7 +313,7 @@ def review_readiness(config_path: str | None = None, year: int | None = None) ->
     mart_checks: list[dict[str, Any]] = []
     for output_name in mart_outputs:
         o_path = Path(output_name)
-        rows = mart_val.get("row_count") if o_path.exists() else None
+        rows = _val_field(mart_val, "row_count") if o_path.exists() else None
         # Fallback: leggi dal parquet se validation non disponibile
         if rows is None and o_path.exists():
             rows = parquet_row_count(o_path)
@@ -333,7 +359,7 @@ def review_readiness(config_path: str | None = None, year: int | None = None) ->
     )
 
     # --- A. Clean column naming (snake_case check) ---
-    clean_cols = clean_val.get("columns") or clean.get("columns")
+    clean_cols = _val_field(clean_val, "columns") or clean.get("columns")
     if clean_cols:
         _bad_naming: list[str] = []
         for col in clean_cols:
@@ -356,7 +382,7 @@ def review_readiness(config_path: str | None = None, year: int | None = None) ->
         )
 
     # --- B. Validation rules coverage ---
-    rules_obj = clean_val.get("rules") or clean.get("rules") or {}
+    rules_obj = _val_field(clean_val, "rules") or clean.get("rules") or {}
     if clean_cols:
         covered_cols: set[str] = set()
         for rule_name, rule_vals in rules_obj.items():
@@ -443,14 +469,23 @@ def review_readiness(config_path: str | None = None, year: int | None = None) ->
     }
 
     # Transition stats from clean validation
-    raw_row_count = clean_val.get("raw_row_count")
-    clean_row_count = clean_val.get("clean_row_count")
+    # (nuovo: summary.stats.* — legacy: campi top-level della validation)
+    raw_row_count = _val_field(clean_val, "raw_row_count") or (
+        (clean_val.get("summary") or {}).get("stats") or {}
+    ).get("raw_rows")
+    clean_row_count = _val_field(clean_val, "clean_row_count") or (
+        (clean_val.get("summary") or {}).get("stats") or {}
+    ).get("clean_rows")
     col_drop = None
     row_drop_pct = None
     if raw_row_count is not None and clean_row_count is not None and raw_row_count > 0:
         row_drop_pct = round((raw_row_count - clean_row_count) / raw_row_count * 100, 1)
-    raw_col_count = raw_val.get("col_count")
-    clean_col_count = clean_val.get("col_count")
+    raw_col_count = _val_field(raw_val, "col_count") or (
+        (raw_val.get("summary") or {}).get("stats") or {}
+    ).get("raw_cols")
+    clean_col_count = _val_field(clean_val, "col_count") or (
+        (clean_val.get("summary") or {}).get("stats") or {}
+    ).get("clean_cols")
     if raw_col_count is not None and clean_col_count is not None:
         col_drop = raw_col_count - clean_col_count
 
@@ -484,8 +519,8 @@ def review_readiness(config_path: str | None = None, year: int | None = None) ->
                 "validation_msgs": clean_msgs,
                 "output": clean.get("output"),
                 "row_count": clean_rows,
-                "columns": clean_val.get("columns") or clean.get("columns"),
-                "rules": clean_val.get("rules") or clean.get("rules"),
+                "columns": _val_field(clean_val, "columns") or clean.get("columns"),
+                "rules": _val_field(clean_val, "rules") or clean.get("rules"),
                 "transition": {
                     "raw_row_count": raw_row_count,
                     "clean_row_count": clean_row_count,

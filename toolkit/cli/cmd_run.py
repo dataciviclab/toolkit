@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import io
 import json
 from pathlib import Path
 from time import perf_counter
@@ -8,22 +9,16 @@ from typing import Any
 
 import typer
 
-from toolkit.cli._batch_helpers import (
-    build_row,
-    format_duration,
-    print_table,
-    silence_logger,
-    silence_typer_echo,
-)
 from toolkit.cli.common import dump_cfg_section, load_cfg_and_logger
-from toolkit.domain.common import iter_selected_years
-from toolkit.domain.source_utils import resolve_source as _resolve_source
-from toolkit.cli.sql_dry_run import validate_sql_dry_run
+from toolkit.core.sql_validation import validate_sql_dry_run
 from toolkit.clean.run import run_clean
 from toolkit.clean.validate import run_clean_validation
 from toolkit.core.logging import bind_logger, get_logger
 from toolkit.core.paths import RAW_PROFILE, layer_dataset_dir, layer_year_dir
+from toolkit.core.probe import ProbePool, probe_fmt
 from toolkit.core.run_context import RunContext
+from toolkit.domain.common import iter_selected_years
+from toolkit.domain.source_utils import resolve_source as _resolve_source
 from toolkit.mart.run import run_mart, run_mart_multi_year
 from toolkit.mart.validate import run_mart_validation
 from toolkit.raw.run import run_raw
@@ -31,6 +26,8 @@ from toolkit.raw.validate import run_raw_validation
 
 
 class ValidationGateError(RuntimeError):
+    """Layer validation failed in strict mode."""
+
     pass
 
 
@@ -52,55 +49,6 @@ def _planned_layers(step: str) -> list[str]:
     return [step]
 
 
-def _resolve_sql_path(cfg, rel_path: str | None) -> Path:
-    if not rel_path:
-        raise ValueError("Missing SQL path in dataset.yml")
-    path = Path(rel_path)
-    if path.is_absolute():
-        return path
-    return Path(cfg.base_dir) / path
-
-
-def _is_mart_only_cfg(cfg) -> bool:
-    return not bool(cfg.clean.sql)
-
-
-def _validate_execution_plan(cfg, step: str) -> list[str]:
-    layers = _planned_layers(step)
-
-    if step == "all" and _is_mart_only_cfg(cfg):
-        raise ValueError(
-            "run all is not supported for mart-only / compose-only configs; "
-            "use: toolkit run mart --config ...",
-        )
-
-    if "clean" in layers:
-        if _is_mart_only_cfg(cfg):
-            raise ValueError(
-                "run clean is not supported for mart-only / compose-only configs; "
-                "use: toolkit run mart --config ...",
-            )
-        clean_sql = _resolve_sql_path(cfg, cfg.clean.sql)
-        if not clean_sql.exists():
-            raise ValueError(
-                f"CLEAN SQL file not found: {clean_sql}\n"
-                f"This config is not bootstrapped yet.\n"
-                f"Run: toolkit run raw -c <config> -y <year>\n"
-                f"Then review sql/clean.sql and run: toolkit run all ..."
-            )
-
-    if "mart" in layers:
-        tables = cfg.mart.tables or []
-        if not isinstance(tables, list) or not tables:
-            raise ValueError("mart.tables missing or empty in dataset.yml")
-        for table in tables:
-            sql_path = _resolve_sql_path(cfg, table.sql if hasattr(table, "sql") else None)
-            if not sql_path.exists():
-                raise FileNotFoundError(f"MART SQL file not found: {sql_path}")
-
-    return layers
-
-
 def _layers_from_start(layers: list[str], start_from_layer: str | None) -> list[str]:
     if start_from_layer is None:
         return layers
@@ -108,6 +56,86 @@ def _layers_from_start(layers: list[str], start_from_layer: str | None) -> list[
         raise ValueError(f"Cannot start from layer '{start_from_layer}' for planned steps {layers}")
     start_index = layers.index(start_from_layer)
     return layers[start_index:]
+
+
+def _validate_execution_plan(cfg, step: str) -> list[str]:
+    layers = _planned_layers(step)
+
+    if step == "all" and cfg.is_mart_only:
+        raise ValueError(
+            "run all is not supported for mart-only / compose-only configs; "
+            "use: toolkit run mart --config ...",
+        )
+    if "clean" in layers:
+        if cfg.is_mart_only:
+            raise ValueError(
+                "run clean is not supported for mart-only / compose-only configs; "
+                "use: toolkit run mart --config ...",
+            )
+        clean_sql = cfg.resolve(cfg.clean.sql)
+        if not clean_sql.exists():
+            raise ValueError(
+                f"CLEAN SQL file not found: {clean_sql}\n"
+                f"This config is not bootstrapped yet.\n"
+                f"Run: toolkit run raw -c <config> -y <year>\n"
+                f"Then review sql/clean.sql and run: toolkit run all ..."
+            )
+    if "mart" in layers:
+        tables = cfg.mart.tables or []
+        if not isinstance(tables, list) or not tables:
+            raise ValueError("mart.tables missing or empty in dataset.yml")
+        for table in tables:
+            sql_path = cfg.resolve(table.sql if hasattr(table, "sql") else None)
+            if not sql_path.exists():
+                raise FileNotFoundError(f"MART SQL file not found: {sql_path}")
+
+    return layers
+
+
+def _run_probe(cfg, year: int, logger, pool=None) -> None:
+    """Passo probe della pipeline: verifica raggiungibilità fonti remote."""
+    sources = cfg.raw.sources
+    if not sources:
+        logger.info("PROBE | nessuna fonte remota da verificare")
+        return
+
+    _own_pool = pool is None
+    pool = pool or ProbePool(workers=8, circuit_threshold=3)
+
+    try:
+        futures = []
+        for src in sources:
+            resolved = _resolve_source(src, year)
+            stype, name, args = resolved["stype"], resolved["name"], resolved["args"]
+            if stype in ("http_file", "http_post_file"):
+                url = resolved["url"]
+                if url:
+                    futures.append(pool.submit(url, dataset=name))
+            elif stype == "ckan":
+                portal_url = args.get("portal_url", "")
+                portal = portal_url.replace("{year}", str(year)) if portal_url else ""
+                if portal:
+                    futures.append(pool.submit(portal, dataset=name))
+
+        for result in pool.as_completed(futures):
+            if result.reachable:
+                logger.info(
+                    "PROBE | %s -> HTTP %s (%s)",
+                    result.dataset,
+                    result.status_code,
+                    probe_fmt(result.content_type),
+                )
+            elif result.circuit_open:
+                logger.warning("PROBE | %s -> CIRCUIT OPEN (%s)", result.dataset, result.error)
+            elif result.error:
+                logger.warning("PROBE | %s -> unreachable: %s", result.dataset, result.error)
+            elif not result.reachable and result.status_code:
+                logger.warning(
+                    "PROBE | %s -> HTTP %s %s", result.dataset, result.status_code, result.url
+                )
+    finally:
+        if _own_pool:
+            pool.close()
 
 
 def _print_execution_plan(
@@ -127,106 +155,6 @@ def _print_execution_plan(
     for layer in layers:
         typer.echo(f"  - {layer}: {layer_year_dir(cfg.root, layer, cfg.dataset, year)}")
     typer.echo("")
-
-
-_PROBE_FORMATS = {
-    "text/csv": "CSV",
-    "text/tab-separated-values": "TSV",
-    "application/json": "JSON",
-    "application/xml": "XML",
-    "application/zip": "ZIP",
-    "application/gzip": "GZ",
-    "application/pdf": "PDF",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
-    "application/vnd.ms-excel": "XLS",
-    "application/vnd.oasis.opendocument.spreadsheet": "ODS",
-    "text/html": "HTML",
-}
-
-
-def _probe_fmt(content_type: str | None) -> str:
-    """Riduce un content-type a un formato leggibile (es. XLSX, CSV)."""
-    if not content_type:
-        return "?"
-    base = content_type.split(";")[0].strip().lower()
-    return _PROBE_FORMATS.get(base, base)
-
-
-def _run_probe(cfg, year: int, logger, pool=None) -> None:
-    """Passo probe della pipeline: verifica raggiungibilita' fonti remote.
-
-    Riutilizza probe_url_routed dello scout (routing automatico,
-    format detection) per output ricco come lo scout CLI.
-    Non blocca mai — il vero errore arrivera' da raw.
-    Salta local_file, sdmx, sparql (non timeoutano).
-    Le probe sono eseguite in parallelo con ProbePool
-    (ThreadPoolExecutor + HttpClient con circuit breaker opzionale).
-
-    Args:
-        cfg: Config del dataset.
-        year: Anno da processare.
-        logger: Logger.
-        pool: ProbePool opzionale. Se fornito, riutilizza lo stesso
-            pool tra anni/config (utile per batch — il circuit breaker
-            mantiene lo stato tra le probe). Se None, ne crea uno nuovo.
-    """
-    sources = cfg.raw.sources
-    if not sources:
-        logger.info("PROBE | nessuna fonte remota da verificare")
-        return
-
-    from toolkit.core.probe import ProbePool
-
-    _own_pool = pool is None
-    pool = pool or ProbePool(workers=8, circuit_threshold=3)
-
-    try:
-        futures = []
-
-        for src in sources:
-            resolved = _resolve_source(src, year)
-            stype, name, args = resolved["stype"], resolved["name"], resolved["args"]
-
-            if stype in ("http_file", "http_post_file"):
-                url = resolved["url"]
-                if url:
-                    futures.append(pool.submit(url, dataset=name))
-            elif stype == "ckan":
-                portal_url = args.get("portal_url", "")
-                portal = portal_url.replace("{year}", str(year)) if portal_url else ""
-                if portal:
-                    futures.append(pool.submit(portal, dataset=name))
-
-        for result in pool.as_completed(futures):
-            if result.reachable:
-                logger.info(
-                    "PROBE | %s -> HTTP %s (%s)",
-                    result.dataset,
-                    result.status_code,
-                    _probe_fmt(result.content_type),
-                )
-            elif result.circuit_open:
-                logger.warning(
-                    "PROBE | %s -> CIRCUIT OPEN (%s)",
-                    result.dataset,
-                    result.error,
-                )
-            elif result.error:
-                logger.warning(
-                    "PROBE | %s -> unreachable: %s",
-                    result.dataset,
-                    result.error,
-                )
-            elif not result.reachable and result.status_code:
-                logger.warning(
-                    "PROBE | %s -> HTTP %s %s",
-                    result.dataset,
-                    result.status_code,
-                    result.url,
-                )
-    finally:
-        if _own_pool:
-            pool.close()
 
 
 def run_year(
@@ -373,7 +301,7 @@ def run_year(
     # (root override in {root}/smoke), non solo se --smoke e' stato usato
     sampling_active = smoke or sample_rows is not None or sample_bytes is not None
 
-    if "clean" in layers_to_run and not _is_mart_only_cfg(cfg):
+    if "clean" in layers_to_run and not cfg.is_mart_only:
         raw_sources = dump_cfg_section(cfg.raw).get("sources", [])
         if not _execute_layer(
             "clean",
@@ -393,7 +321,7 @@ def run_year(
             # CLEAN fallito: skip mart per evitare output stale
             layers_to_run = [layer for layer in layers_to_run if layer != "mart"]
 
-    if "mart" in layers_to_run and _has_single_year_mart(cfg):
+    if "mart" in layers_to_run and cfg.has_single_year_mart:
         _execute_layer(
             "mart",
             run_mart,
@@ -413,23 +341,6 @@ def run_year(
     return context
 
 
-def _has_multi_year_mart(cfg) -> bool:
-    """Check if any mart table has an explicit ``years`` field (multi-year)."""
-    return any(t.years for t in cfg.mart.tables)
-
-
-def _has_single_year_mart(cfg) -> bool:
-    """Check if any mart table does NOT have an explicit ``years`` field,
-    OR if a hierarchy section is defined (runtime-generated aggregation).
-
-    Quando tutte le tabelle sono multi-year (hanno ``years``) e non c'è
-    hierarchy, il per-year ``run mart`` non ha nulla da elaborare.
-    """
-    has_single_year = any(not t.years for t in cfg.mart.tables)
-    has_hierarchy = cfg.mart.hierarchy is not None
-    return has_single_year or has_hierarchy
-
-
 def _maybe_run_multi_year_mart(
     cfg,
     selected_years: list[int],
@@ -446,7 +357,7 @@ def _maybe_run_multi_year_mart(
     ``sampling_active`` indica che il root e' stato spostato in ``{root}/smoke``
     per via di ``--smoke``, ``--sample-rows`` o ``--sample-bytes``.
     """
-    if not _has_multi_year_mart(cfg):
+    if not cfg.has_multi_year_mart:
         return
     if logger is None:
         logger = get_logger()
@@ -803,13 +714,13 @@ def _run_batch(
 ) -> None:
     """Esegue piu' config in sequenza e stampa un report aggregato.
 
-    Legge un file di testo con un dataset.yml per riga (righe vuote e commenti
-    con # sono ignorati) e li esegue uno dopo l'altro.
+    Ogni config viene eseguito via ``_run_pipeline()`` — la stessa funzione
+    usata da ``toolkit run``. Il loop batch aggiunge solo la tabella riassuntiva.
 
     Args:
         batch_file: Path al file con lista di dataset.yml.
-        step: Step da eseguire (probe, raw, clean, mart, all). Default ``all``.
-        years: Non usato in batch (ogni config usa i propri anni configurati).
+        step: Step da eseguire (raw, clean, mart, all). Default ``all``.
+        years: Non usato (ogni config usa i propri anni).
         smoke: Alias per --sample-rows 1000 --sample-bytes 1048576.
         sample_rows: Limite righe in CLEAN.
         sample_bytes: Limite bytes in RAW.
@@ -817,118 +728,84 @@ def _run_batch(
         json_output: Output JSON.
         dry_run: Solo plan senza esecuzione.
     """
-    dry_flag = dry_run if isinstance(dry_run, bool) else False
-    sample_rows_final = 1000 if smoke else sample_rows
-    sample_bytes_final = 1048576 if smoke else sample_bytes
+    config_paths = _read_config_list(Path(batch_file))
 
-    configs_file = Path(batch_file)
-    config_paths = _read_config_list(configs_file)
-
-    rows: list[dict[str, str]] = []
-    failures: list[dict[str, str]] = []
+    rows: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
 
     for config_path in config_paths:
-        config_started_at = perf_counter()
+        started_at = perf_counter()
         dataset_label = config_path.stem
 
-        try:
-            if smoke:
-                _cfg0, _logger0 = load_cfg_and_logger(str(config_path))
-                if json_output:
-                    silence_logger()
-                cfg, logger = load_cfg_and_logger(
+        # In modalita' --json, reindirizza stdout per evitare che i log
+        # del toolkit contaminino l'output JSON.
+        _stdout_ctx = (
+            contextlib.redirect_stdout(io.StringIO()) if json_output else contextlib.nullcontext()
+        )
+
+        results: dict[str, Any] = {}
+        with _stdout_ctx:
+            try:
+                results = _run_pipeline(
                     str(config_path),
-                    root_override=str(_cfg0.root / "smoke"),
-                )
-            else:
-                cfg, logger = load_cfg_and_logger(str(config_path))
-
-            if json_output:
-                silence_logger()
-            dataset_label = cfg.dataset
-
-            for year in cfg.years:
-                run_started_at = perf_counter()
-                status = "FAILED"
-                try:
-                    _run_ctx = silence_typer_echo() if json_output else contextlib.nullcontext()
-                    with _run_ctx:
-                        context = run_year(
-                            cfg,
-                            year,
-                            step=step,
-                            dry_run=dry_flag,
-                            logger=logger,
-                            sample_rows=sample_rows_final,
-                            sample_bytes=sample_bytes_final,
-                        )
-                    status = context.status
-                except Exception as exc:
-                    failures.append(
-                        {
-                            "config": str(config_path),
-                            "dataset": dataset_label,
-                            "years": str(year),
-                            "error": str(exc),
-                        }
-                    )
-                finally:
-                    rows.append(
-                        build_row(
-                            dataset=dataset_label,
-                            config_path=str(config_path),
-                            years=str(year),
-                            step=step,
-                            status=status,
-                            duration=format_duration(perf_counter() - run_started_at),
-                        )
-                    )
-        except Exception as exc:
-            failures.append(
-                {
-                    "config": str(config_path),
-                    "dataset": dataset_label,
-                    "years": "-",
-                    "error": str(exc),
-                }
-            )
-            rows.append(
-                build_row(
-                    dataset=dataset_label,
-                    config_path=str(config_path),
-                    years="-",
+                    years=years,
                     step=step,
-                    status="FAILED",
-                    duration=format_duration(perf_counter() - config_started_at),
+                    smoke=smoke,
+                    sample_rows=sample_rows,
+                    sample_bytes=sample_bytes,
+                    root=root,
+                    dry_run=dry_run,
                 )
+                status = "SUCCESS" if results["status"] == "passed" else "FAILED"
+                dataset_label = results.get("dataset_name") or dataset_label
+            except Exception as exc:
+                status = "FAILED"
+                failures.append(
+                    {"config": str(config_path), "dataset": dataset_label, "error": str(exc)}
+                )
+
+            rows.append(
+                {
+                    "dataset": dataset_label,
+                    "config": str(config_path),
+                    "years": str(results.get("years")) if status == "SUCCESS" else "-",
+                    "status": status,
+                    "duration": f"{perf_counter() - started_at:.3f}s",
+                }
             )
 
     if json_output:
-        report: dict[str, Any] = {
-            "summary": {
-                "total": len(rows),
-                "passed": sum(1 for r in rows if r["status"] in ("SUCCESS", "DRY_RUN")),
-                "failed": sum(1 for r in rows if r["status"] not in ("SUCCESS", "DRY_RUN")),
-                "duration_seconds": sum(
-                    float(r["duration"].rstrip("s")) for r in rows if r["duration"] != "-"
-                ),
-            },
-            "rows": rows,
-            "failures": failures,
-        }
-        typer.echo(json.dumps(report, indent=2, default=str))
+        typer.echo(
+            json.dumps(
+                {
+                    "summary": {
+                        "total": len(rows),
+                        "passed": sum(1 for r in rows if r["status"] == "SUCCESS"),
+                        "failed": sum(1 for r in rows if r["status"] != "SUCCESS"),
+                    },
+                    "rows": rows,
+                    "failures": failures,
+                },
+                indent=2,
+                default=str,
+            )
+        )
     else:
-        table_headers = ["dataset", "years", "step", "status", "duration"]
-        print_table(rows, table_headers)
-
+        headers = ["dataset", "years", "status", "duration", "config"]
+        widths = {h: len(h) for h in headers}
+        for row in rows:
+            for h in headers:
+                widths[h] = max(widths[h], len(str(row.get(h, ""))))
+        typer.echo("Batch Report")
+        typer.echo("  ".join(h.ljust(widths[h]) for h in headers))
+        typer.echo("  ".join("-" * widths[h] for h in headers))
+        for row in rows:
+            typer.echo("  ".join(str(row.get(h, "")).ljust(widths[h]) for h in headers))
         if failures:
             typer.echo("")
             typer.echo("Failures")
-            for failure in failures:
-                typer.echo(
-                    f"- config={failure['config']} dataset={failure['dataset']} "
-                    f"years={failure['years']} error={failure['error']}"
-                )
+            for f in failures:
+                typer.echo(f"- config={f['config']} dataset={f['dataset']} error={f['error']}")
 
     if failures:
         raise typer.Exit(code=1)
@@ -939,30 +816,34 @@ def _run_batch(
 # ---------------------------------------------------------------------------
 
 
-def _execute_pipeline(
+def _run_pipeline(
     config: str | None,
-    years: str | None,
-    smoke: bool,
-    sample_rows: int | None,
-    sample_bytes: int | None,
-    root: str | None,
-    json_output: bool,
-    dry_run: bool,
-) -> None:
+    years: str | None = None,
+    step: str = "all",
+    smoke: bool = False,
+    sample_rows: int | None = None,
+    sample_bytes: int | None = None,
+    root: str | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
     """Esegue pre-flight + support + raw → clean → mart.
 
-    Core della pipeline completa. Chiamata dal comando ``toolkit run``
-    (default) e da ``run_full()`` (deprecato).
+    Versione pura senza output: non stampa nulla, non alza eccezioni CLI.
+    Restituisce un dict con esito, step e readiness.
 
     Args:
         config: Path/slug per dataset.yml, o None per auto-detect CWD.
         years: Anni separati da virgola, o None per tutti quelli configurati.
+        step: Step da eseguire (raw, clean, mart, all). Default ``all``.
         smoke: Se True, attiva --sample-rows 1000 --sample-bytes 1048576.
         sample_rows: Limite righe in CLEAN (LIMIT su output SQL).
         sample_bytes: Limite bytes in RAW (HTTP Range + troncamento).
         root: Override root output directory.
-        json_output: Se True, stampa report JSON su stdout.
         dry_run: Se True, solo plan senza esecuzione.
+
+    Returns:
+        Dict con ``status`` (``passed``/``failed``), ``steps`` (per anno),
+        ``config``, ``years``, e readiness per ogni layer.
     """
     dry_flag = dry_run if isinstance(dry_run, bool) else False
 
@@ -970,7 +851,6 @@ def _execute_pipeline(
     sample_bytes_final = 1048576 if smoke else sample_bytes
     sample_mode = sample_rows_final is not None or sample_bytes_final is not None
 
-    # Qualsiasi forma di campionamento isola l'output in {root}/smoke
     sampling_active = sample_rows_final is not None or sample_bytes_final is not None
     root_override_final = root
     if sampling_active and not root and config is not None:
@@ -983,6 +863,7 @@ def _execute_pipeline(
 
     results: dict[str, Any] = {
         "config": config,
+        "dataset_name": cfg.dataset,
         "years": selected_years,
         "steps": {},
         "status": "passed",
@@ -994,7 +875,6 @@ def _execute_pipeline(
     config_check = run_config_check(cfg, config)
     results["config_check"] = config_check
     if not config_check.get("ok", False):
-        # In dry-run il config check è meno severo: config senza fonti va bene
         if dry_flag:
             logger.warning(
                 "Config: %s (dry-run, continua)", "; ".join(config_check.get("errors", []))
@@ -1002,9 +882,7 @@ def _execute_pipeline(
         else:
             logger.error("Config validation failed — aborting")
             results["status"] = "failed"
-            if json_output:
-                typer.echo(json.dumps(results, indent=2, default=str))
-            raise typer.Exit(code=1)
+            return results
     for warn in config_check.get("warnings", []):
         logger.warning("Config: %s", warn)
 
@@ -1023,7 +901,7 @@ def _execute_pipeline(
                 sum(1 for s in preflight["sources"] if not s["reachable"]),
             )
 
-    # Process support datasets (dichiarati in dataset.yml con support:)
+    # Process support datasets
     support_entries = cfg.support or []
     if support_entries:
         logger.info(
@@ -1034,7 +912,7 @@ def _execute_pipeline(
             logger.info("Support: %s — %s", entry.name, entry.config)
 
             if dry_flag:
-                typer.echo(f"  [dry-run] support: {entry.name} — years={entry.years}")
+                logger.info("  [dry-run] support: %s — years=%s", entry.name, entry.years)
                 continue
 
             try:
@@ -1080,11 +958,11 @@ def _execute_pipeline(
             if results["status"] == "failed":
                 break
 
+    # ── Candidate ────────────────────────────────────────────────────────
     candidate_blocked = results["status"] == "failed" and not dry_flag
-    _candidate_exc: Exception | None = None
     if not candidate_blocked:
-        is_mart_only = _is_mart_only_cfg(cfg)
-        run_step = "mart" if is_mart_only else "all"
+        is_mart_only = cfg.is_mart_only
+        run_step = "mart" if (is_mart_only and step == "all") else step
         fail_on_error_flag = bool(cfg.validation.fail_on_error)
 
         for year in selected_years:
@@ -1105,7 +983,6 @@ def _execute_pipeline(
                 logger.error("Run %s year=%s fallito: %s", run_step, year, exc)
                 results["steps"][str(year)] = {"run": "failed", "validate": "failed"}
                 results["status"] = "failed"
-                _candidate_exc = exc
                 break
 
             if not dry_flag:
@@ -1124,9 +1001,7 @@ def _execute_pipeline(
                 if not all_passed and fail_on_error_flag:
                     results["status"] = "failed"
 
-                from toolkit.domain.readiness import (
-                    review_readiness as _review_readiness,
-                )
+                from toolkit.domain.readiness import review_readiness as _review_readiness
 
                 readiness = _review_readiness(config, year or None)
                 results["steps"][str(year)]["readiness"] = readiness.get("readiness")
@@ -1135,7 +1010,7 @@ def _execute_pipeline(
                 results["steps"][str(year)]["checks_fail"] = readiness.get("fail_count", 0)
                 results["steps"][str(year)]["layers"] = readiness.get("layers", {})
 
-        if _candidate_exc is None and not dry_flag and _has_multi_year_mart(cfg):
+        if results["status"] == "passed" and not dry_flag and cfg.has_multi_year_mart:
             try:
                 _maybe_run_multi_year_mart(
                     cfg,
@@ -1150,59 +1025,84 @@ def _execute_pipeline(
                 if fail_on_error_flag:
                     results["status"] = "failed"
 
-    if _candidate_exc is not None:
-        raise _candidate_exc
+    return results
+
+
+def _execute_pipeline(
+    config: str | None,
+    years: str | None,
+    smoke: bool,
+    sample_rows: int | None,
+    sample_bytes: int | None,
+    root: str | None,
+    json_output: bool,
+    dry_run: bool,
+) -> None:
+    """Wrapper CLI: esegue _run_pipeline e stampa output su stdout."""
+    results = _run_pipeline(
+        config,
+        years,
+        step="all",
+        smoke=smoke,
+        sample_rows=sample_rows,
+        sample_bytes=sample_bytes,
+        root=root,
+        dry_run=dry_run,
+    )
 
     if json_output:
         typer.echo(json.dumps(results, indent=2, default=str))
-    else:
-        status = results["status"]
-        typer.echo(f"config: {config}")
-        typer.echo(f"years: {selected_years}")
-        typer.echo(f"status: {status}")
-        for y, s in results["steps"].items():
-            typer.echo(f"  {y}: run={s['run']} validate={s['validate']}")
-            lyrs = s.get("layers", {})
-            for lname in ("raw", "clean", "mart"):
-                ln = lyrs.get(lname) or {}
-                lv = ln.get("validation") or {}
-                ok = lv.get("ok")
-                qs = lv.get("quality_score")
-                icon = "✅" if ok else ("🔴" if ok is False else "·")
-                parts = []
-                if qs is not None:
-                    parts.append(f"qs={qs}")
-                if lname == "raw":
-                    pf = ln.get("profile") or {}
-                    if pf.get("encoding"):
-                        parts.append(f"encoding={pf['encoding']}")
-                    if pf.get("delim"):
-                        parts.append(f"delim={pf['delim']}")
-                    pw = ln.get("profile_warnings") or []
-                    if pw:
-                        parts.append(f"{len(pw)} warning")
-                elif lname == "clean":
-                    rc = lv.get("row_count") or ln.get("row_count")
-                    cc = lv.get("col_count")
-                    if rc is not None:
-                        parts.append(f"{rc} righe")
-                    if cc is not None:
-                        parts.append(f"{cc} colonne")
-                    tr = ln.get("transition") or {}
-                    if tr.get("row_drop_pct") is not None:
-                        parts.append(f"raw->clean: {tr['row_drop_pct']}% righe")
-                elif lname == "mart":
-                    tbl = ln.get("tables") or []
-                    ready = sum(1 for t in tbl if t.get("readable"))
-                    parts.append(f"{ready}/{len(tbl)} tabelle")
-                typer.echo(
-                    f"       {lname}: {icon}  {'  '.join(parts)}"
-                    if parts
-                    else f"       {lname}: {icon}"
-                )
+        if results["status"] != "passed":
+            raise typer.Exit(code=1)
+        return
+
+    status = results["status"]
+    typer.echo(f"config: {config}")
+    typer.echo(f"years: {results['years']}")
+    typer.echo(f"status: {status}")
+    for y, s in results.get("steps", {}).items():
+        typer.echo(f"  {y}: run={s['run']} validate={s['validate']}")
+        lyrs = s.get("layers", {})
+        for lname in ("raw", "clean", "mart"):
+            ln = lyrs.get(lname) or {}
+            lv = ln.get("validation") or {}
+            ok = lv.get("ok")
+            qs = lv.get("quality_score")
+            icon = "✅" if ok else ("🔴" if ok is False else "·")
+            parts = []
+            if qs is not None:
+                parts.append(f"qs={qs}")
+            if lname == "raw":
+                pf = ln.get("profile") or {}
+                if pf.get("encoding"):
+                    parts.append(f"encoding={pf['encoding']}")
+                if pf.get("delim"):
+                    parts.append(f"delim={pf['delim']}")
+                pw = ln.get("profile_warnings") or []
+                if pw:
+                    parts.append(f"{len(pw)} warning")
+            elif lname == "clean":
+                rc = lv.get("row_count") or ln.get("row_count")
+                cc = lv.get("col_count")
+                if rc is not None:
+                    parts.append(f"{rc} righe")
+                if cc is not None:
+                    parts.append(f"{cc} colonne")
+                tr = ln.get("transition") or {}
+                if tr.get("row_drop_pct") is not None:
+                    parts.append(f"raw->clean: {tr['row_drop_pct']}% righe")
+            elif lname == "mart":
+                tbl = ln.get("tables") or []
+                ready = sum(1 for t in tbl if t.get("readable"))
+                parts.append(f"{ready}/{len(tbl)} tabelle")
             typer.echo(
-                f"       readiness: {s.get('readiness', '?')}  ({s.get('checks_ok', 0)}/{s.get('checks', 0)})"
+                f"       {lname}: {icon}  {'  '.join(parts)}"
+                if parts
+                else f"       {lname}: {icon}"
             )
+        typer.echo(
+            f"       readiness: {s.get('readiness', '?')}  ({s.get('checks_ok', 0)}/{s.get('checks', 0)})"
+        )
 
     if results["status"] != "passed":
         raise typer.Exit(code=1)

@@ -1,6 +1,6 @@
 # ADR-003: Config Pydantic con migrazione graduale da dict
 
-**Status:** implemented (2026-04), bridge `_compat_*` rimosso (2026-05)
+**Status:** superseded (2026-07-30) — sostituito da dataclass semplici (PR #435)
 
 ## Contesto
 
@@ -11,7 +11,7 @@ a ~20 sezioni annidate con tipi specifici (Path, liste, enum, bool da stringa).
 Serviva un modo per validare il YAML all'ingresso con errori espliciti,
 mantenendo la compatibilità con le config esistenti in `dataset-incubator`.
 
-## Decisione
+## Decisione originale
 
 **Fase 1 (v1.0, 2026-02):** Pydantic v2 per il parsing + bridge `_compat_*` per
 convertire i modelli in dict, mantenendo tutta la pipeline downstream su dict.
@@ -30,19 +30,40 @@ YAML → Pydantic models → _CompatModel wrapper → pipeline
                               dict-style .get() per retrocompat
 ```
 
-## Conseguenze
+## Conseguenze (all'epoca)
 
-**Positive:**
-- Errori di configurazione espliciti e leggibili (DCL001-DCL013)
-- Campi legacy rifiutati con messaggio chiaro invece di warning ignorati
-- Type checking progressivo (mypy ora rileva accessi a campi inesistenti)
-- `_CompatModel.__eq__` confronta automaticamente con dict per test retrocompat
+- Errori di configurazione espliciti e leggibili
+- Campi legacy rifiutati con messaggio chiaro
+- Type checking progressivo (mypy)
+- Complessità del wrapper `_CompatModel`
+- `isinstance(x, dict)` non funzionava più
+- Doppia manutenzione per interfaccia dict
 
-**Negative:**
-- Complessità del wrapper `_CompatModel` (mantenere due interfacce sul mismo oggetto)
-- `isinstance(x, dict)` nei consumatori non funziona più — richiesto refactor
-- `exclude_unset=True` significa che campi non configurati non appaiono in model_dump
-- Doppia manutenzione finché tutti i consumatori non migrano ad accesso tipizzato
+## Perché è stato superseded
 
-**Status attuale:** tutti i consumatori interni del toolkit migrati. Dataset-incubator
-usa ancora l'interfaccia dict (compatibile via `_CompatModel.get()`).
+L'architettura Pydantic + `_CompatModel` introduceva complessità sproporzionata
+per il beneficio. Il wrapper `_CompatModel` doveva mantenere due interfacce
+sullo stesso oggetto, e i consumatori downstream (soprattutto dataset-incubator)
+continuavano a usare l'interfaccia dict.
+
+**PR #435 (2026-07-30):** 24 modelli Pydantic → 1 dataclass `PipelineConfig`.
+
+| Componente | Prima | Dopo |
+|---|---|---|
+| Modelli | 24 Pydantic models | 1 dataclass (`PipelineConfig`) |
+| Parsing | Pydantic v2 | `yaml.safe_load` + validazione inline |
+| Wrapper | `_CompatModel` (dict access) | Nessuno — dataclass pura |
+| Righe nette | ~1.200 | ~300 (-1.089) |
+| `isinstance(x, dict)` | Non funzionava | Funziona (`PipelineConfig` è un oggetto normale) |
+| Type checking | mypy su Pydantic generics | mypy su dataclass semplici |
+
+La validazione è ora inline in `load_config()`: errori espliciti
+(es. "Sezione 'dataset' mancante") senza codici DCL né schema Pydantic.
+
+## Lezioni apprese
+
+- Pydantic è overengineering per un carico di configurazione stabile (< 20 sezioni).
+- Un wrapper di compatibilità raddoppia la superficie di manutenzione.
+- La validazione inline con messaggi espliciti è più facile da debuggare
+  rispetto a errori Pydantic generici.
+- Le dataclass sono sufficienti quando il modello è conosciuto a compile-time.

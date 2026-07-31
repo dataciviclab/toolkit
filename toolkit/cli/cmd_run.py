@@ -1006,7 +1006,7 @@ def _run_pipeline(
 
                 from toolkit.domain.readiness import review_readiness as _review_readiness
 
-                readiness = _review_readiness(config, year or None)
+                readiness = _review_readiness(str(cfg.base_dir / "dataset.yml"), year or None)
                 results["steps"][str(year)]["readiness"] = readiness.get("readiness")
                 results["steps"][str(year)]["checks"] = readiness.get("check_count", 0)
                 results["steps"][str(year)]["checks_ok"] = readiness.get("ok_count", 0)

@@ -146,6 +146,29 @@ def _print_layer_profiles(dataset: str, year: int, layers: dict[str, Any]) -> No
                 )
 
 
+def _print_readiness(readiness: dict[str, Any]) -> None:
+    """Stampa verdict readiness + check (se disponibili)."""
+    verdict = readiness.get("readiness")
+    if not verdict:
+        return
+    icon = {"ready": "✅", "needs-review": "⚠️", "incomplete": "🔴"}.get(verdict, "·")
+    typer.echo("")
+    typer.echo(
+        f"readiness: {icon} {verdict}  "
+        f"({readiness.get('ok_count', 0)}/{readiness.get('check_count', 0)} ok, "
+        f"{readiness.get('fail_count', 0)} fail)"
+    )
+    for check in readiness.get("checks") or []:
+        ok = check.get("ok")
+        c_icon = "✅" if ok else ("🔴" if ok is False else "·")
+        detail = check.get("detail")
+        if isinstance(detail, list):
+            detail = f"{len(detail)} output"
+        elif isinstance(detail, str) and len(detail) > 70:
+            detail = detail[:70] + "..."
+        typer.echo(f"  {c_icon} {check.get('check', '?')}: {detail or ''}")
+
+
 def summary(
     config: str | None = typer.Option(None, "--config", "-c", help="Path or slug to dataset.yml"),
     year: int | None = typer.Option(None, "--year", "-y", help="Dataset year (default: first)"),
@@ -298,6 +321,15 @@ def summary(
                 typer.echo(f"    - {t.get('name', '?')} years={t.get('years', [])}")
 
     _print_layer_profiles(ds_name, yr, layers)
+
+    if not as_json:
+        try:
+            from toolkit.domain.readiness import review_readiness as _review_readiness
+
+            readiness = _review_readiness(str(cfg.base_dir / "dataset.yml"), yr)
+            _print_readiness(readiness)
+        except (FileNotFoundError, ValueError, OSError):
+            pass
 
     if record.get("status") == "FAILED" and record.get("error"):
         typer.echo("")

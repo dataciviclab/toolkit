@@ -757,6 +757,9 @@ def _run_batch(
                     dry_run=dry_run,
                 )
                 status = "SUCCESS" if results["status"] == "passed" else "FAILED"
+                # In dry-run, un esito ok e' un piano valido, non una run eseguita
+                if status == "SUCCESS" and dry_run:
+                    status = "DRY_RUN"
                 dataset_label = results.get("dataset_name") or dataset_label
             except Exception as exc:
                 status = "FAILED"
@@ -768,7 +771,7 @@ def _run_batch(
                 {
                     "dataset": dataset_label,
                     "config": str(config_path),
-                    "years": str(results.get("years")) if status == "SUCCESS" else "-",
+                    "years": str(results.get("years")) if status in ("SUCCESS", "DRY_RUN") else "-",
                     "status": status,
                     "duration": f"{perf_counter() - started_at:.3f}s",
                 }
@@ -780,8 +783,8 @@ def _run_batch(
                 {
                     "summary": {
                         "total": len(rows),
-                        "passed": sum(1 for r in rows if r["status"] == "SUCCESS"),
-                        "failed": sum(1 for r in rows if r["status"] != "SUCCESS"),
+                        "passed": sum(1 for r in rows if r["status"] in ("SUCCESS", "DRY_RUN")),
+                        "failed": sum(1 for r in rows if r["status"] not in ("SUCCESS", "DRY_RUN")),
                     },
                     "rows": rows,
                     "failures": failures,
@@ -807,7 +810,7 @@ def _run_batch(
             for f in failures:
                 typer.echo(f"- config={f['config']} dataset={f['dataset']} error={f['error']}")
 
-    if failures:
+    if failures or any(r["status"] not in ("SUCCESS", "DRY_RUN") for r in rows):
         raise typer.Exit(code=1)
 
 

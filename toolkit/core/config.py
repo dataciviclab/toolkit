@@ -574,6 +574,11 @@ def ensure_dict(cfg: Any) -> Any:
     """Convert a config section to a plain dict for runner layers.
 
     Handles dataclasses, old Pydantic models, dicts, and lists.
+
+    Nota: per le dataclass i campi a ``None`` vengono esclusi
+    (``{k: v ... if v is not None}``). I consumer devono usare
+    ``.get()``, non ``in``/``.keys()``. Questo replica il comportamento
+    del vecchio ``cli.common.dump_cfg_section`` (rimosso).
     """
     if hasattr(cfg, "to_dict"):
         return cfg.to_dict()

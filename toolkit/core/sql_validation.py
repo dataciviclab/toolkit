@@ -1,0 +1,234 @@
+from __future__ import annotations
+
+import logging
+import re
+from typing import Any
+
+import duckdb
+from lab_connectors.duckdb import safe_connect
+
+from toolkit.core.constants import RAW_INPUT_VIEW, CLEAN_INPUT_VIEW
+from toolkit.clean.run import load_clean_sql
+from toolkit.clean.sql_execute import _load_standard_macros
+from toolkit.core.config import ensure_dict
+from toolkit.core.paths import resolve_sql_path as _resolve_mart_sql_path
+from toolkit.core.sql_utils import q_ident
+from toolkit.core.support import (
+    check_support_path_drift,
+    flatten_support_template_ctx,
+    resolve_support_payloads,
+)
+from toolkit.core.template import build_runtime_template_ctx, render_template
+
+_logger = logging.getLogger("toolkit.core.sql_validation")
+
+_QUOTED_IDENTIFIER_RE = re.compile(r'"([^"]+)"')
+_BINDER_MISSING_COLUMN_RE = re.compile(r'Referenced column "([^"]+)" not found in FROM clause')
+
+
+def _dedupe_preserve_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
+
+
+def _placeholder_columns(clean_cfg: dict[str, Any], sql: str) -> list[str]:
+    columns: list[str] = []
+    read_cfg = clean_cfg.get("read") or {}
+    read_columns = read_cfg.get("columns") or {}
+    if isinstance(read_columns, dict):
+        columns.extend(str(name) for name in read_columns.keys())
+
+    # Fallback minimale: raccoglie identifier quoted dal SQL per costruire un
+    # raw_input placeholder abbastanza utile nel dry-run. E' deliberatamente
+    # approssimativo: puo' includere nomi non-colonna e non copre colonne non
+    # quotate se non sono gia' dichiarate in clean.read.columns.
+    columns.extend(match.group(1) for match in _QUOTED_IDENTIFIER_RE.finditer(sql))
+    return _dedupe_preserve_order(columns)
+
+
+def _normalize_sql(sql: str) -> str:
+    return sql.strip().rstrip(";").strip()
+
+
+def _create_placeholder_raw_input_with_columns(
+    con: duckdb.DuckDBPyConnection,
+    columns: list[str],
+) -> None:
+    if columns:
+        projection = ", ".join(f"NULL::VARCHAR AS {q_ident(name)}" for name in columns)
+    else:
+        projection = "NULL::VARCHAR AS __dry_run_placeholder"
+    con.execute(f"CREATE OR REPLACE VIEW {RAW_INPUT_VIEW} AS SELECT {projection} LIMIT 0")
+
+
+def _extract_missing_binder_column(exc: Exception) -> str | None:
+    match = _BINDER_MISSING_COLUMN_RE.search(str(exc))
+    if not match:
+        return None
+    return match.group(1)
+
+
+def _build_clean_preview(
+    cfg,
+    *,
+    year: int,
+    con: duckdb.DuckDBPyConnection,
+    support_cfg: list[dict[str, Any]] | None = None,
+    dry_run: bool = False,
+) -> None:
+    clean_cfg_ = ensure_dict(cfg.clean)
+    clean_sql_path, clean_sql, _ = load_clean_sql(
+        clean_cfg_,
+        dataset=cfg.dataset,
+        year=year,
+        root=cfg.root,
+        base_dir=cfg.base_dir,
+        support_cfg=support_cfg,
+    )
+
+    clean_sql = _normalize_sql(clean_sql)
+    columns = _placeholder_columns(clean_cfg_, clean_sql)
+
+    # Pre-calcola i path attesi del support per gestire IOError in dry-run
+    support_paths: list[str] = []
+    support_payloads_drift: list[dict[str, Any]] = []
+    if dry_run and support_cfg:
+        try:
+            sp_payloads = resolve_support_payloads(support_cfg, require_exists=False, smoke=False)
+            support_paths = _all_support_expected_paths(sp_payloads)
+            support_payloads_drift = sp_payloads
+        except Exception:
+            pass
+
+    # Anti-path-drift: verifica che il SQL non referenzi support dataset
+    # via path hardcoded invece di {support.NAME.mart}
+    if support_payloads_drift:
+        raw_sql_text = clean_sql_path.read_text(encoding="utf-8")
+        drift_warnings = check_support_path_drift(
+            raw_sql_text, support_payloads_drift, sql_label=str(clean_sql_path)
+        )
+        for w in drift_warnings:
+            _logger.warning("PATH DRIFT: %s", w)
+
+    # Fallback incrementale: se il clean.sql usa colonne raw non quotate e non
+    # dichiarate in clean.read.columns, il binder di DuckDB ci dice il nome
+    # mancante. Lo aggiungiamo al placeholder e riproviamo, cosi' il dry-run
+    # evita falsi positivi banali senza provare a parsare SQL completo.
+    for _ in range(25):
+        _create_placeholder_raw_input_with_columns(con, columns)
+        try:
+            con.execute(
+                f"CREATE OR REPLACE TABLE __dry_run_clean_preview AS SELECT * FROM ({clean_sql}) AS q LIMIT 0"
+            )
+            return
+        except Exception as exc:
+            err_msg = str(exc)
+            # In dry-run, read_parquet su file support non ancora generato è OK
+            if dry_run and "No files found that match the pattern" in err_msg:
+                if support_paths and any(sp in err_msg for sp in support_paths):
+                    # Crea un placeholder minimo per non bloccare mart validation
+                    con.execute(
+                        "CREATE OR REPLACE TABLE __dry_run_clean_preview AS SELECT NULL::VARCHAR AS __support_placeholder LIMIT 0"
+                    )
+                    return
+
+            missing = _extract_missing_binder_column(exc)
+            if missing and missing not in columns:
+                columns.append(missing)
+                continue
+            raise ValueError(f"CLEAN SQL dry-run failed ({clean_sql_path}): {exc}") from exc
+
+    raise ValueError(
+        f"CLEAN SQL dry-run failed ({clean_sql_path}): exceeded placeholder inference attempts"
+    )
+
+
+def _all_support_expected_paths(support_payloads: list[dict[str, Any]]) -> list[str]:
+    """All support mart output paths attesi (anche se non esistono ancora)."""
+    paths: list[str] = []
+    for entry in support_payloads:
+        paths.extend(entry.get("outputs", []))
+    return paths
+
+
+def _validate_mart_sql(
+    cfg, *, year: int, con: duckdb.DuckDBPyConnection, dry_run: bool = False
+) -> None:
+    clean_cfg_ = ensure_dict(cfg.clean)
+    mart_cfg_ = ensure_dict(cfg.mart)
+    if clean_cfg_.get("sql"):
+        con.execute(
+            f"CREATE OR REPLACE VIEW {CLEAN_INPUT_VIEW} AS SELECT * FROM __dry_run_clean_preview"
+        )
+
+    tables = mart_cfg_.get("tables") or []
+    # In dry-run: require_exists=False per non bloccare candidate senza support
+    # ancora generati. Se DuckDB fallisce su read_parquet (file non esiste),
+    # il dry-run lo registra come avviso ma non blocca.
+    support_payloads = resolve_support_payloads(
+        ensure_dict(cfg.support), require_exists=not dry_run
+    )
+    template_ctx = build_runtime_template_ctx(
+        dataset=cfg.dataset,
+        year=year,
+        root=cfg.root,
+        base_dir=cfg.base_dir,
+        support=flatten_support_template_ctx(support_payloads),
+    )
+
+    for table in tables:
+        name = table.get("name")
+        sql_ref = table.get("sql")
+        sql_path = _resolve_mart_sql_path(sql_ref, base_dir=cfg.base_dir)
+        raw_sql_text = sql_path.read_text(encoding="utf-8")
+        # Anti-path-drift: verifica che il SQL non referenzi support dataset
+        # via path hardcoded invece di {support.NAME.mart}
+        if support_payloads:
+            drift_warnings = check_support_path_drift(
+                raw_sql_text, support_payloads, sql_label=f"{sql_path} ({name})"
+            )
+            for w in drift_warnings:
+                _logger.warning("PATH DRIFT: %s", w)
+        sql = _normalize_sql(render_template(raw_sql_text, template_ctx))
+        try:
+            con.execute(f"EXPLAIN SELECT * FROM ({sql}) AS q LIMIT 0")
+        except Exception as exc:
+            err_msg = str(exc)
+            # In dry-run, DuckDB puo' fallire su read_parquet se il file support
+            # non esiste ancora (placeholder {support.*.mart}). Verifichiamo che
+            # l'errore riguardi un path support atteso, non un qualsiasi IO Error.
+            if dry_run and "No files found that match the pattern" in err_msg:
+                support_paths = _all_support_expected_paths(support_payloads)
+                if support_paths and any(sp in err_msg for sp in support_paths):
+                    continue
+            raise ValueError(f"MART SQL dry-run failed ({name}, {sql_path}): {exc}") from exc
+
+
+def validate_sql_dry_run(cfg, *, year: int, layers: list[str], dry_run: bool = False) -> None:
+    if not any(layer in {"clean", "mart"} for layer in layers):
+        return
+
+    # ── Config check (zero network I/O, sempre) ─────────────────────────
+    from toolkit.domain.preflight import run_config_check
+
+    config_check = run_config_check(cfg, cfg.base_dir / "dataset.yml")
+    if not config_check.get("ok", False):
+        for err in config_check.get("errors", []):
+            _logger.error("CONFIG ERR: %s", err)
+    for warn in config_check.get("warnings", []):
+        _logger.warning("CONFIG WARN: %s", warn)
+
+    with safe_connect() as con:
+        _load_standard_macros(con, logger=None)
+        if cfg.clean.sql:
+            _build_clean_preview(
+                cfg, year=year, con=con, support_cfg=ensure_dict(cfg.support), dry_run=dry_run
+            )
+        if "mart" in layers:
+            _validate_mart_sql(cfg, year=year, con=con, dry_run=dry_run)

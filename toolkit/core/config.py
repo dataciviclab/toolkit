@@ -542,6 +542,23 @@ class PipelineConfig:
             return p
         return (self.base_dir / p).resolve()
 
+    @property
+    def is_mart_only(self) -> bool:
+        """``True`` se il dataset ha solo configurazione MART (no CLEAN SQL)."""
+        return not bool(self.clean.sql)
+
+    @property
+    def has_multi_year_mart(self) -> bool:
+        """``True`` se una tabella MART ha years espliciti (multi-year)."""
+        return any(t.years for t in self.mart.tables)
+
+    @property
+    def has_single_year_mart(self) -> bool:
+        """``True`` se una tabella MART non ha years (per-year) o c'è hierarchy."""
+        has_single_year = any(not t.years for t in self.mart.tables)
+        has_hierarchy = self.mart.hierarchy is not None
+        return has_single_year or has_hierarchy
+
 
 # Backward compat aliases
 ToolkitConfig = PipelineConfig
@@ -557,6 +574,11 @@ def ensure_dict(cfg: Any) -> Any:
     """Convert a config section to a plain dict for runner layers.
 
     Handles dataclasses, old Pydantic models, dicts, and lists.
+
+    Nota: per le dataclass i campi a ``None`` vengono esclusi
+    (``{k: v ... if v is not None}``). I consumer devono usare
+    ``.get()``, non ``in``/``.keys()``. Questo replica il comportamento
+    del vecchio ``cli.common.dump_cfg_section`` (rimosso).
     """
     if hasattr(cfg, "to_dict"):
         return cfg.to_dict()

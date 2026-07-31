@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from pathlib import Path
 
@@ -14,6 +15,11 @@ from toolkit.cli.app import app
 from toolkit.cli.cmd_run import run_year
 from toolkit.core.config import load_config
 from tests.helpers import make_dataset_yml, make_standard_sql
+
+
+def _normalized(text: str) -> str:
+    """Collassa spazi e newline (il logger rich spezza le righe)."""
+    return re.sub(r"\s+", " ", text)
 
 
 # ── Basic patterns ──────────────────────────────────────────────────────────
@@ -66,7 +72,12 @@ def test_run_dry_run_fails_on_clean_sql_syntax_error(tmp_path: Path, runner) -> 
     result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code != 0
-    assert "CLEAN SQL dry-run failed" in str(result.exception)
+    # Il logger rich spezza le righe e inserisce il path del file:
+    # "CLEAN SQL cmd_run.py:986 dry-run failed (...)". Verifichiamo le parti.
+    normalized = _normalized(result.output)
+    assert "CLEAN SQL" in normalized
+    assert "dry-run failed" in normalized
+    assert "Parser Error" in normalized
 
 
 @pytest.mark.policy
@@ -90,7 +101,10 @@ def test_run_dry_run_fails_on_mart_sql_binding_error(tmp_path: Path, runner) -> 
     result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code != 0
-    assert "MART SQL dry-run failed" in str(result.exception)
+    normalized = _normalized(result.output)
+    assert "MART SQL" in normalized
+    assert "dry-run failed" in normalized
+    assert "Binder Error" in normalized
 
 
 @pytest.mark.policy
@@ -532,9 +546,8 @@ def test_run_all_fails_with_bootstrap_hint_when_clean_sql_missing(
     result = runner.invoke(app, ["run", "--config", str(config_path)])
 
     assert result.exit_code != 0
-    exc_text = str(result.exception)
-    assert "CLEAN SQL file not found" in exc_text
-    assert "toolkit run raw" in exc_text
+    assert "CLEAN SQL" in result.output
+    assert "toolkit run raw" in result.output
 
 
 # ── Probe step contract tests ────────────────────────────────────────────────

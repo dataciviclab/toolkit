@@ -217,3 +217,30 @@ class ProbePool:
 
     def __exit__(self, *args: Any) -> None:
         self.close()
+
+
+# ---------------------------------------------------------------------------
+# Probe format hint
+# ---------------------------------------------------------------------------
+
+_PROBE_FORMATS: dict[str, str] = {
+    "text/csv": "CSV",
+    "text/tab-separated-values": "TSV",
+    "application/json": "JSON",
+    "application/xml": "XML",
+    "application/zip": "ZIP",
+    "application/gzip": "GZ",
+    "application/pdf": "PDF",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
+    "application/vnd.ms-excel": "XLS",
+    "application/vnd.oasis.opendocument.spreadsheet": "ODS",
+    "text/html": "HTML",
+}
+
+
+def probe_fmt(content_type: str | None) -> str:
+    """Riduce un content-type MIME a un formato leggibile (es. XLSX, CSV)."""
+    if not content_type:
+        return "?"
+    base = content_type.split(";")[0].strip().lower()
+    return _PROBE_FORMATS.get(base, base)

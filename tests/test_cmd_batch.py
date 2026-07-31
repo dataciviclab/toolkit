@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from toolkit.cli._batch_helpers import format_duration, format_years
 from toolkit.cli.cmd_run import _read_config_list
 
 pytestmark = pytest.mark.pure_unit
@@ -142,37 +141,3 @@ class TestReadConfigList:
         )
         result = _read_config_list(configs_file)
         assert len(result) == 1
-
-
-class TestFormatYears:
-    def test_none(self) -> None:
-        assert format_years(None) == "-"
-
-    def test_empty_list(self) -> None:
-        assert format_years([]) == "-"
-
-    def test_single_year(self) -> None:
-        assert format_years([2023]) == "2023"
-
-    def test_multiple_years(self) -> None:
-        assert format_years([2021, 2022, 2023]) == "2021,2022,2023"
-
-    def test_returns_string(self) -> None:
-        assert isinstance(format_years([2020]), str)
-
-
-class TestFormatDuration:
-    def test_none_returns_dash(self) -> None:
-        assert format_duration(None) == "-"
-
-    def test_seconds_formatted(self) -> None:
-        assert format_duration(1.234) == "1.234s"
-
-    def test_zero(self) -> None:
-        assert format_duration(0.0) == "0.000s"
-
-    def test_rounds_to_3_decimals(self) -> None:
-        assert format_duration(1.23456789) == "1.235s"
-
-    def test_returns_string(self) -> None:
-        assert isinstance(format_duration(1.0), str)

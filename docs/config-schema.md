@@ -27,6 +27,12 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 | `dataset.years` | `list[int]` | nessuno |
 | `dataset.tags` | `list[string]` | `[]` |
 | `dataset.category` | `string \| null` | `null` |
+| `dataset.time_coverage` | `{start_year: int, end_year: int} \| null` | `null` |
+
+`time_coverage` dichiara l'intervallo temporale del contenuto (non degli anni di
+run). Esposto dal `dataset_loader` (manifest) e dal layer tool per la
+catalogazione; usato dai candidate per serie storiche (es. `ga-sentenze`:
+2023-2026). Opzionale ma raccomandato per serie storiche.
 
 ## raw
 

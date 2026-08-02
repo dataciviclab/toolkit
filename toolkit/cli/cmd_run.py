@@ -342,7 +342,7 @@ def run_year(
         # validate da run_mart_multi_year a livello dataset). Registrare
         # una validazione mart "skippata" (passed) per non far fallire il
         # run per-anno (issue #445).
-        skipped_summary = {
+        skipped_summary: dict[str, Any] = {
             "passed": True,
             "errors_count": 0,
             "warnings_count": 0,

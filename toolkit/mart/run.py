@@ -51,7 +51,7 @@ def _validate_multi_year_tables(
     la validazione per-anno le escludeva (tabelle non nel dir per-anno) e
     il passaggio multi-year non validava nulla.
     """
-    multi_year_names = {t.get("name") for t in multi_year_tables if t.get("name")}
+    multi_year_names: set[str] = {str(t.get("name")) for t in multi_year_tables if t.get("name")}
     validate_rules = (mart_cfg.get("validate") or {}).get("table_rules") or {}
     required_tables = (mart_cfg.get("required_tables") or []) or []
 

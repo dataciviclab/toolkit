@@ -31,7 +31,6 @@ from toolkit.core.paths import (
 from toolkit.core.sql_utils import sql_path as _sql_path_quote
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
-from toolkit.mart.validate import validate_mart
 
 
 _CLEAN_INPUT_TOKEN_RE = re.compile(rf"\b{CLEAN_INPUT_VIEW}\b", re.IGNORECASE)
@@ -59,6 +58,11 @@ def _validate_multi_year_tables(
         name: rule for name, rule in validate_rules.items() if name in multi_year_names
     }
     multi_year_required = [t for t in required_tables if t in multi_year_names]
+
+    # Import locale: evita di caricare validate_mart al module-import di run.py
+    # (il dry-run importa run.py e non deve tirare su l'intero stack di
+    # validazione mart).
+    from toolkit.mart.validate import validate_mart
 
     result = validate_mart(
         mart_dir,

@@ -337,32 +337,39 @@ def run_year(
             smoke=sampling_active,
         )
     elif "mart" in layers_to_run and cfg.has_multi_year_mart:
-        # Tutte le tabelle mart sono multi-year: il layer per-anno non ha
-        # nulla da eseguire/validare (le tabelle vengono prodotte e
-        # validate da run_mart_multi_year a livello dataset). Registrare
-        # una validazione mart "skippata" (passed) per non far fallire il
-        # run per-anno (issue #445).
-        skipped_summary: dict[str, Any] = {
-            "passed": True,
-            "errors_count": 0,
-            "warnings_count": 0,
-            "quality_score": None,
-            "quality_verdict": "skipped",
-            "errors": [],
-            "warnings": [],
-            "checks": [],
-            "summary": {
-                "dir": str(layer_year_dir(cfg.root, "mart", cfg.dataset, year)),
-                "skipped": True,
-                "reason": "all mart tables are multi-year (mart.tables[].years) — "
-                "validated at dataset level by run_mart_multi_year",
-            },
-        }
-        validations["mart"] = skipped_summary
-        context.set_validation("mart", skipped_summary)
+        _skip_mart_validation(cfg, year, context, validations)
 
     context.complete_run(success_with_warnings=run_has_validation_warnings)
     return context
+
+
+def _skip_mart_validation(cfg, year: int, context, validations: dict) -> None:
+    """Registra una validazione mart 'skippata' quando tutte le tabelle sono
+    multi-year (issue #445).
+
+    Il layer mart per-anno non ha nulla da eseguire/validare quando tutte le
+    tabelle hanno ``years`` (vengono prodotte e validate da
+    run_mart_multi_year a livello dataset). Senza questo, la validazione
+    mart per-anno resterebbe vuota e il run risulterebbe fallito.
+    """
+    skipped_summary: dict[str, Any] = {
+        "passed": True,
+        "errors_count": 0,
+        "warnings_count": 0,
+        "quality_score": None,
+        "quality_verdict": "skipped",
+        "errors": [],
+        "warnings": [],
+        "checks": [],
+        "summary": {
+            "dir": str(layer_year_dir(cfg.root, "mart", cfg.dataset, year)),
+            "skipped": True,
+            "reason": "all mart tables are multi-year (mart.tables[].years) — "
+            "validated at dataset level by run_mart_multi_year",
+        },
+    }
+    validations["mart"] = skipped_summary
+    context.set_validation("mart", skipped_summary)
 
 
 def _maybe_run_multi_year_mart(

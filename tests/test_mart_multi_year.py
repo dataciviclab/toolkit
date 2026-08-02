@@ -134,3 +134,55 @@ def test_mart_only_multi_year(project_example: Path) -> None:
     assert validation.get("errors_count") == 0, (
         f"multi-year validation errors: {validation.get('errors')}"
     )
+
+
+def test_mart_output_paths_multi_year_resolve_to_dataset_level(tmp_path: Path) -> None:
+    """Le tabelle multi-year risolvono a livello dataset, non per-anno (issue #445).
+
+    Regressione: il path resolver elencava TUTTI gli output mart nel dir
+    per-anno, quindi readiness/summary segnalavano mart_outputs_missing
+    per le tabelle multi-year (scritte a data/mart/{dataset}/{name}.parquet).
+    """
+    from toolkit.core.config import load_config
+    from toolkit.domain.path_resolver import payload_for_year
+
+    root = tmp_path / "out"
+    (root / "data" / "raw" / "demo_ds" / "2022").mkdir(parents=True)
+    cfg_path = tmp_path / "dataset.yml"
+    cfg_path.write_text(
+        "\n".join(
+            [
+                f'root: "{root.as_posix()}"',
+                "dataset:",
+                '  name: "demo_ds"',
+                "  years: [2022]",
+                "raw:",
+                "  sources:",
+                "    - type: local_file",
+                "      args:",
+                '        path: "."',
+                '        filename: "dummy.csv"',
+                "mart:",
+                "  tables:",
+                '    - name: "mart_per_anno"',
+                '      sql: "sql/mart_per_anno.sql"',
+                '    - name: "mart_multi"',
+                '      sql: "sql/mart_multi.sql"',
+                "      years: [2022]",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = load_config(str(cfg_path), strict_config=False)
+    payload = payload_for_year(cfg, 2022)
+    outputs = payload["paths"]["mart"]["outputs"]
+
+    # mart_per_anno -> nel dir per-anno
+    assert any(o.endswith("data/mart/demo_ds/2022/mart_per_anno.parquet") for o in outputs), (
+        f"per-year mart should be in year dir: {outputs}"
+    )
+    # mart_multi -> a livello dataset
+    assert any(o.endswith("data/mart/demo_ds/mart_multi.parquet") for o in outputs), (
+        f"multi-year mart should be at dataset level: {outputs}"
+    )

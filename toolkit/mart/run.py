@@ -36,6 +36,52 @@ from toolkit.core.template import build_runtime_template_ctx, public_template_ct
 _CLEAN_INPUT_TOKEN_RE = re.compile(rf"\b{CLEAN_INPUT_VIEW}\b", re.IGNORECASE)
 
 
+def _validate_multi_year_tables(
+    mart_dir: Path,
+    mart_cfg: dict[str, Any],
+    *,
+    root: str | Path | None,
+    multi_year_tables: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Valida le tabelle multi-year prodotte a livello dataset (issue #445).
+
+    Applica le table_rules e required_tables relative alle tabelle con
+    ``years``. Prima del fix queste regole non venivano mai applicate:
+    la validazione per-anno le escludeva (tabelle non nel dir per-anno) e
+    il passaggio multi-year non validava nulla.
+    """
+    multi_year_names: set[str] = {str(t.get("name")) for t in multi_year_tables if t.get("name")}
+    validate_rules = (mart_cfg.get("validate") or {}).get("table_rules") or {}
+    required_tables = (mart_cfg.get("required_tables") or []) or []
+
+    multi_year_rules = {
+        name: rule for name, rule in validate_rules.items() if name in multi_year_names
+    }
+    multi_year_required = [t for t in required_tables if t in multi_year_names]
+
+    # Import locale: evita di caricare validate_mart al module-import di run.py
+    # (il dry-run importa run.py e non deve tirare su l'intero stack di
+    # validazione mart).
+    from toolkit.mart.validate import validate_mart
+
+    result = validate_mart(
+        mart_dir,
+        required_tables=multi_year_required or None,
+        root=root,
+        table_rules=multi_year_rules,
+        declared_tables=list(multi_year_names),
+    )
+
+    return {
+        "passed": result.ok,
+        "errors_count": len(result.errors),
+        "warnings_count": len(result.warnings),
+        "errors": result.errors,
+        "warnings": result.warnings,
+        "summary": result.summary,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Multi-year mart tables (assorbe ex-cross_year)
 # ---------------------------------------------------------------------------
@@ -145,6 +191,17 @@ def run_mart_multi_year(
                 }
             )
 
+    # Validazione delle tabelle multi-year a livello dataset (issue #445):
+    # le table_rules/required_tables delle tabelle con years vengono
+    # applicate qui, dopo la produzione. Prima questa validazione non
+    # esisteva: le regole multi-year non venivano mai applicate.
+    validation_result = _validate_multi_year_tables(
+        multi_year_dir,
+        mart_cfg,
+        root=root_dir,
+        multi_year_tables=multi_year_tables,
+    )
+
     outputs = [file_record(p) for p in written]
     metadata_payload: dict[str, Any] = {
         "layer": "mart_multi_year",
@@ -154,6 +211,7 @@ def run_mart_multi_year(
         "outputs": outputs,
         "output_paths": [serialize_metadata_path(p, root_dir) for p in written],
         "tables": executed,
+        "validation": validation_result,
     }
     if source_id:
         metadata_payload["source_id"] = source_id
@@ -173,11 +231,17 @@ def run_mart_multi_year(
         or None
     )
     logger.info("MART multi-year -> %s (%d tables)", multi_year_dir, len(written))
+    if not validation_result["passed"]:
+        # La validazione delle tabelle multi-year è fallita: segnalare nel
+        # ritorno per far fallire il run (fail_on_error gestito dal chiamante).
+        logger.error("MART multi-year validation failed: %s", validation_result["errors"])
     return {
         "output_rows": total_rows,
         "output_bytes": total_bytes,
         "tables_count": len(written),
         "col_count": col_count,
+        "validation_passed": validation_result["passed"],
+        "validation_errors": validation_result["errors"],
     }
 
 

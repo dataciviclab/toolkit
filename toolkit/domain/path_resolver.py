@@ -15,6 +15,7 @@ from toolkit.core.paths import (
     METADATA,
     RAW_PROFILE_DIR,
     RAW_SUGGESTED_READ,
+    layer_dataset_dir,
     layer_year_dir,
 )
 from toolkit.core.run_records import get_run_dir, latest_run
@@ -44,16 +45,27 @@ def _clean_paths(root: Path, dataset: str, year: int) -> dict[str, str | None]:
     }
 
 
-def _mart_output_paths(root: Path, year_dir: Path, tables: list[Any]) -> list[Path]:
+def _mart_output_paths(root: Path, year_dir: Path, dataset: str, tables: list[Any]) -> list[Path]:
     result: list[Path] = []
+    # Le tabelle multi-year (mart.tables[].years) vengono scritte a livello
+    # dataset (data/mart/{dataset}/{name}.parquet), NON nel dir per-anno:
+    # il path deve rifletterlo, altrimenti readiness/summary segnalano
+    # mart_outputs_missing anche quando gli output esistono (issue #445).
+    dataset_mart_dir = layer_dataset_dir(root, "mart", dataset)
     for table in tables:
         if isinstance(table, dict):
             name = table.get("name")
+            is_multi_year = bool(table.get("years"))
         elif hasattr(table, "name"):
             name = table.name
+            is_multi_year = bool(getattr(table, "years", None))
         else:
             continue
-        if name:
+        if not name:
+            continue
+        if is_multi_year:
+            result.append(dataset_mart_dir / f"{name}.parquet")
+        else:
             result.append(year_dir / f"{name}.parquet")
     return result
 
@@ -64,7 +76,7 @@ def _mart_paths(
     mart_dir = layer_year_dir(root, "mart", dataset, year)
     return {
         "dir": str(mart_dir),
-        "outputs": [str(path) for path in _mart_output_paths(root, mart_dir, tables)],
+        "outputs": [str(path) for path in _mart_output_paths(root, mart_dir, dataset, tables)],
         "metadata": str(mart_dir / METADATA),
         "validation": None,
     }

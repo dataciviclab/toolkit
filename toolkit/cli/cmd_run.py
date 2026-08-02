@@ -336,9 +336,40 @@ def run_year(
             source_id=source_id,
             smoke=sampling_active,
         )
+    elif "mart" in layers_to_run and cfg.has_multi_year_mart:
+        _skip_mart_validation(cfg, year, context, validations)
 
     context.complete_run(success_with_warnings=run_has_validation_warnings)
     return context
+
+
+def _skip_mart_validation(cfg, year: int, context, validations: dict) -> None:
+    """Registra una validazione mart 'skippata' quando tutte le tabelle sono
+    multi-year (issue #445).
+
+    Il layer mart per-anno non ha nulla da eseguire/validare quando tutte le
+    tabelle hanno ``years`` (vengono prodotte e validate da
+    run_mart_multi_year a livello dataset). Senza questo, la validazione
+    mart per-anno resterebbe vuota e il run risulterebbe fallito.
+    """
+    skipped_summary: dict[str, Any] = {
+        "passed": True,
+        "errors_count": 0,
+        "warnings_count": 0,
+        "quality_score": None,
+        "quality_verdict": "skipped",
+        "errors": [],
+        "warnings": [],
+        "checks": [],
+        "summary": {
+            "dir": str(layer_year_dir(cfg.root, "mart", cfg.dataset, year)),
+            "skipped": True,
+            "reason": "all mart tables are multi-year (mart.tables[].years) — "
+            "validated at dataset level by run_mart_multi_year",
+        },
+    }
+    validations["mart"] = skipped_summary
+    context.set_validation("mart", skipped_summary)
 
 
 def _maybe_run_multi_year_mart(
@@ -376,7 +407,7 @@ def _maybe_run_multi_year_mart(
         ",".join(str(y) for y in selected_years),
     )
     try:
-        run_mart_multi_year(
+        result = run_mart_multi_year(
             cfg.dataset,
             selected_years,
             cfg.root,
@@ -388,6 +419,16 @@ def _maybe_run_multi_year_mart(
             source_id=cfg.source_id,
             smoke=sampling_active,
         )
+        # La validazione delle tabelle multi-year può fallire senza eccezione:
+        # il runner registra validation_passed=False nel risultato. In quel
+        # caso comportarsi come un fallimento di validazione.
+        if not (result or {}).get("validation_passed", True):
+            errors = (result or {}).get("validation_errors") or [
+                "multi-year mart validation failed"
+            ]
+            if fail_on_error:
+                raise ValidationGateError(f"Multi-year MART validation failed: {errors}")
+            logger.warning("Multi-year MART validation failed (non-fatal): %s", errors)
     except Exception as exc:
         if fail_on_error:
             raise ValidationGateError(f"Multi-year MART failed: {exc}")

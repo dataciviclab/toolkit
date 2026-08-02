@@ -189,10 +189,18 @@ def run_mart_validation(cfg, year: int, logger, *, sample_mode: bool = False) ->
 
     declared_tables = [t.name for t in cfg.mart.tables if t.name]
     validate_rules = cfg.mart.validate.to_dict() if cfg.mart.validate else {}
+
+    # Le tabelle multi-year (mart.tables[].years) vengono eseguite da
+    # run_mart_multi_year() e scritte a livello dataset, NON nel dir
+    # per-anno. Escluderle dalla validazione per-anno, altrimenti
+    # `Missing required MART tables` fallisce sempre il run (issue #445).
+    multi_year_names = {t.name for t in cfg.mart.tables if t.years}
+    per_year_required = [t for t in (cfg.mart.required_tables or []) if t not in multi_year_names]
+
     spec = (
         MartValidationSpec.from_dict(
             {
-                "required_tables": cfg.mart.required_tables,
+                "required_tables": per_year_required,
                 **validate_rules,
             }
         )

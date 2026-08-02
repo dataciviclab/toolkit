@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.47.2] - 2026-08-02
+
+### Fixed
+
+- **Validazione mart multi-year (`mart.tables[].years`)** (PR #446, issue #445): un candidate con tabelle mart multi-year non poteva completare il run — la validazione per-anno falliva (`Missing required MART tables`) e il passaggio multi-year non partiva mai. Ora:
+  - la validazione per-anno esclude le tabelle con `years` (prodotte a livello dataset);
+  - `run_mart_multi_year` valida le tabelle prodotte (applica `table_rules`/`required_tables`);
+  - candidate con solo tabelle multi-year registrano validazione mart "skipped" (non falliscono il run);
+  - il path resolver espone le tabelle multi-year a livello dataset, quindi readiness/summary non segnalano più `mart_outputs_missing`.
+
 ## [1.17.0] - 2026-05-29
 
 ### Changed

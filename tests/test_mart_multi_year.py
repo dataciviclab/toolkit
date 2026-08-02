@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -186,3 +187,76 @@ def test_mart_output_paths_multi_year_resolve_to_dataset_level(tmp_path: Path) -
     assert any(o.endswith("data/mart/demo_ds/mart_multi.parquet") for o in outputs), (
         f"multi-year mart should be at dataset level: {outputs}"
     )
+
+
+def test_mart_only_multi_year_validation_failure(project_example: Path) -> None:
+    """Validazione multi-year fallita: table_rules violata blocca il run (issue #445).
+
+    Regressione: il ramo di errore di _validate_multi_year_tables non era
+    coperto — la validazione multi-year applica le table_rules ma il
+    fallimento (validation_passed=False) deve far fallire il run quando
+    fail_on_error è attivo.
+    """
+    config_path = project_example / "dataset.yml"
+    sql_dir = project_example / "sql" / "multi_year"
+    sql_dir.mkdir(parents=True, exist_ok=True)
+    (sql_dir / "solo_multi_viol.sql").write_text(
+        "\n".join(
+            [
+                "select",
+                "  anno,",
+                "  count(*) as righe",
+                "from clean_input",
+                "group by anno",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config_text = config_path.read_text(encoding="utf-8")
+    config_data = yaml.safe_load(config_text)
+    config_data["dataset"]["years"] = [2022, 2023]
+    config_data["mart"] = {
+        "tables": [
+            {
+                "name": "solo_multi_viol",
+                "sql": "sql/multi_year/solo_multi_viol.sql",
+                "years": [2022, 2023],
+            }
+        ],
+        "required_tables": ["solo_multi_viol"],
+        "validate": {
+            # required_columns include una colonna che la query non produce:
+            # la validazione multi-year deve fallire.
+            "table_rules": {
+                "solo_multi_viol": {
+                    "required_columns": ["anno", "colonna_inesistente"],
+                    "primary_key": ["anno"],
+                    "min_rows": 1,
+                }
+            }
+        },
+    }
+    config_path.write_text(
+        yaml.dump(config_data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    # fail_on_error attivo (default): il run deve fallire con la validazione
+    # multi-year segnalata come errore. Il logger rich spezza le righe lunghe
+    # (ancora cmd_run.py:NNNN / run.py:NNNN in mezzo): tollerare con regex.
+    from typer.testing import CliRunner
+    from toolkit.cli.app import app
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "--config", str(config_path)])
+    assert result.exit_code != 0, "run should fail when multi-year validation fails"
+    normalized = re.sub(r"\s+", " ", result.output)
+    assert re.search(r"MART multi-year validation failed", normalized), normalized
+
+    # Il metadata registra l'esito della validazione fallita.
+    mart_dir = project_example / "_smoke_out" / "data" / "mart" / "project_example"
+    metadata = json.loads((mart_dir / "metadata.json").read_text(encoding="utf-8"))
+    validation = metadata.get("validation") or {}
+    assert validation.get("passed") is False, "multi-year validation should have failed"
+    assert len(validation.get("errors") or []) > 0, "errors should be recorded"

@@ -50,16 +50,18 @@ class SparqlSource:
         )
         # is_ok è True anche su errori HTTP (response presente, err None) —
         # ma una risposta 4xx/5xx NON è un risultato SPARQL valido.
-        # Fallback GET solo su 4xx (WAF/Virtuoso rifiutano POST): 403 è il
-        # caso tipico. Su 5xx il fallback non deve mascherare l'errore server.
+        # Fallback GET quando il POST non produce dati validi:
+        #   - 4xx (WAF/Virtuoso rifiutano POST, es. 403 Senato)
+        #   - errore di rete/timeout (post_status None)
+        # Su 5xx NON si fa fallback (errore server reale, non va mascherato).
         post_status = (
             result.response.status_code if result.is_ok and result.response is not None else None
         )
         if post_status is not None and post_status < 400:
             return self._parse_response(result.response, is_json)
 
-        # --- Tentativo 2: GET fallback (solo se POST è fallito con 4xx) ---
-        if post_status is not None and 400 <= post_status < 500:
+        # --- Tentativo 2: GET fallback (4xx o errore di rete/timeout) ---
+        if post_status is None or 400 <= post_status < 500:
             url = f"{endpoint}?query={urllib.parse.quote(q)}"
             get_headers = {
                 "Accept": (
@@ -75,6 +77,11 @@ class SparqlSource:
             )
             if get_status is not None and get_status < 400:
                 return self._parse_response(result.response, is_json)
+            if get_status is not None and get_status >= 500:
+                body = (result.response.text or "")[:200] if result.response is not None else ""
+                raise DownloadError(
+                    f"SPARQL GET fallback returned HTTP {get_status} for {endpoint}: {body}"
+                )
 
         if post_status is not None and post_status >= 500:
             body = (result.response.text or "")[:200] if result.response is not None else ""

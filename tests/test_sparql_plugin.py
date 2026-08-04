@@ -113,6 +113,50 @@ def test_sparql_fetch_post_403_falls_back_to_get():
         assert mock_cls.return_value.get.called  # il fallback GET è scattato
 
 
+def test_sparql_fetch_get_fallback_5xx_raises():
+    """POST 403 → GET fallback 500 → DownloadError con status del GET.
+
+    Il fallback GET non deve mascherare un errore server del GET stesso.
+    """
+    with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+        mock_cls.return_value.post.return_value = _http_ok(
+            status=403,
+            text="<!DOCTYPE html><html>Forbidden</html>",
+        )
+        mock_cls.return_value.get.return_value = _http_ok(
+            status=500,
+            text="Internal Server Error",
+        )
+        source = SparqlSource()
+        with pytest.raises(DownloadError, match="GET fallback returned HTTP 500"):
+            source.fetch("https://example.test/sparql", "SELECT * WHERE { }")
+    """POST con errore di rete/timeout (response None) deve cadere sul GET.
+
+    Estensione del fix 403: il docstring prometteva il fallback anche su
+    timeout — il POST con err (connection refused) produce post_status=None
+    e prima del fix andava dritto al raise senza provare il GET.
+    """
+    from lab_connectors.http import HttpResult
+
+    with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+        mock_cls.return_value.post.return_value = HttpResult(
+            response=None, err=TimeoutError("connection refused")
+        )
+        mock_cls.return_value.get.return_value = _http_ok(
+            status=200,
+            text="name,value\nfoo,123\n",
+            headers={"Content-Type": "text/csv"},
+        )
+        source = SparqlSource()
+        payload, origin = source.fetch(
+            "https://dati.senato.it/sparql",
+            "SELECT ?name ?value WHERE { }",
+            accept_format="csv",
+        )
+        assert b"foo" in payload
+        assert mock_cls.return_value.get.called  # il fallback GET è scattato
+
+
 def test_sparql_fetch_network_error():
     """Network error raises DownloadError."""
     with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:

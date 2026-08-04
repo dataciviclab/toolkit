@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import time
 import urllib.parse
 from typing import Any
 
@@ -26,6 +27,11 @@ class SparqlSource:
 
     def __init__(self, timeout: int = 60):
         self._client = HttpClient(timeout=timeout)
+        # Retry dedicati per le pagine successive (la prima ha retries in _do_fetch).
+        # Un errore su una pagina NON è "fine dati": va ritentato e, se persiste,
+        # propagato per far fallire il run invece di troncare silenziosamente.
+        self._page_retries = 3
+        self._page_retry_delay = 5.0
 
     def _do_fetch(self, endpoint: str, q: str, accept_format: str) -> bytes:
         """Esegue una singola query SPARQL, restituisce CSV bytes.
@@ -138,6 +144,7 @@ class SparqlSource:
         accept_format: str = "csv",
         pages: int = 1,
         step: int = 10000,
+        pagination: dict | None = None,
     ) -> tuple[bytes, str]:
         """Execute a SPARQL query and return CSV data.
 
@@ -145,12 +152,23 @@ class SparqlSource:
         usa ``pages`` e ``step`` per fare piu' query con OFFSET incrementale
         e concatenare i risultati in un unico CSV.
 
+        ``pagination`` supporta due modalita':
+        - ``{"mode": "offset"}`` (default): paginazione OFFSET con ``pages``/``step``.
+          Funziona solo se l'endpoint accetta OFFSET con ORDER BY (NON tutti
+          gli endpoint Virtuoso lo accettano — es. dati.camera.it rifiuta con
+          errore SR353 quando ORDER BY + OFFSET supera 10k righe).
+        - ``{"mode": "keyset", "key": "?var"}``: paginazione keyset. La query
+          DEVE avere gia' ``ORDER BY ?var``. Le pagine successive iniettano
+          ``FILTER(?var > <ultimo_valore>)`` al posto di OFFSET — deterministico
+          e compatibile con i limiti Virtuoso.
+
         Args:
             endpoint: SPARQL endpoint URL.
             query: SPARQL SELECT query string.
             accept_format: 'csv' for direct CSV, 'sparql-results+json' for JSON conversion.
             pages: Numero di pagine da fetchare (default 1 = nessuna paginazione).
             step: Righe per pagina (default 10000).
+            pagination: Config paginazione keyset/offset (vedi sopra).
 
         Returns:
             (csv_bytes, endpoint) tuple.
@@ -168,40 +186,146 @@ class SparqlSource:
                 "Supported values: 'csv', 'sparql-results+json'."
             )
 
+        pagination_mode = (pagination or {}).get("mode", "offset")
+        keyset_key = (pagination or {}).get("key")
+        if pagination_mode == "keyset" and not keyset_key:
+            raise DownloadError(
+                'pagination mode=keyset requires \'key\' (es. {"mode": "keyset", "key": "?deputato"})'
+            )
+
         # Se e' richiesta paginazione, assicura che la query abbia LIMIT
-        if pages > 1:
+        if pages > 1 or pagination_mode == "keyset":
             if "limit" not in query.lower():
                 query = f"{query.rstrip().rstrip(';')} LIMIT {step}"
 
-        # Prima pagina
-        all_bytes = self._do_fetch(endpoint, query, accept_format)
+        # Prima pagina — con retry+backoff dedicati: su endpoint instabili
+        # (es. Camera 503/500 intermittenti) la prima query pesante riceve
+        # spesso il 503 iniziale; _do_fetch ha retries ma senza delay sufficiente.
+        all_bytes = self._fetch_page_with_retry(endpoint, query, accept_format)
 
-        # Paginazione: pagine successive, concatena CSV (saltando l'header)
+        # Fine dati legittima sulla prima pagina: header vuoto o pagina corta
+        # (< step righe di dati). Su endpoint come Camera l'OFFSET oltre la fine
+        # risponde 503 invece di 200 con 0 righe: la fine va rilevata qui,
+        # non da un errore HTTP.
+        data_start = all_bytes.find(b"\n")
+        if data_start < 0 or len(all_bytes) <= data_start + 1:
+            return all_bytes, endpoint
+        if _csv_data_rows(all_bytes) < step:
+            return all_bytes, endpoint
+
+        if pagination_mode == "keyset":
+            all_bytes = self._fetch_keyset_pages(
+                endpoint,
+                query,
+                accept_format,
+                keyset_key,
+                step,
+                all_bytes,
+            )
+            return all_bytes, endpoint
+
+        # Paginazione OFFSET: pagine successive, concatena CSV (saltando l'header)
         for page in range(1, pages):
-            try:
-                q = query
-                if "offset" not in q.lower():
-                    q = f"{q.rstrip().rstrip(';')} OFFSET {page * step}"
-                else:
-                    q = f"{q.rstrip().rstrip(';')} OFFSET {page * step}"
+            q = query
+            if "offset" not in q.lower():
+                q = f"{q.rstrip().rstrip(';')} OFFSET {page * step}"
+            else:
+                q = f"{q.rstrip().rstrip(';')} OFFSET {page * step}"
 
-                page_bytes = self._do_fetch(endpoint, q, accept_format)
+            page_bytes = self._fetch_page_with_retry(endpoint, q, accept_format)
 
-                # Se la pagina e' vuota (solo header, nessun dato), fermati
-                data_start = page_bytes.find(b"\n")
-                if data_start < 0 or len(page_bytes) <= data_start + 1:
-                    break
-                # Concatena solo i dati (salta l'header)
-                header_end = all_bytes.find(b"\n")
-                if header_end >= 0:
-                    all_bytes = all_bytes + page_bytes[data_start + 1 :]
-                else:
-                    all_bytes = all_bytes + page_bytes
-            except DownloadError:
-                # Endpoint non ha piu' pagine (es. OFFSET oltre la fine) → esci
+            # Se la pagina e' vuota (solo header, nessun dato), fermati —
+            # unica condizione legittima di fine dati.
+            data_start = page_bytes.find(b"\n")
+            if data_start < 0 or len(page_bytes) <= data_start + 1:
                 break
+            # Pagina corta (< step righe di dati) = ultima pagina: fermati
+            # senza fare OFFSET oltre la fine (che su alcuni endpoint — es.
+            # Camera — risponde 503 invece di 200 con 0 righe).
+            if _csv_data_rows(page_bytes) < step:
+                all_bytes = all_bytes + page_bytes[data_start + 1 :]
+                break
+            # Concatena solo i dati (salta l'header)
+            header_end = all_bytes.find(b"\n")
+            if header_end >= 0:
+                all_bytes = all_bytes + page_bytes[data_start + 1 :]
+            else:
+                all_bytes = all_bytes + page_bytes
 
         return all_bytes, endpoint
+
+    def _fetch_page_with_retry(
+        self,
+        endpoint: str,
+        q: str,
+        accept_format: str,
+    ) -> bytes:
+        """Fetch di una pagina con retry; propaga l'errore dopo i tentativi.
+
+        Un errore di rete su una pagina NON e' "fine dati": ritenta e, se
+        persiste, propaga per far fallire il run invece di troncare il CSV
+        (regression: issue #449).
+        """
+        last_error: DownloadError | None = None
+        for attempt in range(self._page_retries):
+            try:
+                return self._do_fetch(endpoint, q, accept_format)
+            except DownloadError as exc:
+                last_error = exc
+                if attempt < self._page_retries - 1:
+                    time.sleep(self._page_retry_delay)
+        raise last_error  # type: ignore[misc]
+
+    def _fetch_keyset_pages(
+        self,
+        endpoint: str,
+        query: str,
+        accept_format: str,
+        key: str,
+        step: int,
+        all_bytes: bytes,
+    ) -> bytes:
+        """Paginazione keyset: inietta FILTER(?key > <last>) nelle pagine successive.
+
+        Deterministico e compatibile con endpoint Virtuoso che rifiutano
+        ORDER BY + OFFSET (SR353) — es. dati.camera.it.
+        """
+        if not key.startswith("?"):
+            key = f"?{key}"
+        # normalizza: niente ';' finale per poter concatenare la clausola
+        base_query = query.rstrip().rstrip(";")
+
+        while True:
+            last_value = _csv_last_value(all_bytes, key.lstrip("?"))
+            if last_value is None:
+                break
+            # Inietta il FILTER prima del ORDER BY / LIMIT (se presenti)
+            q = base_query
+            filter_clause = f"FILTER({key} > <{last_value}>)"
+            for kw in ("ORDER BY", "LIMIT", "OFFSET"):
+                idx = q.upper().rfind(kw)
+                if idx != -1:
+                    q = q[:idx] + filter_clause + " " + q[idx:]
+                    break
+            else:
+                q = q + " " + filter_clause
+
+            page_bytes = self._fetch_page_with_retry(endpoint, q, accept_format)
+
+            data_start = page_bytes.find(b"\n")
+            if data_start < 0 or len(page_bytes) <= data_start + 1:
+                break  # pagina vuota = fine dati
+            # Pagina corta (< step) = ultima pagina: concatena e ferma
+            if _csv_data_rows(page_bytes) < step:
+                all_bytes = all_bytes + page_bytes[data_start + 1 :]
+                break
+            header_end = all_bytes.find(b"\n")
+            if header_end >= 0:
+                all_bytes = all_bytes + page_bytes[data_start + 1 :]
+            else:
+                all_bytes = all_bytes + page_bytes
+
+        return all_bytes
 
     def _fetch_bindings(
         self,
@@ -335,3 +459,43 @@ def _sparql_json_to_csv(json_text: str) -> bytes:
     writer.writeheader()
     writer.writerows(rows)
     return buffer.getvalue().encode("utf-8")
+
+
+def _csv_data_rows(csv_bytes: bytes) -> int:
+    """Conta le righe di dati (escludendo l'header) di un CSV bytes.
+
+    Usa csv.reader per gestire correttamente i quoted newline (valori che
+    contengono \\n dentro le virgolette — es. biografie, testi lunghi).
+    """
+    text = csv_bytes.decode("utf-8", errors="replace")
+    reader = csv.reader(io.StringIO(text))
+    try:
+        next(reader)  # header
+    except StopIteration:
+        return 0
+    return sum(1 for _ in reader)
+
+
+def _csv_last_value(csv_bytes: bytes, key_col: str) -> str | None:
+    """Ultimo valore della colonna chiave in un CSV bytes (per keyset pagination).
+
+    Ritorna None se la colonna non esiste o il CSV è vuoto.
+    """
+    text = csv_bytes.decode("utf-8", errors="replace")
+    reader = csv.reader(io.StringIO(text))
+    try:
+        header = next(reader)
+    except StopIteration:
+        return None
+    try:
+        idx = header.index(key_col)
+    except ValueError:
+        raise DownloadError(
+            f"keyset pagination: colonna '{key_col}' non trovata nell'output SPARQL "
+            f"(colonne: {header})"
+        )
+    last = None
+    for row in reader:
+        if len(row) > idx and row[idx]:
+            last = row[idx]
+    return last

@@ -82,6 +82,7 @@ def test_sparql_fetch_http_error():
             text="Internal Server Error",
         )
         source = SparqlSource()
+        source._page_retry_delay = 0
         with pytest.raises(DownloadError, match="HTTP 500"):
             source.fetch("https://example.test/sparql", "SELECT * WHERE { }")
 
@@ -128,6 +129,7 @@ def test_sparql_fetch_get_fallback_5xx_raises():
             text="Internal Server Error",
         )
         source = SparqlSource()
+        source._page_retry_delay = 0
         with pytest.raises(DownloadError, match="GET fallback returned HTTP 500"):
             source.fetch("https://example.test/sparql", "SELECT * WHERE { }")
     """POST con errore di rete/timeout (response None) deve cadere sul GET.
@@ -164,6 +166,7 @@ def test_sparql_fetch_network_error():
         mock_cls.return_value.post.return_value = err_result
         mock_cls.return_value.get.return_value = err_result
         source = SparqlSource()
+        source._page_retry_delay = 0
         with pytest.raises(DownloadError, match="connection refused"):
             source.fetch("https://example.test/sparql", "SELECT * WHERE { }")
 
@@ -177,6 +180,7 @@ def test_sparql_fetch_empty_results():
             headers={"Content-Type": "application/sparql-results+json"},
         )
         source = SparqlSource()
+        source._page_retry_delay = 0
         with pytest.raises(DownloadError, match="no results"):
             source.fetch(
                 "https://example.test/sparql",
@@ -194,6 +198,7 @@ def test_sparql_fetch_invalid_json():
             headers={"Content-Type": "application/sparql-results+json"},
         )
         source = SparqlSource()
+        source._page_retry_delay = 0
         with pytest.raises(DownloadError, match="Invalid SPARQL JSON"):
             source.fetch(
                 "https://example.test/sparql",
@@ -211,6 +216,7 @@ def test_sparql_fetch_unsupported_content_type_raises():
             headers={"Content-Type": "application/xml"},
         )
         source = SparqlSource()
+        source._page_retry_delay = 0
         with pytest.raises(DownloadError, match="Unsupported Content-Type"):
             source.fetch(
                 "https://example.test/sparql",
@@ -435,7 +441,7 @@ class TestSparqlPagination:
                 "https://example.test/sparql",
                 "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
                 pages=3,
-                step=10,
+                step=2,
             )
             assert mock_cls.return_value.post.call_count == 3
             # Header deve apparire una sola volta
@@ -453,25 +459,25 @@ class TestSparqlPagination:
     def test_pages_without_limit_injects_step(self):
         """Se la query non ha LIMIT e pages>1, deve iniettare LIMIT step."""
         with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
-            mock_cls.return_value.post.return_value = _http_ok(
-                text=self.CSV_P1,
-                headers={"Content-Type": "text/csv"},
-            )
+            mock_cls.return_value.post.side_effect = [
+                _http_ok(text=self.CSV_P1, headers={"Content-Type": "text/csv"}),
+                _http_ok(text=self.CSV_P2, headers={"Content-Type": "text/csv"}),
+            ]
             source = SparqlSource()
             source.fetch(
                 "https://example.test/sparql",
                 "SELECT * WHERE { ?s ?p ?o }",
                 pages=2,
-                step=100,
+                step=2,
             )
-            # La seconda chiamata deve avere LIMIT 100 + OFFSET 100
+            # La seconda chiamata deve avere LIMIT 2 + OFFSET 2
             second_call = mock_cls.return_value.post.call_args_list[1]
             query_body = second_call.args[1].get("query", "")
-            assert "LIMIT 100" in query_body
-            assert "OFFSET 100" in query_body
+            assert "LIMIT 2" in query_body
+            assert "OFFSET 2" in query_body
 
     def test_pages_stops_when_page_empty(self):
-        """Se una pagina restituisce 0 righe, ci si ferma prima di pages totali."""
+        """Se una pagina restituisce 0 righe (header vuoto), ci si ferma prima di pages totali."""
         call = [0]
 
         def side_effect(*a, **kw):
@@ -488,13 +494,73 @@ class TestSparqlPagination:
                 "https://example.test/sparql",
                 "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
                 pages=5,
-                step=10,
+                step=2,
             )
-            # Pagina 0 ok, pagina 1 vuota → stop (2 chiamate)
+            # Pagina 0 ok (2 righe = piena), pagina 1 vuota → stop (2 chiamate)
             assert mock_cls.return_value.post.call_count == 2
 
-    def test_pages_early_stop_on_http_error(self):
-        """Se una pagina successiva da HTTP error, ci si ferma senza crash."""
+    def test_pages_stops_when_page_short(self):
+        """Una pagina con meno righe di step = ultima pagina: stop senza OFFSET oltre fine.
+
+        regression: issue #449 — su endpoint come dati.camera.it l'OFFSET oltre la
+        fine risponde 503 invece di 200 con 0 righe; la fine va rilevata dalla
+        pagina corta, non da un errore HTTP.
+        """
+        call = [0]
+
+        def side_effect(*a, **kw):
+            call[0] += 1
+            if call[0] == 1:
+                return _http_ok(text=self.CSV_P1, headers={"Content-Type": "text/csv"})
+            # Pagina 2: solo 1 riga (quux) — corta, ultima
+            return _http_ok(text=self.CSV_P3, headers={"Content-Type": "text/csv"})
+
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.side_effect = side_effect
+            source = SparqlSource()
+            payload, _ = source.fetch(
+                "https://example.test/sparql",
+                "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
+                pages=5,
+                step=10,
+            )
+            # Pagina 0 (2 righe < 10) corta già alla prima → fermati subito
+            assert mock_cls.return_value.post.call_count == 1
+            assert b"foo" in payload and b"bar" in payload
+
+    def test_pages_short_page_concatenates_then_stops(self):
+        """Pagina piena (== step) concatena e continua; pagina corta concatena e ferma."""
+        call = [0]
+
+        def side_effect(*a, **kw):
+            call[0] += 1
+            if call[0] == 1:
+                return _http_ok(text=self.CSV_P1, headers={"Content-Type": "text/csv"})
+            # Pagina 2: corta (1 riga) — deve essere concatenata e poi stop
+            return _http_ok(text=self.CSV_P3, headers={"Content-Type": "text/csv"})
+
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.side_effect = side_effect
+            source = SparqlSource()
+            payload, _ = source.fetch(
+                "https://example.test/sparql",
+                "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
+                pages=3,
+                step=2,
+            )
+            # Pagina 1 piena (2 righe = step) → pagina 2 corta (1 riga) → stop
+            assert mock_cls.return_value.post.call_count == 2
+            text = payload.decode()
+            assert "foo" in text and "bar" in text and "quux" in text
+            assert "baz" not in text  # mai fetchata
+
+    def test_pages_http_error_after_retries_raises(self):
+        """Un errore HTTP persistente su una pagina deve propagare (non troncare).
+
+        regression: issue #449 — il vecchio comportamento faceva break silenzioso
+        su DownloadError, producendo CSV troncati su endpoint instabili (es. Camera
+        500/503 intermittenti). Dopo i retry, l'errore deve far fallire il run.
+        """
         from toolkit.core.exceptions import DownloadError
 
         call = [0]
@@ -508,12 +574,127 @@ class TestSparqlPagination:
         with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
             mock_cls.return_value.post.side_effect = side_effect
             source = SparqlSource()
+            source._page_retry_delay = 0  # test veloce
+            with pytest.raises(DownloadError, match="HTTP 500"):
+                source.fetch(
+                    "https://example.test/sparql",
+                    "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
+                    pages=3,
+                    step=2,
+                )
+            # 1 pagina ok + 3 retry falliti sulla pagina 2
+            assert mock_cls.return_value.post.call_count == 4
+
+    def test_pages_transient_error_retries_then_succeeds(self):
+        """Un errore transitorio su una pagina deve essere ritentato e recuperato."""
+        call = [0]
+
+        def side_effect(*a, **kw):
+            call[0] += 1
+            if call[0] == 1:
+                return _http_ok(text=self.CSV_P1, headers={"Content-Type": "text/csv"})
+            if call[0] == 2:
+                raise DownloadError("endpoint returned HTTP 503 for page 2")
+            # Al retry successivo la pagina risponde
+            return _http_ok(text=self.CSV_P2, headers={"Content-Type": "text/csv"})
+
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.side_effect = side_effect
+            source = SparqlSource()
+            source._page_retry_delay = 0  # test veloce
             payload, _ = source.fetch(
                 "https://example.test/sparql",
                 "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
-                pages=3,
-                step=10,
+                pages=2,
+                step=2,
             )
-            # Prima pagina ok, seconda fallisce → stop, ritorna solo pagina 1
-            assert payload.decode().count("foo") == 1
-            assert payload.decode().count("baz") == 0
+            text = payload.decode()
+            assert "foo" in text and "baz" in text  # pagina 2 recuperata
+            # 1 (pagina 1) + 1 fallita + 1 retry riuscito
+            assert mock_cls.return_value.post.call_count == 3
+
+    # --- keyset pagination ---
+
+    CSV_K1 = "s,value\nfoo,1\nbar,2\n"  # 2 righe (piena con step=2)
+    CSV_K2 = "s,value\nbaz,3\nqux,4\n"  # 2 righe (piena con step=2)
+    CSV_K3 = "s,value\nquux,5\n"  # 1 riga (corta → ultima)
+
+    def test_keyset_injects_filter_and_concatenates(self):
+        """Keyset: le pagine successive iniettano FILTER(?s > <last>) e concatena."""
+        queries: list[str] = []
+
+        def side_effect(*a, **kw):
+            q = a[1].get("query", "") if len(a) > 1 and isinstance(a[1], dict) else ""
+            queries.append(q)
+            if len(queries) == 1:
+                return _http_ok(text=self.CSV_K1, headers={"Content-Type": "text/csv"})
+            if len(queries) == 2:
+                return _http_ok(text=self.CSV_K2, headers={"Content-Type": "text/csv"})
+            # Dopo la pagina 2 (piena) il loop continua; la 3a pagina è vuota → stop
+            return _http_ok(text="s,value\n", headers={"Content-Type": "text/csv"})
+
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.side_effect = side_effect
+            source = SparqlSource()
+            payload, _ = source.fetch(
+                "https://example.test/sparql",
+                "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 10",
+                pages=1,
+                step=2,
+                pagination={"mode": "keyset", "key": "?s"},
+            )
+            # Pagina 2: FILTER con l'ultimo valore della colonna 's' (bar)
+            assert "FILTER(?s > <bar>)" in queries[1], f"pagina 2: {queries[1]}"
+            text = payload.decode()
+            assert "foo" in text and "baz" in text and "qux" in text
+            # 3 chiamate: K1, K2, pagina vuota (stop)
+            assert len(queries) == 3
+
+    def test_keyset_stops_when_short_page(self):
+        """Keyset: pagina corta (< step) = ultima, stop senza ulteriori fetch."""
+        call = [0]
+
+        def side_effect(*a, **kw):
+            call[0] += 1
+            if call[0] == 1:
+                return _http_ok(text=self.CSV_K1, headers={"Content-Type": "text/csv"})
+            return _http_ok(text=self.CSV_K3, headers={"Content-Type": "text/csv"})
+
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.side_effect = side_effect
+            source = SparqlSource()
+            payload, _ = source.fetch(
+                "https://example.test/sparql",
+                "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 10",
+                pagination={"mode": "keyset", "key": "?s"},
+                step=2,
+            )
+            assert mock_cls.return_value.post.call_count == 2
+            assert b"quux" in payload  # pagina corta concatenata
+
+    def test_keyset_missing_key_column_raises(self):
+        """Keyset: colonna chiave assente nell'output → DownloadError (non silenzio)."""
+        csv_p1_no_key = "altra_colonna,value\nfoo,1\nbar,2\n"
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.return_value = _http_ok(
+                text=csv_p1_no_key,
+                headers={"Content-Type": "text/csv"},
+            )
+            source = SparqlSource()
+            with pytest.raises(DownloadError, match="non trovata"):
+                source.fetch(
+                    "https://example.test/sparql",
+                    "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 10",
+                    pagination={"mode": "keyset", "key": "?s"},
+                    step=2,
+                )
+
+    def test_keyset_requires_key(self):
+        """Keyset senza 'key' → DownloadError esplicito."""
+        source = SparqlSource()
+        with pytest.raises(DownloadError, match="requires 'key'"):
+            source.fetch(
+                "https://example.test/sparql",
+                "SELECT ?s WHERE { ?s ?p ?o }",
+                pagination={"mode": "keyset"},
+            )

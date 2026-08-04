@@ -77,9 +77,9 @@ class SparqlSource:
                 return self._parse_response(result.response, is_json)
 
         if post_status is not None and post_status >= 500:
+            body = (result.response.text or "")[:200] if result.response is not None else ""
             raise DownloadError(
-                f"SPARQL endpoint returned HTTP {post_status} for {endpoint}: "
-                f"{(result.response.text or '')[:200]}"
+                f"SPARQL endpoint returned HTTP {post_status} for {endpoint}: {body}"
             )
 
         raise DownloadError(

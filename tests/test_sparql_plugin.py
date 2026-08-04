@@ -86,6 +86,33 @@ def test_sparql_fetch_http_error():
             source.fetch("https://example.test/sparql", "SELECT * WHERE { }")
 
 
+def test_sparql_fetch_post_403_falls_back_to_get():
+    """POST 403 (WAF/Virtuoso) deve cadere sul fallback GET.
+
+    Regressione: il plugin considerava ok il 403 (is_ok = response presente,
+    err None) e salvava il body HTML come CSV — il fallback GET non scattava.
+    Caso reale: dati.senato.it accetta solo GET (POST → 403).
+    """
+    with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+        mock_cls.return_value.post.return_value = _http_ok(
+            status=403,
+            text="<!DOCTYPE html><html>Forbidden</html>",
+        )
+        mock_cls.return_value.get.return_value = _http_ok(
+            status=200,
+            text="name,value\nfoo,123\n",
+            headers={"Content-Type": "text/csv"},
+        )
+        source = SparqlSource()
+        payload, origin = source.fetch(
+            "https://dati.senato.it/sparql",
+            "SELECT ?name ?value WHERE { }",
+            accept_format="csv",
+        )
+        assert b"foo" in payload
+        assert mock_cls.return_value.get.called  # il fallback GET è scattato
+
+
 def test_sparql_fetch_network_error():
     """Network error raises DownloadError."""
     with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:

@@ -48,20 +48,39 @@ class SparqlSource:
             headers=headers,
             retries=2,
         )
-        if result.is_ok:
+        # is_ok è True anche su errori HTTP (response presente, err None) —
+        # ma una risposta 4xx/5xx NON è un risultato SPARQL valido.
+        # Fallback GET solo su 4xx (WAF/Virtuoso rifiutano POST): 403 è il
+        # caso tipico. Su 5xx il fallback non deve mascherare l'errore server.
+        post_status = (
+            result.response.status_code if result.is_ok and result.response is not None else None
+        )
+        if post_status is not None and post_status < 400:
             return self._parse_response(result.response, is_json)
 
-        # --- Tentativo 2: GET fallback ---
-        url = f"{endpoint}?query={urllib.parse.quote(q)}"
-        get_headers = {
-            "Accept": (
-                "application/sparql-results+xml,"
-                "application/sparql-results+json,application/json,text/csv"
-            ),
-        }
-        result = self._client.get(url, headers=get_headers)
-        if result.is_ok:
-            return self._parse_response(result.response, is_json)
+        # --- Tentativo 2: GET fallback (solo se POST è fallito con 4xx) ---
+        if post_status is not None and 400 <= post_status < 500:
+            url = f"{endpoint}?query={urllib.parse.quote(q)}"
+            get_headers = {
+                "Accept": (
+                    "application/sparql-results+xml,"
+                    "application/sparql-results+json,application/json,text/csv"
+                ),
+            }
+            result = self._client.get(url, headers=get_headers)
+            get_status = (
+                result.response.status_code
+                if result.is_ok and result.response is not None
+                else None
+            )
+            if get_status is not None and get_status < 400:
+                return self._parse_response(result.response, is_json)
+
+        if post_status is not None and post_status >= 500:
+            body = (result.response.text or "")[:200] if result.response is not None else ""
+            raise DownloadError(
+                f"SPARQL endpoint returned HTTP {post_status} for {endpoint}: {body}"
+            )
 
         raise DownloadError(
             f"SPARQL request failed for {endpoint}: POST → {result.err or 'unknown'}"

@@ -82,7 +82,9 @@ def sniff_source_file(filepath: Path) -> Dict[str, Any]:
 
     enc, txt = sniff_encoding(filepath)
     delim = sniff_delim(txt)
-    dec = sniff_decimal(txt)
+    # Il delim è noto: sniff_decimal field-aware evita falsi positivi tipo
+    # "2008,88" (anno + valore separati dal delim CSV) come decimale con virgola.
+    dec = sniff_decimal(txt, delim)
     skip = suggest_skip(txt, delim)
     warnings: list[str] = []
 

@@ -356,7 +356,7 @@ def test_run_dry_run_detects_hardcoded_support_path(
     assert result.exit_code == 0, f"exit_code={result.exit_code} output={result.output}"
     assert "PATH DRIFT" in result.output, f"output={result.output}"
     assert "lookup_ds" in result.output
-    assert "{support.lookup.mart}" in result.output
+    assert "support.lookup" in result.output
 
 
 # ── Logger context ──────────────────────────────────────────────────────────

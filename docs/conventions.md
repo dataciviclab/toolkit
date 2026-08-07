@@ -79,6 +79,19 @@ Versioni schema stabili:
 - Ogni validation report include `validation_schema_version`.
 - I metadata CLEAN espongono `read_params_source`, `read_source_used`, `read_params_used`.
 
+## 8. Support dataset (ADR-005)
+- I support (dataset/codelist/file) si dichiarano in `support:` nel dataset.yml e si
+  referenziano nel SQL **solo** con i placeholder `{support.NAME.*}` — mai con path
+  hardcoded (il drift è segnalato come warning in dry-run da `check_support_path_drift`).
+- Placeholder disponibili: `{support.NAME.mart}` (prima tabella), `{support.NAME.mart.TABLE}`,
+  `{support.NAME.clean}`, `{support.NAME.path}` (codelist/file), `{support.NAME.outputs}`.
+- Orchestrazione: i support sono eseguiti prima del candidate e riusati se gli output
+  (clean+mart per dataset; parquet canonico per codelist; path per file) sono già presenti.
+  Rigenerazione forzata: `toolkit run --refresh-support`.
+- Codelist SDMX: parquet canonico in `out/data/support/{name}/{name}.parquet`, fuori dal
+  catalogo clean (le codelist non sono dataset).
+- Riferimento: [ADR-005](adr/005-support-ensure.md), schema in [config-schema.md](config-schema.md).
+
 Rimandi:
 - schema completo: [config-schema.md](config-schema.md)
 - workflow avanzati e legacy boundary: [advanced-workflows.md](advanced-workflows.md)

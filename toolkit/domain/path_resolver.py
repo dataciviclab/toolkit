@@ -120,7 +120,9 @@ def payload_for_year(cfg, year: int) -> dict[str, Any]:
             "raw": _raw_output_paths(root, cfg.dataset, year),
             "clean": _clean_paths(root, cfg.dataset, year),
             "mart": _mart_paths(root, cfg.dataset, year, mart_tables),
-            "support": resolve_support_payloads(ensure_dict(cfg.support), require_exists=False),
+            "support": resolve_support_payloads(
+                ensure_dict(cfg.support), require_exists=False, root=Path(root)
+            ),
             "run_dir": str(run_dir),
         },
         "run_file_count": len(run_files),

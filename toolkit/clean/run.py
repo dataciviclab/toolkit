@@ -51,7 +51,12 @@ def load_clean_sql(
         from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
 
         try:
-            payloads = resolve_support_payloads(support_cfg, require_exists=False, smoke=smoke)
+            payloads = resolve_support_payloads(
+                support_cfg,
+                require_exists=False,
+                smoke=smoke,
+                root=Path(root) if root else None,
+            )
             support_ctx = flatten_support_template_ctx(payloads)
         except Exception:
             # Se il support non è disponibile (non ancora eseguito), il template

@@ -373,6 +373,61 @@ Note:
 - gli output vengono scritti in `root/data/mart/<dataset>/<name>.parquet` (livello dataset, senza anno)
 - la validazione multi-anno non produce un validation.json separato (la validazione è integrata in MART)
 
+## support
+
+Dataset / codelist / file di riferimento per i join nei SQL di clean e mart.
+Vengono eseguiti (o riusati) **prima** del candidate; il risultato è esposto
+al template SQL come placeholder `{support.NAME.*}` (vedi ADR-005).
+
+| Campo | Tipo | Default |
+|---|---|---|
+| `support[].name` | `str` | — (obbligatorio, univoco) |
+| `support[].type` | `dataset` \| `codelist` \| `file` | `dataset` |
+| `support[].config` | path dataset.yml | — (solo `dataset`) |
+| `support[].years` | `list[int]` | — (solo `dataset`) |
+| `support[].id` | `str` | — (solo `codelist`) |
+| `support[].agency` | `str` | `ESTAT` (solo `codelist`) |
+| `support[].provider` | `str` | `sdmx` (solo `codelist`) |
+| `support[].path` | `str` | — (solo `file`, relativo al root candidate) |
+| `support[].command` | `str` | — (solo `file`, opzionale: rigenera il file) |
+
+```yaml
+support:
+  - name: comuni
+    type: dataset                 # materializza: run del config (skip se clean+mart presenti)
+    config: "../../support_datasets/istat-elenco-comuni/dataset.yml"
+    years: [2026]
+  - name: geo
+    type: codelist                # materializza: fetch_codelist → parquet canonico
+    agency: ESTAT
+    id: GEO
+  - name: quartieri
+    type: file                    # materializza: exec command se il file manca
+    path: "mapping/colonnine-quartieri.csv"
+    command: "python mapping/colonnine_quartieri.py"
+```
+
+**Orchestrazione (ensure):** gli output attesi per tipo sono — `dataset`:
+parquet clean + tutte le tabelle mart (per anno); `codelist`:
+`out/data/support/{name}/{name}.parquet`; `file`: il path dichiarato.
+Se gli output sono già presenti il run li **riusa** (skip-if-exists, per-anno);
+la rigenerazione forzata è `toolkit run --refresh-support`. Un support fallito
+blocca il candidate. L'esecuzione di un `command` file richiede
+`TOOLKIT_ALLOW_SCRIPT_SOURCE=1`.
+
+**Placeholder nel SQL** (il toolkit li risolve prima di eseguire):
+
+| Placeholder | Risolve a |
+|---|---|
+| `{support.NAME.mart}` | prima tabella mart del support (compat) |
+| `{support.NAME.mart.TABLE}` | tabella mart specifica |
+| `{support.NAME.clean}` | parquet clean del support |
+| `{support.NAME.path}` | file materializzato (codelist/file) |
+| `{support.NAME.outputs}` | lista completa degli output |
+
+I SQL devono usare i placeholder e non path hardcoded: `check_support_path_drift`
+segnala il drift come warning in dry-run.
+
 ## validation
 
 Campi supportati:

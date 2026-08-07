@@ -3,11 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import os
 import pytest
+
+from toolkit.core.exceptions import DownloadError
 
 from toolkit.core.support import (
     check_support_path_drift,
     flatten_support_template_ctx,
+    materialize_codelist_to,
+    materialize_support,
     resolve_support_payloads,
     _support_expected_mart_outputs,
 )
@@ -66,6 +71,10 @@ def _make_support_dataset(
             mart_dir.mkdir(parents=True, exist_ok=True)
             for table in mart_tables:
                 (mart_dir / f"{table}.parquet").write_bytes(b"")
+            # ADR-005: output attesi = clean + mart → il fixture crea anche il clean
+            clean_dir = ds_dir / "data" / "clean" / name / str(year)
+            clean_dir.mkdir(parents=True, exist_ok=True)
+            (clean_dir / f"{name}_{year}_clean.parquet").write_bytes(b"")
 
     return config_path
 
@@ -185,7 +194,8 @@ class TestResolveSupportPayloadsHappy:
         payload = result[0]
         assert len(payload["years_resolved"]) == 1
         yr = payload["years_resolved"][0]
-        assert len(yr["outputs"]) == 1
+        # ADR-005: output attesi = clean + mart (2 file)
+        assert len(yr["outputs"]) == 2
         assert yr["existing_outputs"] == []
         assert yr["all_outputs_exist"] is False
 
@@ -334,7 +344,7 @@ class TestCheckSupportPathDrift:
         warnings = check_support_path_drift(sql, self._SAMPLE_PAYLOADS)
         assert len(warnings) == 1
         assert "opencivitas_glossario" in warnings[0]
-        assert "{support.glossario.mart}" in warnings[0]
+        assert "support.glossario" in warnings[0]
 
     def test_multiple_hardcoded_paths(self):
         sql = (
@@ -392,10 +402,132 @@ class TestResolveAndFlatten:
 
         assert "support.my_support.outputs" in ctx
         assert "support.my_support.mart" in ctx
-        assert len(ctx["support.my_support.outputs"]) == 1
+        assert len(ctx["support.my_support.outputs"]) == 2  # clean + mart
         assert ctx["support.my_support.mart"].endswith("table_a.parquet")
+        assert ctx["support.my_support.clean"].endswith("support_ds_2024_clean.parquet")
+        assert ctx["support.my_support.mart.table_a"].endswith("table_a.parquet")
 
     def test_no_flatten_on_empty_resolve(self):
         resolved = resolve_support_payloads(None, require_exists=True)
         ctx = flatten_support_template_ctx(resolved)
         assert ctx == {}
+
+
+# ---------------------------------------------------------------------------
+# ADR-005: tipi codelist / file
+# ---------------------------------------------------------------------------
+
+
+class TestCodelistFileSupport:
+    def test_codelist_payload_path(self, tmp_path: Path):
+        root = tmp_path / "cand"
+        root.mkdir()
+        entries = [{"name": "geo", "type": "codelist", "id": "GEO", "agency": "ESTAT"}]
+        payloads = resolve_support_payloads(entries, require_exists=False, root=root)
+        payload = payloads[0]
+        assert payload["type"] == "codelist"
+        assert payload["path"].endswith(os.path.join("data", "support", "geo", "geo.parquet"))
+        assert payload["mart"] is None
+        assert payload["all_outputs_exist"] is False
+
+    def test_codelist_require_exists_missing(self, tmp_path: Path):
+        root = tmp_path / "cand"
+        root.mkdir()
+        entries = [{"name": "geo", "type": "codelist", "id": "GEO"}]
+        with pytest.raises(FileNotFoundError, match="codelist 'geo' non materializzata"):
+            resolve_support_payloads(entries, require_exists=True, root=root)
+
+    def test_codelist_requires_root(self):
+        with pytest.raises(ValueError, match="requires the candidate root"):
+            resolve_support_payloads(
+                [{"name": "geo", "type": "codelist", "id": "GEO"}], require_exists=False
+            )
+
+    def test_codelist_requires_id(self, tmp_path: Path):
+        with pytest.raises(ValueError, match="requires 'id'"):
+            resolve_support_payloads(
+                [{"name": "geo", "type": "codelist"}], require_exists=False, root=tmp_path
+            )
+
+    def test_file_payload_path(self, tmp_path: Path):
+        root = tmp_path
+        entries = [{"name": "quartieri", "type": "file", "path": "mapping/q.csv"}]
+        payloads = resolve_support_payloads(entries, require_exists=False, root=root)
+        assert payloads[0]["type"] == "file"
+        assert payloads[0]["path"] == str(root / "mapping" / "q.csv")
+
+    def test_file_existing_is_skippable(self, tmp_path: Path):
+        (tmp_path / "mapping").mkdir()
+        (tmp_path / "mapping" / "q.csv").write_text("x\n", encoding="utf-8")
+        entries = [{"name": "quartieri", "type": "file", "path": "mapping/q.csv"}]
+        payloads = resolve_support_payloads(entries, require_exists=False, root=tmp_path)
+        assert payloads[0]["all_outputs_exist"] is True
+
+    def test_invalid_type_raises(self):
+        with pytest.raises(ValueError, match=r"support\[\]\.type"):
+            resolve_support_payloads(
+                [{"name": "x", "type": "boh"}], require_exists=False, root=Path(".")
+            )
+
+
+class TestFlattenCodelistFile:
+    def test_ctx_path_placeholder(self, tmp_path: Path):
+        root = tmp_path / "cand"
+        root.mkdir()
+        payloads = resolve_support_payloads(
+            [{"name": "geo", "type": "codelist", "id": "GEO"}],
+            require_exists=False,
+            root=root,
+        )
+        ctx = flatten_support_template_ctx(payloads)
+        assert ctx["support.geo.path"].endswith("geo.parquet")
+        assert ctx["support.geo.outputs"] == [ctx["support.geo.path"]]
+
+
+class TestMaterializeCodelist:
+    def test_writes_parquet(self, tmp_path: Path, monkeypatch):
+        import toolkit.plugins.sdmx as sdmx_mod
+
+        class _FakeSdmx:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def fetch_codelist(self, codelist_id, agency="ESTAT"):
+                return {
+                    "id": codelist_id,
+                    "codes": {"IT": "Italy", "ITC4": "Nord-Ovest"},
+                    "annotations": {"IT": {"LEVEL": "0"}, "ITC4": {"LEVEL": "2"}},
+                    "origin": "https://fake.test",
+                }
+
+        monkeypatch.setattr(sdmx_mod, "SdmxSource", _FakeSdmx)
+
+        entry = {"name": "geo", "type": "codelist", "id": "GEO", "agency": "ESTAT"}
+        target = materialize_codelist_to(entry, tmp_path)
+        assert target.exists()
+
+        import duckdb
+
+        rows = duckdb.sql(
+            f"SELECT code, label_en, LEVEL FROM read_parquet('{target}') ORDER BY code"
+        ).fetchall()
+        assert rows == [("IT", "Italy", "0"), ("ITC4", "Nord-Ovest", "2")]
+
+    def test_unsupported_provider_raises(self, tmp_path: Path):
+        entry = {"name": "geo", "type": "codelist", "id": "GEO", "provider": "boh"}
+        with pytest.raises(DownloadError, match="provider 'boh' non supportato"):
+            materialize_codelist_to(entry, tmp_path)
+
+
+class TestMaterializeFile:
+    def test_missing_without_command_raises(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("TOOLKIT_ALLOW_SCRIPT_SOURCE", "1")
+        entry = {"name": "q", "type": "file", "path": "mapping/q.csv"}
+        with pytest.raises(DownloadError, match="senza 'command'"):
+            materialize_support(entry, root=tmp_path)
+
+    def test_command_requires_env_guard(self, tmp_path: Path, monkeypatch):
+        monkeypatch.delenv("TOOLKIT_ALLOW_SCRIPT_SOURCE", raising=False)
+        entry = {"name": "q", "type": "file", "path": "mapping/q.csv", "command": "true"}
+        with pytest.raises(DownloadError, match="TOOLKIT_ALLOW_SCRIPT_SOURCE"):
+            materialize_support(entry, root=tmp_path)

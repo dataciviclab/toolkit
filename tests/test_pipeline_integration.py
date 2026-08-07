@@ -214,6 +214,12 @@ def test_run_mart_supports_support_placeholder(tmp_path: Path) -> None:
     duckdb.execute(
         f"COPY (SELECT 'ok' AS marker) TO '{support_output.as_posix()}' (FORMAT PARQUET)"
     )
+    # ADR-005: output attesi = clean + mart → il fixture crea anche il clean
+    support_clean = (
+        support_root / "data" / "clean" / "lookup_ds" / "2024" / "lookup_ds_2024_clean.parquet"
+    )
+    support_clean.parent.mkdir(parents=True, exist_ok=True)
+    duckdb.execute(f"COPY (SELECT 'ok' AS marker) TO '{support_clean.as_posix()}' (FORMAT PARQUET)")
 
     support_config = tmp_path / "support_dataset.yml"
     support_config.write_text(

@@ -11,7 +11,7 @@ import csv
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import duckdb
 from lab_connectors.duckdb import safe_connect
@@ -276,7 +276,9 @@ def _sample_profile_rows(
           le colonne (non troncata). Usata dall'inferenza NOT NULL della validazione.
     """
     df = con.execute("SELECT * FROM v LIMIT 50").fetchdf()
-    sample_rows = df.to_dict(orient="records")
+    # pandas-stubs: to_dict(orient='records') restituisce dict[Hashable, Any];
+    # le chiavi sono sempre str (nomi colonna) → cast esplicito.
+    sample_rows = cast(list[dict[str, Any]], df.to_dict(orient="records"))
 
     # Single-pass missingness: one query with all columns in CASE expressions.
     # Avoids O(N) separate queries (N = columns), which was slow for 50+ column files.

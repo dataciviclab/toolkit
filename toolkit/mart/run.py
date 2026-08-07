@@ -120,7 +120,9 @@ def run_mart_multi_year(
     if not multi_year_tables:
         return {"output_rows": 0, "output_bytes": 0, "tables_count": 0, "col_count": None}
 
-    support_payloads = resolve_support_payloads(support_cfg, require_exists=True, smoke=smoke)
+    support_payloads = resolve_support_payloads(
+        support_cfg, require_exists=True, smoke=smoke, root=Path(root_dir)
+    )
     base_ctx = build_runtime_template_ctx(
         dataset=dataset,
         year=dataset_years[0] if dataset_years else 0,
@@ -443,7 +445,9 @@ def run_mart(
                 "(add explicit tables or a hierarchy section)"
             )
 
-        support_payloads = resolve_support_payloads(support_cfg, require_exists=True, smoke=smoke)
+        support_payloads = resolve_support_payloads(
+            support_cfg, require_exists=True, smoke=smoke, root=Path(root_dir)
+        )
         template_ctx = build_runtime_template_ctx(
             dataset=dataset,
             year=year,

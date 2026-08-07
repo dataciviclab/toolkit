@@ -27,7 +27,7 @@ def _print_list(data: dict[str, Any]) -> None:
 
 def registry_list(json_output: bool = typer.Option(False, "--json", help="Output JSON")) -> None:
     """Elenca gli artifact registry committati nei repo del workspace."""
-    from toolkit.domain.registry_ops import list_registries
+    from toolkit.registry.reader import list_registries
 
     data = list_registries()
     if json_output:
@@ -43,7 +43,7 @@ def registry_show(
     json_output: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
     """Mostra un artifact registry di un repo del workspace."""
-    from toolkit.domain.registry_ops import show_registry
+    from toolkit.registry.reader import show_registry
 
     try:
         data = show_registry(repo, artifact, slug=slug)

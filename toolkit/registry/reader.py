@@ -1,10 +1,13 @@
-"""Lettura degli artifact registry committati nei repo del workspace.
+"""Lettore degli artifact registry committati nei repo del workspace.
 
 Il registry builder (``toolkit.registry.builders``) genera e i repo committano
 i cataloghi in ``{repo}/registry/*.json`` (clean_catalog, mart_catalog,
 pipeline_signals, codelists, ...). Questo modulo li espone all'agente (CLI e
 MCP) senza riprogettare la discovery: lettura diretta dei file committati,
 cross-repo.
+
+Fa parte di ``toolkit.registry`` (home unica della capacità registry:
+builder + schemi + lettore). CLI e MCP sono wrapper sottili sopra.
 """
 
 from __future__ import annotations

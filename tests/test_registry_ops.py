@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from toolkit.domain.registry_ops import list_registries, show_registry
+from toolkit.registry.reader import list_registries, show_registry
 
 
 @pytest.fixture
@@ -84,7 +84,7 @@ def test_show_registry_slug_missing(mini_workspace: Path) -> None:
 
 def test_entries_count_pure() -> None:
     """Conteggio entries per tipo artifact (pure_unit)."""
-    from toolkit.domain.registry_ops import _entries_count
+    from toolkit.registry.reader import _entries_count
 
     assert _entries_count("clean_catalog", {"datasets": [1, 2]}) == 2
     assert _entries_count("mart_catalog", {"marts": [1]}) == 1

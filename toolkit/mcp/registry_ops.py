@@ -10,8 +10,8 @@ from typing import Any
 
 from lab_connectors.mcp.errors import ErrorCode
 
-from toolkit.domain.registry_ops import list_registries as _list_registries
-from toolkit.domain.registry_ops import show_registry as _show_registry
+from toolkit.registry.reader import list_registries as _list_registries
+from toolkit.registry.reader import show_registry as _show_registry
 from toolkit.mcp.errors import ToolkitClientError
 
 

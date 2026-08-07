@@ -123,16 +123,28 @@ def block_links(links: list[str]) -> list[str]:
 
 
 def block_sdmx(sdmx_info: dict[str, Any] | None, url: str) -> list[str]:
-    """Blocchi raw.sources per endpoint SDMX."""
+    """Blocchi raw.sources per endpoint SDMX.
+
+    - ESTAT (Eurostat): ``flow`` + ``agency: ESTAT`` — il profilo dedicato del
+      plugin risolve automaticamente l'endpoint Eurostat e ignora la versione
+      (numero mobile). Nessun ``endpoint`` nel config.
+    - Altre agenzie: ``flow`` + ``endpoint`` (URL scoperta dallo scout): il
+      fetch ``sdmx`` la usa come base (root SDMX derivato) per data e metadata.
+    """
     if sdmx_info and sdmx_info.get("flow_id"):
-        return [
+        lines = [
             f'    - name: "sdmx_{sdmx_info["flow_id"]}"',
             '      type: "sdmx"',
             "      args:",
-            f'        endpoint: "{url}"',
             f'        flow: "{sdmx_info["flow_id"]}"',
-            "      primary: true",
         ]
+        agency = sdmx_info.get("agency")
+        if agency and str(agency).upper() == "ESTAT":
+            lines.append('        agency: "ESTAT"')
+        else:
+            lines.append(f'        endpoint: "{url}"')
+        lines.append("      primary: true")
+        return lines
     return block_http_file(url, "sdmx")
 
 

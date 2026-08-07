@@ -25,10 +25,40 @@ def sniff_delim(sample_text: str) -> Optional[str]:
     return sorted(scores.items(), key=lambda kv: (kv[1][0], kv[1][1], kv[1][2]), reverse=True)[0][0]
 
 
-def sniff_decimal(sample_text: str) -> Optional[str]:
+def sniff_decimal(sample_text: str, delim: Optional[str] = None) -> Optional[str]:
+    if delim is None:
+        # Legacy (senza delim): conteggio regex su tutto il chunk.
+        chunk = sample_text[:200_000]
+        comma_dec = len(re.findall(r"\d+,\d{1,3}\b", chunk))
+        dot_dec = len(re.findall(r"\d+\.\d{1,3}\b", chunk))
+        if comma_dec == 0 and dot_dec == 0:
+            return None
+        return "," if comma_dec >= dot_dec else "."
+
+    # Field-aware: ragiona sui campi separati dal delim del CSV. La virgola che
+    # separa due colonne (es. "2008,88") NON è un separatore decimale — senza
+    # delim produce falsi positivi quando i valori numerici hanno <=3 cifre.
     chunk = sample_text[:200_000]
-    comma_dec = len(re.findall(r"\d+,\d{1,3}\b", chunk))
-    dot_dec = len(re.findall(r"\d+\.\d{1,3}\b", chunk))
+    comma_dec = 0
+    dot_dec = 0
+    for line in chunk.splitlines():
+        fields = [f.strip().strip('"') for f in line.split(delim)]
+        for field in fields:
+            if re.fullmatch(r"\d+,\d{1,2}", field):
+                # "88,5" — virgola decimale semplice (es. delim ';')
+                comma_dec += 1
+            elif re.fullmatch(r"\d+\.\d{1,3}", field):
+                # "88.5" / "21900.0" — punto decimale semplice
+                dot_dec += 1
+            elif re.fullmatch(r"\d+\.\d{3},\d{1,2}", field):
+                # "1.234,56" — numero italiano completo (delim ';': la virgola
+                # decimale resta interna al campo)
+                comma_dec += 1
+        # Coppie adiacenti in formato italiano "1.234" + "56" (mille-separatore
+        # col punto + decimali con virgola) quando il delim è la virgola.
+        for i in range(len(fields) - 1):
+            if re.fullmatch(r"\d+\.\d{3}", fields[i]) and re.fullmatch(r"\d{1,2}", fields[i + 1]):
+                comma_dec += 1
     if comma_dec == 0 and dot_dec == 0:
         return None
     return "," if comma_dec >= dot_dec else "."

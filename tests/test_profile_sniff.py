@@ -28,6 +28,43 @@ def test_sniff_delim_tab():
 def test_sniff_decimal_it_comma():
     sample = "val\n1.234,56\n7.890,12\n"
     assert sniff_decimal(sample) == ","
+    # Con delim noto: coppie adiacenti "1.234" + "56" → virgola decimale
+    assert sniff_decimal(sample, delim=",") == ","
+
+
+@pytest.mark.policy
+def test_sniff_decimal_csv_dot_values():
+    """CSV con delim ',' e valori numerici col punto → '.' (non ',')."""
+    sample = (
+        "freq,unit,iccs,geo,year,value,flag\n"
+        "A,NR,ICCS0101,AL,2008,88.0,\n"
+        "A,NR,ICCS0101,AL,2009,82.0,\n"
+    )
+    assert sniff_decimal(sample, delim=",") == "."
+
+
+@pytest.mark.policy
+def test_sniff_decimal_csv_dot_no_false_positive():
+    """La virgola-delim (anno,valore) non deve contare come decimale.
+
+    Regressione vera: "2008,88" (anno + valore a <=3 cifre separati dal delim
+    CSV) veniva sniffata come decimale con virgola → decimal=',' su CSV col
+    punto → value VARCHAR → mart falliva con avg(VARCHAR).
+    """
+    sample = (
+        "freq,unit,iccs,geo,year,value,flag\n"
+        "A,NR,ICCS0101,AL,2008,88.0,\n"
+        "A,NR,ICCS0101,AL,2009,520.0,\n"
+        "A,NR,ICCS0101,AL,2010,7.0,\n"
+    )
+    assert sniff_decimal(sample, delim=",") == "."
+
+
+@pytest.mark.policy
+def test_sniff_decimal_legacy_backcompat():
+    """Senza delim mantiene il comportamento storico."""
+    assert sniff_decimal("a\n1,5\n2,7\n") == ","
+    assert sniff_decimal("a\n1.5\n2.7\n") == "."
 
 
 @pytest.mark.policy

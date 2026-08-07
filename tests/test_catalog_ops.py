@@ -190,6 +190,75 @@ def resolver_with_local(monkeypatch: pytest.MonkeyPatch) -> CatalogResolver:
             },
         },
     )
+    # Catalogo semantico committato: isolato nei test (nessuna semantica)
+    monkeypatch.setattr("toolkit.domain.catalog._scan_committed_catalogs", lambda _workspace: {})
+    return resolver
+
+
+# Catalogo semantico fake: arricchisce entry già presenti nel manifest.
+_FAKE_SEMANTIC: dict[str, dict[str, Any]] = {
+    "anac_bandi_gara": {
+        "slug": "anac_bandi_gara",
+        "name": "Bandi di gara ANAC",
+        "description": "Bandi di gara pubblici",
+        "tags": ["appalti"],
+        "category": "appalti",
+        "period": {"start": 2023, "end": 2024},
+        "columns": [
+            {
+                "name": "cig_code",
+                "type": "VARCHAR",
+                "role": "dimension",
+                "description": "Codice CIG",
+            },
+            {"name": "importo", "type": "DOUBLE", "role": "metric", "description": "Importo gara"},
+        ],
+        "_repo": "dataset-incubator",
+    },
+    "terna_electricity_by_source": {
+        "slug": "terna_electricity_by_source",
+        "name": "Elettricità per fonte",
+        "description": "Produzione elettrica per fonte",
+        "tags": ["energia"],
+        "category": "energia",
+        "period": {"start": 2023, "end": 2024},
+        "columns": [
+            {"name": "fonte", "type": "VARCHAR", "role": "dimension", "description": ""},
+            {"name": "gwh", "type": "DOUBLE", "role": "metric", "description": "GWh prodotti"},
+        ],
+        "_repo": "dataset-incubator",
+    },
+    "popolazione_istat_comunale_2019_2025": {
+        "slug": "popolazione_istat_comunale_2019_2025",
+        "name": "Popolazione comunale",
+        "description": "Popolazione residente per comune",
+        "tags": [],
+        "category": "popolazione",
+        "columns": [{"name": "comune", "type": "VARCHAR", "role": "dimension", "description": ""}],
+        "_repo": "dataset-incubator",
+    },
+}
+
+
+@pytest.fixture
+def resolver_semantic(monkeypatch: pytest.MonkeyPatch) -> CatalogResolver:
+    """Resolver con manifest mockato E catalogo semantico mockato."""
+    resolver = CatalogResolver(
+        manifest_url="http://fake/manifest.json",
+        include_local=True,
+    )
+
+    def _fake_read_manifest(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return _FAKE_MANIFEST
+
+    monkeypatch.setattr("toolkit.domain.catalog.read_manifest", _fake_read_manifest)
+    monkeypatch.setattr("toolkit.domain.catalog._scan_workspace_parquets", lambda _w: [])
+    monkeypatch.setattr(
+        "toolkit.domain.catalog._scan_workspace_configs", lambda _w, stage="all": {}
+    )
+    monkeypatch.setattr(
+        "toolkit.domain.catalog._scan_committed_catalogs", lambda _w: _FAKE_SEMANTIC
+    )
     return resolver
 
 
@@ -544,3 +613,67 @@ class TestEdgeCases:
         res = resolver.list_datasets(limit=3)
         assert res["truncated"] is True
         assert len(res["datasets"]) == 3
+
+
+# ---------------------------------------------------------------------------
+# Semantic find (mossa 1: catalogo committato nel resolver)
+# ---------------------------------------------------------------------------
+
+
+class TestSemanticFind:
+    def test_find_by_description(self, resolver_semantic: CatalogResolver) -> None:
+        """Query su description del catalogo committato trova il dataset."""
+        res = resolver_semantic.list_datasets(query="bandi di gara")
+        slugs = {d["slug"] for d in res["datasets"]}
+        assert "anac_bandi_gara" in slugs
+        entry = next(d for d in res["datasets"] if d["slug"] == "anac_bandi_gara")
+        assert entry["description"] == "Bandi di gara pubblici"
+        assert entry["meta_match"] is True
+        assert entry["_repo"] == "dataset-incubator"
+
+    def test_find_by_column(self, resolver_semantic: CatalogResolver) -> None:
+        """Query su nome colonna → matched_columns popolato."""
+        res = resolver_semantic.list_datasets(query="importo")
+        entry = next(d for d in res["datasets"] if d["slug"] == "anac_bandi_gara")
+        assert entry["meta_match"] is not True
+        assert entry["matched_columns"] == [
+            {"name": "importo", "type": "DOUBLE", "role": "metric", "description": "Importo gara"}
+        ]
+
+    def test_find_metric_only(self, resolver_semantic: CatalogResolver) -> None:
+        """metric_only esclude i dataset senza colonne metric."""
+        res = resolver_semantic.list_datasets(metric_only=True)
+        slugs = {d["slug"] for d in res["datasets"]}
+        assert "anac_bandi_gara" in slugs
+        assert "terna_electricity_by_source" in slugs
+        assert "popolazione_istat_comunale_2019_2025" not in slugs
+
+    def test_find_metric_only_respects_query(self, resolver_semantic: CatalogResolver) -> None:
+        """metric_only + query semantica si combinano."""
+        res = resolver_semantic.list_datasets(query="produzione elettrica", metric_only=True)
+        slugs = {d["slug"] for d in res["datasets"]}
+        assert "terna_electricity_by_source" in slugs
+        assert "anac_bandi_gara" not in slugs
+
+    def test_describe_semantic_enrichment(
+        self, resolver_semantic: CatalogResolver, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """describe_slug arricchito: description/tags/period + colonne con role."""
+        fake_preview = {
+            "path": "x",
+            "column_count": 1,
+            "columns": [{"name": "importo", "type": "DOUBLE"}],
+            "row_count": 10,
+            "preview": [],
+            "truncated": False,
+        }
+        monkeypatch.setattr(
+            "toolkit.domain.catalog.parquet_preview", lambda *a, **k: dict(fake_preview)
+        )
+
+        res = resolver_semantic.describe_slug("anac_bandi_gara")
+        assert res["description"] == "Bandi di gara pubblici"
+        assert res["tags"] == ["appalti"]
+        assert res["period"] == {"start": 2023, "end": 2024}
+        assert res["columns"][0]["role"] == "metric"
+        assert res["columns"][0]["description"] == "Importo gara"

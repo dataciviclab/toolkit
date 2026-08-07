@@ -189,11 +189,15 @@ def toolkit_status(
 
 @mcp.tool(
     description="Cerca dataset per slug, source, layer (clean/mart) o testo. "
+    "La query matcha anche la semantica dei cataloghi committati del workspace "
+    "(description, tags, category, nomi colonne) — vedi matched_columns/meta_match. "
     "source='gcs' = pubblicati (da gcs_manifest.json), "
     "source='workspace' = in sviluppo (da dataset.yml + parquet locali), "
     "source='all' (default) = unione. "
-    "Filtri aggiuntivi: stage (candidates/support), status_filter (SUCCESS/FAILED/DRY_RUN). "
-    "Restituisce slug, layer, anni, file count, size, run_status, flag source.",
+    "Filtri aggiuntivi: stage (candidates/support), status_filter (SUCCESS/FAILED/DRY_RUN), "
+    "metric_only (solo dataset con colonne metric dal catalogo). "
+    "Restituisce slug, layer, anni, file count, size, run_status, flag source + "
+    "semantica quando il catalogo committato è presente.",
     structured_output=True,
 )
 def toolkit_find(

@@ -15,6 +15,7 @@ vanno aggiunte nei wrapper MCP.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -269,6 +270,90 @@ def _merge_gcs_and_local(
 
 
 # ---------------------------------------------------------------------------
+# Catalogo semantico committato (mossa 1: find semantico nel resolver)
+# ---------------------------------------------------------------------------
+
+# Campi semantici arricchiti dal catalogo committato (se presenti).
+SEMANTIC_FIELDS = (
+    "name",
+    "description",
+    "source",
+    "source_id",
+    "tags",
+    "category",
+    "period",
+    "mart_refs",
+)
+
+
+def _scan_committed_catalogs(workspace: Path = WORKSPACE_ROOT) -> dict[str, dict[str, Any]]:
+    """Scansiona i cataloghi committati nei repo del workspace.
+
+    Qualsiasi dir di primo livello con ``registry/clean_catalog.json``
+    (eurostat/, dataset-incubator/, ...). Ritorna ``{slug: entry semantica}``
+    con ``_repo`` (nome dir) aggiunto.
+
+    La semantica (columns con role/semantic_type, description, tags, period)
+    vive nei cataloghi generati dal registry builder e committati nei repo:
+    qui diventa la fonte per il find semantico del resolver.
+    """
+    result: dict[str, dict[str, Any]] = {}
+    if not workspace.is_dir():
+        return result
+    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
+        catalog_path = repo_dir / "registry" / "clean_catalog.json"
+        if not catalog_path.is_file():
+            continue
+        try:
+            catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        for ds in catalog.get("datasets", []) or []:
+            slug = ds.get("slug")
+            if slug:
+                entry = dict(ds)
+                entry["_repo"] = repo_dir.name
+                result[slug] = entry
+    return result
+
+
+def _semantic_query_hits(
+    semantic: dict[str, dict[str, Any]], query: str
+) -> dict[str, list[dict[str, Any] | None]]:
+    """Slug che matchano la query sulla semantica (meta o colonne).
+
+    Returns:
+        ``{slug: [None | colonna_matchata, ...]}`` — ``None`` = meta match
+        (name/description/source/tags/category), dict = colonna matchata.
+    """
+    q = query.lower()
+    hits: dict[str, list[dict[str, Any] | None]] = {}
+    for slug, s in semantic.items():
+        matched: list[dict[str, Any] | None] = []
+        meta_parts = " ".join(
+            str(s.get(k) or "") for k in ("name", "description", "source", "tags", "category")
+        )
+        if q in slug.lower() or q in meta_parts.lower():
+            matched.append(None)
+        for col in s.get("columns", []) or []:
+            if (
+                q in str(col.get("name", "")).lower()
+                or q in str(col.get("description", "")).lower()
+            ):
+                matched.append(
+                    {
+                        "name": col.get("name"),
+                        "type": col.get("type"),
+                        "role": col.get("role"),
+                        "description": col.get("description"),
+                    }
+                )
+        if matched:
+            hits[slug] = matched
+    return hits
+
+
+# ---------------------------------------------------------------------------
 # Resolver
 # ---------------------------------------------------------------------------
 
@@ -294,6 +379,27 @@ class CatalogResolver:
         self._gcs_manifest: dict[str, Any] | None = None
         self._local_entries: list[dict[str, Any]] | None = None
         self._workspace_configs: dict[str, dict[str, Any]] | None = None
+        self._semantic: dict[str, dict[str, Any]] | None = None
+
+    def _load_semantic(self) -> dict[str, dict[str, Any]]:
+        """Carica i cataloghi semantici committati nel workspace (lazy)."""
+        if self._semantic is not None:
+            return self._semantic
+        if not self._include_local:
+            self._semantic = {}
+            return self._semantic
+        self._semantic = _scan_committed_catalogs(self._workspace)
+        return self._semantic
+
+    def _merge_semantic(self, entry: dict[str, Any], semantic: dict[str, Any] | None) -> None:
+        """Arricchisce un entry con i campi semantici del catalogo committato."""
+        if not semantic:
+            return
+        for field in SEMANTIC_FIELDS:
+            if semantic.get(field):
+                entry[field] = semantic[field]
+        entry["_repo"] = semantic.get("_repo")
+        entry["_has_semantic"] = True
 
     def _load_gcs(self) -> dict[str, Any]:
         if self._gcs_manifest is not None:
@@ -331,19 +437,26 @@ class CatalogResolver:
         source: str = "all",
         stage: str = "all",
         status_filter: str | None = None,
+        metric_only: bool = False,
     ) -> dict[str, Any]:
         """Cerca dataset per slug, sorgente, layer o testo.
 
         Args:
-            query: Testo nello slug (case-insensitive, substring).
+            query: Testo da cercare — oltre allo slug, matcha la semantica
+                dei cataloghi committati (name, description, tags, category,
+                colonne) se presente nel workspace.
             layer: ``"clean"``, ``"mart"`` o ``None`` (entrambi).
             limit: Max risultati (default 15). Usa ``0`` per nessun limite.
             source: ``"gcs"``, ``"workspace"`` o ``"all"`` (default).
             stage: Filtro workspace: ``"candidates"``, ``"support"``, ``"all"`` (default).
             status_filter: Filtro run status: ``"SUCCESS"``, ``"FAILED"``, ecc.
+            metric_only: Se True, solo dataset con almeno una colonna role=metric
+                (richiede la semantica del catalogo committato).
 
         Returns:
             Dict con ``datasets`` (lista), ``total_count``, ``truncated``.
+            Le entry con semantica includono ``description``, ``tags``,
+            ``category``, ``period``, ``matched_columns`` e ``meta_match``.
         """
         # Input validation
         if source not in VALID_SOURCES:
@@ -358,6 +471,19 @@ class CatalogResolver:
         # Build agg map: slug → entry
         datasets: dict[str, dict[str, Any]] = {}
 
+        # Semantic layer: hit di query sulla semantica + slug con metriche
+        semantic = self._load_semantic()
+        sem_hits: dict[str, list[dict[str, Any] | None]] = (
+            _semantic_query_hits(semantic, query) if query else {}
+        )
+        metric_slugs: set[str] = set()
+        if metric_only:
+            metric_slugs = {
+                slug
+                for slug, s in semantic.items()
+                if any(c.get("role") == "metric" for c in (s.get("columns") or []))
+            }
+
         # --- Source: GCS ---
         if source in ("gcs", "all"):
             manifest = self._load_gcs()
@@ -370,7 +496,9 @@ class CatalogResolver:
                 slug = f["slug"]
                 if slug is None:
                     continue
-                if query and query.lower() not in slug.lower():
+                if query and query.lower() not in slug.lower() and slug not in sem_hits:
+                    continue
+                if metric_only and slug not in metric_slugs:
                     continue
 
                 if slug not in datasets:
@@ -394,7 +522,9 @@ class CatalogResolver:
 
             # Process config entries
             for slug in set(configs) | parquet_only_slugs:
-                if query and query.lower() not in slug.lower():
+                if query and query.lower() not in slug.lower() and slug not in sem_hits:
+                    continue
+                if metric_only and slug not in metric_slugs:
                     continue
                 info = configs.get(slug, {})
 
@@ -426,6 +556,11 @@ class CatalogResolver:
         for slug in sorted(datasets):
             entry = datasets[slug]
             entry["years"] = sorted(entry["years"])
+            self._merge_semantic(entry, semantic.get(slug))
+            hits = sem_hits.get(slug)
+            if hits is not None:
+                entry["matched_columns"] = [h for h in hits if h]
+                entry["meta_match"] = any(h is None for h in hits)
             self._finalize_layer(entry, layer)
             result.append(entry)
 
@@ -593,6 +728,24 @@ class CatalogResolver:
             result["year"] = actual_year
             result["layer"] = layer
             result["_local"] = is_local
+            # Arricchimento semantico dal catalogo committato (se presente):
+            # description/tags/period + role/semantic_type/description colonne.
+            sem = self._load_semantic().get(slug)
+            if sem:
+                for field in ("description", "tags", "category", "period", "source"):
+                    if sem.get(field):
+                        result[field] = sem[field]
+                sem_cols = {c.get("name"): c for c in (sem.get("columns") or [])}
+                for col in result.get("columns", []) or []:
+                    sc = sem_cols.get(col.get("name"))
+                    if sc:
+                        if sc.get("role"):
+                            col["role"] = sc["role"]
+                        if sc.get("semantic_type"):
+                            col["semantic_type"] = sc["semantic_type"]
+                        if sc.get("description"):
+                            col["description"] = sc["description"]
+                result["_repo"] = sem.get("_repo")
             return result
         except Exception as exc:
             raise RuntimeError(

@@ -46,6 +46,21 @@ def _format_args(args: dict, year: int) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _sdmx_root_from_url(url: str) -> str:
+    """Deriva il root SDMX da una URL scoperta dallo scout.
+
+    Lo scout espone l'URL col path risorsa (es. ``.../sdmx/2.1/dataflow/IT1/22_289``
+    o ``.../data/NAMA_10R_3GDP``): il plugin SdmxSource costruisce i path
+    partendo dal root (``data/...``, ``dataflow/...``), quindi stripamo il
+    segmento di risorsa.
+    """
+    base = url.split("?")[0].rstrip("/")
+    for marker in ("/dataflow/", "/data/"):
+        if marker in base:
+            return base[: base.index(marker)]
+    return base
+
+
 def _infer_ext(stype: str, formatted_args: dict, origin: str | None = None) -> str:
     if stype in {"sdmx", "sparql"}:
         return ".csv"
@@ -130,9 +145,20 @@ def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, 
 
 @_register_fetch("sdmx")
 def _fetch_sdmx(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
-    src = registry.create(stype, **(client or {}))
+    agency = str(formatted_args.get("agency") or "IT1")
+    src_client = dict(client or {})
+    # Endpoint esplicito per agenzie non-ISTAT/ESTAT: lo scout scopre l'URL
+    # (spesso col path dataflow/data) → deriviamo il root SDMX e lo usiamo
+    # come base per data e metadata. ISTAT resta sui default (esploradati +
+    # sdmx.istat.it), ESTAT è auto-risolto dal profilo.
+    endpoint = formatted_args.get("endpoint")
+    if endpoint and agency != "IT1" and agency.upper() != "ESTAT":
+        root = _sdmx_root_from_url(str(endpoint))
+        src_client.setdefault("data_base_url", root)
+        src_client.setdefault("metadata_base_url", root)
+    src = registry.create(stype, **src_client)
     return src.fetch(
-        str(formatted_args.get("agency") or "IT1"),
+        agency,
         str(formatted_args["flow"]),
         # La versione è opzionale: il profilo Eurostat (ESTAT) la ignora
         # (numero mobile, mai nel path dati); ISTAT la richiede (errore a valle).

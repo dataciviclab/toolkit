@@ -1,3 +1,11 @@
+## [1.48.0] - 2026-08-07
+
+### Added
+
+- **Profilo Eurostat (ESTAT) in `SdmxSource`** (PR #450): fetch TSV wide con unpivot e flag, constraints SDMX-JSON 2.0, `fetch_codelist` con annotations NUTS, scout dataflow ESTAT + scaffold `agency: ESTAT`, `version` opzionale per sdmx. Fix `sniff_decimal` field-aware.
+- **Support unificati — ADR-005** (PR #451): `support[].type` (`dataset`/`codelist`/`file`), orchestrazione ensure (skip-if-exists + materializzazione per tipo), placeholder `{support.NAME.clean|mart.TABLE|path}`, flag `--refresh-support`. `mypy toolkit/` pulito al 100%.
+- **Modulo registry condiviso** (PR #452): `toolkit.registry` — builder di `clean_catalog`/`mart_catalog`/`pipeline_signals`/`codelists` (derive locale + check-gcs + existing_catalog), schemi JSON standard, `semantic_types.yaml` condiviso, reader CLI (`toolkit registry list/show`) e MCP (`registry_list/show`), find semantico nel resolver.
+
 # Changelog
 
 All notable changes to this project will be documented in this file.

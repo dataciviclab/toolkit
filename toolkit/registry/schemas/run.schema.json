@@ -16,7 +16,7 @@
     },
     "status": {
       "type": "string",
-      "enum": ["SUCCESS", "FAILED", "PENDING", "SKIPPED"],
+      "enum": ["SUCCESS", "FAILED", "PENDING", "SKIPPED", "RUNNING", "DRY_RUN", "RUNNING", "DRY_RUN"],
       "description": "Stato del run record del toolkit."
     },
     "quality_score": {

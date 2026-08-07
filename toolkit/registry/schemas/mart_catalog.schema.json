@@ -171,10 +171,7 @@
         "status": {
           "type": "string",
           "enum": [
-            "SUCCESS",
-            "FAILED",
-            "PENDING",
-            "SKIPPED"
+            "SUCCESS", "FAILED", "PENDING", "SKIPPED", "RUNNING", "DRY_RUN"
           ]
         },
         "quality_score": {

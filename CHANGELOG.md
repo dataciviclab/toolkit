@@ -1,3 +1,9 @@
+## [1.48.1] - 2026-08-07
+
+### Fixed
+
+- **Schema registry: enum run.status incompleto** (emerso dal wrapper DI): gli schemi `run`, `pipeline_signals`, `mart_catalog`, `clean_catalog` ammettevano solo `SUCCESS/FAILED/PENDING/SKIPPED`, ma il run_state del toolkit produce anche `RUNNING` e `DRY_RUN` → il builder rifiutava i catalog con run parziali/dry. Allineato l'enum al vocabolario reale (`toolkit/core/run_records.py`).
+
 ## [1.48.0] - 2026-08-07
 
 ### Added

@@ -4,16 +4,19 @@ Schemi canonici degli artifact registry generati dal builder condiviso
 (`lab_connectors.registry`, Fase 1). Ogni repo (dataset-incubator, eurostat,
 dcl-bologna, ...) genera i propri JSON con questi contratti e li committa.
 
-## Il modello a 3 viste
+## Il modello a 4 viste
 
 Stesso stato (dataset.yml + run records + parquet locali + `--check-gcs`),
-tre proiezioni:
+quattro proiezioni:
 
 | Artifact | Risponde a | Contenuto | Consumatori |
 |---|---|---|---|
 | `clean_catalog.json` | "cosa esiste e com'è fatto" (clean) | slug, columns (role/semantic_type), period, location, stage | clean-query, data-explorer, resolver |
 | `mart_catalog.json` | "cosa esiste a livello analitico" (mart) | tabelle, PK, required_columns, min_rows, location, run | clean-query, data-explorer |
 | `pipeline_signals.json` | "come è andato e cosa manca" (operativo) | status ok/warn/error, years, run, detail, action | ACB (bootstrap/triage) |
+| `codelists.json` | "quali valori hanno le dimensioni" | mappa nome-codelist → righe (code, label_en, ...) | agenti MCP (risoluzione codici) |
+
+Il codelists è opzionale: assente se il repo non ha una dir `codelists/`.
 
 Regole di coerenza:
 
@@ -35,6 +38,7 @@ Regole di coerenza:
   opzionali (`years`, `run`) — backward compatible. `latest_run` (sample run
   GHA) resta distinto da `run` (run record toolkit).
 - `mart_catalog.schema.json`: v1 nuovo. `columns` opzionale in v1.
+- `codelists.schema.json`: v1 nuovo (mappa nome-codelist → righe CSV).
 - `run.schema.json`: blocco condiviso, fonte canonica.
 
 ## Migrazione

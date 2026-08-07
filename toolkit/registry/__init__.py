@@ -13,6 +13,7 @@ from toolkit.registry.layout import DatasetManifest, RepoLayout, iter_manifests,
 from toolkit.registry.paths import PathContract
 from toolkit.registry.builders import (
     build_clean_catalog,
+    build_codelists,
     build_mart_catalog,
     build_registry,
     build_signals,
@@ -23,6 +24,7 @@ __all__ = [
     "PathContract",
     "RepoLayout",
     "build_clean_catalog",
+    "build_codelists",
     "build_mart_catalog",
     "build_registry",
     "build_signals",

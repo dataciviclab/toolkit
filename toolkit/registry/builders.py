@@ -123,7 +123,7 @@ def build_clean_catalog(
         entry: dict[str, Any] = {
             "slug": manifest.slug,
             "name": manifest.slug.replace("_", " ").title(),
-            "description": "",
+            "description": manifest.description,
             "source": "",
             "source_id": manifest.source_id,
             "period": manifest.period or {"start": years_eff[0], "end": years_eff[-1]},
@@ -369,6 +369,75 @@ def _years_label(years: Iterable[int]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# codelists (valori delle dimensioni)
+# ---------------------------------------------------------------------------
+
+
+def _read_codelist_csv(path: Path) -> list[dict[str, Any]]:
+    """Legge un codelist CSV (header, prima riga) in lista di dict.
+
+    Preserva tutte le colonne (es. geo.csv: code, label_en, nuts_level,
+    parent_code). Righe vuote ignorate.
+    """
+    import csv
+
+    rows: list[dict[str, Any]] = []
+    with path.open(encoding="utf-8", newline="") as fh:
+        for row in csv.DictReader(fh):
+            if not row or not any((v or "").strip() for v in row.values()):
+                continue
+            cleaned = {k.strip(): (v or "").strip() for k, v in row.items()}
+            rows.append(cleaned)
+    return rows
+
+
+def build_codelists(
+    layout: RepoLayout,
+    codelists_dir: Path | None = None,
+) -> tuple[dict[str, Any], dict[str, list[str]]]:
+    """Costruisce codelists.json: i valori delle dimensioni del repo.
+
+    Legge ``{repo_root}/codelists/*.csv`` (convenzione eurostat: geo.csv,
+    units.csv, freq.csv, ...) e li espone come mappa ``nome → [righe]``.
+    Permette all'agente MCP di risolvere i codici (es. unit='EUR_HAB',
+    geo='ITC4' con parent_code) prima di scrivere le query.
+
+    Returns:
+        Tuple (payload, errors) con errors = {"derive": [], "validation": [...]}.
+        Se la dir codelists non esiste, ritorna un payload vuoto senza errori
+        (codelists è opzionale).
+    """
+    codelists_dir = codelists_dir or (layout.repo_root / "codelists")
+    codelists: dict[str, Any] = {}
+    errors: list[str] = []
+
+    if not codelists_dir.is_dir():
+        return (
+            {"schema_version": 1, "source_repo": layout.source_repo, "codelists": {}},
+            {"derive": [], "validation": []},
+        )
+
+    for csv_path in sorted(codelists_dir.glob("*.csv")):
+        name = csv_path.stem
+        try:
+            rows = _read_codelist_csv(csv_path)
+        except Exception as exc:
+            errors.append(f"codelist {name}: {exc}")
+            continue
+        if rows:
+            codelists[name] = rows
+
+    payload: dict[str, Any] = {
+        "schema_version": 1,
+        "source_repo": layout.source_repo,
+        "updated_at": str(datetime.now(UTC).date()),
+        "codelists": codelists,
+    }
+    errors.extend(validate_artifact(payload, "codelists.schema.json"))
+    return payload, {"derive": [], "validation": errors}
+
+
+# ---------------------------------------------------------------------------
 # Convenience: unico entry point
 # ---------------------------------------------------------------------------
 
@@ -399,13 +468,16 @@ def build_registry(
     )
     marts, mc_errors = build_mart_catalog(layout, path_contract=path_contract, slug=slug)
     signals, ps_errors = build_signals(layout)
+    codelists, cl_errors = build_codelists(layout)
     return {
         "clean_catalog": catalog,
         "mart_catalog": marts,
         "pipeline_signals": signals,
+        "codelists": codelists,
         "errors": {
             "clean_catalog": cc_errors,
             "mart_catalog": mc_errors,
             "pipeline_signals": ps_errors,
+            "codelists": cl_errors,
         },
     }

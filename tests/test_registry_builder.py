@@ -48,6 +48,8 @@ mart:
         required_columns: [year, geo, value]
         primary_key: [year, geo]
         min_rows: 10
+registry:
+  description: "Test dataset per il registry builder"
 """
 
 SIMPLE_YML = """
@@ -151,6 +153,7 @@ def test_clean_catalog_contract(tmp_path: Path) -> None:
     ds = catalog["datasets"][0]
     assert ds["slug"] == "my_dataset"
     assert ds["period"] == {"start": 2000, "end": 2024}  # da time_coverage
+    assert ds["description"] == "Test dataset per il registry builder"  # da registry.description
     assert [c["name"] for c in ds["columns"]] == ["geo", "year", "value"]
     assert ds["mart_refs"] == ["my_dataset__mart_trend"]
     assert ds["run"]["status"] == "SUCCESS"
@@ -318,3 +321,45 @@ def test_registry_builder_imports() -> None:
         hasattr(reg, name)
         for name in ("build_clean_catalog", "build_mart_catalog", "build_signals", "RepoLayout")
     )
+
+
+# ---------------------------------------------------------------------------
+# codelists
+# ---------------------------------------------------------------------------
+
+
+def test_codelists_contract(tmp_path: Path) -> None:
+    """codelists.json espone i valori delle dimensioni dal repo (contract)."""
+    from toolkit.registry.builders import build_codelists
+
+    layout = _make_repo(tmp_path)
+    cl_dir = tmp_path / "codelists"
+    cl_dir.mkdir()
+    (cl_dir / "units.csv").write_text(
+        "unit,label_en\nEUR_HAB,EUR per inhabitant\nPPS_HAB,PPS per inhabitant\n",
+        encoding="utf-8",
+    )
+    (cl_dir / "geo.csv").write_text(
+        "code,label_en,nuts_level,parent_code\nITC4,Lombardia,3,ITH\n",
+        encoding="utf-8",
+    )
+
+    payload, errors = build_codelists(layout)
+    assert errors == {"derive": [], "validation": []}, f"errori inattesi: {errors}"
+    assert payload["codelists"]["units"] == [
+        {"unit": "EUR_HAB", "label_en": "EUR per inhabitant"},
+        {"unit": "PPS_HAB", "label_en": "PPS per inhabitant"},
+    ]
+    assert payload["codelists"]["geo"] == [
+        {"code": "ITC4", "label_en": "Lombardia", "nuts_level": "3", "parent_code": "ITH"}
+    ]
+
+
+def test_codelists_empty_without_dir(tmp_path: Path) -> None:
+    """Senza dir codelists → payload vuoto, nessun errore (opzionale)."""
+    from toolkit.registry.builders import build_codelists
+
+    layout = _make_repo(tmp_path)
+    payload, errors = build_codelists(layout)
+    assert errors == {"derive": [], "validation": []}
+    assert payload["codelists"] == {}

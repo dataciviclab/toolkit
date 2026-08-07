@@ -71,6 +71,7 @@ class DatasetManifest:
     source_id: str = ""
     tags: tuple[str, ...] = ()
     category: str = ""
+    description: str = ""
     time_coverage: dict[str, Any] = field(default_factory=dict)
     mart_tables: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     mart_rules: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -102,6 +103,19 @@ def load_manifest(yml_path: Path) -> DatasetManifest | None:
     except Exception:
         extra = {}
 
+    # Description: campi custom non esposti dal config model — lettura mirata
+    # del yaml (dataset.description, registry.description/theme).
+    description = ""
+    try:
+        import yaml as _yaml
+
+        raw = _yaml.safe_load(yml_path.read_text(encoding="utf-8")) or {}
+        ds = raw.get("dataset") or {}
+        reg = raw.get("registry") or {}
+        description = ds.get("description") or reg.get("description") or reg.get("theme") or ""
+    except Exception:
+        description = ""
+
     tables = tuple({"name": t.name, "sql": t.sql} for t in cfg.mart.tables if t.name)
     rules: dict[str, dict[str, Any]] = {}
     validate = cfg.mart.validate
@@ -125,6 +139,7 @@ def load_manifest(yml_path: Path) -> DatasetManifest | None:
         source_id=cfg.source_id or "",
         tags=tuple(cfg.tags or []),
         category=cfg.category or "",
+        description=description,
         time_coverage=extra.get("time_coverage") or {},
         mart_tables=tables,
         mart_rules=rules,

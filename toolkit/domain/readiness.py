@@ -55,6 +55,16 @@ def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
         else []
     )
 
+    # Ultimo run record assoluto: attraverso TUTTI gli anni con run records
+    # (non solo il target year). Usato dai consumer aggregati (registry builder).
+    latest_run_record_abs: dict[str, Any] | None = None
+    if years_seen:
+        abs_year = int(max(years_seen))
+        abs_run_dir = get_run_dir(Path(cfg.root), cfg.dataset, abs_year)
+        abs_files = sorted(abs_run_dir.glob("*.json")) if abs_run_dir.exists() else []
+        if abs_files:
+            latest_run_record_abs = read_json_or_none(abs_files[-1])
+
     return {
         "dataset": paths.get("dataset"),
         "config_path": str(config_path),
@@ -65,6 +75,7 @@ def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
         "years_seen": years_seen,
         "latest_run": latest_run,
         "latest_run_record": latest_payload,
+        "latest_run_record_abs": latest_run_record_abs,
     }
 
 

@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataciviclab.org/schemas/mart_catalog.schema.json",
+  "title": "DataCivicLab Mart Catalog",
+  "description": "Inventario queryabile dei mart del Lab: tabelle analitiche per dataset (benchmark/sintesi/trend), schema dichiarato (primary_key, required_columns, min_rows), location e ultimo run. Complemento di clean_catalog.schema.json per il layer MART. Slug convention: {dataset}__{mart}. Il blocco run segue run.schema.json (canonica, inline copy qui).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "name",
+    "updated_at",
+    "marts"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "source_repo": {
+      "type": "string",
+      "description": "Repo GitHub che genera/possiede il catalogo (es. dataciviclab/eurostat)."
+    },
+    "marts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/mart"
+      }
+    }
+  },
+  "$defs": {
+    "mart": {
+      "type": "object",
+      "required": [
+        "slug",
+        "dataset",
+        "table",
+        "location"
+      ],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+__[a-z0-9_]+$",
+          "description": "Slug canonico del mart: {dataset}__{mart_name} (es. eurostat_gdp_nuts3__mart_geo_benchmark)."
+        },
+        "dataset": {
+          "type": "string",
+          "description": "Slug del dataset clean parent (vedi clean_catalog.schema.json)."
+        },
+        "table": {
+          "type": "string",
+          "description": "Nome della tabella mart (es. mart_geo_benchmark)."
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "primary_key": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Chiave primaria dichiarata (dal dataset.yml mart.validate.table_rules)."
+        },
+        "required_columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Colonne richieste dichiarate (dal dataset.yml)."
+        },
+        "min_rows": {
+          "type": "integer",
+          "description": "Soglia minima di righe dichiarata (dal dataset.yml)."
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/column"
+          },
+          "description": "Schema colonne reale (dal parquet locale in derive_mode=local). Opzionale in v1."
+        },
+        "run": {
+          "$ref": "#/$defs/run",
+          "description": "Ultimo run record del toolkit per il layer mart. Opzionale."
+        }
+      },
+      "additionalProperties": true
+    },
+    "column": {
+      "type": "object",
+      "required": [
+        "name",
+        "type",
+        "role",
+        "description"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "dimension",
+            "metric"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "semantic_type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "location": {
+      "type": "object",
+      "required": [
+        "type",
+        "path"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "gcs",
+            "local"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "multi_file": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "run": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "year",
+        "status"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string"
+        },
+        "year": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "SUCCESS",
+            "FAILED",
+            "PENDING",
+            "SKIPPED"
+          ]
+        },
+        "quality_score": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "output_rows": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "duration_seconds": {
+          "type": "number"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "output_bytes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "Byte prodotti per layer (es. {\"raw\": 6961784}). Presente anche quando output_rows e' null (es. layer raw)."
+        }
+      },
+      "additionalProperties": true,
+      "description": "Blocco run condiviso — inline copy da run.schema.json (canonica)."
+    }
+  }
+}

@@ -36,17 +36,21 @@ def mcp_find(
     source: str = "all",
     stage: str = "all",
     status_filter: str | None = None,
+    metric_only: bool = False,
 ) -> dict[str, Any]:
     """Cerca dataset nel manifest GCS e/o workspace locale.
 
     Args:
-        query: Testo da cercare nello slug (case-insensitive).
+        query: Testo da cercare — oltre allo slug, matcha la semantica dei
+            cataloghi committati (description, tags, category, colonne).
         layer: ``"clean"``, ``"mart"`` o ``None`` (entrambi).
         limit: Max risultati (default 15). Usa ``0`` per nessun limite.
         source: ``"gcs"`` (pubblicati), ``"workspace"`` (in sviluppo),
                 ``"all"`` (default, unione).
         stage: Filtro workspace: ``"candidates"``, ``"support"``, ``"all"``.
         status_filter: Filtro run status (es. ``"SUCCESS"``).
+        metric_only: Se True, solo dataset con colonne role=metric (dal
+            catalogo committato).
 
     Returns:
         Dict con ``datasets``, ``total_count``, ``truncated``.
@@ -63,6 +67,7 @@ def mcp_find(
             source=source,
             stage=stage,
             status_filter=status_filter,
+            metric_only=metric_only,
         )
     except (FileNotFoundError, TimeoutError) as exc:
         raise ToolkitClientError(
@@ -71,7 +76,7 @@ def mcp_find(
         ) from exc
     except ValueError as exc:
         raise ToolkitClientError(
-            f"Errore parametri: {exc}",
+            f"Errori parametri: {exc}",
             code=ErrorCode.INVALID_PARAMS,
         ) from exc
 

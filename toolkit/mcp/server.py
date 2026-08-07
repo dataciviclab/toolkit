@@ -45,6 +45,11 @@ from .catalog_ops import (
     mcp_find as find_impl,
 )
 
+from .registry_ops import (
+    mcp_registry_list as registry_list_impl,
+    mcp_registry_show as registry_show_impl,
+)
+
 
 mcp = create_mcp_server(
     name="toolkit",
@@ -189,11 +194,15 @@ def toolkit_status(
 
 @mcp.tool(
     description="Cerca dataset per slug, source, layer (clean/mart) o testo. "
+    "La query matcha anche la semantica dei cataloghi committati del workspace "
+    "(description, tags, category, nomi colonne) — vedi matched_columns/meta_match. "
     "source='gcs' = pubblicati (da gcs_manifest.json), "
     "source='workspace' = in sviluppo (da dataset.yml + parquet locali), "
     "source='all' (default) = unione. "
-    "Filtri aggiuntivi: stage (candidates/support), status_filter (SUCCESS/FAILED/DRY_RUN). "
-    "Restituisce slug, layer, anni, file count, size, run_status, flag source.",
+    "Filtri aggiuntivi: stage (candidates/support), status_filter (SUCCESS/FAILED/DRY_RUN), "
+    "metric_only (solo dataset con colonne metric dal catalogo). "
+    "Restituisce slug, layer, anni, file count, size, run_status, flag source + "
+    "semantica quando il catalogo committato è presente.",
     structured_output=True,
 )
 def toolkit_find(
@@ -334,6 +343,35 @@ def toolkit_sparql_query(
     return guard_timed(
         sparql_query_impl, "toolkit_sparql_query", endpoint, query, timeout, max_rows
     )
+
+
+@mcp.tool(
+    description=(
+        "Elenca gli artifact registry committati nei repo del workspace "
+        "(clean_catalog, mart_catalog, pipeline_signals, codelists, ...). "
+        "Ogni repo con registry/ viene elencato con i suoi artifact, "
+        "dimensione e conteggio entries. Usa toolkit_registry_show per il contenuto."
+    ),
+    structured_output=True,
+)
+def toolkit_registry_list() -> dict[str, Any]:
+    return guard_timed(registry_list_impl, "toolkit_registry_list")
+
+
+@mcp.tool(
+    description=(
+        "Mostra un artifact registry committato di un repo del workspace "
+        "(es. repo='eurostat', artifact='clean_catalog'). "
+        "Con slug filtra un'entry: dataset slug (clean_catalog), mart slug "
+        "in formato {dataset}__{mart} (mart_catalog), id (pipeline_signals), "
+        "codelist name (codelists). "
+        "Il catalogo semantico contiene columns (role, semantic_type), "
+        "description, period, location, mart_refs e il blocco run."
+    ),
+    structured_output=True,
+)
+def toolkit_registry_show(repo: str, artifact: str, slug: str | None = None) -> dict[str, Any]:
+    return guard_timed(registry_show_impl, "toolkit_registry_show", repo, artifact, slug)
 
 
 if __name__ == "__main__":

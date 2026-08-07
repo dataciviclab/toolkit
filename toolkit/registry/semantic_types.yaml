@@ -1,0 +1,309 @@
+# semantic_types.yaml — Vocabolario dei tipi semantici riconoscibili
+#
+# Ogni tipo definisce:
+#   description: spiegazione breve
+#   entity: entità del mondo reale rappresentata
+#   aliases: nomi colonna comunemente usati per questo tipo
+#   hub: mappatura verso l'hub di riferimento (opzionale)
+#     hub_slug: slug dell'hub (comuni_master, bdap_anagrafe_enti, ...)
+#     hub_column: colonna nell'hub
+#     normalizers: espressioni SQL per normalizzare la colonna del dataset al formato hub
+#   bridge: se il join è indiretto (opzionale)
+#     via: hub/dataset intermedio
+#     on_column: colonna del bridge su cui avviene il join
+#                (NOTA: non usare "on" — in YAML 1.1 "on:" è parsificato come booleano True)
+#     to: tipo semantico di arrivo
+#   validators: hint per validazione (opzionale)
+
+types:
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # TERRITORIO
+  # ═══════════════════════════════════════════════════════════════════════
+
+  municipality_code:
+    description: "Codice ISTAT del comune a 6 cifre (es. 015002)"
+    entity: Comune
+    aliases: [codice_istat, codice_istat_comune, codice_istat_luogo, codice_comune,
+              cod_comune, pro_com, codice_comune_istat, localizzazione_codice_istat,
+              comune_istat, cod_istat_comune, comune_codice, cod_comune_istat,
+              ente_codice_comune_istat, codice_comune_comune]
+    hub:
+      hub_slug: comuni_master
+      hub_column: codice_istat
+      normalizers:
+        - name: direct
+          expr: "{col}"
+        - name: LPAD(6)
+          expr: "LPAD(CAST({col} AS VARCHAR), 6, '0')"
+        - name: RIGHT(6)
+          expr: "RIGHT({col}, 6)"
+    weight: 20
+
+  cadastral_code:
+    description: "Codice catastale Belfiore (es. A010, C466)"
+    entity: Comune
+    aliases: [codice_catastale, cod_catastale, catastale, codice_belfiore,
+              codice_comune_scuola]
+    hub:
+      hub_slug: comuni_master
+      hub_column: codice_catastale
+      normalizers:
+        - name: direct
+          expr: "{col}"
+        - name: UPPER TRIM
+          expr: "UPPER(TRIM({col}))"
+    weight: 15
+
+  municipality_name:
+    description: "Denominazione testuale del comune"
+    entity: Comune
+    aliases: [comune, denominazione_comune, comune_denominazione, comune_descrizione]
+    hub:
+      hub_slug: comuni_master
+      hub_column: denominazione
+      normalizers:
+        - name: UPPER TRIM
+          expr: "UPPER(TRIM({col}))"
+        - name: "UPPER TRIM + apostrofo→accento"
+          expr: "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(TRIM({col})), \"U'\", chr(217)), \"O'\", chr(210)), \"I'\", chr(204)), \"E'\", chr(200)), \"A'\", chr(192))"
+    weight: 3
+    note: "Join testuale. Fragile per fusioni/omonimie. Preferire municipality_code o cadastral_code."
+
+  province_code:
+    description: "Sigla o codice della provincia"
+    entity: Provincia
+    aliases: [provincia, sigla_provincia, sigla_provincia_pa, sigla_provincia_asl,
+              sigla_provincia_struttura, codice_provincia, sigla_prov, cod_prov]
+    hub:
+      hub_slug: comuni_master
+      hub_column: sigla_provincia
+      normalizers:
+        - name: UPPER TRIM
+          expr: "UPPER(TRIM({col}))"
+    weight: 5
+
+  region_code:
+    description: "Codice o nome della regione"
+    entity: Regione
+    aliases: [regione, codice_regione, cod_regione, cod_reg, regione_codice,
+              istat_regione, regione_istat_cod, regione_beneficiario, amministrazione_regione_sede]
+    hub:
+      hub_slug: comuni_master
+      hub_column: regione
+      normalizers:
+        - name: UPPER TRIM
+          expr: "UPPER(TRIM({col}))"
+    weight: 5
+
+  nuts_code:
+    description: "Codice NUTS Eurostat (es. ITC45)"
+    entity: Provincia (tramite NUTS3)
+    aliases: [geo, nuts, nuts2, nuts3, nuts_code, codice_nuts]
+    hub:
+      hub_slug: comuni_master
+      hub_column: nuts3_2021
+      normalizers:
+        - name: direct
+          expr: "{col}"
+    weight: 8
+    note: "Cross-grano: 1 provincia -> N comuni. Il dato provinciale viene replicato."
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # ANAGRAFICA ENTI
+  # ═══════════════════════════════════════════════════════════════════════
+
+  fiscal_code:
+    description: "Codice fiscale o partita IVA di ente/impresa"
+    entity: Ente (o Impresa)
+    aliases: [codice_fiscale, codice_fiscale_ente, cf, cf_amministrazione_appaltante,
+              cf_soggetto_attuatore, cf_subappaltante, amministrazione_codice_fiscale,
+              partita_iva, p_iva, piva, codi_fiscale, codice_fiscale_beneficiario]
+    hub:
+      hub_slug: comuni_master
+      hub_column: codice_fiscale
+      normalizers:
+        - name: direct
+          expr: "{col}"
+        - name: REPLACE brackets
+          expr: "REPLACE(REPLACE({col}, '[', ''), ']', '')"
+    weight: 15
+    note: "Match solo per enti pubblici. CF di imprese (ANAC, RNA) non matchano (0%)."
+
+  ipa_code:
+    description: "Codice IndicePA dell'ente (es. c_a010)"
+    entity: Ente
+    aliases: [codice_ipa, ipa, cod_ipa]
+    hub:
+      hub_slug: comuni_master
+      hub_column: codice_ipa
+      normalizers:
+        - name: direct
+          expr: "{col}"
+        - name: LOWER
+          expr: "LOWER({col})"
+    weight: 15
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # DOMINIO APPALTI
+  # ═══════════════════════════════════════════════════════════════════════
+
+  cig_code:
+    description: "Codice CIG (Codice Identificativo Gara) ANAC"
+    entity: Gara
+    aliases: [cig, codice_cig, cig_accordo_quadro, CIG_PROG_ESTERNA, CIG_COLLEGAMENTO]
+    bridge:
+      via: anac_bandi_gara
+      on_column: cig
+      to: municipality_code
+    weight: 25
+
+  cup_code:
+    description: "Codice CUP (Codice Unico Progetto)"
+    entity: Progetto
+    aliases: [cup, codice_cup]
+    bridge:
+      via: anac_cup
+      on_column: cup
+      to: municipality_code
+    weight: 20
+
+  ausa_code:
+    description: "Codice AUSA (Anagrafe Unica Stazioni Appaltanti)"
+    entity: Stazione Appaltante
+    aliases: [codice_ausa, ausa]
+    bridge:
+      via: bdap_anagrafe_enti
+      on_column: codice_ente_ipa
+      to: fiscal_code
+    weight: 15
+
+  cpv_code:
+    description: "Codice CPV (vocabolario appalti)"
+    entity: Categoria merceologica
+    aliases: [cod_cpv, codice_cpv, cpv, cod_cpv_principale]
+    weight: 10
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # DOMINIO SCUOLA
+  # ═══════════════════════════════════════════════════════════════════════
+
+  school_code:
+    description: "Codice meccanografico scuola MIM"
+    entity: Scuola
+    aliases: [codice_scuola, codicescuola, codice_meccanografico, cod_scuola]
+    weight: 15
+    note: "Può risalire al comune via mim_anagrafica_scuole_statali"
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # CHIAVI ENTE (bridge BDAP)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  siope_code:
+    description: "Codice ente SIOPE (9 caratteri)"
+    entity: Ente
+    aliases: [codice_ente]
+    bridge:
+      via: bdap_anagrafe_enti
+      on_column: codice_ente_siope
+      to: municipality_code
+    weight: 15
+
+  miur_code:
+    description: "Codice ente MIUR"
+    entity: Ente
+    aliases: [codice_ente_miur, codice_ente_miur]
+    bridge:
+      via: bdap_anagrafe_enti
+      on_column: codice_ente_miur
+      to: municipality_code
+    weight: 15
+
+  ssn_code:
+    description: "Codice ente SSN (Sanità)"
+    entity: Ente sanitario
+    aliases: [codice_ente_ssn]
+    bridge:
+      via: bdap_anagrafe_enti
+      on_column: codice_ente_ssn
+      to: municipality_code
+    weight: 15
+
+  sogei_code:
+    description: "Codice Sogei ente FSC (13 caratteri)"
+    entity: Ente
+    aliases: [username]
+    bridge:
+      via: opencivitas_fsc_enti_rso
+      on_column: username
+      to: municipality_name
+    weight: 10
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # CLASSIFICAZIONI
+  # ═══════════════════════════════════════════════════════════════════════
+
+  ateco_code:
+    description: "Codice ATECO attività economica"
+    entity: Attività economica
+    aliases: [ateco, codice_ateco, sezione_ateco, ateco_code]
+    weight: 8
+
+  country_code:
+    description: "Codice nazione / paese"
+    entity: Nazione
+    aliases: [nazione, stato, paese, country, codice_nazione]
+    weight: 3
+
+  year:
+    description: "Anno di riferimento"
+    entity: Tempo
+    aliases: [anno, year, anno_di_imposta, anno_riferimento, esercizio_finanziario]
+    weight: 1
+
+  month:
+    description: "Mese di riferimento"
+    entity: Tempo
+    aliases: [mese, month, periodo]
+    weight: 1
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # PERSONE (sistema parlamentare e non solo)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  person_id:
+    description: "ID numerico della persona fisica (es. 302103 da ocd/persona.rdf/p302103 — Camera/Senato/Governo)"
+    entity: Persona
+    aliases: [persona_id, person_id, id_persona, codice_persona]
+    weight: 15
+    note: "Chiave standard del sistema parlamentare (deputati, senatori, membri governo). Ponte tra rami via URI persona."
+
+  senator_id:
+    description: "ID numerico del senatore (es. 3923 da dati.senato.it/senatore/3923 — id locale Senato)"
+    entity: Persona
+    aliases: [senatore_id]
+    weight: 15
+    note: "ID locale Senato — NON coincide con persona_id Camera (numerazioni diverse). Ponte tra rami via nominativo o senato_firmatari.deputato_url."
+
+  ddl_id:
+    description: "Identificativo numerico del disegno di legge (osr:idDdl — numerazione interna Senato, condivisa tra senato_ddl e senato_firmatari)"
+    entity: Atto legislativo
+    aliases: [ddl_id, id_ddl]
+    weight: 15
+    note: "NON è l'id dell'URI /ddl/N (numerazione diversa) — usare osr:idDdl per il join tra senato_ddl e senato_firmatari."
+
+  gruppo_parlamentare:
+    description: "URI del gruppo parlamentare (es. ocd/gruppoParlamentare.rdf/gr1612 — Camera)"
+    entity: Gruppo parlamentare
+    aliases: [gruppo, gruppo_parlamentare]
+    weight: 15
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # GIUSTIZIA
+  # ═══════════════════════════════════════════════════════════════════════
+
+  ricorso_number:
+    description: "Numero del ricorso giudiziario"
+    entity: Procedimento
+    aliases: [numero_ricorso, NUMERO_RICORSO, NUMERO_PROVVEDIMENTO, n_ricorso]
+    weight: 20

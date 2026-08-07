@@ -1,0 +1,257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataciviclab.org/schemas/clean_catalog.schema.json",
+  "title": "DataCivicLab Clean Catalog",
+  "description": "Inventario queryabile dei clean parquet pubblici del Lab: cosa esiste, come e' fatto (colonne, tipi, semantic_type), dove sta (location) e in che fase di pubblicazione (stage). Contratto condiviso in lab-connectors: identico allo schema v1 di dataset-incubator, con aggiunte opzionali (years, mart_refs, run) — backward compatible, schema_version resta 1.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "name",
+    "updated_at",
+    "datasets"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "source_repo": {
+      "type": "string",
+      "description": "Repo GitHub che genera/possiede il catalogo (es. dataciviclab/dataset-incubator)."
+    },
+    "datasets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dataset"
+      }
+    }
+  },
+  "$defs": {
+    "dataset": {
+      "type": "object",
+      "required": [
+        "slug",
+        "name",
+        "description",
+        "period",
+        "columns",
+        "location"
+      ],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "source_id": {
+          "type": "string",
+          "description": "source_id corrispondente in source-observatory/sources_registry.yaml"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tag semantici per categorizzazione e raggruppamento batch"
+        },
+        "category": {
+          "type": "string",
+          "description": "Categoria principale del dataset (es. sanità, energia, finanza)"
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "incubating",
+            "published",
+            "deprecated"
+          ],
+          "description": "incubating = parquet su GCS ma non in DE; published = ha pagina su data-explorer; deprecated = non piu' mantenuto"
+        },
+        "registry_source": {
+          "type": "string",
+          "description": "Origine dell'entry: derive_auto (dal builder) o editorial (mantenuta a mano)."
+        },
+        "period": {
+          "type": "object",
+          "required": [
+            "start",
+            "end"
+          ],
+          "properties": {
+            "start": {
+              "type": "integer"
+            },
+            "end": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Copertura temporale dei dati (da time_coverage del dataset.yml)."
+        },
+        "years": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Anni eseguiti dal run (da years del dataset.yml). Opzionale, distinto da period."
+        },
+        "mart_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Slug mart appartenenti al dataset, convention {dataset}__{mart} (vedi mart_catalog.schema.json). Opzionale."
+        },
+        "run": {
+          "$ref": "#/$defs/run",
+          "description": "Ultimo run record del toolkit (fonte canonica: run.schema.json). Opzionale — per la diagnostica dettagliata vedi pipeline_signals.json."
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/column"
+          }
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        }
+      },
+      "additionalProperties": true
+    },
+    "column": {
+      "type": "object",
+      "required": [
+        "name",
+        "type",
+        "role",
+        "description"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "dimension",
+            "metric"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "semantic_type": {
+          "type": "string",
+          "description": "Tipo semantico della colonna (es. municipality_code, fiscal_code, ...)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "location": {
+      "type": "object",
+      "required": [
+        "type",
+        "path"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "gcs",
+            "local"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "multi_file": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "run": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "year",
+        "status"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string"
+        },
+        "year": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "SUCCESS",
+            "FAILED",
+            "PENDING",
+            "SKIPPED"
+          ]
+        },
+        "quality_score": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "output_rows": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "duration_seconds": {
+          "type": "number"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "output_bytes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "Byte prodotti per layer (es. {\"raw\": 6961784}). Presente anche quando output_rows e' null (es. layer raw)."
+        }
+      },
+      "additionalProperties": true,
+      "description": "Blocco run condiviso — inline copy da run.schema.json (canonica)."
+    }
+  }
+}

@@ -1,0 +1,360 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dataciviclab.org/schemas/pipeline_signals.schema.json",
+  "title": "PipelineSignals",
+  "description": "Health check operativo per ACB: stato dei dataset di un repo (ok/warn/error), anni, ultimo run. Segue lo standard repo-signals (agent-context-builder/schemas/repo-signals.md). Contratto condiviso in lab-connectors: identico allo schema v1 di dataset-incubator, con aggiunte opzionali (years, run) — backward compatible, schema_version resta \"1\". NOTA: status=ok NON significa pubblicato — significa struttura coerente + mart presente. Dimensione ortogonale a stage (clean_catalog).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "repo",
+    "topic",
+    "signals"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "1"
+      ],
+      "description": "Versione dello schema (stringa)."
+    },
+    "generated_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Data di generazione in formato YYYY-MM-DD."
+    },
+    "repo": {
+      "type": "string",
+      "description": "Nome del repo GitHub (es. 'dataset-incubator', 'eurostat')."
+    },
+    "topic": {
+      "type": "string",
+      "description": "Dominio del segnale (es. 'pipeline_state' — riusato da tutti i repo toolkit-based)."
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "total",
+        "by_status"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "by_status": {
+          "type": "object",
+          "required": [
+            "ok",
+            "warn",
+            "error"
+          ],
+          "properties": {
+            "ok": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "warn": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "error": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "description": "Conteggi aggregati per stato."
+    },
+    "signals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Signal"
+      },
+      "description": "Lista dei segnali, uno per dataset."
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "Signal": {
+      "type": "object",
+      "required": [
+        "id",
+        "status",
+        "label",
+        "detail",
+        "action"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identificativo unico del dataset (slug). Per compose: prefisso 'compose:'."
+        },
+        "source_id": {
+          "type": "string",
+          "description": "Identificativo della fonte dati (opzionale, puo' essere stringa vuota)."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "warn",
+            "error"
+          ],
+          "description": "Stato del dataset: ok=valido, warn=anomalia, error=bloccante."
+        },
+        "label": {
+          "type": "string",
+          "description": "Etichetta leggibile del dataset."
+        },
+        "detail": {
+          "type": "string",
+          "description": "Descrizione estesa (anni, fonte, layer)."
+        },
+        "action": {
+          "type": "string",
+          "description": "Azione suggerita. Stringa vuota se nessuna."
+        },
+        "years": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Anni dichiarati nel dataset.yml (opzionale)."
+        },
+        "run": {
+          "$ref": "#/definitions/Run",
+          "description": "Ultimo run record del toolkit (data/_runs/). Diverso da latest_run (sample run GHA). Opzionale."
+        },
+        "latest_run": {
+          "$ref": "#/definitions/LatestRun",
+          "description": "Risultato del sample run GitHub Actions (opzionale, presente solo se eseguito)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "Run": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "year",
+        "status"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string"
+        },
+        "year": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "SUCCESS",
+            "FAILED",
+            "PENDING",
+            "SKIPPED"
+          ]
+        },
+        "quality_score": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "output_rows": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "duration_seconds": {
+          "type": "number"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "output_bytes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "Byte prodotti per layer (es. {\"raw\": 6961784}). Presente anche quando output_rows e' null (es. layer raw)."
+        }
+      },
+      "additionalProperties": true,
+      "description": "Blocco run condiviso — inline copy da run.schema.json (canonica)."
+    },
+    "LatestRun": {
+      "type": "object",
+      "required": [
+        "status",
+        "run_id",
+        "run_url",
+        "checked_at"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "failed"
+          ],
+          "description": "Esito del sample run."
+        },
+        "run_id": {
+          "type": "string",
+          "description": "ID del workflow run GitHub Actions."
+        },
+        "run_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL del workflow run GitHub Actions."
+        },
+        "checked_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}",
+          "description": "Data del check in formato YYYY-MM-DD."
+        },
+        "year": {
+          "type": "integer",
+          "description": "Anno singolo testato (alternativo a years per single-year)."
+        },
+        "years": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Anni testati (alternativo a year per multi-year)."
+        },
+        "config_path": {
+          "type": "string",
+          "description": "Path del dataset.yml testato (singolo config)."
+        },
+        "config_exists": {
+          "type": "boolean",
+          "description": "False se il dataset.yml non esiste piu' nel branch target."
+        },
+        "configs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ConfigEntry"
+          },
+          "description": "Lista dei config testati (post-merge con multi-anno)."
+        },
+        "duration_seconds": {
+          "type": "number",
+          "description": "Durata totale del run in secondi."
+        },
+        "row_counts": {
+          "type": "object",
+          "properties": {
+            "raw": {
+              "type": "integer",
+              "description": "Righe lette in RAW."
+            },
+            "clean": {
+              "type": "integer",
+              "description": "Righe prodotte in CLEAN."
+            },
+            "mart": {
+              "type": "integer",
+              "description": "Righe totali nelle tabelle MART."
+            }
+          },
+          "additionalProperties": false,
+          "description": "Conteggio righe per layer."
+        },
+        "quality_scores": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Quality score PA per fonte (nome_fonte → punteggio)."
+        },
+        "readiness": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "needs-review",
+            "incomplete"
+          ],
+          "description": "Punteggio di prontezza del dataset."
+        },
+        "readiness_checks": {
+          "type": "object",
+          "properties": {
+            "total": {
+              "type": "integer"
+            },
+            "ok": {
+              "type": "integer"
+            },
+            "fail": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Esito dei readiness check."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "year"
+          ]
+        },
+        {
+          "required": [
+            "years"
+          ]
+        }
+      ]
+    },
+    "ConfigEntry": {
+      "type": "object",
+      "required": [
+        "status",
+        "year",
+        "config_path"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "failed"
+          ],
+          "description": "Esito del run per questo config."
+        },
+        "year": {
+          "type": "integer",
+          "description": "Anno testato."
+        },
+        "config_path": {
+          "type": "string",
+          "description": "Path del dataset.yml."
+        },
+        "config_exists": {
+          "type": "boolean",
+          "description": "False se il dataset.yml non esiste piu'."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

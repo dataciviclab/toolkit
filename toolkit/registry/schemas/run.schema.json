@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dataciviclab.org/schemas/run.schema.json",
+  "title": "DataCivicLab Run Block",
+  "description": "Blocco run condiviso: ultimo run record del toolkit (data/_runs/{dataset}/{year}/*.json) per un dataset o una tabella mart. Fonte canonica per il campo 'run' in clean_catalog.schema.json, pipeline_signals.schema.json e mart_catalog.schema.json. Ogni schema che lo usa lo include come $defs.run inline (validatori standalone).",
+  "type": "object",
+  "required": ["run_id", "year", "status"],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "ID del run record del toolkit (es. 20260807T095224Z_85695b3a)."
+    },
+    "year": {
+      "type": "integer",
+      "description": "Anno eseguito dal run."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["SUCCESS", "FAILED", "PENDING", "SKIPPED"],
+      "description": "Stato del run record del toolkit."
+    },
+    "quality_score": {
+      "type": "object",
+      "additionalProperties": { "type": "number" },
+      "description": "Quality score PA per layer (es. {\"clean\": 95, \"mart\": 100})."
+    },
+    "output_rows": {
+      "type": "object",
+      "additionalProperties": { "type": "integer" },
+      "description": "Righe prodotte per layer (es. {\"clean\": 41709, \"mart\": 1512}). raw puo' mancare: il run record del toolkit non la registra sempre."
+    },
+    "output_bytes": {
+      "type": "object",
+      "additionalProperties": { "type": "integer" },
+      "description": "Byte prodotti per layer (es. {\"raw\": 6961784, \"clean\": 9757664}). Presente anche quando output_rows e' null (es. layer raw)."
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_seconds": {
+      "type": "number"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento di estrazione dell'artifact (per freshness)."
+    }
+  },
+  "additionalProperties": true
+}

@@ -4,7 +4,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from toolkit.core.config import load_config
 from toolkit.core.exceptions import DownloadError
@@ -283,8 +283,8 @@ def _write_codelist_parquet(result: dict[str, object], target: Path) -> None:
     """Serializza {codes, annotations} in parquet: code, label_en + annotation types."""
     import duckdb
 
-    codes: dict[str, str] = result.get("codes") or {}
-    annotations: dict[str, dict[str, str]] = result.get("annotations") or {}
+    codes = cast(dict[str, str], result.get("codes") or {})
+    annotations = cast(dict[str, dict[str, str]], result.get("annotations") or {})
 
     ann_types: list[str] = []
     for ann in annotations.values():

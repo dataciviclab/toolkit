@@ -100,7 +100,9 @@ def _build_clean_preview(
     support_payloads_drift: list[dict[str, Any]] = []
     if dry_run and support_cfg:
         try:
-            sp_payloads = resolve_support_payloads(support_cfg, require_exists=False, smoke=False)
+            sp_payloads = resolve_support_payloads(
+                support_cfg, require_exists=False, smoke=False, root=cfg.root
+            )
             support_paths = _all_support_expected_paths(sp_payloads)
             support_payloads_drift = sp_payloads
         except Exception:

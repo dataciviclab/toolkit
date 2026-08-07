@@ -869,6 +869,7 @@ def _run_pipeline(
     sample_bytes: int | None = None,
     root: str | None = None,
     dry_run: bool = False,
+    refresh_support: bool = False,
 ) -> dict[str, Any]:
     """Esegue pre-flight + support + raw → clean → mart.
 
@@ -945,62 +946,109 @@ def _run_pipeline(
                 sum(1 for s in preflight["sources"] if not s["reachable"]),
             )
 
-    # Process support datasets
+    # Process support datasets (ADR-005: ensure — skip se output presenti, materializza se manca)
     support_entries = cfg.support or []
     if support_entries:
+        from toolkit.core.support import materialize_support, resolve_support_payloads
+
         logger.info(
             "RUN — processing %d support dataset(s) before candidate",
             len(support_entries),
         )
         for entry in support_entries:
-            logger.info("Support: %s — %s", entry.name, entry.config)
+            entry_dict = dump_cfg_section(entry)
+            stype = str(entry_dict.get("type") or "dataset")
 
             if dry_flag:
-                logger.info("  [dry-run] support: %s — years=%s", entry.name, entry.years)
+                logger.info(
+                    "  [dry-run] support: %s — type=%s years=%s",
+                    entry.name,
+                    stype,
+                    getattr(entry, "years", []),
+                )
                 continue
 
             try:
-                if sample_mode:
-                    _sup0, _ = load_cfg_and_logger(str(entry.config))
-                    support_cfg, support_logger = load_cfg_and_logger(
-                        str(entry.config),
-                        root_override=str(_sup0.root / "smoke"),
-                    )
-                else:
-                    support_cfg, support_logger = load_cfg_and_logger(str(entry.config))
+                payloads = resolve_support_payloads(
+                    [entry_dict],
+                    require_exists=False,
+                    smoke=smoke,
+                    root=cfg.root,
+                )
+                payload = payloads[0]
             except Exception as exc:
-                logger.error("Support: cannot load config %s: %s", entry.config, exc)
+                logger.error("Support: cannot resolve %s: %s", entry.name, exc)
                 results["status"] = "failed"
                 break
 
-            for sy in entry.years:
-                logger.info("Support: running %s year=%s", entry.name, sy)
+            if payload["all_outputs_exist"] and not refresh_support:
+                logger.info("  reuse support %s (output presenti)", entry.name)
+                continue
+
+            if stype == "dataset":
                 try:
-                    ctx = run_year(
-                        support_cfg,
-                        sy,
-                        step="all",
-                        logger=support_logger,
-                        sample_rows=sample_rows_final,
-                        sample_bytes=sample_bytes_final,
-                        smoke=smoke,
-                    )
+                    if sample_mode:
+                        _sup0, _ = load_cfg_and_logger(str(entry.config))
+                        support_cfg, support_logger = load_cfg_and_logger(
+                            str(entry.config),
+                            root_override=str(_sup0.root / "smoke"),
+                        )
+                    else:
+                        support_cfg, support_logger = load_cfg_and_logger(str(entry.config))
                 except Exception as exc:
-                    logger.error("Support run failed: %s year=%s — %s", entry.name, sy, exc)
+                    logger.error("Support: cannot load config %s: %s", entry.config, exc)
                     results["status"] = "failed"
                     break
 
-                all_support_passed = all(
-                    ctx.validations.get(layer, {}).get("passed", False)
-                    for layer in ("raw", "clean", "mart")
-                )
-                if not all_support_passed:
-                    logger.error("Support validation failed: %s year=%s", entry.name, sy)
+                for sy in entry.years:
+                    logger.info("Support: running %s year=%s", entry.name, sy)
+                    try:
+                        ctx = run_year(
+                            support_cfg,
+                            sy,
+                            step="all",
+                            logger=support_logger,
+                            sample_rows=sample_rows_final,
+                            sample_bytes=sample_bytes_final,
+                            smoke=smoke,
+                        )
+                    except Exception as exc:
+                        logger.error("Support run failed: %s year=%s — %s", entry.name, sy, exc)
+                        results["status"] = "failed"
+                        break
+
+                    all_support_passed = all(
+                        ctx.validations.get(layer, {}).get("passed", False)
+                        for layer in ("raw", "clean", "mart")
+                    )
+                    if not all_support_passed:
+                        logger.error("Support validation failed: %s year=%s", entry.name, sy)
+                        results["status"] = "failed"
+                        break
+
+                if results["status"] == "failed":
+                    break
+            else:
+                # codelist / file: materializza (fetch / command) — output verificato mancante
+                logger.info("Support: materializing %s (%s)", entry.name, stype)
+                try:
+                    materialize_support(entry_dict, root=cfg.root, smoke=smoke)
+                except Exception as exc:
+                    logger.error("Support materialization failed: %s — %s", entry.name, exc)
                     results["status"] = "failed"
                     break
-
-            if results["status"] == "failed":
-                break
+                try:
+                    payloads = resolve_support_payloads(
+                        [entry_dict], require_exists=False, smoke=smoke, root=cfg.root
+                    )
+                    if not payloads[0]["all_outputs_exist"]:
+                        logger.error("Support materialization produced no output: %s", entry.name)
+                        results["status"] = "failed"
+                        break
+                except Exception as exc:
+                    logger.error("Support: cannot re-resolve %s: %s", entry.name, exc)
+                    results["status"] = "failed"
+                    break
 
     # ── Candidate ────────────────────────────────────────────────────────
     candidate_blocked = results["status"] == "failed" and not dry_flag
@@ -1081,6 +1129,7 @@ def _execute_pipeline(
     root: str | None,
     json_output: bool,
     dry_run: bool,
+    refresh_support: bool = False,
 ) -> None:
     """Wrapper CLI: esegue _run_pipeline e stampa output su stdout."""
     results = _run_pipeline(
@@ -1092,6 +1141,7 @@ def _execute_pipeline(
         sample_bytes=sample_bytes,
         root=root,
         dry_run=dry_run,
+        refresh_support=refresh_support,
     )
 
     if json_output:
@@ -1258,6 +1308,11 @@ def register(app: typer.Typer) -> None:
         ),
         json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
         dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without executing"),
+        refresh_support: bool = typer.Option(
+            False,
+            "--refresh-support",
+            help="Rigenera i support anche se gli output sono già presenti",
+        ),
     ):
         """Esegue la pipeline: singolo dataset o batch (--batch)."""
         if ctx.invoked_subcommand is not None:
@@ -1281,7 +1336,15 @@ def register(app: typer.Typer) -> None:
             raise typer.Exit(code=2)
         try:
             _execute_pipeline(
-                config, years_str, smoke, sample_rows, sample_bytes, root, json_output, dry_run
+                config,
+                years_str,
+                smoke,
+                sample_rows,
+                sample_bytes,
+                root,
+                json_output,
+                dry_run,
+                refresh_support=refresh_support,
             )
         except FileNotFoundError as exc:
             typer.echo(str(exc), err=True)

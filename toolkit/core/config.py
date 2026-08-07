@@ -613,12 +613,20 @@ def _normalize_paths(data: dict, base_dir: Path) -> None:
     support = data.get("support")
     if isinstance(support, list):
         for item in support:
-            if isinstance(item, dict) and "config" in item:
-                val = item["config"]
-                if isinstance(val, str):
-                    p = Path(val)
-                    if not p.is_absolute():
-                        item["config"] = (base_dir / p).resolve()
+            if isinstance(item, dict):
+                if "config" in item:
+                    val = item["config"]
+                    if isinstance(val, str):
+                        p = Path(val)
+                        if not p.is_absolute():
+                            item["config"] = (base_dir / p).resolve()
+                # ADR-005: path del support file normalizzato sul root candidate
+                if "path" in item:
+                    val = item["path"]
+                    if isinstance(val, str):
+                        p = Path(val)
+                        if not p.is_absolute():
+                            item["path"] = str((base_dir / p).resolve())
 
 
 def _normalize_section_paths(section: dict, base_dir: Path) -> None:
@@ -750,6 +758,25 @@ def load_config(
         duplicates = sorted({n for n in support_names if support_names.count(n) > 1})
         if duplicates:
             raise ValueError("support[].name values must be unique: " + ", ".join(duplicates))
+
+        # ADR-005: validazione del tipo e dei campi richiesti per tipo
+        from toolkit.core.support import SUPPORT_TYPES
+
+        for s in support:
+            if not isinstance(s, dict):
+                continue
+            stype = str(s.get("type") or "dataset")
+            if stype not in SUPPORT_TYPES:
+                raise ValueError(
+                    f"support[].type must be one of {SUPPORT_TYPES}, got {stype!r} "
+                    f"for support '{s.get('name')}'"
+                )
+            if stype == "dataset" and "config" not in s:
+                raise ValueError(f"support dataset '{s.get('name')}' requires 'config'")
+            if stype == "codelist" and not s.get("id"):
+                raise ValueError(f"support codelist '{s.get('name')}' requires 'id'")
+            if stype == "file" and not s.get("path"):
+                raise ValueError(f"support file '{s.get('name')}' requires 'path'")
 
     # Convert support entries to dict-like objects with attribute access
     support_objects = [_dict2ns(s) if isinstance(s, dict) else s for s in support]

@@ -79,11 +79,6 @@ def mcp_find(
             f"Errori parametri: {exc}",
             code=ErrorCode.INVALID_PARAMS,
         ) from exc
-    except ValueError as exc:
-        raise ToolkitClientError(
-            f"Errore parametri: {exc}",
-            code=ErrorCode.INVALID_PARAMS,
-        ) from exc
 
 
 def mcp_dataset_overview(

@@ -197,6 +197,32 @@ def test_mart_catalog_contract(tmp_path: Path) -> None:
     assert mart["run"]["status"] == "SUCCESS"
 
 
+def test_mart_catalog_year_layout_without_years(tmp_path: Path) -> None:
+    """Layout 'year' + mart senza years → errore di derive, non crash (regression)."""
+    from toolkit.registry.layout import RepoLayout as RL
+
+    ds_dir = tmp_path / "datasets" / "no-years"
+    ds_dir.mkdir(parents=True)
+    no_years_yml = """
+root: "../../out"
+schema_version: 1
+dataset:
+  name: "no_years"
+  years: []
+mart:
+  tables:
+    - name: "mart_trend"
+      sql: "sql/mart_trend.sql"
+"""
+    (ds_dir / "dataset.yml").write_text(no_years_yml, encoding="utf-8")
+    layout = RL(repo_root=tmp_path, dataset_dirs=("datasets",), source_repo="dataciviclab/test")
+
+    catalog, errors = build_mart_catalog(layout, path_contract=PathContract())  # layout year
+
+    assert catalog["marts"] == []
+    assert any("location mart non risolvibile" in e for e in errors)
+
+
 # ---------------------------------------------------------------------------
 # pipeline_signals
 # ---------------------------------------------------------------------------

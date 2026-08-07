@@ -254,12 +254,14 @@ def build_mart_catalog(
                 entry["min_rows"] = rule["min_rows"]
             if runs_cache[manifest.slug]:
                 entry["run"] = runs_cache[manifest.slug]
-            try:
-                entry["location"] = contract.mart_location(
-                    manifest.slug, name, year=max(manifest.years, default=None)
+            year = max(manifest.years, default=None)
+            if contract.mart_layout == "year" and year is None:
+                errors.append(
+                    f"{manifest.slug}__{name}: location mart non risolvibile "
+                    "(layout 'year' senza years dichiarati)"
                 )
-            except ValueError:
-                entry["location"] = contract.mart_location(manifest.slug, name)
+                continue
+            entry["location"] = contract.mart_location(manifest.slug, name, year=year)
             marts.append(entry)
 
     catalog: dict[str, Any] = {

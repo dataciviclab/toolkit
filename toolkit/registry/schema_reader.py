@@ -18,6 +18,9 @@ from toolkit.domain.path_resolver import payload_for_year
 
 from toolkit.registry.layout import DatasetManifest
 
+# Vocabolario condiviso dei tipi semantici (contratto Lab, package-data).
+DEFAULT_SEMANTIC_TYPES = Path(__file__).resolve().parent / "semantic_types.yaml"
+
 # Mappa tipi DuckDB → tipo catalogo (preserva BIGINT vs INTEGER)
 DUCKDB_TO_CATALOG: dict[str, str] = {
     "integer": "INTEGER",
@@ -49,13 +52,16 @@ DUCKDB_TO_CATALOG: dict[str, str] = {
 _DIMENSION_TYPES = {"VARCHAR", "DATE", "BOOLEAN"}
 
 
-def load_semantic_types(path: Path | None) -> dict[str, str]:
-    """Carica alias_map da un semantic_types.yaml (alias.lower → semantic_type).
+def load_semantic_types(path: Path | None = None) -> dict[str, str]:
+    """Carica alias_map dal vocabolario semantic_types (alias.lower → semantic_type).
 
-    Nessun partial/substring match — solo match esatto. Il file è opzionale:
-    senza, le colonne non ricevono semantic_type.
+    Nessun partial/substring match — solo match esatto.
+    Default: il vocabolario condiviso del toolkit (package-data); un path
+    esplicito fa da override (es. vocabolario esteso di un repo).
     """
-    if path is None or not path.is_file():
+    if path is None:
+        path = DEFAULT_SEMANTIC_TYPES
+    if not path.is_file():
         return {}
     import yaml
 

@@ -65,7 +65,7 @@ def build_clean_catalog(
     slug: str | None = None,
     semantic_types_path: Path | None = None,
     path_contract: PathContract | None = None,
-) -> tuple[dict[str, Any], list[str]]:
+) -> tuple[dict[str, Any], dict[str, list[str]]]:
     """Costruisce il clean_catalog per il layout del repo.
 
     Args:
@@ -79,8 +79,10 @@ def build_clean_catalog(
         path_contract: Contratto GCS (default: layout DI, year).
 
     Returns:
-        Tuple (catalog, errors). Gli errori NON bloccano il catalogo: le
-        entry non derivabili sono escluse e segnalate.
+        Tuple (catalog, errors) con errors = {"derive": [...], "validation": [...]}.
+        Gli errori derive NON bloccano il catalogo: le entry non derivabili
+        sono escluse e segnalate. Gli errori validation indicano un artifact
+        non conforme allo schema.
     """
     if derive_mode == "check-gcs" or check_gcs:
         derive_mode = "check-gcs"
@@ -93,7 +95,7 @@ def build_clean_catalog(
             editorial[ds.get("slug", "")] = ds
 
     datasets: list[dict[str, Any]] = []
-    errors: list[str] = []
+    derive_errors: list[str] = []
 
     for manifest in iter_manifests(layout):
         if slug and manifest.slug != slug:
@@ -106,13 +108,13 @@ def build_clean_catalog(
             if manifest.slug in editorial:
                 datasets.append(editorial[manifest.slug])
                 continue
-            errors.append(
+            derive_errors.append(
                 f"{manifest.slug}: nessun parquet clean locale "
                 f"per anni {manifest.years} (runnare la pipeline per generarlo)"
             )
             continue
         if latest_year is None:
-            errors.append(f"{manifest.slug}: schema letto ma anno non risolvibile")
+            derive_errors.append(f"{manifest.slug}: schema letto ma anno non risolvibile")
             continue
 
         years_present = sorted(y for y in manifest.years if clean_parquet_path(manifest.cfg, y))
@@ -181,10 +183,10 @@ def build_clean_catalog(
     }
 
     if derive_mode == "check-gcs":
-        errors.extend(_check_gcs_locations(catalog, contract))
+        derive_errors.extend(_check_gcs_locations(catalog, contract))
 
-    errors.extend(validate_artifact(catalog, "clean_catalog.schema.json"))
-    return catalog, errors
+    validation_errors = validate_artifact(catalog, "clean_catalog.schema.json")
+    return catalog, {"derive": derive_errors, "validation": validation_errors}
 
 
 def _check_gcs_locations(catalog: dict[str, Any], contract: PathContract) -> list[str]:
@@ -217,7 +219,7 @@ def build_mart_catalog(
     layout: RepoLayout,
     path_contract: PathContract | None = None,
     slug: str | None = None,
-) -> tuple[dict[str, Any], list[str]]:
+) -> tuple[dict[str, Any], dict[str, list[str]]]:
     """Costruisce il mart_catalog per il layout del repo.
 
     Sorgenti: sezione ``mart:`` del dataset.yml (tables, validate.table_rules)
@@ -226,7 +228,7 @@ def build_mart_catalog(
     """
     contract = path_contract or PathContract()
     marts: list[dict[str, Any]] = []
-    errors: list[str] = []
+    derive_errors: list[str] = []
     runs_cache: dict[str, dict[str, Any]] = {}
 
     for manifest in iter_manifests(layout):
@@ -256,7 +258,7 @@ def build_mart_catalog(
                 entry["run"] = runs_cache[manifest.slug]
             year = max(manifest.years, default=None)
             if contract.mart_layout == "year" and year is None:
-                errors.append(
+                derive_errors.append(
                     f"{manifest.slug}__{name}: location mart non risolvibile "
                     "(layout 'year' senza years dichiarati)"
                 )
@@ -272,8 +274,8 @@ def build_mart_catalog(
         "updated_at": str(datetime.now(UTC).date()),
         "marts": sorted(marts, key=lambda m: m["slug"]),
     }
-    errors.extend(validate_artifact(catalog, "mart_catalog.schema.json"))
-    return catalog, errors
+    validation_errors = validate_artifact(catalog, "mart_catalog.schema.json")
+    return catalog, {"derive": derive_errors, "validation": validation_errors}
 
 
 # ---------------------------------------------------------------------------
@@ -284,7 +286,7 @@ def build_mart_catalog(
 def build_signals(
     layout: RepoLayout,
     topic: str = "pipeline_state",
-) -> tuple[dict[str, Any], list[str]]:
+) -> tuple[dict[str, Any], dict[str, list[str]]]:
     """Costruisce pipeline_signals per ACB (repo-signals standard).
 
     Semantica status: ok = struttura coerente + mart presente; warn = nessun
@@ -292,7 +294,6 @@ def build_signals(
     NOTA: status=ok NON significa pubblicato (vedi clean_catalog.stage).
     """
     signals: list[dict[str, Any]] = []
-    errors: list[str] = []
     compose_ids: set[str] = set()
 
     for manifest in iter_manifests(layout):
@@ -354,8 +355,8 @@ def build_signals(
         "summary": {"total": len(signals), "by_status": by_status},
         "signals": signals,
     }
-    errors.extend(validate_artifact(payload, "pipeline_signals.schema.json"))
-    return payload, errors
+    validation_errors = validate_artifact(payload, "pipeline_signals.schema.json")
+    return payload, {"derive": [], "validation": validation_errors}
 
 
 def _years_label(years: Iterable[int]) -> str:
@@ -385,7 +386,8 @@ def build_registry(
 
     Returns:
         Dict ``{"clean_catalog": {...}, "mart_catalog": {...},
-        "pipeline_signals": {...}, "errors": {...}}``.
+        "pipeline_signals": {...}, "errors": {...}}`` con errors per artifact:
+        ``{"derive": [...], "validation": [...]}``.
     """
     catalog, cc_errors = build_clean_catalog(
         layout,

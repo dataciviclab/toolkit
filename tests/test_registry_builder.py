@@ -146,7 +146,7 @@ def test_clean_catalog_contract(tmp_path: Path) -> None:
     layout = _make_repo(tmp_path)
     catalog, errors = build_clean_catalog(layout)
 
-    assert errors == [], f"errori inattesi: {errors}"
+    assert errors == {"derive": [], "validation": []}, f"errori inattesi: {errors}"
     assert len(catalog["datasets"]) == 1
     ds = catalog["datasets"][0]
     assert ds["slug"] == "my_dataset"
@@ -172,7 +172,7 @@ def test_clean_catalog_missing_parquet_reported(tmp_path: Path) -> None:
 
     shutil.rmtree(layout.repo_root / "out" / "data" / "clean")
     catalog, errors = build_clean_catalog(layout)
-    assert any("nessun parquet clean locale" in e for e in errors)
+    assert any("nessun parquet clean locale" in e for e in errors["derive"])
     assert catalog["datasets"] == []
 
 
@@ -186,7 +186,7 @@ def test_mart_catalog_contract(tmp_path: Path) -> None:
     layout = _make_repo(tmp_path)
     catalog, errors = build_mart_catalog(layout)
 
-    assert errors == [], f"errori inattesi: {errors}"
+    assert errors == {"derive": [], "validation": []}, f"errori inattesi: {errors}"
     assert len(catalog["marts"]) == 1
     mart = catalog["marts"][0]
     assert mart["slug"] == "my_dataset__mart_trend"
@@ -220,7 +220,7 @@ mart:
     catalog, errors = build_mart_catalog(layout, path_contract=PathContract())  # layout year
 
     assert catalog["marts"] == []
-    assert any("location mart non risolvibile" in e for e in errors)
+    assert any("location mart non risolvibile" in e for e in errors["derive"])
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +233,7 @@ def test_signals_contract(tmp_path: Path) -> None:
     layout = _make_repo(tmp_path)
     payload, errors = build_signals(layout)
 
-    assert errors == [], f"errori inattesi: {errors}"
+    assert errors == {"derive": [], "validation": []}, f"errori inattesi: {errors}"
     assert payload["summary"]["total"] == 1
     assert payload["summary"]["by_status"] == {"ok": 1, "warn": 0, "error": 0}
     sig = payload["signals"][0]
@@ -247,7 +247,7 @@ def test_signals_warn_without_mart(tmp_path: Path) -> None:
     """Senza mart il segnale è warn, non ok (policy)."""
     layout = _make_repo(tmp_path, with_mart=False)
     payload, errors = build_signals(layout)
-    assert errors == []
+    assert errors == {"derive": [], "validation": []}
     assert payload["signals"][0]["status"] == "warn"
     assert payload["signals"][0]["action"].startswith("aggiungere mart")
 

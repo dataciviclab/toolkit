@@ -18,27 +18,17 @@ LAYERS = ("raw", "clean", "mart")
 
 
 def latest_run_record(yml_path: str) -> dict[str, Any] | None:
-    """Ultimo run record del toolkit per il config.
+    """Ultimo run record del toolkit per il config (attraverso gli anni).
 
-    Usa ``run_state`` (lettura run records del toolkit). Il target è il max
-    dei config years; se quell'anno non ha run, fallback sull'anno più
-    recente tra gli anni con run records (``years_seen``).
+    Usa ``run_state`` (lettura run records del toolkit) e il campo
+    ``latest_run_record_abs`` (ultimo run su tutti gli anni, esposto dal
+    toolkit in ``toolkit.domain.readiness.run_state``).
     """
     try:
         state = run_state(yml_path)
     except Exception:
         return None
-    record = state.get("latest_run_record")
-    if record:
-        return record
-    years_seen = state.get("years_seen") or []
-    if not years_seen:
-        return None
-    try:
-        state = run_state(yml_path, year=int(max(years_seen)))
-    except Exception:
-        return None
-    return state.get("latest_run_record")
+    return state.get("latest_run_record_abs")
 
 
 def run_block(run_record: dict[str, Any] | None) -> dict[str, Any] | None:

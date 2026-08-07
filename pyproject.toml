@@ -99,7 +99,7 @@ exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 toolkit = ["sql/*.sql"]
-"toolkit.registry" = ["schemas/*.json"]
+"toolkit.registry" = ["schemas/*.json", "semantic_types.yaml"]
 
 [tool.setuptools.dynamic]
 version = { attr = "toolkit.version.__version__" }

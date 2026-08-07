@@ -557,3 +557,190 @@ def test_sdmx_cache_is_per_instance(monkeypatch):
         "https://two.test/rest/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99",
     ]
     assert calls == expected_calls, f"Cache contamination! calls={calls}"
+
+
+# ── Profilo Eurostat (ESTAT) ─────────────────────────────────────────────────
+
+# SDMX-JSON 2.0 di Eurostat: `dimension.{id}.category.{index,label}`, flat.
+ESTAT_CONSTRAINTS_JSON = """
+{
+  "id": ["freq", "unit", "geo", "time"],
+  "size": [1, 7, 1814, 25],
+  "dimension": {
+    "freq": {"label": "Time frequency",
+             "category": {"index": {"A": 0}, "label": {"A": "Annual"}}},
+    "unit": {"label": "Unit of measure",
+             "category": {"index": {"EUR_HAB": 0, "MIO_EUR": 1},
+                          "label": {"EUR_HAB": "Euro per inhabitant", "MIO_EUR": "Million euro"}}},
+    "geo": {"label": "Geopolitical entity (reporting)",
+            "category": {"index": {"EU27_2020": 0, "IT": 1, "ITC4": 2},
+                         "label": {"EU27_2020": "EU (27 countries)", "IT": "Italy", "ITC4": "Nord-Ovest"}}},
+    "time": {"label": "Time",
+             "category": {"index": {"2000": 0, "2001": 1},
+                          "label": {"2000": "2000", "2001": "2001"}}}
+  },
+  "value": {}
+}
+"""
+
+# TSV wide Eurostat: header `dims\TIME_PERIOD`, righe serie, `:` = missing,
+# flag di qualità come lettera finale dopo spazio (es. `1200 d`).
+ESTAT_TSV = (
+    "freq,unit,geo\\TIME_PERIOD\t2000 \t2001 \n"
+    "A,EUR_HAB,IT\t21900 \t23000 \n"
+    "A,MIO_EUR,IT\t: \t1200 d \n"
+)
+
+ESTAT_TSV_MONTHLY = "freq,unit,geo\\TIME_PERIOD\t2024-01\t2024-02\nA,EUR_HAB,IT\t10 \t20 \n"
+
+
+def _estat_fake_get(allowed_urls=None, calls=None):
+    """Factory per mock HttpClient.get che serve constraints JSON 2.0 + TSV."""
+    allowed_urls = allowed_urls or set()
+
+    def _fake_get(self, url, **kwargs):
+        if calls is not None:
+            calls.append(url)
+        params = kwargs.get("params") or {}
+        if url.endswith("/data/NAMA_10R_3GDP/all") and params.get("format") == "JSON":
+            return _ok(_FakeResponse(200, ESTAT_CONSTRAINTS_JSON, url))
+        if url.endswith("/data/NAMA_10R_3GDP/all") and params.get("format") == "TSV":
+            return _ok(_FakeResponse(200, ESTAT_TSV, url))
+        if url.endswith("/data/NAMA_10R_3GDP/A.EUR_HAB") and params.get("format") == "TSV":
+            return _ok(_FakeResponse(200, ESTAT_TSV, url))
+        if url.endswith("/data/NAMA_10R_3GDP/A.EUR_HAB.IT") and params.get("format") == "TSV":
+            return _ok(_FakeResponse(200, ESTAT_TSV, url))
+        if not allowed_urls:
+            raise AssertionError(f"Unexpected URL {url} params={params}")
+        if any(url.endswith(u) for u in allowed_urls):
+            return _ok(_FakeResponse(200, ESTAT_TSV, url))
+        raise AssertionError(f"Unexpected URL {url} params={params}")
+
+    return _fake_get
+
+
+def test_sdmx_estat_fetch_tsv_normalizes(monkeypatch):
+    """ESTAT: TSV wide → CSV long [dims, year, value, flag]; niente version check."""
+    calls = []
+    monkeypatch.setattr(HttpClient, "get", _estat_fake_get(calls=calls))
+
+    # version vuota: il profilo ESTAT NON deve chiamare dataflow né fallire
+    payload, origin = SdmxSource(retries=1).fetch("ESTAT", "NAMA_10R_3GDP", "")
+
+    text = payload.decode("utf-8")
+    assert origin.endswith("/data/NAMA_10R_3GDP/all?format=TSV") or origin.endswith(
+        "/data/NAMA_10R_3GDP/all"
+    )
+    assert "freq,unit,geo,year,value,flag" in text
+    assert "A,EUR_HAB,IT,2000,21900.0," in text
+    assert "A,EUR_HAB,IT,2001,23000.0," in text
+    # missing → value vuota; flag preservato
+    assert "A,MIO_EUR,IT,2000,," in text
+    assert "A,MIO_EUR,IT,2001,1200.0,d" in text
+    # Nessuna chiamata a dataflow (niente version check per ESTAT)
+    assert not any("/dataflow/" in c for c in calls)
+
+
+def test_sdmx_estat_filters_build_key(monkeypatch):
+    """ESTAT: filtri → key parziale nel path dati (ordine dims dal JSON 2.0)."""
+    calls = []
+    monkeypatch.setattr(HttpClient, "get", _estat_fake_get(calls=calls))
+
+    payload, origin = SdmxSource(retries=1).fetch(
+        "ESTAT", "NAMA_10R_3GDP", "", {"freq": "A", "unit": "EUR_HAB"}
+    )
+
+    assert "A,EUR_HAB,IT,2000,21900.0," in payload.decode("utf-8")
+    assert any(c.endswith("/data/NAMA_10R_3GDP/A.EUR_HAB") for c in calls)
+
+
+def test_sdmx_estat_rejects_invalid_filter_value(monkeypatch):
+    """ESTAT: filtro con valore non valido → errore esplicito (constraints 2.0)."""
+    monkeypatch.setattr(HttpClient, "get", _estat_fake_get())
+
+    with pytest.raises(DownloadError, match=r"Invalid value\(s\) for SDMX dimension freq"):
+        SdmxSource(retries=1).fetch("ESTAT", "NAMA_10R_3GDP", "", {"freq": "X"})
+
+
+def test_sdmx_estat_rejects_unknown_filter_dimension(monkeypatch):
+    """ESTAT: dimensione sconosciuta (non nel JSON 2.0) → errore esplicito."""
+    monkeypatch.setattr(HttpClient, "get", _estat_fake_get())
+
+    with pytest.raises(DownloadError, match=r"Unknown SDMX filter dimensions"):
+        SdmxSource(retries=1).fetch("ESTAT", "NAMA_10R_3GDP", "", {"NOT_A_DIM": "X"})
+
+
+def test_sdmx_estat_tsv_monthly(monkeypatch):
+    """ESTAT: TSV mensile (YYYY-MM) → colonne year + month."""
+
+    def _fake_get(self, url, **kwargs):
+        params = kwargs.get("params") or {}
+        if url.endswith("/data/NAMA_10R_3GDP/all") and params.get("format") == "JSON":
+            return _ok(_FakeResponse(200, ESTAT_CONSTRAINTS_JSON, url))
+        if url.endswith("/data/NAMA_10R_3GDP/all") and params.get("format") == "TSV":
+            return _ok(_FakeResponse(200, ESTAT_TSV_MONTHLY, url))
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
+
+    payload, _origin = SdmxSource(retries=1).fetch("ESTAT", "NAMA_10R_3GDP", "")
+
+    text = payload.decode("utf-8")
+    assert "freq,unit,geo,year,month,value,flag" in text
+    assert "A,EUR_HAB,IT,2024,1,10.0," in text
+    assert "A,EUR_HAB,IT,2024,2,20.0," in text
+
+
+ESTAT_CODELIST_JSON = """
+{
+  "version": "1.0",
+  "class": "codelist",
+  "label": "Geopolitical entity (reporting)",
+  "category": {
+    "index": {"IT": 0, "ITC4": 1},
+    "label": {"IT": "Italy", "ITC4": "Nord-Ovest"}
+  },
+  "extension": {
+    "lang": "EN",
+    "id": "GEO",
+    "version": "1.0",
+    "code-annotation": {
+      "IT": [
+        {"type": "IS_STANDARD_CODE", "title": "Y"},
+        {"type": "LEVEL", "title": "0"}
+      ],
+      "ITC4": [
+        {"type": "IS_STANDARD_CODE", "title": "Y"},
+        {"type": "LEVEL", "title": "2"}
+      ]
+    }
+  }
+}
+"""
+
+
+def test_sdmx_estat_fetch_codelist(monkeypatch):
+    """ESTAT: codelist SDMX-JSON 2.0 → {codes, annotations (LEVEL per NUTS)}."""
+
+    def _fake_get(self, url, **kwargs):
+        params = kwargs.get("params") or {}
+        if url.endswith("/codelist/ESTAT/GEO") and params.get("format") == "json":
+            return _ok(_FakeResponse(200, ESTAT_CODELIST_JSON, url))
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
+
+    result = SdmxSource(retries=1).fetch_codelist("GEO")
+
+    assert result["id"] == "GEO"
+    assert result["codes"]["IT"] == "Italy"
+    assert result["codes"]["ITC4"] == "Nord-Ovest"
+    assert result["annotations"]["IT"]["LEVEL"] == "0"
+    assert result["annotations"]["ITC4"]["LEVEL"] == "2"
+    assert result["annotations"]["IT"]["IS_STANDARD_CODE"] == "Y"
+
+
+def test_sdmx_fetch_codelist_requires_estat():
+    """fetch_codelist: solo profilo ESTAT (ISTAT non espone JSON 2.0)."""
+    with pytest.raises(DownloadError, match="solo per il profilo Eurostat"):
+        SdmxSource().fetch_codelist("GEO", agency="IT1")

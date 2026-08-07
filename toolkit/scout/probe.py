@@ -291,25 +291,43 @@ def _route_html(
 def _route_sdmx(final_url: str, result: dict[str, Any], *, timeout: int) -> dict[str, Any]:
     """Route per URL SDMX."""
     flow_id = None
+    agency = None
     parsed_url = urlparse(final_url)
     path = parsed_url.path
     if "/dataflow/" in path:
         parts = path.split("/dataflow/", 1)[1].split("/")
         if len(parts) >= 2:
             flow_id = parts[1]
+    elif "/data/" in path:
+        # Path dati: /data/{flow} oppure /data/{agency},{flow}[,{version}]
+        data_part = path.split("/data/", 1)[1].split("/")[0]
+        segments = [s for s in data_part.split(",") if s]
+        if len(segments) == 1:
+            flow_id = segments[0]
+        elif len(segments) >= 2:
+            agency, flow_id = segments[0], segments[1]
     elif parsed_url.query:
         from urllib.parse import parse_qs
 
         qs = parse_qs(parsed_url.query)
         flow_id = next(iter(qs.get("flow") or qs.get("id") or []), None)
 
+    # Agenzia implicita per l'API Eurostat (non compare nel path dati)
+    if agency is None and "eurostat" in (parsed_url.netloc + parsed_url.path).lower():
+        agency = "ESTAT"
+
     if flow_id:
         year_min, year_max = fetch_sdmx_years(final_url, flow_id, timeout=timeout)
         result["source_type"] = "sdmx"
-        result["sdmx_info"] = {"flow_id": flow_id, "year_min": year_min, "year_max": year_max}
+        result["sdmx_info"] = {
+            "flow_id": flow_id,
+            "agency": agency,
+            "year_min": year_min,
+            "year_max": year_max,
+        }
     else:
         result["source_type"] = "sdmx"
-        result["sdmx_info"] = {"flow_id": None, "year_min": None, "year_max": None}
+        result["sdmx_info"] = {"flow_id": None, "agency": None, "year_min": None, "year_max": None}
 
     result["ckan_resources"] = None
     result["candidate_links"] = []

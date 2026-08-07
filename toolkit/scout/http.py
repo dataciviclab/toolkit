@@ -687,38 +687,66 @@ def fetch_sdmx_years(
 ) -> tuple[int | None, int | None]:
     """Chiama endpoint SDMX per ricavare year_min/year_max da TIME_PERIOD.
 
+    Supporta sia SDMX-ML (ISTAT, parse XML ``generic:ObsKey``) sia SDMX-JSON
+    2.0 (Eurostat, flat ``dimension.time.category.index``): se il parse XML
+    non trova TIME_PERIOD, ritenta con Accept JSON e legge la dimensione time.
+
     Args:
         client: HttpClient opzionale. Se fornito, lo usa invece di crearne uno.
     """
+    import json
+    import xml.etree.ElementTree as ET
+
     try:
         base = base_url.split("?")[0].rstrip("/")
         if "/dataflow/" in base:
             sdmx_root = base[: base.index("/dataflow/")]
+        elif "/data/" in base:
+            # Root API da path dati: es. .../sdmx/2.1/data/NAMA_10R_3GDP
+            sdmx_root = base[: base.index("/data/")]
         elif base.endswith("/dataflow"):
             sdmx_root = base[: -len("/dataflow")]
         else:
             sdmx_root = base
         url = f"{sdmx_root}/data/{flow_id}?lastNObservations=1"
         client = client or _mk_client(timeout=timeout)
-        result = client.get(url, headers={"Accept": "application/xml"})
-        if not result.is_ok or result.response is None:
-            return None, None
-        r = result.response
-        if r.status_code != 200:
-            return None, None
-        import xml.etree.ElementTree as ET
 
-        root = ET.fromstring(r.text)
-        time_values: list[str] = []
-        for val_el in root.findall(".//generic:ObsKey/generic:Value", _SDMX_NS):
-            if val_el.get("id") == "TIME_PERIOD":
-                v = val_el.get("value")
-                if v:
-                    time_values.append(v)
+        # Passo 1: XML (SDMX-ML, convention ISTAT)
+        result = client.get(url, headers={"Accept": "application/xml"})
         years: list[int] = []
-        for tv in time_values:
-            found = _YEAR_RE.findall(tv)
-            years.extend(int(y) for y in found)
+        if result.is_ok and result.response is not None and result.response.status_code == 200:
+            root = ET.fromstring(result.response.text)
+            time_values: list[str] = []
+            for val_el in root.findall(".//generic:ObsKey/generic:Value", _SDMX_NS):
+                if val_el.get("id") == "TIME_PERIOD":
+                    v = val_el.get("value")
+                    if v:
+                        time_values.append(v)
+            for tv in time_values:
+                found = _YEAR_RE.findall(tv)
+                years.extend(int(y) for y in found)
+
+        # Passo 2: fallback JSON 2.0 (Eurostat) — nessun TIME_PERIOD XML.
+        # Eurostat richiede ?format=json esplicito (il default è JSONSTAT,
+        # che richiede lang e risponde 400). Il JSON 2.0 ha la dimensione
+        # time flat in dimension.time.category.index.
+        if not years:
+            result = client.get(
+                url,
+                headers={"Accept": "application/json"},
+                params={"format": "json"},
+            )
+            if result.is_ok and result.response is not None and result.response.status_code == 200:
+                try:
+                    payload = json.loads(result.response.text)
+                except (json.JSONDecodeError, TypeError):
+                    payload = None
+                if payload:
+                    time_dim = (payload.get("dimension") or {}).get("time") or {}
+                    for period in (time_dim.get("category") or {}).get("index") or {}:
+                        found = _YEAR_RE.findall(str(period))
+                        years.extend(int(y) for y in found)
+
         if not years:
             return None, None
         return min(years), max(years)

@@ -134,7 +134,9 @@ def _fetch_sdmx(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, 
     return src.fetch(
         str(formatted_args.get("agency") or "IT1"),
         str(formatted_args["flow"]),
-        str(formatted_args["version"]),
+        # La versione è opzionale: il profilo Eurostat (ESTAT) la ignora
+        # (numero mobile, mai nel path dati); ISTAT la richiede (errore a valle).
+        str(formatted_args.get("version") or ""),
         formatted_args.get("filters"),
     )
 

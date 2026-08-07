@@ -143,6 +143,7 @@ def _make_repo(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.contract
 def test_clean_catalog_contract(tmp_path: Path) -> None:
     """Il catalogo generato è valido contro lo schema condiviso (contract)."""
     layout = _make_repo(tmp_path)
@@ -161,6 +162,7 @@ def test_clean_catalog_contract(tmp_path: Path) -> None:
     assert ds["run"]["output_bytes"] == {"raw": 6961784, "clean": 9757664}
 
 
+@pytest.mark.policy
 def test_clean_catalog_dirname_not_identity(tmp_path: Path) -> None:
     """La dir con trattini non è identità: la chiave è dataset.name (policy)."""
     layout = _make_repo(tmp_path, dirname="my-dataset")
@@ -168,6 +170,7 @@ def test_clean_catalog_dirname_not_identity(tmp_path: Path) -> None:
     assert catalog["datasets"][0]["slug"] == "my_dataset"
 
 
+@pytest.mark.pure_unit
 def test_clean_catalog_missing_parquet_reported(tmp_path: Path) -> None:
     """Dataset dichiarato senza parquet locale → errore, non catalogo finto."""
     layout = _make_repo(tmp_path)
@@ -184,6 +187,7 @@ def test_clean_catalog_missing_parquet_reported(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.contract
 def test_mart_catalog_contract(tmp_path: Path) -> None:
     """Il mart catalog è valido e usa la convention {dataset}__{mart} (contract)."""
     layout = _make_repo(tmp_path)
@@ -200,6 +204,7 @@ def test_mart_catalog_contract(tmp_path: Path) -> None:
     assert mart["run"]["status"] == "SUCCESS"
 
 
+@pytest.mark.pure_unit
 def test_mart_catalog_year_layout_without_years(tmp_path: Path) -> None:
     """Layout 'year' + mart senza years → errore di derive, non crash (regression)."""
     from toolkit.registry.layout import RepoLayout as RL
@@ -231,6 +236,7 @@ mart:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.contract
 def test_signals_contract(tmp_path: Path) -> None:
     """Segnale ok con mart; campi years/run presenti (contract)."""
     layout = _make_repo(tmp_path)
@@ -246,6 +252,7 @@ def test_signals_contract(tmp_path: Path) -> None:
     assert sig["run"]["run_id"] == "20260101T000000Z_abc123"
 
 
+@pytest.mark.policy
 def test_signals_warn_without_mart(tmp_path: Path) -> None:
     """Senza mart il segnale è warn, non ok (policy)."""
     layout = _make_repo(tmp_path, with_mart=False)
@@ -260,6 +267,7 @@ def test_signals_warn_without_mart(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.contract
 def test_path_contract_year_layout() -> None:
     contract = PathContract()  # default DI
     assert (
@@ -275,6 +283,7 @@ def test_path_contract_year_layout() -> None:
     assert "/*/" in loc["path"]
 
 
+@pytest.mark.contract
 def test_path_contract_flat_layout() -> None:
     contract = PathContract(prefix="eurostat", clean_layout="flat", mart_layout="flat")
     assert (
@@ -292,6 +301,7 @@ def test_path_contract_flat_layout() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.pure_unit
 def test_run_block_mapping() -> None:
     block = run_block(RUN_RECORD)
     assert block == {
@@ -308,11 +318,13 @@ def test_run_block_mapping() -> None:
     }
 
 
+@pytest.mark.pure_unit
 def test_run_block_none_for_incomplete() -> None:
     assert run_block(None) is None
     assert run_block({"year": 2024, "status": "SUCCESS"}) is None  # no run_id
 
 
+@pytest.mark.pure_unit
 def test_registry_builder_imports() -> None:
     """Export pubblico del package (contract)."""
     import toolkit.registry as reg
@@ -328,6 +340,7 @@ def test_registry_builder_imports() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.contract
 def test_codelists_contract(tmp_path: Path) -> None:
     """codelists.json espone i valori delle dimensioni dal repo (contract)."""
     from toolkit.registry.builders import build_codelists
@@ -355,6 +368,7 @@ def test_codelists_contract(tmp_path: Path) -> None:
     ]
 
 
+@pytest.mark.pure_unit
 def test_codelists_large_external(tmp_path: Path) -> None:
     """Codelist oltre la soglia → dichiarato in large, non embedded (policy)."""
     from toolkit.registry.builders import build_codelists, MAX_CODELIST_ROWS
@@ -371,6 +385,7 @@ def test_codelists_large_external(tmp_path: Path) -> None:
     assert payload["large"] == ["big"]
 
 
+@pytest.mark.pure_unit
 def test_codelists_empty_without_dir(tmp_path: Path) -> None:
     """Senza dir codelists → payload vuoto, nessun errore (opzionale)."""
     from toolkit.registry.builders import build_codelists

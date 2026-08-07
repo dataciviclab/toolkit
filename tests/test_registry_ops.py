@@ -40,6 +40,7 @@ def mini_workspace(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.mark.contract
 def test_list_registries(mini_workspace: Path) -> None:
     """Lista i repo con artifact, escludendo gli schemi (contract)."""
     data = list_registries(mini_workspace)
@@ -53,6 +54,7 @@ def test_list_registries(mini_workspace: Path) -> None:
     assert cc["entries"] == 1
 
 
+@pytest.mark.contract
 def test_show_registry_full(mini_workspace: Path) -> None:
     """show senza slug ritorna il payload completo (contract)."""
     data = show_registry("eurostat", "clean_catalog", workspace=mini_workspace)
@@ -60,6 +62,7 @@ def test_show_registry_full(mini_workspace: Path) -> None:
     assert len(data["data"]["datasets"]) == 1
 
 
+@pytest.mark.contract
 def test_show_registry_filter_slug(mini_workspace: Path) -> None:
     """show con slug filtra l'entry richiesta (contract)."""
     data = show_registry(
@@ -68,6 +71,7 @@ def test_show_registry_filter_slug(mini_workspace: Path) -> None:
     assert data["entry"]["slug"] == "eurostat_gdp_nuts3"
 
 
+@pytest.mark.contract
 def test_show_registry_not_found(mini_workspace: Path) -> None:
     """Artifact o repo inesistente → FileNotFoundError (contract)."""
     with pytest.raises(FileNotFoundError):
@@ -76,12 +80,14 @@ def test_show_registry_not_found(mini_workspace: Path) -> None:
         show_registry("no-registry-repo", "clean_catalog", workspace=mini_workspace)
 
 
+@pytest.mark.contract
 def test_show_registry_slug_missing(mini_workspace: Path) -> None:
     """Slug inesistente → FileNotFoundError (pure_unit)."""
     with pytest.raises(FileNotFoundError):
         show_registry("eurostat", "pipeline_signals", slug="missing", workspace=mini_workspace)
 
 
+@pytest.mark.pure_unit
 def test_entries_count_pure() -> None:
     """Conteggio entries per tipo artifact (pure_unit)."""
     from toolkit.registry.reader import _entries_count

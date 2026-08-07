@@ -64,12 +64,15 @@ _SOURCE_TYPES: list[dict[str, Any]] = [
     },
     {
         "type": "sdmx",
-        "description": "Scarica dati da API SDMX 2.1 (es. ISTAT, Eurostat).",
+        "description": "Scarica dati da API SDMX 2.1. Profilo ISTAT (agency IT1, default) e profilo Eurostat (agency ESTAT, TSV wide + JSON 2.0).",
         "args": {
-            "endpoint": "URL dell'endpoint SDMX",
-            "resource": "ID del dataflow/risorsa",
-            "filename": "nome locale (opzionale)",
+            "agency": "Agenzia SDMX: IT1 (ISTAT, default) o ESTAT (Eurostat)",
+            "flow": "ID del dataflow (es. NAMA_10R_3GDP, 22_289)",
+            "version": "Versione dataflow. Obbligatoria per ISTAT; opzionale/ignorata per ESTAT (numero mobile, mai nel path)",
+            "filters": "Filtri per dimensione (es. {freq: A, geo: [IT, ITC4]}). Valori validati contro i constraints dell'API",
+            "endpoint": "URL SDMX scoperta dallo scout. Funzionale per agenzie non-ISTAT/ESTAT (root derivato); ISTAT/ESTAT auto-risolvono",
         },
+        "note": "Output: CSV normalizzato. ISTAT: colonne con _label (JSON 2.1). ESTAT: [dims..., year, (month), value, flag] — le label si risolvono a valle con le codelist.",
     },
     {
         "type": "sparql",
@@ -333,8 +336,33 @@ _CONFIG_QUICKREF: dict[str, Any] = {
         "mart.validate.transition.max_row_drop_pct (soglia % righe perse clean→mart, default none)",
         "raw.sources[].type (http_file, ckan, sdmx, sparql, local_file)",
         "raw.sources[].extractor (identity, unzip_all, unzip_first, unzip_first_csv)",
-        "support (lista dataset di supporto, eseguiti prima del candidate)",
+        "support (lista support eseguiti prima del candidate — vedi sezione support)",
     ],
+    "support": {
+        "description": "Dataset/codelist/file di riferimento per i join nei SQL. Eseguiti (o riusati) PRIMA del candidate; esposti al template come placeholder {support.NAME.*}.",
+        "types": [
+            {
+                "type": "dataset",
+                "fields": "name, config (dataset.yml del support), years",
+                "materialize": "run del config (skip se clean+mart già presenti)",
+                "placeholder": "{support.NAME.mart}, {support.NAME.mart.TABLE}, {support.NAME.clean}, {support.NAME.outputs}",
+            },
+            {
+                "type": "codelist",
+                "fields": "name, id, agency (default ESTAT), provider (default sdmx)",
+                "materialize": "fetch_codelist → parquet in out/data/support/{name}/{name}.parquet (skip se presente)",
+                "placeholder": "{support.NAME.path}",
+            },
+            {
+                "type": "file",
+                "fields": "name, path, command (opzionale, per rigenerare il file)",
+                "materialize": "exec command se il file manca (richiede TOOLKIT_ALLOW_SCRIPT_SOURCE=1)",
+                "placeholder": "{support.NAME.path}",
+            },
+        ],
+        "ensure": "se gli output del support sono già presenti il run li riusa (skip-if-exists, per-anno); rigenerazione forzata con --refresh-support. Output attesi dataset = clean + tutte le tabelle mart.",
+        "anti_drift": "i SQL devono usare i placeholder {support.NAME.*} e non path hardcoded (check_support_path_drift, warning in dry-run).",
+    },
     "minimal_example": """dataset:
   name: mio_dataset
   years: [2024]
@@ -379,6 +407,7 @@ CONTRACTS: dict[str, Any] = {
         "required_columns = nomi OUTPUT del clean, non raw  |  "
         "se decimal=',' basta CAST(x AS DOUBLE)  |  "
         "mart.sql: SELECT ... FROM clean_input  |  "
+        "support: {support.NAME.mart|clean|path} (skip-if-exists, --refresh-support per forzare)  |  "
         "validazione: inline nel run record (_runs/), non piu' file separati  |  "
         "comandi: toolkit run init / preflight / all / scout / inspect"
     ),

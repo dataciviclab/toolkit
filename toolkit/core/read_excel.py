@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
 
@@ -45,7 +45,8 @@ def _load_excel_frame(
     sheet_name = _normalize_excel_sheet_name(read_cfg.get("sheet_name"))
 
     ext = input_file.suffix.lower()
-    engine = "xlrd" if ext == ".xls" else "openpyxl"
+    # Literal richiesto dagli overload pandas (engine non è str generico)
+    engine: Literal["xlrd", "openpyxl"] = "xlrd" if ext == ".xls" else "openpyxl"
     df = pd.read_excel(
         input_file,
         sheet_name=sheet_name,

@@ -391,6 +391,11 @@ def _read_codelist_csv(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+# Soglia righe per embedding nel JSON: oltre, il codelist è dichiarato in
+# ``large`` (il MCP lo legge dal CSV del repo, come faceva eurostat-mcp).
+MAX_CODELIST_ROWS = 1000
+
+
 def build_codelists(
     layout: RepoLayout,
     codelists_dir: Path | None = None,
@@ -398,8 +403,11 @@ def build_codelists(
     """Costruisce codelists.json: i valori delle dimensioni del repo.
 
     Legge ``{repo_root}/codelists/*.csv`` (convenzione eurostat: geo.csv,
-    units.csv, freq.csv, ...) e li espone come mappa ``nome → [righe]``.
-    Permette all'agente MCP di risolvere i codici (es. unit='EUR_HAB',
+    units.csv, freq.csv, ...). I codelist piccoli (<= MAX_CODELIST_ROWS righe)
+    sono embedded come mappa ``nome → [righe]``; i grandi (es. geo, c_resid)
+    sono elencati in ``large`` — il consumatore li legge dal CSV del repo
+    (pattern del vecchio eurostat-mcp: embedded per i piccoli, file per i
+    grandi). Permette all'agente MCP di risolvere i codici (es. unit='EUR_HAB',
     geo='ITC4' con parent_code) prima di scrivere le query.
 
     Returns:
@@ -409,6 +417,7 @@ def build_codelists(
     """
     codelists_dir = codelists_dir or (layout.repo_root / "codelists")
     codelists: dict[str, Any] = {}
+    large: list[str] = []
     errors: list[str] = []
 
     if not codelists_dir.is_dir():
@@ -424,7 +433,11 @@ def build_codelists(
         except Exception as exc:
             errors.append(f"codelist {name}: {exc}")
             continue
-        if rows:
+        if not rows:
+            continue
+        if len(rows) > MAX_CODELIST_ROWS:
+            large.append(name)
+        else:
             codelists[name] = rows
 
     payload: dict[str, Any] = {
@@ -433,6 +446,8 @@ def build_codelists(
         "updated_at": str(datetime.now(UTC).date()),
         "codelists": codelists,
     }
+    if large:
+        payload["large"] = sorted(large)
     errors.extend(validate_artifact(payload, "codelists.schema.json"))
     return payload, {"derive": [], "validation": errors}
 

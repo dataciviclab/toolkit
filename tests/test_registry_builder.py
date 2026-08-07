@@ -355,6 +355,22 @@ def test_codelists_contract(tmp_path: Path) -> None:
     ]
 
 
+def test_codelists_large_external(tmp_path: Path) -> None:
+    """Codelist oltre la soglia → dichiarato in large, non embedded (policy)."""
+    from toolkit.registry.builders import build_codelists, MAX_CODELIST_ROWS
+
+    layout = _make_repo(tmp_path)
+    cl_dir = tmp_path / "codelists"
+    cl_dir.mkdir()
+    rows = "".join(f"code{i},label{i}\n" for i in range(MAX_CODELIST_ROWS + 5))
+    (cl_dir / "big.csv").write_text("code,label_en\n" + rows, encoding="utf-8")
+
+    payload, errors = build_codelists(layout)
+    assert errors == {"derive": [], "validation": []}
+    assert "big" not in payload["codelists"]
+    assert payload["large"] == ["big"]
+
+
 def test_codelists_empty_without_dir(tmp_path: Path) -> None:
     """Senza dir codelists → payload vuoto, nessun errore (opzionale)."""
     from toolkit.registry.builders import build_codelists

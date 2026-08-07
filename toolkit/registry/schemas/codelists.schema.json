@@ -17,6 +17,11 @@
       "type": "string",
       "format": "date"
     },
+    "large": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Codelist troppo grandi per l'embedding: il consumatore li legge dal CSV del repo ({repo}/codelists/{name}.csv)."
+    },
     "codelists": {
       "type": "object",
       "additionalProperties": {

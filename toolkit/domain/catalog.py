@@ -128,38 +128,42 @@ def _find_latest_run_status(slug: str, runs_root: Path | None = None) -> str | N
 
 
 def _scan_workspace_parquets(workspace: Path = WORKSPACE_ROOT) -> list[dict[str, Any]]:
-    """Scansiona il workspace per clean parquet locali."""
-    incubator = workspace / "dataset-incubator"
-    if not incubator.is_dir():
+    """Scansiona il workspace per clean parquet locali (tutti i repo).
+
+    Come ``_scan_committed_catalogs``: qualsiasi dir di primo livello con
+    parquet clean (eurostat/, dataset-incubator/, dcl-bologna/, ...).
+    """
+    if not workspace.is_dir():
         return []
 
     entries: list[dict[str, Any]] = []
     seen: set[tuple[str, int, str]] = set()
 
-    for fpath in incubator.rglob("*_clean.parquet"):
-        parsed = _parse_clean_filename(fpath.name)
-        if parsed is None:
-            continue
-        slug, year = parsed
-        rel_path = str(fpath.relative_to(workspace))
-        dedup_key = (slug, year, rel_path)
-        if dedup_key in seen:
-            continue
-        seen.add(dedup_key)
+    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
+        for fpath in repo_dir.rglob("*_clean.parquet"):
+            parsed = _parse_clean_filename(fpath.name)
+            if parsed is None:
+                continue
+            slug, year = parsed
+            rel_path = str(fpath.relative_to(workspace))
+            dedup_key = (slug, year, rel_path)
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
 
-        stat = fpath.stat()
-        entries.append(
-            {
-                "url": str(fpath),
-                "slug": slug,
-                "bucket": LOCAL_BUCKET,
-                "year": year,
-                "path": rel_path,
-                "size_bytes": stat.st_size,
-                "updated": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
-                "_local": True,
-            }
-        )
+            stat = fpath.stat()
+            entries.append(
+                {
+                    "url": str(fpath),
+                    "slug": slug,
+                    "bucket": LOCAL_BUCKET,
+                    "year": year,
+                    "path": rel_path,
+                    "size_bytes": stat.st_size,
+                    "updated": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                    "_local": True,
+                }
+            )
 
     return entries
 

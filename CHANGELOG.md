@@ -1,3 +1,9 @@
+## [1.48.2] - 2026-08-07
+
+### Fixed
+
+- **Resolver: scan parquet multi-repo** (emerso dalle prove MCP su eurostat): `_scan_workspace_parquets` scansionava solo `dataset-incubator/` — i parquet dei repo esterni (eurostat, dcl-bologna) non erano visibili → `dataset_overview`/`describe_slug` rispondevano `parquet_not_found` anche con i parquet locali presenti. Ora scansiona tutte le dir di primo livello del workspace (stesso pattern di `_scan_committed_catalogs`). Nota: il server MCP cachea il resolver per istanza — va riavviato per riflettere il fix.
+
 ## [1.48.1] - 2026-08-07
 
 ### Fixed

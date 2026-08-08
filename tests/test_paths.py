@@ -61,3 +61,41 @@ def test_from_root_relative_accepts_forward_slashes_for_windows_like_root():
     rel = "data/raw/demo/2022/file.csv"
 
     assert str(from_root_relative(rel, root)) == r"C:\repo\out\data\raw\demo\2022\file.csv"
+
+
+# ---------------------------------------------------------------------------
+# Config discovery cross-repo (fusion ADR generalizzata)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_resolve_config_path_cross_repo(tmp_path):
+    """Lo slug si risolve nei repo migrati (datasets/) e in DI (candidates/)."""
+    from toolkit.core.discovery import resolve_config_path
+
+    # Repo migrato: layout flat datasets/
+    eu = tmp_path / "eurostat" / "datasets" / "eurostat-crime-nuts3"
+    eu.mkdir(parents=True)
+    (eu / "dataset.yml").write_text("dataset:\n  name: 'eurostat_crime_nuts3'\n", encoding="utf-8")
+
+    # DI: candidates/
+    di = tmp_path / "dataset-incubator" / "candidates" / "anac-bandi-gara"
+    di.mkdir(parents=True)
+    (di / "dataset.yml").write_text("dataset:\n  name: 'anac_bandi_gara'\n", encoding="utf-8")
+
+    assert (
+        resolve_config_path("eurostat-crime-nuts3", workspace=tmp_path)
+        == (eu / "dataset.yml").resolve()
+    )
+    assert (
+        resolve_config_path("anac-bandi-gara", workspace=tmp_path) == (di / "dataset.yml").resolve()
+    )
+
+
+@pytest.mark.contract
+def test_resolve_config_path_not_found(tmp_path):
+    """Slug inesistente → FileNotFoundError con suggerimento."""
+    from toolkit.core.discovery import resolve_config_path
+
+    with pytest.raises(FileNotFoundError, match="Nessun dataset trovato"):
+        resolve_config_path("slug-inesistente", workspace=tmp_path)

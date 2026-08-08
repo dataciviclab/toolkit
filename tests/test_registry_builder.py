@@ -499,3 +499,30 @@ class TestEntityGraph:
             for b in bridges
         )
         assert graph["schema_version"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Mappa canonica repo → dataset_dirs (fusion ADR generalizzata)
+# ---------------------------------------------------------------------------
+
+
+class TestRepoDatasetDirs:
+    """La mappa REPO_DATASET_DIRS è la fonte unica dei layout per repo."""
+
+    def test_default_flat_for_unknown_repos(self) -> None:
+        """Repo non mappato → default ('datasets',) — scalabile senza codice."""
+        from toolkit.registry.layout import repo_dataset_dirs
+
+        assert repo_dataset_dirs("eurostat") == ("datasets",)
+        assert repo_dataset_dirs("dcl-bologna") == ("datasets",)
+        assert repo_dataset_dirs("nuovo-repo-futuro") == ("datasets",)
+
+    def test_di_custom_dirs(self) -> None:
+        """dataset-incubator dichiara i suoi tre layout."""
+        from toolkit.registry.layout import repo_dataset_dirs
+
+        assert repo_dataset_dirs("dataset-incubator") == (
+            "candidates",
+            "compose",
+            "support_datasets",
+        )

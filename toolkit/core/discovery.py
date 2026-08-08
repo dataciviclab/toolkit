@@ -6,7 +6,8 @@ Centralizza la logica oggi dispersa tra:
 
 La funzione ``resolve_config_path()`` implementa 3 stadi:
 1. CWD o path diretto
-2. Slug → candidates/compose/support_datasets
+2. Slug → repo del workspace con la mappa canonica ``REPO_DATASET_DIRS``
+   (dataset-incubator: candidates/compose/support_datasets; altri repo: datasets)
 3. FileNotFoundError con suggerimento
 """
 
@@ -15,8 +16,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from toolkit.core.paths import WORKSPACE_ROOT
-
-_INCUBATOR_DIRS = ("candidates", "compose", "support_datasets")
 
 
 def resolve_config_path(
@@ -28,8 +27,9 @@ def resolve_config_path(
     Args:
         hint: ``None`` → cerca ``dataset.yml`` nel CWD.
               Path o stringa con ``/`` o ``.yml`` → path diretto.
-              Stringa senza ``/`` né ``.yml`` → slug risolto in
-              ``candidates/{slug}/dataset.yml`` (e categorie affini).
+              Stringa senza ``/`` né ``.yml`` → slug risolto nei repo del
+              workspace (dataset-incubator candidates/compose/support_datasets,
+              altri repo datasets/).
         workspace: Workspace root (default: ``WORKSPACE_ROOT``).
 
     Returns:
@@ -71,16 +71,23 @@ def resolve_config_path(
             f"File non trovato: {candidate}\n  Usa -c <slug> per risolvere automaticamente"
         )
 
-    # ── Stage 3: risoluzione slug ─────────────────────────────────────
-    incubator = ws / "dataset-incubator"
-    for subdir in _INCUBATOR_DIRS:
-        for name in ("dataset.yml", "dataset.yaml"):
-            probe = incubator / subdir / hint_str / name
-            if probe.is_file():
-                return probe.resolve()
+    # ── Stage 3: risoluzione slug nei repo del workspace ──────────────
+    from toolkit.registry.layout import repo_dataset_dirs
+
+    searched: list[str] = []
+    for repo_dir in sorted(p for p in ws.iterdir() if p.is_dir()):
+        for section in repo_dataset_dirs(repo_dir.name):
+            section_dir = repo_dir / section
+            if not section_dir.is_dir():
+                continue
+            for name in ("dataset.yml", "dataset.yaml"):
+                probe = section_dir / hint_str / name
+                if probe.is_file():
+                    return probe.resolve()
+            searched.append(str(section_dir / hint_str))
 
     raise FileNotFoundError(
         f"Nessun dataset trovato per '{hint_str}'.\n"
-        f"  Cercato in: {ws}/dataset-incubator/{{candidates,compose,support_datasets}}/<slug>/dataset.yml\n"
+        f"  Cercato in: {', '.join(searched) or ws}\n"
         f"  Verifica che lo slug sia corretto."
     )

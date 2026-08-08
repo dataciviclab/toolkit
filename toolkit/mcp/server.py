@@ -46,6 +46,7 @@ from .catalog_ops import (
 )
 
 from .registry_ops import (
+    mcp_graph as graph_impl,
     mcp_registry_list as registry_list_impl,
     mcp_registry_show as registry_show_impl,
 )
@@ -375,6 +376,34 @@ def toolkit_registry_list() -> dict[str, Any]:
 )
 def toolkit_registry_show(repo: str, artifact: str, slug: str | None = None) -> dict[str, Any]:
     return guard_timed(registry_show_impl, "toolkit_registry_show", repo, artifact, slug)
+
+
+@mcp.tool(
+    description=(
+        "Mostra la mappa delle relazioni tra dataset del Lab (cross-repo). "
+        "Ogni dataset si collega a un'entità del mondo reale (Comune, Provincia, "
+        "Ente, Gara, ...) tramite un tipo semantico (municipality_code, fiscal_code, ...). "
+        "I bridge collegano entità tra loro (es. CIG → Comune via anac_bandi_gara). "
+        "Aggrega i registry di tutti i repo del workspace (fusion ADR). "
+        "Filtri: by_key (tipo semantico), by_dataset (slug), by_registry (entità), "
+        "by_domain (appalti/enti/territorio/giustizia/scuola/progetti/economia)."
+    ),
+    structured_output=True,
+)
+def toolkit_graph(
+    by_key: str = "",
+    by_dataset: str = "",
+    by_registry: str = "",
+    by_domain: str = "",
+) -> dict[str, Any]:
+    return guard_timed(
+        graph_impl,
+        "toolkit_graph",
+        by_key=by_key,
+        by_dataset=by_dataset,
+        by_registry=by_registry,
+        by_domain=by_domain,
+    )
 
 
 if __name__ == "__main__":

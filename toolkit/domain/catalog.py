@@ -582,7 +582,8 @@ class CatalogResolver:
                     datasets[slug]["_buckets"] = set()
                 entry = datasets[slug]
                 entry["_buckets"].add(f["bucket"])
-                entry["years"].add(f["year"])
+                if f["year"] is not None:
+                    entry["years"].add(f["year"])
                 entry["file_count"] += 1
                 entry["total_size_bytes"] += f.get("size_bytes", 0)
                 entry["has_remote"] = True

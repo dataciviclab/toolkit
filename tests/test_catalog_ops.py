@@ -288,6 +288,55 @@ class TestListDatasets:
         assert res["total_count"] == 4
         assert res["truncated"] is False
 
+    @pytest.mark.regression
+    def test_merge_gcs_workspace_mixed_years(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Merge source=all con file GCS senza anno + parquet locale non crasha.
+
+        Regressione: i file GCS dai registry hanno year=None (path flat), lo
+        scan workspace int → sorted(set{years}) crashava con TypeError
+        ('<' int vs NoneType). Il None non deve entrare nel set years.
+        """
+        resolver = CatalogResolver(include_local=True)
+        # GCS: file senza anno (dal registry)
+        monkeypatch.setattr(
+            "toolkit.domain.catalog._gcs_files_from_registry",
+            lambda _w: [
+                {
+                    "url": "gs://dataciviclab-clean/mio_dataset/*.parquet",
+                    "slug": "mio_dataset",
+                    "bucket": CLEAN_BUCKET,
+                    "year": None,
+                    "path": "gs://dataciviclab-clean/mio_dataset/*.parquet",
+                    "_gcs": True,
+                }
+            ],
+        )
+        # Workspace: parquet locale con anno
+        monkeypatch.setattr(
+            "toolkit.domain.catalog._scan_workspace_parquets",
+            lambda _w: [
+                {
+                    "url": "/tmp/mio_dataset_2024_clean.parquet",
+                    "slug": "mio_dataset",
+                    "bucket": "local",
+                    "year": 2024,
+                    "path": "mio_dataset/2024/mio_dataset_2024_clean.parquet",
+                    "size_bytes": 100,
+                    "updated": "2026-01-01T00:00:00Z",
+                    "_local": True,
+                }
+            ],
+        )
+        monkeypatch.setattr("toolkit.domain.catalog._scan_workspace_configs", lambda _w, **_: {})
+        monkeypatch.setattr("toolkit.domain.catalog._scan_committed_catalogs", lambda _w: {})
+
+        res = resolver.list_datasets(query="mio_dataset", source="all")
+        assert res["total_count"] == 1
+        entry = res["datasets"][0]
+        assert entry["years"] == [2024]  # solo anni reali, nessun None
+        assert entry["has_remote"] is True
+        assert entry["has_local"] is True
+
     def test_list_by_query(self, resolver: CatalogResolver) -> None:
         """Filtro query per slug (case-insensitive, substring)."""
         res = resolver.list_datasets(query="ANAC")

@@ -136,6 +136,9 @@ def toolkit_preview_url(
     "mode=sql funziona su tutti i layer (raw->CSV, clean/mart->parquet). "
     "Per layer=mart, table specifica la tabella (es. 'mart_top_sa'). "
     "Catalog mode (datasets) supporta solo mode='sql'. "
+    "Con dry_run=True (mode=sql) valida lo scope SQL e fa EXPLAIN senza eseguire: "
+    "ritorna {'valid': True, 'plan': ...} o {'valid': False, 'error': ...} "
+    "— utile per provare la query prima di eseguirla. "
     "Esempi: mode=sql, datasets=['anac_bandi_gara', 'popolazione_istat']",
     structured_output=True,
 )
@@ -149,6 +152,7 @@ def toolkit_layer(
     sql: str | None = None,
     mart_index: int = 0,
     table: str | None = None,
+    dry_run: bool = False,
 ) -> dict[str, Any]:
     return guard_timed(
         layer_query_impl,
@@ -162,6 +166,7 @@ def toolkit_layer(
         sql=sql,
         mart_index=mart_index,
         table=table,
+        dry_run=dry_run,
     )
 
 

@@ -390,6 +390,7 @@ def layer_sql(
     sql: str | None = None,
     mart_index: int = 0,
     table: str | None = None,
+    dry_run: bool = False,
 ) -> dict[str, Any]:
     """Esegue SQL arbitrario su uno o piu' dataset.
 
@@ -406,9 +407,12 @@ def layer_sql(
         sql: Query SQL. I dati sono disponibili come tabella ``data``
             (singolo dataset) o CTE col nome slug (multi dataset).
         mart_index: Indice tabella mart (solo pipeline mode).
+        dry_run: Se True, valida lo scope SQL e fa EXPLAIN senza eseguire
+            (stesso contratto del dry_run di clean-query).
 
     Returns:
-        Risultato della query SQL.
+        Risultato della query SQL, o ``{"valid", "plan"/"error"}`` con
+        ``dry_run=True``.
 
     Raises:
         ValueError: se parametri invalidi o SQL non valido.
@@ -428,7 +432,12 @@ def layer_sql(
         resolved = _resolve_datasets(datasets, layer=layer, year=year, table=table)
         # Scope validation: solo i CTE dichiarati
         allowed = set(resolved.keys())
-        validated_sql = _validate_sql_scope(sql, allowed)
+        try:
+            validated_sql = _validate_sql_scope(sql, allowed)
+        except ValueError as exc:
+            if dry_run:
+                return {"valid": False, "error": str(exc), "dry_run": True}
+            raise
 
         # Costruisci CTE per ogni dataset
         cte_defs = []
@@ -436,6 +445,20 @@ def layer_sql(
             cte_defs.append(f"{slug} AS (SELECT * FROM read_parquet(['{url}']))")
         cte = ", ".join(cte_defs)
         wrapped_sql = f"WITH {cte} {validated_sql}"
+
+        # ── Dry run: EXPLAIN senza eseguire (contratto clean-query) ──
+        if dry_run:
+            try:
+                with safe_connect() as conn:
+                    plan = conn.execute(f"EXPLAIN {wrapped_sql}").fetchone()
+                plan_text = plan[1] if plan and len(plan) > 1 else (plan[0] if plan else None)
+                return {
+                    "valid": True,
+                    "plan": str(plan_text)[:300] if plan_text else None,
+                    "dry_run": True,
+                }
+            except Exception as exc:
+                return {"valid": False, "error": str(exc)[:300], "dry_run": True}
 
         with safe_connect() as conn:
             result = conn.execute(wrapped_sql).fetchall()
@@ -544,6 +567,7 @@ def layer_query(
     sql: str | None = None,
     mart_index: int = 0,
     table: str | None = None,
+    dry_run: bool = False,
 ) -> dict[str, Any]:
     """Query unificata su layer RAW/CLEAN/MART.
 
@@ -556,6 +580,7 @@ def layer_query(
         limit: Max righe in preview/sql.
         sql: Query SQL per mode=sql.
         mart_index: Indice tabella mart (solo pipeline mode).
+        dry_run: Se True e mode=sql, valida lo scope + EXPLAIN senza eseguire.
 
     Raises:
         ValueError: se layer/mode non validi.
@@ -596,6 +621,7 @@ def layer_query(
             limit=limit,
             sql=sql,
             table=table,
+            dry_run=dry_run,
         )
 
     if safe_mode == "profile" and safe_layer != "raw":

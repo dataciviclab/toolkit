@@ -9,12 +9,17 @@ Protegge:
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 
 from lab_connectors.gcs.paths import CLEAN_BUCKET, MART_BUCKET
-from toolkit.domain.catalog import CatalogResolver, _parse_clean_filename
+from toolkit.domain.catalog import (
+    CatalogResolver,
+    _parse_clean_filename,
+    _scan_committed_catalogs,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -282,6 +287,55 @@ class TestListDatasets:
         # pipeline_run.json non deve apparire
         assert res["total_count"] == 4
         assert res["truncated"] is False
+
+    @pytest.mark.regression
+    def test_merge_gcs_workspace_mixed_years(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Merge source=all con file GCS senza anno + parquet locale non crasha.
+
+        Regressione: i file GCS dai registry hanno year=None (path flat), lo
+        scan workspace int → sorted(set{years}) crashava con TypeError
+        ('<' int vs NoneType). Il None non deve entrare nel set years.
+        """
+        resolver = CatalogResolver(include_local=True)
+        # GCS: file senza anno (dal registry)
+        monkeypatch.setattr(
+            "toolkit.domain.catalog._gcs_files_from_registry",
+            lambda _w: [
+                {
+                    "url": "gs://dataciviclab-clean/mio_dataset/*.parquet",
+                    "slug": "mio_dataset",
+                    "bucket": CLEAN_BUCKET,
+                    "year": None,
+                    "path": "gs://dataciviclab-clean/mio_dataset/*.parquet",
+                    "_gcs": True,
+                }
+            ],
+        )
+        # Workspace: parquet locale con anno
+        monkeypatch.setattr(
+            "toolkit.domain.catalog._scan_workspace_parquets",
+            lambda _w: [
+                {
+                    "url": "/tmp/mio_dataset_2024_clean.parquet",
+                    "slug": "mio_dataset",
+                    "bucket": "local",
+                    "year": 2024,
+                    "path": "mio_dataset/2024/mio_dataset_2024_clean.parquet",
+                    "size_bytes": 100,
+                    "updated": "2026-01-01T00:00:00Z",
+                    "_local": True,
+                }
+            ],
+        )
+        monkeypatch.setattr("toolkit.domain.catalog._scan_workspace_configs", lambda _w, **_: {})
+        monkeypatch.setattr("toolkit.domain.catalog._scan_committed_catalogs", lambda _w: {})
+
+        res = resolver.list_datasets(query="mio_dataset", source="all")
+        assert res["total_count"] == 1
+        entry = res["datasets"][0]
+        assert entry["years"] == [2024]  # solo anni reali, nessun None
+        assert entry["has_remote"] is True
+        assert entry["has_local"] is True
 
     def test_list_by_query(self, resolver: CatalogResolver) -> None:
         """Filtro query per slug (case-insensitive, substring)."""
@@ -677,3 +731,145 @@ class TestSemanticFind:
         assert res["period"] == {"start": 2023, "end": 2024}
         assert res["columns"][0]["role"] == "metric"
         assert res["columns"][0]["description"] == "Importo gara"
+
+
+# ---------------------------------------------------------------------------
+# Scan cataloghi semantici committati (fusion ADR)
+# ---------------------------------------------------------------------------
+
+
+class TestScanCommittedCatalogs:
+    """Scan semantico cross-repo: registry.json unico + fallback legacy.
+
+    Regressione fusion ADR: prima leggeva solo ``clean_catalog.json``, quindi
+    i repo migrati a ``registry.json`` (eurostat, dcl-bologna) sparivano dal
+    find semantico. Ora usa ``load_repo_registry`` (stesso reader del resolver
+    GCS).
+    """
+
+    def test_reads_fusion_registry_and_legacy(self, tmp_path: "Any") -> None:
+        """Repo migrato (registry.json) e legacy (clean_catalog.json) indicizzati."""
+        # Repo migrato: registry.json unico con sezione datasets
+        migrato = tmp_path / "eurostat"
+        (migrato / "registry").mkdir(parents=True)
+        (migrato / "registry" / "registry.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "repo": "eurostat",
+                    "datasets": [
+                        {
+                            "slug": "eurostat_crime_nuts3",
+                            "name": "Criminalità NUTS3",
+                            "tags": ["giustizia", "reati"],
+                            "columns": [
+                                {"name": "geo", "role": "dimension", "semantic_type": "nuts_code"}
+                            ],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        # Repo legacy: solo clean_catalog.json
+        legacy = tmp_path / "dataset-incubator"
+        (legacy / "registry").mkdir(parents=True)
+        (legacy / "registry" / "clean_catalog.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "datasets": [
+                        {
+                            "slug": "anac_bandi_gara",
+                            "name": "Bandi ANAC",
+                            "tags": ["appalti"],
+                            "columns": [{"name": "cig", "role": "dimension"}],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        sem = _scan_committed_catalogs(tmp_path)
+
+        assert "eurostat_crime_nuts3" in sem
+        assert sem["eurostat_crime_nuts3"]["_repo"] == "eurostat"
+        assert sem["eurostat_crime_nuts3"]["tags"] == ["giustizia", "reati"]
+
+        assert "anac_bandi_gara" in sem
+        assert sem["anac_bandi_gara"]["_repo"] == "dataset-incubator"
+        assert sem["anac_bandi_gara"]["name"] == "Bandi ANAC"
+
+    def test_skips_repo_without_registry(self, tmp_path: "Any") -> None:
+        """Repo senza registry non produce entry."""
+        (tmp_path / "no-registry").mkdir()
+        sem = _scan_committed_catalogs(tmp_path)
+        assert sem == {}
+
+
+# ---------------------------------------------------------------------------
+# Scan configs workspace — cross-repo (gap fusion: configs DI-centrico)
+# ---------------------------------------------------------------------------
+
+
+class TestScanWorkspaceConfigs:
+    """Scan dataset.yml cross-repo: DI (candidates/compose/support) + migrati.
+
+    Regressione fusion ADR: prima scansionava solo dataset-incubator
+    candidates/support, quindi i repo migrati (eurostat, dcl-bologna) avevano
+    stage=None/has_clean=False pur avendo dataset.yml e parquet locali. Ora
+    usa la mappa canonica REPO_DATASET_DIRS (scalabile ai nuovi repo).
+    """
+
+    def test_reads_migrated_repo_datasets(self, tmp_path: "Any") -> None:
+        """Dataset.yml in datasets/ di un repo migrato viene indicizzato."""
+        migrated = tmp_path / "eurostat"
+        (migrated / "datasets" / "eurostat-crime-nuts3").mkdir(parents=True)
+        (migrated / "datasets" / "eurostat-crime-nuts3" / "dataset.yml").write_text(
+            "root: '../../out'\n"
+            "dataset:\n"
+            "  name: 'eurostat_crime_nuts3'\n"
+            "  source_id: 'eurostat'\n"
+            "  years: [2026]\n",
+            encoding="utf-8",
+        )
+        # Parquet locale finto → has_clean True
+        (migrated / "out" / "data" / "clean" / "eurostat_crime_nuts3").mkdir(parents=True)
+        (migrated / "out" / "data" / "clean" / "eurostat_crime_nuts3" / "x.parquet").touch()
+
+        from toolkit.domain.catalog import _scan_workspace_configs
+
+        configs = _scan_workspace_configs(tmp_path)
+
+        assert "eurostat_crime_nuts3" in configs
+        entry = configs["eurostat_crime_nuts3"]
+        assert entry["stage"] == "datasets"
+        assert entry["has_clean"] is True
+        assert "dataset.yml" in entry["config_path"]
+
+    def test_keeps_di_candidates_compose_and_support(self, tmp_path: "Any") -> None:
+        """DI candidates/compose/support_datasets restano indicizzati."""
+        for section in ("candidates", "compose", "support_datasets"):
+            d = tmp_path / "dataset-incubator" / section
+            d.mkdir(parents=True)
+            (d / "dataset.yml").write_text("dataset:\n  name: 'x'\n", encoding="utf-8")
+        (tmp_path / "dataset-incubator" / "candidates" / "anac-bandi-gara").mkdir(parents=True)
+        (
+            tmp_path / "dataset-incubator" / "candidates" / "anac-bandi-gara" / "dataset.yml"
+        ).write_text("dataset:\n  name: 'anac_bandi_gara'\n", encoding="utf-8")
+        (tmp_path / "dataset-incubator" / "compose" / "anac-appalti-master").mkdir(parents=True)
+        (
+            tmp_path / "dataset-incubator" / "compose" / "anac-appalti-master" / "dataset.yml"
+        ).write_text("dataset:\n  name: 'anac_appalti_master'\n", encoding="utf-8")
+        supp = tmp_path / "dataset-incubator" / "support_datasets" / "anac-collaudo"
+        supp.mkdir(parents=True)
+        (supp / "dataset.yml").write_text("dataset:\n  name: 'anac_collaudo'\n", encoding="utf-8")
+
+        from toolkit.domain.catalog import _scan_workspace_configs
+
+        configs = _scan_workspace_configs(tmp_path)
+
+        assert configs["anac_bandi_gara"]["stage"] == "candidates"
+        assert configs["anac_appalti_master"]["stage"] == "compose"
+        assert configs["anac_collaudo"]["stage"] == "support"

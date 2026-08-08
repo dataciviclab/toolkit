@@ -1,11 +1,12 @@
 """Catalog resolver — fonte unica per dataset discovery.
 
-Legge ``gcs_manifest.json`` (auto-generato dalla CI), scansiona il workspace
-locale e i dataset.yml per fornire una vista unificata di tutti i dataset
-del Lab, sia in sviluppo che pubblicati.
+Legge i registry committati (``{repo}/registry/registry.json`` unico, fusion
+ADR, con fallback sui file legacy) e scansiona il workspace locale e i
+dataset.yml per fornire una vista unificata di tutti i dataset del Lab, sia
+in sviluppo che pubblicati.
 
 Supporta tre ``source``:
-- ``"gcs"``: dataset pubblicati su GCS (dal manifest)
+- ``"gcs"``: dataset pubblicati su GCS (dai registry committati)
 - ``"workspace"``: dataset in sviluppo (da dataset.yml + clean parquet locali)
 - ``"all"`` (default): unione di entrambi
 
@@ -15,7 +16,6 @@ vanno aggiunte nei wrapper MCP.
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -173,25 +173,36 @@ def _scan_workspace_configs(
 ) -> dict[str, dict[str, Any]]:
     """Scansiona dataset.yml nel workspace e restituisce metadata di pipeline.
 
+    Cross-repo (come ``_scan_workspace_parquets``): usa la mappa canonica
+    ``REPO_DATASET_DIRS`` (toolkit.registry.layout) — dataset-incubator legge
+    ``candidates/compose/support_datasets``, gli altri repo (eurostat,
+    dcl-bologna, ...) ``datasets/``. Nuovi repo con layout flat funzionano
+    senza toccare il codice.
+
     Returns:
         Dict slug → {dataset_name, stage, years, has_clean, has_mart,
                      last_run_status, config_path, root}
     """
-    incubator = workspace / "dataset-incubator"
-    if not incubator.is_dir():
-        return {}
+    from toolkit.registry.layout import repo_dataset_dirs
+
+    # Nome dir DI → stage legacy (contratto pre-fusion).
+    DI_STAGE = {"candidates": "candidates", "compose": "compose", "support_datasets": "support"}
 
     results: dict[str, dict[str, Any]] = {}
     dirs_to_scan: list[tuple[str, Path]] = []
 
-    if stage in ("candidates", "all"):
-        candidates_dir = incubator / "candidates"
-        if candidates_dir.exists():
-            dirs_to_scan.append(("candidates", candidates_dir))
-    if stage in ("support", "all"):
-        support_dir = incubator / "support_datasets"
-        if support_dir.exists():
-            dirs_to_scan.append(("support", support_dir))
+    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
+        for section in repo_dataset_dirs(repo_dir.name):
+            section_dir = repo_dir / section
+            if not section_dir.is_dir():
+                continue
+            # Filtro stage: "all" prende tutto; "candidates"/"support" solo DI.
+            if stage == "candidates" and section != "candidates":
+                continue
+            if stage == "support" and section != "support_datasets":
+                continue
+            stage_name = DI_STAGE.get(section, section)
+            dirs_to_scan.append((stage_name, section_dir))
 
     for stage_name, scan_dir in dirs_to_scan:
         for dataset_yml in sorted(scan_dir.rglob("dataset.yml")):
@@ -344,28 +355,27 @@ SEMANTIC_FIELDS = (
 
 
 def _scan_committed_catalogs(workspace: Path = WORKSPACE_ROOT) -> dict[str, dict[str, Any]]:
-    """Scansiona i cataloghi committati nei repo del workspace.
+    """Scansiona i cataloghi semantici committati nei repo del workspace.
 
-    Qualsiasi dir di primo livello con ``registry/clean_catalog.json``
-    (eurostat/, dataset-incubator/, ...). Ritorna ``{slug: entry semantica}``
+    Usa ``load_repo_registry`` (lo stesso reader del resolver GCS): legge il
+    ``registry.json`` unico dei repo migrati (fusion ADR) e il fallback
+    ``clean_catalog.json`` dei repo legacy. Ritorna ``{slug: entry semantica}``
     con ``_repo`` (nome dir) aggiunto.
 
     La semantica (columns con role/semantic_type, description, tags, period)
-    vive nei cataloghi generati dal registry builder e committati nei repo:
+    vive nei registry generati dal registry builder e committati nei repo:
     qui diventa la fonte per il find semantico del resolver.
     """
+    from toolkit.registry.reader import load_repo_registry
+
     result: dict[str, dict[str, Any]] = {}
     if not workspace.is_dir():
         return result
     for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
-        catalog_path = repo_dir / "registry" / "clean_catalog.json"
-        if not catalog_path.is_file():
+        payload, _is_legacy = load_repo_registry(repo_dir)
+        if payload is None:
             continue
-        try:
-            catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
-        for ds in catalog.get("datasets", []) or []:
+        for ds in payload.get("datasets", []) or []:
             slug = ds.get("slug")
             if slug:
                 entry = dict(ds)
@@ -572,7 +582,8 @@ class CatalogResolver:
                     datasets[slug]["_buckets"] = set()
                 entry = datasets[slug]
                 entry["_buckets"].add(f["bucket"])
-                entry["years"].add(f["year"])
+                if f["year"] is not None:
+                    entry["years"].add(f["year"])
                 entry["file_count"] += 1
                 entry["total_size_bytes"] += f.get("size_bytes", 0)
                 entry["has_remote"] = True

@@ -222,27 +222,31 @@ def show_registry(
 
 
 def _filter_entry(section: str, data: Any, slug: str) -> dict[str, Any]:
-    """Filtra l'entry richiesta dalla sezione (errore se non trovata)."""
+    """Filtra l'entry richiesta dalla sezione (errore se non trovata).
+
+    Ritorna l'entry stessa (senza wrapper ``{slug, entry}``: il livello di
+    wrapping è già fornito da ``show_registry``).
+    """
     if section in ("datasets", "marts"):
         entries = data or []
         hit = next((d for d in entries if d.get("slug") == slug), None)
         if hit is None:
             raise FileNotFoundError(f"'{slug}' non presente in {section}")
-        return {"slug": slug, "entry": hit}
+        return hit
     if section == "signals":
         entries = data or []
         hit = next((s for s in entries if s.get("id") == slug), None)
         if hit is None:
             raise FileNotFoundError(f"Signal '{slug}' non presente in signals")
-        return {"slug": slug, "entry": hit}
+        return hit
     if section == "codelists":
         entries = data or {}
         if slug not in entries:
             raise FileNotFoundError(f"Codelist '{slug}' non presente in codelists")
-        return {"slug": slug, "entry": entries[slug]}
+        return entries[slug]
     if section == "entities":
         entities = (data or {}).get("entities") or {}
         if slug not in entities:
             raise FileNotFoundError(f"Entità '{slug}' non presente in entities")
-        return {"slug": slug, "entry": entities[slug]}
+        return entities[slug]
     raise FileNotFoundError(f"Filtro per slug non supportato per la sezione '{section}'")

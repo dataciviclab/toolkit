@@ -21,6 +21,22 @@ from toolkit.core.dataset_loader import load_dataset_manifest
 
 DEFAULT_DATASET_DIRS: tuple[str, ...] = ("datasets",)
 
+# Mappa canonica repo → dataset_dirs (fusion ADR generalizzata).
+# Ogni repo del workspace può dichiarare dove vivono i suoi dataset.yml;
+# i repo non elencati usano il default ``("datasets",)`` (layout flat).
+REPO_DATASET_DIRS: dict[str, tuple[str, ...]] = {
+    "dataset-incubator": ("candidates", "compose", "support_datasets"),
+}
+
+
+def repo_dataset_dirs(repo_name: str) -> tuple[str, ...]:
+    """Dataset dirs di un repo del workspace (default flat se non mappato).
+
+    La mappa ``REPO_DATASET_DIRS`` è la fonte unica: aggiungere un repo con
+    layout custom = una riga qui, senza toccare resolver, discovery o CLI.
+    """
+    return REPO_DATASET_DIRS.get(repo_name, DEFAULT_DATASET_DIRS)
+
 
 @dataclass(frozen=True)
 class RepoLayout:

@@ -1,3 +1,15 @@
+## [1.49.0] - 2026-08-08
+
+### Changed
+
+- **Fusion registry (ADR)** (PR #453): gli artifact registry per repo passano da 5 file separati (clean_catalog, mart_catalog, pipeline_signals, codelists, entity_graph) a **UN `registry.json`** con sezioni (datasets/marts/signals/codelists/entities) + `registry.schema.json` unico. Reader/CLI/MCP con fallback legacy sui vecchi file (i repo non migrati continuano a funzionare).
+- **Drop del `gcs_manifest`** dal resolver (PR #453): `source='gcs'` legge i registry.json committati (path GCS esatti per repo). Risolve il bug `slug=parts[0]` che assegnava lo slug "eurostat" a 224 file del layout con prefisso org. `manifest_url` accettato ma non più usato (compat di firma).
+- **`existing_signals`** (PR #453): `build_signals` preserva il blocco `run` dal signals committato quando il run locale manca (CI post-merge) — stesso pattern di `existing_catalog`; il run locale vince.
+
+### Removed
+
+- Schemi legacy `clean_catalog`/`mart_catalog`/`pipeline_signals`/`codelists`/`run.schema.json` (doppia validazione eliminata, -972 righe).
+
 ## [1.48.2] - 2026-08-07
 
 ### Fixed

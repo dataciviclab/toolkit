@@ -128,6 +128,21 @@ def _scan_repo(repo_dir: Path) -> list[dict[str, Any]]:
     return []
 
 
+def load_repo_registry(repo_dir: Path) -> tuple[dict[str, Any] | None, bool]:
+    """Carica il registry di un repo: formato unico o fallback legacy.
+
+    Returns:
+        (payload sezioni, is_legacy). None se il repo non ha registry.
+    """
+    payload = _load_registry(repo_dir)
+    if payload is not None:
+        return payload, False
+    payload, _sections = _load_legacy(repo_dir)
+    if payload is not None:
+        return payload, True
+    return None, False
+
+
 def list_registries(workspace: Path = WORKSPACE_ROOT) -> dict[str, Any]:
     """Elenca i registry committati nei repo del workspace.
 

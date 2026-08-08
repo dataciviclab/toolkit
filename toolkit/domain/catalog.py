@@ -20,7 +20,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from lab_connectors.gcs.manifest import MANIFEST_URL, read_manifest
 from lab_connectors.gcs.paths import CLEAN_BUCKET, MART_BUCKET
 
 from toolkit.core.duckdb_shape import parquet_preview
@@ -253,6 +252,60 @@ def _scan_workspace_configs(
     return results
 
 
+def _gcs_files_from_registry(workspace: Path = WORKSPACE_ROOT) -> list[dict[str, Any]]:
+    """File GCS dai registry.json committati (fusion ADR — drop del manifest).
+
+    Le location del catalogo sono esatte per repo (layout DI year o eurostat
+    flat): file diretto (``.parquet``) o dir (→ glob ``*.parquet``). I mart
+    hanno la location file diretta. Sostituisce il gcs_manifest.json, che
+    assegnava lo slug ``parts[0]`` (sbagliato per i layout con prefisso org).
+    """
+    from toolkit.registry.reader import load_repo_registry
+
+    files: list[dict[str, Any]] = []
+    if not workspace.is_dir():
+        return files
+    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
+        payload, _is_legacy = load_repo_registry(repo_dir)
+        if payload is None:
+            continue
+        # clean: datasets → location
+        for ds in payload.get("datasets", []) or []:
+            loc = ds.get("location") or {}
+            path = loc.get("path", "")
+            if not path or CLEAN_BUCKET not in path:
+                continue
+            url = path if path.endswith(".parquet") else path.rstrip("/") + "/*.parquet"
+            files.append(
+                {
+                    "url": url,
+                    "slug": ds.get("slug", ""),
+                    "bucket": CLEAN_BUCKET,
+                    "year": None,
+                    "path": url,
+                    "_gcs": True,
+                }
+            )
+        # mart: location file diretta (slug = dataset, table = nome tabella)
+        for m in payload.get("marts", []) or []:
+            loc = m.get("location") or {}
+            path = loc.get("path", "")
+            if not path or MART_BUCKET not in path or not path.endswith(".parquet"):
+                continue
+            files.append(
+                {
+                    "url": path,
+                    "slug": m.get("dataset", ""),
+                    "bucket": MART_BUCKET,
+                    "year": None,
+                    "path": path,
+                    "table": m.get("table"),
+                    "_gcs": True,
+                }
+            )
+    return files
+
+
 def _merge_gcs_and_local(
     gcs_files: list[dict[str, Any]],
     local_files: list[dict[str, Any]],
@@ -366,7 +419,7 @@ class CatalogResolver:
     """Risolve slug dataset → metadati, unificando GCS + workspace.
 
     Supporta tre modalita' (``source``):
-    - ``"gcs"``: solo manifest GCS (dataset pubblicati)
+    - ``"gcs"``: solo file GCS dai registry.json committati (fusion ADR)
     - ``"workspace"``: solo workspace (dataset in sviluppo, con pipeline status)
     - ``"all"`` (default): unione — merge GCS + workspace, arricchito con pipeline status
     """
@@ -377,10 +430,13 @@ class CatalogResolver:
         workspace: str | Path | None = None,
         include_local: bool = True,
     ) -> None:
-        self._manifest_url = manifest_url or MANIFEST_URL
+        # manifest_url è accettato per compatibilità di firma ma NON è più
+        # usato: il gcs_manifest.json è stato rimpiazzato dai registry.json
+        # committati (fusion ADR — path GCS esatti per repo).
+        self._manifest_url = manifest_url
         self._workspace = Path(workspace or WORKSPACE_ROOT)
         self._include_local = include_local
-        self._gcs_manifest: dict[str, Any] | None = None
+        self._gcs_entries: list[dict[str, Any]] | None = None
         self._local_entries: list[dict[str, Any]] | None = None
         self._workspace_configs: dict[str, dict[str, Any]] | None = None
         self._semantic: dict[str, dict[str, Any]] | None = None
@@ -405,11 +461,17 @@ class CatalogResolver:
         entry["_repo"] = semantic.get("_repo")
         entry["_has_semantic"] = True
 
-    def _load_gcs(self) -> dict[str, Any]:
-        if self._gcs_manifest is not None:
-            return self._gcs_manifest
-        self._gcs_manifest = read_manifest(self._manifest_url)
-        return self._gcs_manifest
+    def _gcs_files(self) -> list[dict[str, Any]]:
+        """File GCS dai registry.json committati (cache per istanza).
+
+        I registry committati nel workspace sono la fonte GCS: disponibili
+        sempre (non dipendono da ``include_local``, che governa solo lo scan
+        dei parquet locali).
+        """
+        if self._gcs_entries is not None:
+            return self._gcs_entries
+        self._gcs_entries = _gcs_files_from_registry(self._workspace)
+        return self._gcs_entries
 
     def _load_local_parquets(self) -> list[dict[str, Any]]:
         if self._local_entries is not None:
@@ -490,9 +552,8 @@ class CatalogResolver:
 
         # --- Source: GCS ---
         if source in ("gcs", "all"):
-            manifest = self._load_gcs()
             gcs_configs = self._load_workspace_configs()
-            for f in manifest.get("files", []):
+            for f in self._gcs_files():
                 if not _is_data_parquet(f):
                     continue
                 if not _matches_layer(f, layer):
@@ -653,8 +714,7 @@ class CatalogResolver:
 
         Cerca prima nel workspace locale, poi su GCS.
         """
-        manifest = self._load_gcs()
-        gcs_files = manifest.get("files", [])
+        gcs_files = self._gcs_files()
         local_files = self._load_local_parquets()
         files = _merge_gcs_and_local(gcs_files, local_files)
 
@@ -705,8 +765,7 @@ class CatalogResolver:
         """
         # Source filter: verifica esistenza prima di risolvere
         if source == "gcs":
-            manifest = self._load_gcs()
-            gcs_slugs = {f["slug"] for f in manifest.get("files", []) if _is_data_parquet(f)}
+            gcs_slugs = {f["slug"] for f in self._gcs_files() if _is_data_parquet(f)}
             if slug not in gcs_slugs:
                 raise FileNotFoundError(f"Slug '{slug}' non trovato su GCS (source=gcs)")
         elif source == "workspace":

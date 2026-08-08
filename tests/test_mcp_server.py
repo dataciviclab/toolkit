@@ -31,6 +31,7 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_dataset_overview",
         "toolkit_registry_list",
         "toolkit_registry_show",
+        "toolkit_graph",
     }
 
 

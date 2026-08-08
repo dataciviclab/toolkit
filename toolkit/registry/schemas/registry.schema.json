@@ -1,12 +1,12 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dataciviclab.org/schemas/clean_catalog.schema.json",
-  "title": "DataCivicLab Clean Catalog",
-  "description": "Inventario queryabile dei clean parquet pubblici del Lab: cosa esiste, come e' fatto (colonne, tipi, semantic_type), dove sta (location) e in che fase di pubblicazione (stage). Contratto condiviso in lab-connectors: identico allo schema v1 di dataset-incubator, con aggiunte opzionali (years, mart_refs, run) — backward compatible, schema_version resta 1.",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "registry.schema.json",
+  "title": "Lab Registry (fusionato)",
+  "description": "Artifact registry unico per repo: datasets + marts + signals + codelists + entities. Sostituisce clean_catalog/mart_catalog/pipeline_signals/codelists/entity_graph (ADR fusion).",
   "type": "object",
   "required": [
     "schema_version",
-    "name",
+    "repo",
     "updated_at",
     "datasets"
   ],
@@ -15,27 +15,82 @@
       "type": "integer",
       "const": 1
     },
-    "name": {
+    "repo": {
       "type": "string"
     },
-    "description": {
+    "source_repo": {
       "type": "string"
     },
     "updated_at": {
-      "type": "string",
-      "format": "date"
-    },
-    "source_repo": {
-      "type": "string",
-      "description": "Repo GitHub che genera/possiede il catalogo (es. dataciviclab/dataset-incubator)."
+      "type": "string"
     },
     "datasets": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/dataset"
+      },
+      "description": "Inventario queryabile dei clean parquet (ex clean_catalog)."
+    },
+    "marts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/mart"
+      },
+      "description": "Tabelle mart (ex mart_catalog)."
+    },
+    "signals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/signal"
+      },
+      "description": "Health check operativo (ex pipeline_signals.signals)."
+    },
+    "codelists": {
+      "type": "object",
+      "properties": {
+        "large": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "codelists": {
+          "type": "object"
+        }
+      },
+      "description": "Valori delle dimensioni (ex codelists.json)."
+    },
+    "entities": {
+      "type": "object",
+      "properties": {
+        "entities": {
+          "type": "object"
+        },
+        "bridges": {
+          "type": "array"
+        },
+        "summary": {
+          "type": "object"
+        }
+      },
+      "description": "Grafo entità → dataset (ex entity_graph)."
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "datasets": {
+          "type": "integer"
+        },
+        "marts": {
+          "type": "integer"
+        },
+        "signals": {
+          "type": "integer"
+        }
       }
     }
   },
+  "additionalProperties": true,
   "$defs": {
     "dataset": {
       "type": "object",
@@ -209,7 +264,12 @@
         "status": {
           "type": "string",
           "enum": [
-            "SUCCESS", "FAILED", "PENDING", "SKIPPED", "RUNNING", "DRY_RUN"
+            "SUCCESS",
+            "FAILED",
+            "PENDING",
+            "SKIPPED",
+            "RUNNING",
+            "DRY_RUN"
           ]
         },
         "quality_score": {
@@ -249,6 +309,110 @@
       },
       "additionalProperties": true,
       "description": "Blocco run condiviso — inline copy da run.schema.json (canonica)."
+    },
+    "mart": {
+      "type": "object",
+      "required": [
+        "slug",
+        "dataset",
+        "table",
+        "location"
+      ],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+__[a-z0-9_]+$",
+          "description": "Slug canonico del mart: {dataset}__{mart_name} (es. eurostat_gdp_nuts3__mart_geo_benchmark)."
+        },
+        "dataset": {
+          "type": "string",
+          "description": "Slug del dataset clean parent (vedi clean_catalog.schema.json)."
+        },
+        "table": {
+          "type": "string",
+          "description": "Nome della tabella mart (es. mart_geo_benchmark)."
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "primary_key": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Chiave primaria dichiarata (dal dataset.yml mart.validate.table_rules)."
+        },
+        "required_columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Colonne richieste dichiarate (dal dataset.yml)."
+        },
+        "min_rows": {
+          "type": "integer",
+          "description": "Soglia minima di righe dichiarata (dal dataset.yml)."
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/column"
+          },
+          "description": "Schema colonne reale (dal parquet locale in derive_mode=local). Opzionale in v1."
+        },
+        "run": {
+          "$ref": "#/$defs/run",
+          "description": "Ultimo run record del toolkit per il layer mart. Opzionale."
+        }
+      },
+      "additionalProperties": true
+    },
+    "signal": {
+      "type": "object",
+      "required": [
+        "id",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "warn",
+            "error"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "years": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "run": {
+          "$ref": "#/$defs/run"
+        }
+      }
     }
   }
 }

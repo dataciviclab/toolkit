@@ -136,10 +136,10 @@ def resolver(monkeypatch: pytest.MonkeyPatch) -> CatalogResolver:
         include_local=False,
     )
 
-    def _fake_read_manifest(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        return _FAKE_MANIFEST
+    def _fake_gcs_files(workspace=None):
+        return _FAKE_MANIFEST["files"]
 
-    monkeypatch.setattr("toolkit.domain.catalog.read_manifest", _fake_read_manifest)
+    monkeypatch.setattr("toolkit.domain.catalog._gcs_files_from_registry", _fake_gcs_files)
     return resolver
 
 
@@ -151,10 +151,10 @@ def resolver_with_local(monkeypatch: pytest.MonkeyPatch) -> CatalogResolver:
         include_local=True,
     )
 
-    def _fake_read_manifest(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        return _FAKE_MANIFEST
+    def _fake_gcs_files(workspace=None):
+        return _FAKE_MANIFEST["files"]
 
-    monkeypatch.setattr("toolkit.domain.catalog.read_manifest", _fake_read_manifest)
+    monkeypatch.setattr("toolkit.domain.catalog._gcs_files_from_registry", _fake_gcs_files)
 
     # Mock della scan locale: restituisce un dataset locale aggiuntivo
     fake_local = [
@@ -248,10 +248,10 @@ def resolver_semantic(monkeypatch: pytest.MonkeyPatch) -> CatalogResolver:
         include_local=True,
     )
 
-    def _fake_read_manifest(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        return _FAKE_MANIFEST
+    def _fake_gcs_files(workspace=None):
+        return _FAKE_MANIFEST["files"]
 
-    monkeypatch.setattr("toolkit.domain.catalog.read_manifest", _fake_read_manifest)
+    monkeypatch.setattr("toolkit.domain.catalog._gcs_files_from_registry", _fake_gcs_files)
     monkeypatch.setattr("toolkit.domain.catalog._scan_workspace_parquets", lambda _w: [])
     monkeypatch.setattr(
         "toolkit.domain.catalog._scan_workspace_configs", lambda _w, stage="all": {}
@@ -485,10 +485,10 @@ class TestLocalMerge:
             include_local=True,
         )
 
-        def _fake_read_manifest(*args: Any, **kwargs: Any) -> dict[str, Any]:
-            return _FAKE_MANIFEST
+        def _fake_gcs_files(workspace=None):
+            return _FAKE_MANIFEST["files"]
 
-        monkeypatch.setattr("toolkit.domain.catalog.read_manifest", _fake_read_manifest)
+        monkeypatch.setattr("toolkit.domain.catalog._gcs_files_from_registry", _fake_gcs_files)
 
         # Mock scan parquet locale: stesso slug del GCS (anac_bandi_gara)
         monkeypatch.setattr(
@@ -557,39 +557,39 @@ class TestEdgeCases:
         assert not any("pipeline_run" in p for p in paths)
 
     def test_resolver_cache_independence(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Due resolver con URL diverso non condividono cache."""
-        r1 = CatalogResolver(manifest_url="http://fake/a.json")
-        r2 = CatalogResolver(manifest_url="http://fake/b.json")
+        """Due resolver non condividono la cache dei file GCS."""
+        r1 = CatalogResolver()
+        r2 = CatalogResolver()
 
-        calls: list[str] = []
+        calls: list[int] = []
 
-        def tracking_read_manifest(url: str | None = None) -> dict[str, Any]:
-            calls.append(url or "default")
-            return _FAKE_MANIFEST
+        def tracking_gcs_files(workspace=None):
+            calls.append(1)
+            return _FAKE_MANIFEST["files"]
 
-        monkeypatch.setattr("toolkit.domain.catalog.read_manifest", tracking_read_manifest)
+        monkeypatch.setattr("toolkit.domain.catalog._gcs_files_from_registry", tracking_gcs_files)
 
         r1.list_datasets(query="anac")
         r2.list_datasets(query="anac")
 
-        # Ogni resolver fa la propria chiamata
+        # Ogni resolver fa la propria scansione
         assert len(calls) == 2
 
     def test_gcs_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Due chiamate a list_datasets producono una sola fetch del manifest.
+        """Due chiamate a list_datasets producono una sola scansione registry.
 
-        Regression: _load_gcs deve cacheare il manifest come _load_local.
+        Regression: _gcs_files deve cacheare come _load_local.
         """
         call_count = 0
 
-        def counting_manifest(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        def counting_gcs_files(workspace=None):
             nonlocal call_count
             call_count += 1
-            return _FAKE_MANIFEST
+            return _FAKE_MANIFEST["files"]
 
-        monkeypatch.setattr("toolkit.domain.catalog.read_manifest", counting_manifest)
+        monkeypatch.setattr("toolkit.domain.catalog._gcs_files_from_registry", counting_gcs_files)
 
-        r = CatalogResolver(manifest_url="http://fake/manifest.json", include_local=False)
+        r = CatalogResolver(include_local=False)
 
         r.list_datasets()
         assert call_count == 1, f"Prima chiamata: 1 fetch, ma {call_count}"

@@ -46,8 +46,8 @@ Sostituire il path del `command` con il Python reale del clone locale.
 
 ## Note tecniche
 
-- I tool catalogo usano `gcs_manifest.json` (auto-generato dalla CI,
-  pubblicato su GCS) come fonte di verità per i dataset pubblicati
+- I tool catalogo usano i `registry.json` committati nei repo del workspace
+  (fusion ADR — path GCS esatti per repo) come fonte per i dataset pubblicati
 - `toolkit_find` unifica GCS + workspace locale (clean parquet + dataset.yml)
 - `list_candidates` (discovery.py) rimosso: usa `toolkit_find(source="workspace")`
 - `toolkit_layer(mode=sql, datasets=[...])` usa DuckDB con CTE multipli

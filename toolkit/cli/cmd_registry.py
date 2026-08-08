@@ -21,8 +21,12 @@ def _print_list(data: dict[str, Any]) -> None:
     for repo_info in repos:
         typer.echo(f"  {repo_info['repo']}:")
         for art in repo_info["artifacts"]:
-            entries = f" ({art['entries']} entries)" if art["entries"] is not None else ""
-            typer.echo(f"    {art['name']}.json  [{art['size_bytes'] // 1024} KB]{entries}")
+            size = art.get("size_bytes")
+            size_txt = f"  [{size // 1024} KB]" if size is not None else ""
+            sections = art.get("sections") or {}
+            counts = ", ".join(f"{k}: {v}" for k, v in sections.items() if v is not None)
+            legacy = " (legacy)" if art.get("legacy") else ""
+            typer.echo(f"    registry.json{size_txt}{legacy}  {counts}")
 
 
 def registry_list(json_output: bool = typer.Option(False, "--json", help="Output JSON")) -> None:

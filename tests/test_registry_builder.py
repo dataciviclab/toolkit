@@ -17,6 +17,7 @@ import pytest
 
 from toolkit.registry.builders import (
     build_clean_catalog,
+    build_entity_graph,
     build_mart_catalog,
     build_signals,
 )
@@ -107,12 +108,17 @@ def _write_run_record(runs_root: Path, slug: str, year: int = 2024) -> None:
 
 
 def _make_repo(
-    tmp_path: Path, *, with_mart: bool = True, dirname: str = "my-dataset"
+    tmp_path: Path,
+    *,
+    with_mart: bool = True,
+    with_run: bool = True,
+    dirname: str = "my-dataset",
 ) -> RepoLayout:
     """Mini-repo: datasets/{dirname}/dataset.yml + parquet locale + run record.
 
     Il run record copre solo il 2024 mentre il config dichiara anche il 2025:
-    verifica il fallback su ``years_seen`` di run_state.
+    verifica il fallback su ``years_seen`` di run_state. ``with_run=False``
+    simula la CI (nessun run record locale).
     """
     ds_dir = tmp_path / "datasets" / dirname
     ds_dir.mkdir(parents=True)
@@ -129,7 +135,8 @@ def _make_repo(
     out = tmp_path / "out"
     _write_parquet(out / "data" / "clean" / name / "2024" / f"{name}_2024_clean.parquet")
     _write_parquet(out / "data" / "clean" / name / "2025" / f"{name}_2025_clean.parquet")
-    _write_run_record(out / "data" / "_runs", name)
+    if with_run:
+        _write_run_record(out / "data" / "_runs", name)
 
     return RepoLayout(
         repo_root=tmp_path,
@@ -394,3 +401,101 @@ def test_codelists_empty_without_dir(tmp_path: Path) -> None:
     payload, errors = build_codelists(layout)
     assert errors == {"derive": [], "validation": []}
     assert payload["codelists"] == {}
+
+
+class TestSignalsExisting:
+    """existing_signals: preserva i run storici quando il run locale manca."""
+
+    @pytest.mark.contract
+    def test_preserves_run_from_existing_signals(self, tmp_path: Path) -> None:
+        """CI: nessun run record locale → il run viene dal signals committato."""
+        layout = _make_repo(tmp_path, with_run=False)
+        existing = {
+            "schema_version": "1",
+            "signals": [
+                {
+                    "id": "my_dataset",
+                    "status": "ok",
+                    "run": {"run_id": "20260101T000000Z_abc123", "year": 2025, "status": "SUCCESS"},
+                }
+            ],
+        }
+        payload, errors = build_signals(layout, existing_signals=existing)
+        assert errors == {"derive": [], "validation": []}
+        sig = payload["signals"][0]
+        assert sig["id"] == "my_dataset"
+        assert sig["status"] == "ok"  # struttura derivata dal manifest
+        assert sig["run"]["run_id"] == "20260101T000000Z_abc123"  # run preservato
+        assert sig["run"]["status"] == "SUCCESS"
+
+    @pytest.mark.contract
+    def test_local_run_wins_over_existing(self, tmp_path: Path) -> None:
+        """Run locale presente → vince su existing_signals (non lo sovrascrive)."""
+        layout = _make_repo(tmp_path, with_run=True)
+        existing = {
+            "schema_version": "1",
+            "signals": [
+                {
+                    "id": "my_dataset",
+                    "run": {"run_id": "OLD_run", "year": 2025, "status": "FAILED"},
+                }
+            ],
+        }
+        payload, _errors = build_signals(layout, existing_signals=existing)
+        sig = payload["signals"][0]
+        assert sig["run"]["run_id"] == "20260101T000000Z_abc123"  # run locale, non OLD
+
+
+class TestEntityGraph:
+    """build_entity_graph: entità + bridge dal clean_catalog (5° artifact)."""
+
+    @pytest.mark.contract
+    def test_entity_graph_from_catalog(self, tmp_path: Path) -> None:
+        catalog = {
+            "schema_version": 1,
+            "datasets": [
+                {
+                    "slug": "anac_bandi_gara",
+                    "name": "Bandi",
+                    "columns": [
+                        {
+                            "name": "cig",
+                            "type": "VARCHAR",
+                            "role": "dimension",
+                            "semantic_type": "cig_code",
+                        },
+                        {
+                            "name": "comune",
+                            "type": "VARCHAR",
+                            "role": "dimension",
+                            "semantic_type": "municipality_code",
+                        },
+                    ],
+                },
+                {
+                    "slug": "demo_ds",
+                    "name": "Demo",
+                    "columns": [
+                        {
+                            "name": "anno",
+                            "type": "INTEGER",
+                            "role": "metric",
+                            "semantic_type": "year",
+                        },
+                    ],
+                },
+            ],
+        }
+        graph = build_entity_graph(catalog)
+
+        assert graph["summary"]["total_entities"] >= 2
+        entities = graph["entities"]
+        assert "Gara" in entities  # cig_code → entity Gara
+        assert "Comune" in entities  # municipality_code → entity Comune
+        # bridge cig_code → municipality_code
+        bridges = graph["bridges"]
+        assert any(
+            b["from"]["via"] == "cig_code" and b["to"]["semantic_type"] == "municipality_code"
+            for b in bridges
+        )
+        assert graph["schema_version"] == 1

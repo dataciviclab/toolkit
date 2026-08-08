@@ -1,9 +1,9 @@
 """Validazione degli artifact registry contro gli schemi condivisi.
 
-Gli schemi vivono in ``toolkit/registry/schemas/*.schema.json`` (package-data,
-vedi pyproject). Validatori standalone (jsonschema) — nessun ``$ref`` esterno:
-le definizioni condivise (es. blocco ``run``) sono inline in ogni schema, con
-``run.schema.json`` come fonte canonica.
+Lo schema vive in ``toolkit/registry/schemas/registry.schema.json``
+(package-data, vedi pyproject). Validatore standalone (jsonschema) — nessun
+``$ref`` esterno: le definizioni condivise (dataset/column/location/run/
+mart/signal) sono inline come ``$defs``.
 """
 
 from __future__ import annotations

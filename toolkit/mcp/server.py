@@ -7,7 +7,7 @@ Tool aggregati:
 - toolkit_layer: schema/preview/profile/sql su RAW/CLEAN/MART in un tool
 - toolkit_status: paths + summary + readiness + run_stats + info in un tool
 
-Tool catalogo (nuovi, basati su GCS manifest):
+Tool catalogo (nuovi, basati sui registry.json committati):
 - toolkit_find: cerca dataset pubblicati su GCS per slug/layer
 - toolkit_dataset_overview: schema + conteggio + preview da slug
 
@@ -188,7 +188,7 @@ def toolkit_status(
 
 
 # ---------------------------------------------------------------------------
-# Catalog tools (basati su GCS manifest)
+# Catalog tools (basati sui registry.json committati)
 # ---------------------------------------------------------------------------
 
 
@@ -196,7 +196,7 @@ def toolkit_status(
     description="Cerca dataset per slug, source, layer (clean/mart) o testo. "
     "La query matcha anche la semantica dei cataloghi committati del workspace "
     "(description, tags, category, nomi colonne) — vedi matched_columns/meta_match. "
-    "source='gcs' = pubblicati (da gcs_manifest.json), "
+    "source='gcs' = pubblicati (dai registry.json committati), "
     "source='workspace' = in sviluppo (da dataset.yml + parquet locali), "
     "source='all' (default) = unione. "
     "Filtri aggiuntivi: stage (candidates/support), status_filter (SUCCESS/FAILED/DRY_RUN), "

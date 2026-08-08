@@ -744,3 +744,31 @@ def test_sdmx_fetch_codelist_requires_estat():
     """fetch_codelist: solo profilo ESTAT (ISTAT non espone JSON 2.0)."""
     with pytest.raises(DownloadError, match="solo per il profilo Eurostat"):
         SdmxSource().fetch_codelist("GEO", agency="IT1")
+
+
+def test_sdmx_estat_large_flow_constraints_413_fallback(monkeypatch):
+    """Flow giganti: JSON constraints HTTP 413 → fallback wildcard, TSV ok.
+
+    DEMO_R_D2JAN (pop per sesso/età, 4M+ obs) fa fallire il JSON constraints
+    con 413 — il source deve ripiegare su key wildcard ('all') e scaricare il
+    TSV, non crashare. Regressione trovata durante la migrazione pop-nuts3.
+    """
+
+    def _fake_get_413_then_tsv(self, url, **kwargs):
+        params = kwargs.get("params") or {}
+        if url.endswith("/data/DEMO_R_D2JAN/all") and params.get("format") == "JSON":
+            return _ok(_FakeResponse(413, "Payload Too Large", url))
+        if url.endswith("/data/DEMO_R_D2JAN/all") and params.get("format") == "TSV":
+            return _ok(_FakeResponse(200, ESTAT_TSV, url))
+        raise AssertionError(f"Unexpected URL {url} params={params}")
+
+    monkeypatch.setattr(HttpClient, "get", _fake_get_413_then_tsv)
+    src = SdmxSource(timeout=30, retries=0)
+
+    # Constraints: fallback a vuoti (no crash)
+    constraints = src._estat_constraints("DEMO_R_D2JAN")
+    assert constraints == {}
+
+    # Fetch: la key diventa 'all' e il TSV viene scaricato
+    data, _origin = src._estat_fetch_tsv("DEMO_R_D2JAN", "all")
+    assert data  # TSV scaricato

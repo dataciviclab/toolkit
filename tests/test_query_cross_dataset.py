@@ -173,3 +173,68 @@ class TestRawSql:
         # Verifica primo risultato: Lombardia=130, Lazio=50
         assert result["preview"][0]["tot"] == 130
         assert result["preview"][1]["tot"] == 50
+
+
+class _ExplainConn:
+    """Connessione finta per dry_run: execute("EXPLAIN ...") → fetchone piano."""
+
+    def execute(self, sql: str) -> "_ExplainResult":
+        return _ExplainResult()
+
+    def __enter__(self) -> "_ExplainConn":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        pass
+
+
+class _ExplainResult:
+    def fetchone(self) -> tuple[str, str]:
+        return ("physical_plan", "┌──────────┐\n│  PROJECT │\n└──────────┘")
+
+
+def _mock_dry_run(monkeypatch: MonkeyPatch) -> None:
+    """Mocka duckdb.connect con EXPLAIN e _resolve_datasets."""
+    import toolkit.domain.layer as dl
+
+    def fake_resolve(datasets: list[str], *a, **kw) -> dict[str, str]:
+        return {s: f"/tmp/{s}.parquet" for s in datasets}
+
+    monkeypatch.setattr(dl, "_resolve_datasets", fake_resolve)
+    monkeypatch.setattr(duckdb, "connect", lambda *a, **kw: _ExplainConn())
+
+
+class TestDryRun:
+    """dry_run su mode=sql: EXPLAIN senza eseguire (contratto clean-query)."""
+
+    def test_valid_sql_explains(self, monkeypatch: MonkeyPatch) -> None:
+        _mock_dry_run(monkeypatch)
+        r = layer_query(
+            datasets=["ds_a"],
+            layer="clean",
+            mode="sql",
+            sql="SELECT 1",
+            dry_run=True,
+        )
+        assert r["valid"] is True
+        assert "PROJECT" in (r.get("plan") or "")
+        assert r["dry_run"] is True
+
+    def test_invalid_scope_returns_error_payload(self, monkeypatch: MonkeyPatch) -> None:
+        """Scope error nel dry_run → valid:False nel payload (parità clean-query)."""
+        _mock_dry_run(monkeypatch)
+        r = layer_query(
+            datasets=["ds_a"],
+            layer="clean",
+            mode="sql",
+            sql="SELECT * FROM unknown_table",
+            dry_run=True,
+        )
+        assert r["valid"] is False
+        assert "non consentita" in (r.get("error") or "")
+
+    def test_without_dry_run_still_raises(self, monkeypatch: MonkeyPatch) -> None:
+        """Senza dry_run lo scope error continua a sollevare (invariato)."""
+        _mock_all(monkeypatch)
+        with pytest.raises(ValueError, match="non consentita"):
+            layer_query(datasets=["ds_a"], mode="sql", sql="SELECT * FROM unknown_table")

@@ -185,8 +185,8 @@ def build_clean_catalog(
     if derive_mode == "check-gcs":
         derive_errors.extend(_check_gcs_locations(catalog, contract))
 
-    validation_errors = validate_artifact(catalog, "clean_catalog.schema.json")
-    return catalog, {"derive": derive_errors, "validation": validation_errors}
+    # Validazione: sul registry completo (registry.schema.json), non per sezione.
+    return catalog, {"derive": derive_errors, "validation": []}
 
 
 def _check_gcs_locations(catalog: dict[str, Any], contract: PathContract) -> list[str]:
@@ -274,8 +274,7 @@ def build_mart_catalog(
         "updated_at": str(datetime.now(UTC).date()),
         "marts": sorted(marts, key=lambda m: m["slug"]),
     }
-    validation_errors = validate_artifact(catalog, "mart_catalog.schema.json")
-    return catalog, {"derive": derive_errors, "validation": validation_errors}
+    return catalog, {"derive": derive_errors, "validation": []}
 
 
 # ---------------------------------------------------------------------------
@@ -372,8 +371,7 @@ def build_signals(
         "summary": {"total": len(signals), "by_status": by_status},
         "signals": signals,
     }
-    validation_errors = validate_artifact(payload, "pipeline_signals.schema.json")
-    return payload, {"derive": [], "validation": validation_errors}
+    return payload, {"derive": [], "validation": []}
 
 
 def _years_label(years: Iterable[int]) -> str:
@@ -465,8 +463,7 @@ def build_codelists(
     }
     if large:
         payload["large"] = sorted(large)
-    errors.extend(validate_artifact(payload, "codelists.schema.json"))
-    return payload, {"derive": [], "validation": errors}
+    return payload, {"derive": [], "validation": []}
 
 
 # ---------------------------------------------------------------------------

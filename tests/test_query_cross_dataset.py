@@ -238,3 +238,32 @@ class TestDryRun:
         _mock_all(monkeypatch)
         with pytest.raises(ValueError, match="non consentita"):
             layer_query(datasets=["ds_a"], mode="sql", sql="SELECT * FROM unknown_table")
+
+
+class TestMCPWrapperDryRun:
+    """Regressione: il wrapper MCP aggregate_ops.layer_query propaga dry_run.
+
+    La PR #457 ha aggiunto dry_run al backend (domain.layer) e al tool MCP
+    (server.py) ma non al wrapper intermedio (aggregate_ops.layer_query) →
+    TypeError: layer_query() got an unexpected keyword argument 'dry_run'
+    sul percorso reale del tool.
+    """
+
+    def test_wrapper_propagates_dry_run(self, monkeypatch: MonkeyPatch) -> None:
+        """Il wrapper MCP accetta dry_run e lo passa al backend."""
+        from toolkit.mcp.aggregate_ops import layer_query as mcp_layer_query
+
+        received: dict[str, object] = {}
+
+        def fake_backend(**kwargs: object) -> dict[str, object]:
+            received.update(kwargs)
+            return {"valid": True, "plan": "PLAN", "dry_run": True}
+
+        monkeypatch.setattr("toolkit.mcp.aggregate_ops._layer_query_core", fake_backend)
+
+        res = mcp_layer_query(
+            datasets=["ds_a"], layer="clean", mode="sql", sql="SELECT 1", dry_run=True
+        )
+
+        assert res["valid"] is True
+        assert received.get("dry_run") is True

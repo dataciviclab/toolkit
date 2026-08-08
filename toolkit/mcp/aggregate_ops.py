@@ -52,6 +52,7 @@ def layer_query(
     sql: str | None = None,
     mart_index: int = 0,
     table: str | None = None,
+    dry_run: bool = False,
 ) -> dict[str, Any]:
     """Query unificata su layer RAW/CLEAN/MART.
 
@@ -71,6 +72,7 @@ def layer_query(
         sql: Query SQL per mode=sql.
         mart_index: Indice tabella mart (solo pipeline mode).
         table: Nome tabella mart (es ``"mart_top_sa"``).
+        dry_run: Se True (mode=sql), valida lo scope SQL e fa EXPLAIN senza eseguire.
 
     Raises:
         ToolkitClientError: se parametri invalidi o file non trovato.
@@ -97,6 +99,7 @@ def layer_query(
             sql=sql,
             mart_index=mart_index,
             table=table,
+            dry_run=dry_run,
         )
     except ValueError as exc:
         raise ToolkitClientError(str(exc), code=ErrorCode.INVALID_PARAMS) from exc

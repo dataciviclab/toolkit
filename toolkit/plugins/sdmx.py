@@ -219,11 +219,20 @@ class SdmxSource:
         cache_key = f"{EUROSTAT_AGENCY}/{flow}"
         if cache_key in self._constraints_cache:
             return self._constraints_cache[cache_key]
-        payload, _origin = self._get_json(
-            self._data_base_urls(EUROSTAT_AGENCY),
-            f"data/{flow}/all",
-            params={"format": "JSON", "lastNObservations": "0"},
-        )
+        try:
+            payload, _origin = self._get_json(
+                self._data_base_urls(EUROSTAT_AGENCY),
+                f"data/{flow}/all",
+                params={"format": "JSON", "lastNObservations": "0"},
+            )
+        except DownloadError as exc:
+            # Flow troppo grandi (es. DEMO_R_D2JAN, DEMO_R_MAGEC3) non
+            # rispondono al JSON constraints (HTTP 413/404) — fallback a
+            # constraints vuoti = key wildcard (il TSV dati funziona).
+            if "413" in str(exc) or "404" in str(exc):
+                self._constraints_cache[cache_key] = {}
+                return {}
+            raise
         dimension = payload.get("dimension") or {}
         result: dict[str, list[str]] = {}
         for dim_id in dimension:

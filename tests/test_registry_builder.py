@@ -17,6 +17,7 @@ import pytest
 
 from toolkit.registry.builders import (
     build_clean_catalog,
+    build_entity_graph,
     build_mart_catalog,
     build_signals,
 )
@@ -443,3 +444,58 @@ class TestSignalsExisting:
         payload, _errors = build_signals(layout, existing_signals=existing)
         sig = payload["signals"][0]
         assert sig["run"]["run_id"] == "20260101T000000Z_abc123"  # run locale, non OLD
+
+
+class TestEntityGraph:
+    """build_entity_graph: entità + bridge dal clean_catalog (5° artifact)."""
+
+    @pytest.mark.contract
+    def test_entity_graph_from_catalog(self, tmp_path: Path) -> None:
+        catalog = {
+            "schema_version": 1,
+            "datasets": [
+                {
+                    "slug": "anac_bandi_gara",
+                    "name": "Bandi",
+                    "columns": [
+                        {
+                            "name": "cig",
+                            "type": "VARCHAR",
+                            "role": "dimension",
+                            "semantic_type": "cig_code",
+                        },
+                        {
+                            "name": "comune",
+                            "type": "VARCHAR",
+                            "role": "dimension",
+                            "semantic_type": "municipality_code",
+                        },
+                    ],
+                },
+                {
+                    "slug": "demo_ds",
+                    "name": "Demo",
+                    "columns": [
+                        {
+                            "name": "anno",
+                            "type": "INTEGER",
+                            "role": "metric",
+                            "semantic_type": "year",
+                        },
+                    ],
+                },
+            ],
+        }
+        graph = build_entity_graph(catalog)
+
+        assert graph["summary"]["total_entities"] >= 2
+        entities = graph["entities"]
+        assert "Gara" in entities  # cig_code → entity Gara
+        assert "Comune" in entities  # municipality_code → entity Comune
+        # bridge cig_code → municipality_code
+        bridges = graph["bridges"]
+        assert any(
+            b["from"]["via"] == "cig_code" and b["to"]["semantic_type"] == "municipality_code"
+            for b in bridges
+        )
+        assert graph["schema_version"] == 1

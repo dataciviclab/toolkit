@@ -47,26 +47,27 @@ def test_list_registries(mini_workspace: Path) -> None:
     assert data["total_repos"] == 1
     repo = data["repos"][0]
     assert repo["repo"] == "eurostat"
-    names = {a["name"] for a in repo["artifacts"]}
-    assert names == {"clean_catalog", "pipeline_signals"}
-    assert "clean_catalog.schema" not in names
-    cc = next(a for a in repo["artifacts"] if a["name"] == "clean_catalog")
-    assert cc["entries"] == 1
+    assert len(repo["artifacts"]) == 1
+    reg = repo["artifacts"][0]
+    assert reg["name"] == "registry"
+    # mini_workspace legacy: clean_catalog (1 ds) + pipeline_signals
+    assert reg["sections"]["datasets"] == 1
+    assert reg["sections"]["signals"] == 2
 
 
 @pytest.mark.contract
 def test_show_registry_full(mini_workspace: Path) -> None:
     """show senza slug ritorna il payload completo (contract)."""
-    data = show_registry("eurostat", "clean_catalog", workspace=mini_workspace)
-    assert data["artifact"] == "clean_catalog"
-    assert len(data["data"]["datasets"]) == 1
+    data = show_registry("eurostat", "datasets", workspace=mini_workspace)
+    assert data["artifact"] == "datasets"
+    assert len(data["data"]) == 1
 
 
 @pytest.mark.contract
 def test_show_registry_filter_slug(mini_workspace: Path) -> None:
     """show con slug filtra l'entry richiesta (contract)."""
     data = show_registry(
-        "eurostat", "clean_catalog", slug="eurostat_gdp_nuts3", workspace=mini_workspace
+        "eurostat", "datasets", slug="eurostat_gdp_nuts3", workspace=mini_workspace
     )
     assert data["entry"]["slug"] == "eurostat_gdp_nuts3"
 
@@ -75,25 +76,25 @@ def test_show_registry_filter_slug(mini_workspace: Path) -> None:
 def test_show_registry_not_found(mini_workspace: Path) -> None:
     """Artifact o repo inesistente → FileNotFoundError (contract)."""
     with pytest.raises(FileNotFoundError):
-        show_registry("eurostat", "mart_catalog", workspace=mini_workspace)
+        show_registry("eurostat", "marts", workspace=mini_workspace)
     with pytest.raises(FileNotFoundError):
-        show_registry("no-registry-repo", "clean_catalog", workspace=mini_workspace)
+        show_registry("no-registry-repo", "datasets", workspace=mini_workspace)
 
 
 @pytest.mark.contract
 def test_show_registry_slug_missing(mini_workspace: Path) -> None:
     """Slug inesistente → FileNotFoundError (pure_unit)."""
     with pytest.raises(FileNotFoundError):
-        show_registry("eurostat", "pipeline_signals", slug="missing", workspace=mini_workspace)
+        show_registry("eurostat", "signals", slug="missing", workspace=mini_workspace)
 
 
 @pytest.mark.pure_unit
-def test_entries_count_pure() -> None:
-    """Conteggio entries per tipo artifact (pure_unit)."""
-    from toolkit.registry.reader import _entries_count
+def test_section_count_pure() -> None:
+    """Conteggio entries per sezione del registry unico (pure_unit)."""
+    from toolkit.registry.reader import _section_count
 
-    assert _entries_count("clean_catalog", {"datasets": [1, 2]}) == 2
-    assert _entries_count("mart_catalog", {"marts": [1]}) == 1
-    assert _entries_count("pipeline_signals", {"signals": [1, 2, 3]}) == 3
-    assert _entries_count("codelists", {"codelists": {"geo": [], "units": []}}) == 2
-    assert _entries_count("entity_graph", {}) is None
+    assert _section_count("datasets", {"datasets": [1, 2]}) == 2
+    assert _section_count("marts", {"marts": [1]}) == 1
+    assert _section_count("signals", {"signals": [1, 2, 3]}) == 3
+    assert _section_count("codelists", {"codelists": {"geo": [], "units": []}}) == 2
+    assert _section_count("entities", {"entities": {"entities": {}}}) == 0

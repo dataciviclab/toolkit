@@ -484,12 +484,19 @@ def build_registry(
     semantic_types_path: Path | None = None,
     slug: str | None = None,
 ) -> dict[str, Any]:
-    """Genera i tre artifact per un repo in una sola chiamata.
+    """Genera l'artifact registry UNICO per un repo (fusion ADR).
+
+    Il file ``registry.json`` committato sostituisce i 5 artifact separati
+    (clean_catalog/mart_catalog/pipeline_signals/codelists/entity_graph):
+    le proiezioni sono sezioni dello stesso dict, validato contro
+    ``registry.schema.json``.
 
     Returns:
-        Dict ``{"clean_catalog": {...}, "mart_catalog": {...},
-        "pipeline_signals": {...}, "errors": {...}}`` con errors per artifact:
-        ``{"derive": [...], "validation": [...]}``.
+        Dict ``{"registry": {...}, "errors": {...}}`` con:
+        - ``registry``: il payload unico (``datasets``, ``marts``,
+          ``signals``, ``codelists``, ``entities``, ``summary``);
+        - ``errors``: per sezione ``{"derive": [...], "validation": [...]}``
+          + ``registry`` per la validazione dell'intero artifact.
     """
     catalog, cc_errors = build_clean_catalog(
         layout,
@@ -502,15 +509,143 @@ def build_registry(
     marts, mc_errors = build_mart_catalog(layout, path_contract=path_contract, slug=slug)
     signals, ps_errors = build_signals(layout, existing_signals=existing_signals)
     codelists, cl_errors = build_codelists(layout)
-    return {
-        "clean_catalog": catalog,
-        "mart_catalog": marts,
-        "pipeline_signals": signals,
-        "codelists": codelists,
-        "errors": {
-            "clean_catalog": cc_errors,
-            "mart_catalog": mc_errors,
-            "pipeline_signals": ps_errors,
-            "codelists": cl_errors,
+    graph = build_entity_graph(catalog, semantic_types_path=semantic_types_path)
+
+    registry: dict[str, Any] = {
+        "schema_version": 1,
+        "repo": layout.source_repo.split("/")[-1] or "unknown",
+        "source_repo": layout.source_repo,
+        "updated_at": str(datetime.now(UTC).date()),
+        "datasets": catalog.get("datasets", []),
+        "marts": marts.get("marts", []),
+        "signals": signals.get("signals", []),
+        "codelists": {k: v for k, v in codelists.items() if k != "schema_version"},
+        "entities": {k: v for k, v in graph.items() if k != "schema_version"},
+        "summary": {
+            "datasets": len(catalog.get("datasets", [])),
+            "marts": len(marts.get("marts", [])),
+            "signals": len(signals.get("signals", [])),
         },
+    }
+
+    registry_errors = validate_artifact(registry, "registry.schema.json")
+    errors = {
+        "datasets": cc_errors,
+        "marts": mc_errors,
+        "signals": ps_errors,
+        "codelists": cl_errors,
+        "entities": {"derive": [], "validation": []},
+        "registry": {"derive": [], "validation": registry_errors},
+    }
+    return {"registry": registry, "errors": errors}
+
+
+# Nomi display delle entità nel grafo (default: il nome entity dal vocabolario).
+ENTITY_LABELS: dict[str, str] = {
+    "Comune": "Comune (ISTAT)",
+    "Ente": "Ente pubblico",
+    "Provincia": "Provincia",
+    "Regione": "Regione",
+    "Scuola": "Scuola",
+    "Gara": "Gara / Appalto",
+    "Progetto": "Progetto",
+    "Impresa": "Impresa",
+    "Nazione": "Nazione",
+    "Tempo": "Tempo / data",
+    "Attività economica": "Attività economica",
+    "Stazione Appaltante": "Stazione Appaltante",
+    "Ente sanitario": "Ente sanitario",
+    "Procedimento": "Procedimento giudiziario",
+    "Categoria merceologica": "Categoria merceologica",
+    "Persona": "Persona",
+    "Atto legislativo": "Atto legislativo / Disegno di legge",
+    "Gruppo parlamentare": "Gruppo parlamentare",
+}
+
+
+def build_entity_graph(
+    catalog: dict[str, Any],
+    semantic_types_path: Path | None = None,
+) -> dict[str, Any]:
+    """Grafo entità → dataset dal clean_catalog (5° artifact registry).
+
+    Nodi = entità del mondo reale (dalla semantic_type di ogni colonna),
+    archi = dataset che le descrivono, bridge = relazioni tra entità
+    (via ``bridge`` del vocabolario semantic_types). Logica portata da
+    ``dataset-incubator/tools/graph/build_graph.py``; consumata da
+    lab-dashboard (pagina dataset) e dal MCP clean-query (dataset_graph).
+    """
+    alias_map = load_semantic_types(semantic_types_path)
+    # Struttura completa {stype: {entity, bridge}} dal vocabolario raw
+    # (load_semantic_types ritorna solo alias→stype).
+    from toolkit.registry.schema_reader import DEFAULT_SEMANTIC_TYPES
+
+    vocab_path = semantic_types_path or DEFAULT_SEMANTIC_TYPES
+    types_info: dict[str, dict[str, Any]] = {}
+    if vocab_path.is_file():
+        import yaml
+
+        data = yaml.safe_load(vocab_path.read_text(encoding="utf-8")) or {}
+        for stype, info in (data.get("types") or {}).items():
+            if isinstance(info, dict):
+                types_info[stype] = info
+    if not types_info:
+        # Fallback: vocabolario ridotto da alias_map (senza entity/bridge)
+        types_info = {stype: {"entity": "", "bridge": None} for stype in alias_map}
+
+    nodes: dict[str, dict[str, Any]] = {}
+    relations: list[dict[str, Any]] = []
+
+    for ds in catalog.get("datasets", []) or []:
+        slug = ds.get("slug", "")
+        ds_name = ds.get("name", slug)
+        for col in ds.get("columns", []) or []:
+            st = col.get("semantic_type")
+            if not st:
+                continue
+            type_info = types_info.get(st, {})
+            entity = type_info.get("entity") or "Sconosciuto"
+
+            if entity not in nodes:
+                nodes[entity] = {
+                    "entity": entity,
+                    "label": ENTITY_LABELS.get(entity, entity),
+                    "datasets": [],
+                    "types": {},
+                }
+            ds_entry = {"slug": slug, "name": ds_name, "column": col["name"], "semantic_type": st}
+            if not any(
+                d["slug"] == slug and d["column"] == col["name"] for d in nodes[entity]["datasets"]
+            ):
+                nodes[entity]["datasets"].append(ds_entry)
+            nodes[entity]["types"][st] = nodes[entity]["types"].get(st, 0) + 1
+
+            bridge = type_info.get("bridge")
+            if bridge:
+                via = bridge.get("via", "")
+                on = bridge.get("on_column", "")
+                to_st = bridge.get("to", "")
+                to_entity = (types_info.get(to_st) or {}).get("entity", "Sconosciuto")
+                if to_entity and to_entity != entity:
+                    rel = {
+                        "from": {"entity": entity, "dataset": slug, "via": st},
+                        "to": {
+                            "entity": to_entity,
+                            "bridge": via,
+                            "on": on,
+                            "semantic_type": to_st,
+                        },
+                    }
+                    if rel not in relations:
+                        relations.append(rel)
+
+    for entity in nodes:
+        nodes[entity]["datasets"].sort(key=lambda d: d["slug"])
+
+    return {
+        "schema_version": 1,
+        "generated_from": "clean_catalog.json",
+        "entities": {e: info for e, info in sorted(nodes.items())},
+        "bridges": relations,
+        "summary": {"total_entities": len(nodes), "total_relations": len(relations)},
     }

@@ -1,13 +1,13 @@
-"""Lettore degli artifact registry committati nei repo del workspace.
+"""Lettore dell'artifact registry committato nei repo del workspace.
 
 Il registry builder (``toolkit.registry.builders``) genera e i repo committano
-i cataloghi in ``{repo}/registry/*.json`` (clean_catalog, mart_catalog,
-pipeline_signals, codelists, ...). Questo modulo li espone all'agente (CLI e
-MCP) senza riprogettare la discovery: lettura diretta dei file committati,
-cross-repo.
+il file unico ``{repo}/registry/registry.json`` (fusion ADR): sezioni
+``datasets``, ``marts``, ``signals``, ``codelists``, ``entities``.
 
-Fa parte di ``toolkit.registry`` (home unica della capacità registry:
-builder + schemi + lettore). CLI e MCP sono wrapper sottili sopra.
+Compatibilità: se il repo non ha ancora migrato (solo i vecchi
+clean_catalog/mart_catalog/pipeline_signals/codelists separati), il lettore
+cade sui file legacy. Esposizione all'agente (CLI e MCP) via
+``registry list`` / ``registry show <repo> <section>``.
 """
 
 from __future__ import annotations
@@ -18,54 +18,122 @@ from typing import Any
 
 from toolkit.core.paths import WORKSPACE_ROOT
 
-# Nomi file esclusi dalla vista (schemi e helper, non artifact dati).
-EXCLUDED = (
-    ".schema.json",
-    "README",
-)
+# Mappa: nome legacy → sezione del registry.json unico (per compatibilità).
+LEGACY_TO_SECTION = {
+    "clean_catalog": "datasets",
+    "mart_catalog": "marts",
+    "pipeline_signals": "signals",
+    "codelists": "codelists",
+    "entity_graph": "entities",
+}
+
+# Sezioni esposte (ordine stabile per list).
+SECTIONS = ("datasets", "marts", "signals", "codelists", "entities")
+
+EXCLUDED = (".schema.json", "README")
 
 
-def _entries_count(name: str, payload: dict[str, Any]) -> int | None:
-    """Conteggio entries per tipo artifact (None se struttura sconosciuta)."""
-    if name == "clean_catalog":
+def _section_count(section: str, payload: dict[str, Any]) -> int | None:
+    """Conteggio entries di una sezione del registry unico."""
+    if section == "datasets":
         return len(payload.get("datasets") or [])
-    if name == "mart_catalog":
+    if section == "marts":
         return len(payload.get("marts") or [])
-    if name == "pipeline_signals":
+    if section == "signals":
         return len(payload.get("signals") or [])
-    if name == "codelists":
+    if section == "codelists":
         return len(payload.get("codelists") or {})
+    if section == "entities":
+        return len((payload.get("entities") or {}).get("entities") or {})
     return None
 
 
-def _scan_repo(repo_dir: Path) -> list[dict[str, Any]]:
-    artifacts: list[dict[str, Any]] = []
+def _load_registry(repo_dir: Path) -> dict[str, Any] | None:
+    """Carica il registry unico del repo (registry.json), o None se assente."""
+    path = repo_dir / "registry" / "registry.json"
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _load_legacy(repo_dir: Path) -> tuple[dict[str, Any] | None, set[str]]:
+    """Fallback: carica i vecchi artifact separati come dict di sezioni.
+
+    Returns:
+        (payload sezioni, set delle sezioni effettivamente presenti nei file).
+    """
     registry_dir = repo_dir / "registry"
     if not registry_dir.is_dir():
-        return artifacts
-    for path in sorted(registry_dir.glob("*.json")):
-        if path.name.endswith(EXCLUDED[0]) or path.name.startswith(EXCLUDED[1]):
+        return None, set()
+    payload: dict[str, Any] = {
+        "datasets": [],
+        "marts": [],
+        "signals": [],
+        "codelists": {},
+        "entities": {},
+    }
+    found_sections: set[str] = set()
+    legacy_files = {
+        "clean_catalog": "datasets",
+        "mart_catalog": "marts",
+        "pipeline_signals": "signals",
+        "codelists": "codelists",
+        "entity_graph": "entities",
+    }
+    for fname, section in legacy_files.items():
+        path = registry_dir / f"{fname}.json"
+        if not path.is_file():
             continue
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            payload = {}
-        artifacts.append(
+            continue
+        if section == "datasets":
+            payload["datasets"] = data.get("datasets", [])
+        elif section == "marts":
+            payload["marts"] = data.get("marts", [])
+        elif section == "signals":
+            payload["signals"] = data.get("signals", [])
+        elif section == "codelists":
+            payload["codelists"] = data.get("codelists", {})
+        elif section == "entities":
+            payload["entities"] = data
+        found_sections.add(section)
+    if not found_sections:
+        return None, set()
+    return payload, found_sections
+
+
+def _scan_repo(repo_dir: Path) -> list[dict[str, Any]]:
+    """Artifact del repo: registry unico (con conteggi per sezione)."""
+    payload = _load_registry(repo_dir)
+    if payload is not None:
+        counts = {section: _section_count(section, payload) for section in SECTIONS}
+        return [
             {
-                "name": path.stem,
-                "size_bytes": path.stat().st_size,
-                "entries": _entries_count(path.stem, payload),
+                "name": "registry",
+                "size_bytes": (repo_dir / "registry" / "registry.json").stat().st_size,
+                "sections": counts,
             }
-        )
-    return artifacts
+        ]
+
+    legacy, _sections = _load_legacy(repo_dir)
+    if legacy is not None:
+        counts = {section: _section_count(section, legacy) for section in SECTIONS}
+        return [{"name": "registry", "size_bytes": None, "sections": counts, "legacy": True}]
+
+    return []
 
 
 def list_registries(workspace: Path = WORKSPACE_ROOT) -> dict[str, Any]:
-    """Elenca gli artifact registry committati nei repo del workspace.
+    """Elenca i registry committati nei repo del workspace.
 
     Returns:
         Dict con ``repos`` (lista) e ``total_repos``. Ogni repo:
-        ``{repo, artifacts: [{name, size_bytes, entries}]}``.
+        ``{repo, artifacts: [{name, size_bytes, sections: {...}}]}``.
     """
     repos: list[dict[str, Any]] = []
     if not workspace.is_dir():
@@ -85,57 +153,81 @@ def show_registry(
     slug: str | None = None,
     workspace: Path = WORKSPACE_ROOT,
 ) -> dict[str, Any]:
-    """Legge un artifact committato di un repo del workspace.
+    """Mostra il registry (o una sezione) di un repo del workspace.
 
     Args:
         repo: Nome dir del repo (es. ``eurostat``).
-        artifact: Nome artifact senza estensione (es. ``clean_catalog``).
-        slug: Se fornito, filtra l'entry (dataset slug per clean/mart,
-            id per signals, codelist name per codelists).
+        artifact: Sezione da mostrare (``datasets``, ``marts``, ``signals``,
+            ``codelists``, ``entities``) o ``registry`` (intero).
+            Accetta anche i nomi legacy (``clean_catalog`` → ``datasets``).
+        slug: Se fornito, filtra l'entry (dataset slug, mart slug, signal id,
+            codelist name).
 
     Raises:
-        FileNotFoundError: se il file non esiste nel workspace.
+        FileNotFoundError: se il repo/section non esiste nel workspace.
     """
-    path = workspace / repo / "registry" / f"{artifact}.json"
-    if not path.is_file():
+    repo_dir = workspace / repo
+    payload = _load_registry(repo_dir)
+    legacy_sections: set[str] = set()
+    if payload is None:
+        payload, legacy_sections = _load_legacy(repo_dir)
+
+    if payload is None:
         raise FileNotFoundError(
-            f"Artifact '{artifact}' non trovato in {workspace}/{repo}/registry/ "
-            f"(usa 'toolkit registry list' per gli artifact disponibili)"
+            f"Registry non trovato in {workspace}/{repo}/registry/ "
+            f"(usa 'toolkit registry list' per i repo disponibili)"
         )
-    payload = json.loads(path.read_text(encoding="utf-8"))
+
+    section = LEGACY_TO_SECTION.get(artifact, artifact)
+    if artifact == "registry":
+        return {
+            "repo": repo,
+            "artifact": "registry",
+            "legacy": bool(legacy_sections),
+            "data": payload,
+        }
+    if section not in SECTIONS:
+        raise FileNotFoundError(
+            f"Sezione '{artifact}' non valida (usa una di: registry, " + ", ".join(SECTIONS) + ")"
+        )
+    if legacy_sections and section not in legacy_sections:
+        raise FileNotFoundError(f"Sezione '{section}' non presente nel registry di {repo} (legacy)")
+    data = payload.get(section)
+    if data is None:
+        raise FileNotFoundError(f"Sezione '{section}' non presente nel registry di {repo}")
 
     if slug:
-        filtered = _filter_entry(artifact, payload, slug)
-        return {"repo": repo, "artifact": artifact, "slug": slug, "entry": filtered["entry"]}
-    return {"repo": repo, "artifact": artifact, "data": payload}
+        return {
+            "repo": repo,
+            "artifact": section,
+            "slug": slug,
+            "entry": _filter_entry(section, data, slug),
+        }
+    return {"repo": repo, "artifact": section, "data": data}
 
 
-def _filter_entry(name: str, payload: dict[str, Any], slug: str) -> dict[str, Any]:
-    """Filtra l'entry richiesta dall'artifact (errore se non trovata)."""
-    if name == "clean_catalog":
-        entries = payload.get("datasets") or []
+def _filter_entry(section: str, data: Any, slug: str) -> dict[str, Any]:
+    """Filtra l'entry richiesta dalla sezione (errore se non trovata)."""
+    if section in ("datasets", "marts"):
+        entries = data or []
         hit = next((d for d in entries if d.get("slug") == slug), None)
         if hit is None:
-            raise FileNotFoundError(f"Dataset '{slug}' non presente in clean_catalog")
+            raise FileNotFoundError(f"'{slug}' non presente in {section}")
         return {"slug": slug, "entry": hit}
-    if name == "mart_catalog":
-        entries = payload.get("marts") or []
-        hit = next((m for m in entries if m.get("slug") == slug), None)
-        if hit is None:
-            raise FileNotFoundError(f"Mart '{slug}' non presente in mart_catalog")
-        return {"slug": slug, "entry": hit}
-    if name == "pipeline_signals":
-        entries = payload.get("signals") or []
+    if section == "signals":
+        entries = data or []
         hit = next((s for s in entries if s.get("id") == slug), None)
         if hit is None:
-            raise FileNotFoundError(f"Signal '{slug}' non presente in pipeline_signals")
+            raise FileNotFoundError(f"Signal '{slug}' non presente in signals")
         return {"slug": slug, "entry": hit}
-    if name == "codelists":
-        entries = payload.get("codelists") or {}
+    if section == "codelists":
+        entries = data or {}
         if slug not in entries:
             raise FileNotFoundError(f"Codelist '{slug}' non presente in codelists")
         return {"slug": slug, "entry": entries[slug]}
-    raise FileNotFoundError(
-        f"Filtro per slug non supportato per l'artifact '{name}' "
-        "(supportati: clean_catalog, mart_catalog, pipeline_signals, codelists)"
-    )
+    if section == "entities":
+        entities = (data or {}).get("entities") or {}
+        if slug not in entities:
+            raise FileNotFoundError(f"Entità '{slug}' non presente in entities")
+        return {"slug": slug, "entry": entities[slug]}
+    raise FileNotFoundError(f"Filtro per slug non supportato per la sezione '{section}'")

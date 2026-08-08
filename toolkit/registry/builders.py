@@ -286,13 +286,27 @@ def build_mart_catalog(
 def build_signals(
     layout: RepoLayout,
     topic: str = "pipeline_state",
+    existing_signals: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, list[str]]]:
     """Costruisce pipeline_signals per ACB (repo-signals standard).
 
     Semantica status: ok = struttura coerente + mart presente; warn = nessun
     mart; error = struttura rotta (clean.sql mancante per dataset non-compose).
     NOTA: status=ok NON significa pubblicato (vedi clean_catalog.stage).
+
+    ``existing_signals``: signals committato (pipeline_signals.json del repo).
+    Preserva il blocco ``run`` dei dataset che non hanno run record locale
+    (sempre il caso in CI post-merge: i parquet/run di chi non è stato
+    rieseguito non sono nel runner). Stesso pattern di ``existing_catalog``
+    per il clean: i run storici non devono sparire a ogni rigenerazione.
     """
+    # Index dei run storici dal signals committato (chiave: slug senza prefisso)
+    existing_runs: dict[str, dict[str, Any]] = {}
+    if existing_signals:
+        for s in existing_signals.get("signals", []) or []:
+            if s.get("run"):
+                existing_runs[str(s.get("id", "")).removeprefix("compose:")] = s["run"]
+
     signals: list[dict[str, Any]] = []
     compose_ids: set[str] = set()
 
@@ -333,6 +347,9 @@ def build_signals(
         run_rec = latest_run_record(str(manifest.yml_path))
         if run_block(run_rec):
             signal["run"] = run_block(run_rec)
+        elif manifest.slug in existing_runs:
+            # Nessun run locale (CI senza parquet) → preserva il run storico
+            signal["run"] = existing_runs[manifest.slug]
         signals.append(signal)
 
         # Prefisso "compose:" per i manifest in sezione compose del layout
@@ -463,6 +480,7 @@ def build_registry(
     derive_mode: str = "local",
     path_contract: PathContract | None = None,
     existing_catalog: dict[str, Any] | None = None,
+    existing_signals: dict[str, Any] | None = None,
     semantic_types_path: Path | None = None,
     slug: str | None = None,
 ) -> dict[str, Any]:
@@ -482,7 +500,7 @@ def build_registry(
         slug=slug,
     )
     marts, mc_errors = build_mart_catalog(layout, path_contract=path_contract, slug=slug)
-    signals, ps_errors = build_signals(layout)
+    signals, ps_errors = build_signals(layout, existing_signals=existing_signals)
     codelists, cl_errors = build_codelists(layout)
     return {
         "clean_catalog": catalog,

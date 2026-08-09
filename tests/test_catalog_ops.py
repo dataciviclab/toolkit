@@ -873,3 +873,115 @@ class TestScanWorkspaceConfigs:
         assert configs["anac_bandi_gara"]["stage"] == "candidates"
         assert configs["anac_appalti_master"]["stage"] == "compose"
         assert configs["anac_collaudo"]["stage"] == "support"
+
+
+# ---------------------------------------------------------------------------
+# Scan mart locali (gap: resolver ignorava i mart su disco)
+# ---------------------------------------------------------------------------
+
+
+class TestScanWorkspaceParquetsMarts:
+    """Lo scan parquet locale include i mart (bucket local-mart).
+
+    Regressione: resolve_slug(layer='mart') risolveva solo i mart GCS (dal
+    registry), ignorando i mart locali su disco — i 23+ mart di dcl-bologna
+    non erano leggibili in catalog mode.
+    """
+
+    @pytest.mark.contract
+    def test_scans_mart_with_year(self, tmp_path: "Any") -> None:
+        """Mart con anno: {slug}/{year}/mart_{table}.parquet."""
+        repo = tmp_path / "dcl-bologna"
+        mart = repo / "out" / "data" / "mart" / "centraline_aria" / "2026"
+        mart.mkdir(parents=True)
+        (mart / "mart_aria_ora.parquet").touch()
+        (mart / "mart_aria_stazione.parquet").touch()
+        # Repo dati: registry/ presente
+        (repo / "registry").mkdir()
+
+        from toolkit.domain.catalog import _scan_workspace_parquets
+
+        marts = [
+            f
+            for f in _scan_workspace_parquets(tmp_path)
+            if f["slug"] == "centraline_aria" and f["bucket"] == "local-mart"
+        ]
+        assert len(marts) == 2
+        tables = {f["table"] for f in marts}
+        assert tables == {"mart_aria_ora", "mart_aria_stazione"}
+        assert all(f["year"] == 2026 for f in marts)
+
+    @pytest.mark.contract
+    def test_scans_mart_flat_no_year(self, tmp_path: "Any") -> None:
+        """Mart flat legacy senza anno: {slug}/mart_{table}.parquet."""
+        repo = tmp_path / "dcl-bologna"
+        mart = repo / "out" / "data" / "mart" / "spire_traffico"
+        mart.mkdir(parents=True)
+        (mart / "mart_spire_trend.parquet").touch()
+        (repo / "registry").mkdir()
+
+        from toolkit.domain.catalog import _scan_workspace_parquets
+
+        marts = [
+            f
+            for f in _scan_workspace_parquets(tmp_path)
+            if f["slug"] == "spire_traffico" and f["bucket"] == "local-mart"
+        ]
+        assert len(marts) == 1
+        assert marts[0]["table"] == "mart_spire_trend"
+        assert marts[0]["year"] is None
+
+    @pytest.mark.contract
+    def test_skips_non_data_repos(self, tmp_path: "Any") -> None:
+        """Repo senza registry/ né datasets/ non viene scansionato."""
+        repo = tmp_path / "open-conto-annuale"
+        mart = repo / "out" / "data" / "mart" / "x" / "2026"
+        mart.mkdir(parents=True)
+        (mart / "mart_x.parquet").touch()
+
+        from toolkit.domain.catalog import _scan_workspace_parquets
+
+        entries = _scan_workspace_parquets(tmp_path)
+        assert entries == []
+
+    @pytest.mark.contract
+    def test_resolve_mart_local_and_gcs(
+        self, tmp_path: "Any", monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """resolve_slug layer=mart fonde mart locali + GCS."""
+        from toolkit.domain.catalog import (
+            CatalogResolver,
+            _scan_workspace_parquets,
+        )
+
+        repo = tmp_path / "dcl-bologna"
+        mart = repo / "out" / "data" / "mart" / "centraline_aria" / "2026"
+        mart.mkdir(parents=True)
+        (mart / "mart_aria_ora.parquet").touch()
+        (repo / "registry").mkdir()
+
+        # GCS: mart dal registry (path flat, year=None)
+        gcs = [
+            {
+                "url": "gs://dataciviclab-mart/centraline_aria/2026/mart_aria_ora.parquet",
+                "slug": "centraline_aria",
+                "bucket": "dataciviclab-mart",
+                "year": None,
+                "path": "gs://dataciviclab-mart/centraline_aria/2026/mart_aria_ora.parquet",
+                "table": "mart_aria_ora",
+                "_gcs": True,
+            }
+        ]
+        monkeypatch.setattr("toolkit.domain.catalog._gcs_files_from_registry", lambda _w: gcs)
+        monkeypatch.setattr(
+            "toolkit.domain.catalog._scan_workspace_parquets",
+            lambda _w: _scan_workspace_parquets(tmp_path),
+        )
+        monkeypatch.setattr("toolkit.domain.catalog._scan_workspace_configs", lambda _w, **_: {})
+        monkeypatch.setattr("toolkit.domain.catalog._scan_committed_catalogs", lambda _w: {})
+
+        r = CatalogResolver(workspace=tmp_path)
+        res = r.resolve_slug("centraline_aria", layer="mart")
+        buckets = {(f["bucket"], f.get("table")) for f in res}
+        assert ("local-mart", "mart_aria_ora") in buckets
+        assert ("dataciviclab-mart", "mart_aria_ora") in buckets

@@ -93,6 +93,29 @@ def test_resolve_config_path_cross_repo(tmp_path):
 
 
 @pytest.mark.contract
+def test_resolve_config_path_dir_slug_mismatch(tmp_path):
+    """Dir hyphen ≠ slug underscore: lo slug si risolve comunque.
+
+    Regressione: Stage 3 cercava {section}/{slug}/dataset.yml con lo slug
+    esatto (underscore), ma la dir reale può essere hyphen (es.
+    eurostat-nrg-chddr2-a-nuts3 vs slug eurostat_nrg_chddr2_a_nuts3).
+    """
+    from toolkit.core.discovery import resolve_config_path
+
+    eu = tmp_path / "eurostat" / "datasets" / "eurostat-nrg-chddr2-a-nuts3"
+    eu.mkdir(parents=True)
+    (eu / "dataset.yml").write_text(
+        "dataset:\n  name: 'eurostat_nrg_chddr2_a_nuts3'\n", encoding="utf-8"
+    )
+
+    # Slug canonico (underscore) → risolve la dir hyphen
+    assert (
+        resolve_config_path("eurostat_nrg_chddr2_a_nuts3", workspace=tmp_path)
+        == (eu / "dataset.yml").resolve()
+    )
+
+
+@pytest.mark.contract
 def test_resolve_config_path_not_found(tmp_path):
     """Slug inesistente → FileNotFoundError con suggerimento."""
     from toolkit.core.discovery import resolve_config_path

@@ -33,6 +33,7 @@ from toolkit.core.paths import WORKSPACE_ROOT
 VALID_LAYERS = frozenset({"clean", "mart"})
 
 LOCAL_BUCKET = "local"  # bucket fittizio per file locali
+LOCAL_MART_BUCKET = "local-mart"  # bucket fittizio per mart locali
 VALID_SOURCES: frozenset[Literal["gcs", "workspace", "all"]] = frozenset(
     {"gcs", "workspace", "all"}
 )
@@ -64,7 +65,7 @@ def _matches_layer(file: dict[str, Any], layer: str | None) -> bool:
     if layer == "clean":
         return file["bucket"] in (CLEAN_BUCKET, LOCAL_BUCKET)
     if layer == "mart":
-        return file["bucket"] == MART_BUCKET
+        return file["bucket"] in (MART_BUCKET, LOCAL_MART_BUCKET)
     return False
 
 
@@ -127,25 +128,37 @@ def _find_latest_run_status(slug: str, runs_root: Path | None = None) -> str | N
 
 
 def _scan_workspace_parquets(workspace: Path = WORKSPACE_ROOT) -> list[dict[str, Any]]:
-    """Scansiona il workspace per clean parquet locali (tutti i repo).
+    """Scansiona il workspace per clean/mart parquet locali (solo repo dati).
 
-    Come ``_scan_committed_catalogs``: qualsiasi dir di primo livello con
-    parquet clean (eurostat/, dataset-incubator/, dcl-bologna/, ...).
+    Come ``_scan_committed_catalogs``: solo dir di primo livello con
+    ``registry/`` o ``datasets/`` (eurostat/, dataset-incubator/, dcl-bologna/,
+    ...). Esclude repo non-dati (es. project residui, out/, data/) che
+    non hanno dataset.yml — evitando rglob costosi su decine di repo.
+
+    Clean: ``{slug}/{year}/{slug}_{year}_clean.parquet`` — slug dal filename.
+    Mart: ``{slug}/{year}/mart_{table}.parquet`` (naming canonico della
+    pipeline: il file è ``mart_{table}.parquet``) — slug dalla directory,
+    bucket ``local-mart`` per il layer.
     """
     if not workspace.is_dir():
         return []
 
     entries: list[dict[str, Any]] = []
-    seen: set[tuple[str, int, str]] = set()
+    seen: set[tuple[str, int | None, str]] = set()
 
     for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
+        # Solo repo dati: registry/ (artifact committati) o datasets/ (layout).
+        if not (repo_dir / "registry").is_dir() and not (repo_dir / "datasets").is_dir():
+            continue
+
+        # Clean parquet
         for fpath in repo_dir.rglob("*_clean.parquet"):
             parsed = _parse_clean_filename(fpath.name)
             if parsed is None:
                 continue
             slug, year = parsed
             rel_path = str(fpath.relative_to(workspace))
-            dedup_key = (slug, year, rel_path)
+            dedup_key = (slug, year, LOCAL_BUCKET)
             if dedup_key in seen:
                 continue
             seen.add(dedup_key)
@@ -158,6 +171,40 @@ def _scan_workspace_parquets(workspace: Path = WORKSPACE_ROOT) -> list[dict[str,
                     "bucket": LOCAL_BUCKET,
                     "year": year,
                     "path": rel_path,
+                    "size_bytes": stat.st_size,
+                    "updated": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                    "_local": True,
+                }
+            )
+
+        # Mart locali (naming canonico pipeline: mart_{table}.parquet).
+        # Struttura standard: {slug}/{year}/mart_*.parquet; layout legacy
+        # flat: {slug}/mart_*.parquet (anno sconosciuto → None).
+        for fpath in repo_dir.rglob("mart_*.parquet"):
+            parts = fpath.relative_to(repo_dir).parts
+            # parts[-1]=file, parts[-2]=year|slug, parts[-3]=slug (se year)
+            if len(parts) >= 3 and parts[-2].isdigit() and len(parts[-2]) == 4:
+                slug = parts[-3]
+                year = int(parts[-2])
+            else:
+                slug = parts[-2]
+                year = None
+            rel_path = str(fpath.relative_to(workspace))
+            table = fpath.stem
+            dedup_key = (slug, year, LOCAL_MART_BUCKET, table)
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
+
+            stat = fpath.stat()
+            entries.append(
+                {
+                    "url": str(fpath),
+                    "slug": slug,
+                    "bucket": LOCAL_MART_BUCKET,
+                    "year": year,
+                    "path": rel_path,
+                    "table": table,
                     "size_bytes": stat.st_size,
                     "updated": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
                     "_local": True,
@@ -618,7 +665,8 @@ class CatalogResolver:
                 # Clean parquet count
                 for lf in local_files:
                     if lf["slug"] == slug and _matches_layer(lf, layer):
-                        entry["years"].add(lf["year"])
+                        if lf["year"] is not None:
+                            entry["years"].add(lf["year"])
                         entry["file_count"] += 1
                         entry["total_size_bytes"] += lf.get("size_bytes", 0)
                         entry["has_local"] = True

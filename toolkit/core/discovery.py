@@ -74,17 +74,22 @@ def resolve_config_path(
     # ── Stage 3: risoluzione slug nei repo del workspace ──────────────
     from toolkit.registry.layout import repo_dataset_dirs
 
+    # Lo slug canonico è dataset.name (underscore); la dir è un contenitore
+    # libero (hyphen). Prova entrambe le forme per coprire dir≠slug.
+    hint_forms = {hint_str, hint_str.replace("_", "-")}
+
     searched: list[str] = []
     for repo_dir in sorted(p for p in ws.iterdir() if p.is_dir()):
         for section in repo_dataset_dirs(repo_dir.name):
             section_dir = repo_dir / section
             if not section_dir.is_dir():
                 continue
-            for name in ("dataset.yml", "dataset.yaml"):
-                probe = section_dir / hint_str / name
-                if probe.is_file():
-                    return probe.resolve()
-            searched.append(str(section_dir / hint_str))
+            for form in sorted(hint_forms):
+                for name in ("dataset.yml", "dataset.yaml"):
+                    probe = section_dir / form / name
+                    if probe.is_file():
+                        return probe.resolve()
+                searched.append(str(section_dir / form))
 
     raise FileNotFoundError(
         f"Nessun dataset trovato per '{hint_str}'.\n"

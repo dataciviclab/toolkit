@@ -985,3 +985,46 @@ class TestScanWorkspaceParquetsMarts:
         buckets = {(f["bucket"], f.get("table")) for f in res}
         assert ("local-mart", "mart_aria_ora") in buckets
         assert ("dataciviclab-mart", "mart_aria_ora") in buckets
+
+
+class TestScanWorkspaceConfigsCanonicalSlug:
+    """Lo slug viene da dataset.name (chiave canonica), non dalla dir.
+
+    Regressione: _scan_workspace_configs usava data['slug'] or dir_slug,
+    producendo slug dalla dir (es. 'precipitazioni') invece del name
+    canonico (es. 'precipitazioni_bologna') per 22/188 dataset.
+    """
+
+    @pytest.mark.contract
+    def test_slug_from_dataset_name(self, tmp_path: "Any") -> None:
+        """Dir diversa dal name → slug = dataset.name."""
+        repo = tmp_path / "dcl-bologna"
+        (repo / "datasets" / "precipitazioni").mkdir(parents=True)
+        (repo / "datasets" / "precipitazioni" / "dataset.yml").write_text(
+            "dataset:\n  name: 'precipitazioni_bologna'\n  source_id: 'comune_bologna_opendata'\n"
+            "  years: [2026]\n",
+            encoding="utf-8",
+        )
+
+        from toolkit.domain.catalog import _scan_workspace_configs
+
+        configs = _scan_workspace_configs(tmp_path)
+
+        assert "precipitazioni_bologna" in configs
+        assert "precipitazioni" not in configs
+
+    @pytest.mark.contract
+    def test_slug_fallback_to_dir_without_name(self, tmp_path: "Any") -> None:
+        """Config legacy senza dataset.name → fallback alla dir."""
+        repo = tmp_path / "legacy-repo"
+        (repo / "datasets" / "vecchio-dataset").mkdir(parents=True)
+        (repo / "datasets" / "vecchio-dataset" / "dataset.yml").write_text(
+            "dataset:\n  source_id: 'x'\n  years: [2024]\n",
+            encoding="utf-8",
+        )
+
+        from toolkit.domain.catalog import _scan_workspace_configs
+
+        configs = _scan_workspace_configs(tmp_path)
+
+        assert "vecchio_dataset" in configs

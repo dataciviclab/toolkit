@@ -276,11 +276,13 @@ def _scan_workspace_configs(
             if not isinstance(data, dict):
                 continue
 
-            # Slug: dataset.yml > directory name — normalizzato a underscore
-            slug = (data.get("slug") or dir_slug).replace("-", "_")
-
             ds = data.get("dataset", {}) or {}
-            name = ds.get("name", slug) if isinstance(ds, dict) else slug
+            # Chiave canonica: dataset.name (underscore). La dir è solo un
+            # contenitore (può differire: anag-enti vs ca_anag_enti_seed).
+            # Fallback alla dir solo per config legacy senza dataset.name.
+            name_raw = ds.get("name") if isinstance(ds, dict) else None
+            slug = str(name_raw or dir_slug).replace("-", "_")
+            name = slug
             years = ds.get("years", []) if isinstance(ds, dict) else []
             if isinstance(years, int):
                 years = [years]

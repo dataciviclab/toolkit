@@ -152,10 +152,15 @@ def build_clean_catalog(
                 f"{manifest.slug}__{t.get('name')}" for t in manifest.mart_tables if t.get("name")
             ]
 
-        # Blocco run (ultimo run record del toolkit)
+        # Blocco run (ultimo run record del toolkit). Se il run record locale
+        # manca (CI post-merge senza parquet/run per i dataset non rieseguiti),
+        # preserva il run storico dall'entry editoriale — stesso pattern di
+        # build_signals (existing_signals).
         run_rec = latest_run_record(str(manifest.yml_path))
         if run_block(run_rec):
             entry["run"] = run_block(run_rec)
+        elif old and old.get("run"):
+            entry["run"] = old["run"]
 
         datasets.append(entry)
 

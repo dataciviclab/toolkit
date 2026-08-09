@@ -446,6 +446,54 @@ class TestSignalsExisting:
         assert sig["run"]["run_id"] == "20260101T000000Z_abc123"  # run locale, non OLD
 
 
+class TestCleanCatalogExistingRun:
+    """existing: preserva il blocco run quando il run locale manca (CI)."""
+
+    @pytest.mark.contract
+    def test_preserves_run_from_existing(self, tmp_path: Path) -> None:
+        """CI: nessun run record locale → il run viene dall'entry editoriale."""
+        from toolkit.registry.builders import build_clean_catalog
+
+        layout = _make_repo(tmp_path, with_run=False)
+        existing = {
+            "datasets": [
+                {
+                    "slug": "my_dataset",
+                    "name": "My Dataset",
+                    "description": "desc",
+                    "period": {"start": 2024, "end": 2025},
+                    "columns": [],
+                    "location": {"type": "gcs", "path": "gs://x"},
+                    "run": {"run_id": "20260101T000000Z_abc123", "year": 2025, "status": "SUCCESS"},
+                }
+            ]
+        }
+        catalog, errors = build_clean_catalog(layout, existing=existing)
+        assert not errors["derive"], errors["derive"]
+        ds = next(d for d in catalog["datasets"] if d["slug"] == "my_dataset")
+        assert ds["run"]["run_id"] == "20260101T000000Z_abc123"  # run preservato
+
+    @pytest.mark.contract
+    def test_local_run_wins_over_existing(self, tmp_path: Path) -> None:
+        """Run locale presente → vince su existing (non lo sovrascrive)."""
+        from toolkit.registry.builders import build_clean_catalog
+
+        layout = _make_repo(tmp_path, with_run=True)
+        existing = {
+            "datasets": [
+                {
+                    "slug": "my_dataset",
+                    "columns": [],
+                    "location": {"type": "gcs", "path": "gs://x"},
+                    "run": {"run_id": "OLD_run", "year": 2025, "status": "FAILED"},
+                }
+            ]
+        }
+        catalog, _errors = build_clean_catalog(layout, existing=existing)
+        ds = next(d for d in catalog["datasets"] if d["slug"] == "my_dataset")
+        assert ds["run"]["run_id"] == "20260101T000000Z_abc123"  # run locale, non OLD
+
+
 class TestEntityGraph:
     """build_entity_graph: entità + bridge dal clean_catalog (5° artifact)."""
 

@@ -144,7 +144,8 @@ def _scan_workspace_parquets(workspace: Path = WORKSPACE_ROOT) -> list[dict[str,
         return []
 
     entries: list[dict[str, Any]] = []
-    seen: set[tuple[str, int | None, str]] = set()
+    # Dedup per clean (3-tuple) e mart (4-tuple con table).
+    seen: set[tuple[str, int | None, str] | tuple[str, int | None, str, str]] = set()
 
     for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
         # Solo repo dati: registry/ (artifact committati) o datasets/ (layout).
@@ -184,25 +185,30 @@ def _scan_workspace_parquets(workspace: Path = WORKSPACE_ROOT) -> list[dict[str,
             parts = fpath.relative_to(repo_dir).parts
             # parts[-1]=file, parts[-2]=year|slug, parts[-3]=slug (se year)
             if len(parts) >= 3 and parts[-2].isdigit() and len(parts[-2]) == 4:
-                slug = parts[-3]
-                year = int(parts[-2])
+                mart_slug = parts[-3]
+                mart_year: int | None = int(parts[-2])
             else:
-                slug = parts[-2]
-                year = None
+                mart_slug = parts[-2]
+                mart_year = None
             rel_path = str(fpath.relative_to(workspace))
             table = fpath.stem
-            dedup_key = (slug, year, LOCAL_MART_BUCKET, table)
-            if dedup_key in seen:
+            mart_key: tuple[str, int | None, str, str] = (
+                mart_slug,
+                mart_year,
+                LOCAL_MART_BUCKET,
+                table,
+            )
+            if mart_key in seen:
                 continue
-            seen.add(dedup_key)
+            seen.add(mart_key)
 
             stat = fpath.stat()
             entries.append(
                 {
                     "url": str(fpath),
-                    "slug": slug,
+                    "slug": mart_slug,
                     "bucket": LOCAL_MART_BUCKET,
-                    "year": year,
+                    "year": mart_year,
                     "path": rel_path,
                     "table": table,
                     "size_bytes": stat.st_size,

@@ -21,14 +21,16 @@ from toolkit.core.dataset_loader import load_dataset_manifest
 
 DEFAULT_DATASET_DIRS: tuple[str, ...] = ("datasets",)
 
-# Dir escluse dalla scoperta delle sezioni dati: nascoste (.github, .git)
-# e template (candidate seed). La convenzione è: una sezione dati è una dir
-# di primo livello del repo che contiene {slug}/dataset.yml.
+# Dir escluse dalla scoperta delle sezioni dati: nascoste (.github, .git),
+# template (candidate seed) e fixture di test (smoke). La convenzione è:
+# una sezione dati è una dir di primo livello del repo che contiene
+# {slug}/dataset.yml.
 _EXCLUDED_SECTION_DIRS = {
     ".github",
     ".git",
     ".venv",
     "templates",
+    "smoke",
     "__pycache__",
     "node_modules",
 }
@@ -42,11 +44,16 @@ def repo_dataset_dirs(repo_dir: Path) -> tuple[str, ...]:
     ``support/``, ``candidates/``, ...). Vale per qualsiasi layout presente e
     futuro — nessuna lista hardcoded per repo.
 
+    Un repo senza sezioni scoperte NON è un repo dati → tuple vuota (il
+    chiamante lo salta). Niente fallback a ``("datasets",)``: una dir
+    ``datasets/`` vuota non è una sezione reale.
+
     Args:
         repo_dir: Root del repo (es. ``.../open-conto-annuale``).
 
     Returns:
-        Tuple dei nomi delle sezioni dati (ordine stabile).
+        Tuple dei nomi delle sezioni dati (ordine stabile), vuota se il
+        repo non ha sezioni con dataset.yml.
     """
     sections: list[str] = []
     if not repo_dir.is_dir():
@@ -57,7 +64,7 @@ def repo_dataset_dirs(repo_dir: Path) -> tuple[str, ...]:
         # Sezione dati: contiene almeno un {slug}/dataset.yml a 1 livello.
         if any(p.is_file() for p in entry.glob("*/dataset.yml")):
             sections.append(entry.name)
-    return tuple(sections) or DEFAULT_DATASET_DIRS
+    return tuple(sections)
 
 
 @dataclass(frozen=True)

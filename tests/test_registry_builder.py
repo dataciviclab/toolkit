@@ -556,7 +556,7 @@ class TestRepoDatasetDirs:
 
     @pytest.mark.contract
     def test_excludes_templates_and_hidden(self, tmp_path: Path) -> None:
-        """templates/ e dir nascoste non sono sezioni dati."""
+        """templates/, dir nascoste e smoke non sono sezioni dati."""
         from toolkit.registry.layout import repo_dataset_dirs
 
         repo = tmp_path / "dataset-incubator"
@@ -566,16 +566,18 @@ class TestRepoDatasetDirs:
         (repo / "templates" / "candidate" / "dataset.yml").write_text("x", encoding="utf-8")
         (repo / ".github" / "ISSUE_TEMPLATE").mkdir(parents=True)
         (repo / ".github" / "ISSUE_TEMPLATE" / "dataset.yml").write_text("x", encoding="utf-8")
+        (repo / "smoke" / "bdap_http_csv").mkdir(parents=True)
+        (repo / "smoke" / "bdap_http_csv" / "dataset.yml").write_text("x", encoding="utf-8")
 
         assert repo_dataset_dirs(repo) == ("candidates",)
 
     @pytest.mark.contract
-    def test_no_sections_returns_default(self, tmp_path: Path) -> None:
-        """Repo senza sezioni → default ('datasets',) — compat."""
+    def test_no_sections_returns_empty(self, tmp_path: Path) -> None:
+        """Repo senza sezioni → tuple vuota (non è un repo dati)."""
         from toolkit.registry.layout import repo_dataset_dirs
 
         repo = tmp_path / "nuovo-repo"
         repo.mkdir()
         (repo / "README.md").write_text("x", encoding="utf-8")
 
-        assert repo_dataset_dirs(repo) == ("datasets",)
+        assert repo_dataset_dirs(repo) == ()

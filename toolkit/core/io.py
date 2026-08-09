@@ -128,9 +128,26 @@ def read_json_or_none(path: Path) -> dict[str, Any] | None:
 # YAML helpers — centralise yaml dependency here so callers don't import yaml
 # ---------------------------------------------------------------------------
 
+# Cache mtime-based per read_yaml: i dataset.yml cambiano raramente, ma lo
+# scan workspace li rilegge a ogni istanza (find/resolver) — PyYAML è ~7ms/file,
+# quindi 150+ file = 1s+ a istanza. Cache keyed su (path, mtime_ns, size).
+_YAML_CACHE: dict[tuple[str, int, int], Any] = {}
+
+
+def _yaml_cache_key(path: Path) -> tuple[str, int, int] | None:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (str(path), st.st_mtime_ns, st.st_size)
+
 
 def read_yaml(path: Path) -> Any:
     """Read and parse a YAML file.
+
+    Con cache mtime-based: riusa il parsing se il file non è cambiato
+    (mtime_ns + size invariati). Beneficia lo scan workspace dei dataset.yml
+    (find/resolver), che altrimenti paga PyYAML (~7ms/file) a ogni istanza.
 
     Args:
         path: Path to the YAML file.
@@ -144,23 +161,41 @@ def read_yaml(path: Path) -> Any:
     """
     import yaml as _yaml
 
+    key = _yaml_cache_key(path)
+    if key is not None and key in _YAML_CACHE:
+        return _YAML_CACHE[key]
+
     try:
-        return _yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = _yaml.safe_load(path.read_text(encoding="utf-8"))
     except _yaml.YAMLError as exc:
         raise ValueError(f"YAML parse error in {path}: {exc}") from exc
+
+    if key is not None:
+        _YAML_CACHE[key] = data
+    return data
 
 
 def read_yaml_or_none(path: Path) -> Any:
     """Read and parse a YAML file, returning None on any error.
 
+    Con cache mtime-based (vedi ``read_yaml``).
+
     Use for optional files where absence or malformation is a valid state.
     """
     import yaml as _yaml
 
+    key = _yaml_cache_key(path)
+    if key is not None and key in _YAML_CACHE:
+        return _YAML_CACHE[key]
+
     try:
-        return _yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = _yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, _yaml.YAMLError, UnicodeDecodeError):
         return None
+
+    if key is not None:
+        _YAML_CACHE[key] = data
+    return data
 
 
 def write_yaml(data: Any, path: Path) -> None:

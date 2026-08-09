@@ -10,6 +10,7 @@ import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from toolkit.core.exceptions import DownloadError
@@ -22,9 +23,17 @@ from toolkit.core.registry import registry
 
 
 def _format_args(args: dict, year: int) -> dict:
-    formatted = {}
+    formatted: dict[str, Any] = {}
     for k, v in (args or {}).items():
-        if isinstance(v, str) and "{year}" in v:
+        if isinstance(v, Path):
+            # _normalize_paths converte i path relativi in PosixPath: il
+            # placeholder {year} va sostituito anche su valori Path (es.
+            # raw.sources[].args.path per local_file).
+            if "{year}" in str(v):
+                formatted[k] = Path(str(v).replace("{year}", str(year)))
+            else:
+                formatted[k] = v
+        elif isinstance(v, str) and "{year}" in v:
             # replace instead of str.format to avoid conflicts with SPARQL {} braces
             formatted[k] = v.replace("{year}", str(year))
         else:
@@ -35,7 +44,9 @@ def _format_args(args: dict, year: int) -> dict:
         if isinstance(suffix_map, dict):
             suffix = suffix_map.get(year, "")
             if isinstance(suffix, str):
-                formatted["url"] = formatted["url"] + suffix
+                # url può essere Path (local_file): normalizza a str per il suffix
+                base_url = str(formatted["url"])
+                formatted["url"] = base_url + suffix
     # Remove url_suffix_by_year from output — internal config, not for consumers
     formatted.pop("url_suffix_by_year", None)
     return formatted

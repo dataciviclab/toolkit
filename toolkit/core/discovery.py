@@ -80,7 +80,7 @@ def resolve_config_path(
 
     searched: list[str] = []
     for repo_dir in sorted(p for p in ws.iterdir() if p.is_dir()):
-        for section in repo_dataset_dirs(repo_dir.name):
+        for section in repo_dataset_dirs(repo_dir):
             section_dir = repo_dir / section
             if not section_dir.is_dir():
                 continue

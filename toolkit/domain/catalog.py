@@ -226,11 +226,11 @@ def _scan_workspace_configs(
 ) -> dict[str, dict[str, Any]]:
     """Scansiona dataset.yml nel workspace e restituisce metadata di pipeline.
 
-    Cross-repo (come ``_scan_workspace_parquets``): usa la mappa canonica
-    ``REPO_DATASET_DIRS`` (toolkit.registry.layout) — dataset-incubator legge
-    ``candidates/compose/support_datasets``, gli altri repo (eurostat,
-    dcl-bologna, ...) ``datasets/``. Nuovi repo con layout flat funzionano
-    senza toccare il codice.
+    Cross-repo (come ``_scan_workspace_parquets``): usa la scoperta per
+    convenzione ``repo_dataset_dirs`` (toolkit.registry.layout) — ogni dir di
+    primo livello con {slug}/dataset.yml è una sezione dati (datasets/,
+    support/, candidates/...). Nuovi repo con layout custom funzionano senza
+    toccare il codice.
 
     Returns:
         Dict slug → {dataset_name, stage, years, has_clean, has_mart,
@@ -245,7 +245,7 @@ def _scan_workspace_configs(
     dirs_to_scan: list[tuple[str, Path]] = []
 
     for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
-        for section in repo_dataset_dirs(repo_dir.name):
+        for section in repo_dataset_dirs(repo_dir):
             section_dir = repo_dir / section
             if not section_dir.is_dir():
                 continue
@@ -276,11 +276,13 @@ def _scan_workspace_configs(
             if not isinstance(data, dict):
                 continue
 
-            # Slug: dataset.yml > directory name — normalizzato a underscore
-            slug = (data.get("slug") or dir_slug).replace("-", "_")
-
             ds = data.get("dataset", {}) or {}
-            name = ds.get("name", slug) if isinstance(ds, dict) else slug
+            # Chiave canonica: dataset.name (underscore). La dir è solo un
+            # contenitore (può differire: anag-enti vs ca_anag_enti_seed).
+            # Fallback alla dir solo per config legacy senza dataset.name.
+            name_raw = ds.get("name") if isinstance(ds, dict) else None
+            slug = str(name_raw or dir_slug).replace("-", "_")
+            name = slug
             years = ds.get("years", []) if isinstance(ds, dict) else []
             if isinstance(years, int):
                 years = [years]

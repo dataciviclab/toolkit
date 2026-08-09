@@ -21,21 +21,50 @@ from toolkit.core.dataset_loader import load_dataset_manifest
 
 DEFAULT_DATASET_DIRS: tuple[str, ...] = ("datasets",)
 
-# Mappa canonica repo → dataset_dirs (fusion ADR generalizzata).
-# Ogni repo del workspace può dichiarare dove vivono i suoi dataset.yml;
-# i repo non elencati usano il default ``("datasets",)`` (layout flat).
-REPO_DATASET_DIRS: dict[str, tuple[str, ...]] = {
-    "dataset-incubator": ("candidates", "compose", "support_datasets"),
+# Dir escluse dalla scoperta delle sezioni dati: nascoste (.github, .git),
+# template (candidate seed) e fixture di test (smoke). La convenzione è:
+# una sezione dati è una dir di primo livello del repo che contiene
+# {slug}/dataset.yml.
+_EXCLUDED_SECTION_DIRS = {
+    ".github",
+    ".git",
+    ".venv",
+    "templates",
+    "smoke",
+    "__pycache__",
+    "node_modules",
 }
 
 
-def repo_dataset_dirs(repo_name: str) -> tuple[str, ...]:
-    """Dataset dirs di un repo del workspace (default flat se non mappato).
+def repo_dataset_dirs(repo_dir: Path) -> tuple[str, ...]:
+    """Sezioni dati di un repo, scoperte per convenzione.
 
-    La mappa ``REPO_DATASET_DIRS`` è la fonte unica: aggiungere un repo con
-    layout custom = una riga qui, senza toccare resolver, discovery o CLI.
+    Scoperta (non mappa): ogni dir di primo livello del repo che contiene
+    almeno un ``{slug}/dataset.yml`` è una sezione dati (``datasets/``,
+    ``support/``, ``candidates/``, ...). Vale per qualsiasi layout presente e
+    futuro — nessuna lista hardcoded per repo.
+
+    Un repo senza sezioni scoperte NON è un repo dati → tuple vuota (il
+    chiamante lo salta). Niente fallback a ``("datasets",)``: una dir
+    ``datasets/`` vuota non è una sezione reale.
+
+    Args:
+        repo_dir: Root del repo (es. ``.../open-conto-annuale``).
+
+    Returns:
+        Tuple dei nomi delle sezioni dati (ordine stabile), vuota se il
+        repo non ha sezioni con dataset.yml.
     """
-    return REPO_DATASET_DIRS.get(repo_name, DEFAULT_DATASET_DIRS)
+    sections: list[str] = []
+    if not repo_dir.is_dir():
+        return tuple(sections)
+    for entry in sorted(p for p in repo_dir.iterdir() if p.is_dir()):
+        if entry.name in _EXCLUDED_SECTION_DIRS:
+            continue
+        # Sezione dati: contiene almeno un {slug}/dataset.yml a 1 livello.
+        if any(p.is_file() for p in entry.glob("*/dataset.yml")):
+            sections.append(entry.name)
+    return tuple(sections)
 
 
 @dataclass(frozen=True)

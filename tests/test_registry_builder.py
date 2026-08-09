@@ -502,29 +502,82 @@ class TestEntityGraph:
 
 
 # ---------------------------------------------------------------------------
-# Mappa canonica repo → dataset_dirs (fusion ADR generalizzata)
+# Scoperta sezioni dati per convenzione (risoluzione univoca layout)
 # ---------------------------------------------------------------------------
 
 
 class TestRepoDatasetDirs:
-    """La mappa REPO_DATASET_DIRS è la fonte unica dei layout per repo."""
+    """Scoperta per convenzione: dir con {slug}/dataset.yml = sezione dati.
+
+    Sostituisce la vecchia mappa REPO_DATASET_DIRS: nessun repo va dichiarato,
+    la sezione si scopre dalla struttura (scalabile a qualsiasi layout).
+    """
 
     @pytest.mark.contract
-    def test_default_flat_for_unknown_repos(self) -> None:
-        """Repo non mappato → default ('datasets',) — scalabile senza codice."""
+    def test_discovers_flat_datasets(self, tmp_path: Path) -> None:
+        """Repo con datasets/{slug}/dataset.yml → sezione datasets."""
         from toolkit.registry.layout import repo_dataset_dirs
 
-        assert repo_dataset_dirs("eurostat") == ("datasets",)
-        assert repo_dataset_dirs("dcl-bologna") == ("datasets",)
-        assert repo_dataset_dirs("nuovo-repo-futuro") == ("datasets",)
+        repo = tmp_path / "eurostat"
+        (repo / "datasets" / "crime").mkdir(parents=True)
+        (repo / "datasets" / "crime" / "dataset.yml").write_text("x", encoding="utf-8")
+
+        assert repo_dataset_dirs(repo) == ("datasets",)
 
     @pytest.mark.contract
-    def test_di_custom_dirs(self) -> None:
-        """dataset-incubator dichiara i suoi tre layout."""
+    def test_discovers_multiple_sections(self, tmp_path: Path) -> None:
+        """Repo con più sezioni (datasets + support) → tutte scoperte."""
         from toolkit.registry.layout import repo_dataset_dirs
 
-        assert repo_dataset_dirs("dataset-incubator") == (
+        repo = tmp_path / "open-conto-annuale"
+        (repo / "datasets" / "personale").mkdir(parents=True)
+        (repo / "datasets" / "personale" / "dataset.yml").write_text("x", encoding="utf-8")
+        (repo / "support" / "anag-enti").mkdir(parents=True)
+        (repo / "support" / "anag-enti" / "dataset.yml").write_text("x", encoding="utf-8")
+
+        assert repo_dataset_dirs(repo) == ("datasets", "support")
+
+    @pytest.mark.contract
+    def test_discovers_candidates_compose_support(self, tmp_path: Path) -> None:
+        """DI: candidates/compose/support_datasets scoperti (nessuna mappa)."""
+        from toolkit.registry.layout import repo_dataset_dirs
+
+        repo = tmp_path / "dataset-incubator"
+        for section in ("candidates", "compose", "support_datasets"):
+            d = repo / section / "ds"
+            d.mkdir(parents=True)
+            (d / "dataset.yml").write_text("x", encoding="utf-8")
+
+        assert repo_dataset_dirs(repo) == (
             "candidates",
             "compose",
             "support_datasets",
         )
+
+    @pytest.mark.contract
+    def test_excludes_templates_and_hidden(self, tmp_path: Path) -> None:
+        """templates/, dir nascoste e smoke non sono sezioni dati."""
+        from toolkit.registry.layout import repo_dataset_dirs
+
+        repo = tmp_path / "dataset-incubator"
+        (repo / "candidates" / "ds").mkdir(parents=True)
+        (repo / "candidates" / "ds" / "dataset.yml").write_text("x", encoding="utf-8")
+        (repo / "templates" / "candidate").mkdir(parents=True)
+        (repo / "templates" / "candidate" / "dataset.yml").write_text("x", encoding="utf-8")
+        (repo / ".github" / "ISSUE_TEMPLATE").mkdir(parents=True)
+        (repo / ".github" / "ISSUE_TEMPLATE" / "dataset.yml").write_text("x", encoding="utf-8")
+        (repo / "smoke" / "bdap_http_csv").mkdir(parents=True)
+        (repo / "smoke" / "bdap_http_csv" / "dataset.yml").write_text("x", encoding="utf-8")
+
+        assert repo_dataset_dirs(repo) == ("candidates",)
+
+    @pytest.mark.contract
+    def test_no_sections_returns_empty(self, tmp_path: Path) -> None:
+        """Repo senza sezioni → tuple vuota (non è un repo dati)."""
+        from toolkit.registry.layout import repo_dataset_dirs
+
+        repo = tmp_path / "nuovo-repo"
+        repo.mkdir()
+        (repo / "README.md").write_text("x", encoding="utf-8")
+
+        assert repo_dataset_dirs(repo) == ()

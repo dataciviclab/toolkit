@@ -80,7 +80,7 @@ def resolve_config_path(
 
     searched: list[str] = []
     for repo_dir in sorted(p for p in ws.iterdir() if p.is_dir()):
-        for section in repo_dataset_dirs(repo_dir.name):
+        for section in repo_dataset_dirs(repo_dir):
             section_dir = repo_dir / section
             if not section_dir.is_dir():
                 continue
@@ -90,6 +90,16 @@ def resolve_config_path(
                     if probe.is_file():
                         return probe.resolve()
                 searched.append(str(section_dir / form))
+
+    # ── Stage 4: fallback alla mappa reale slug→config_path ──────────
+    # La dir può differire completamente dal slug (es. anag-enti vs
+    # ca_anag_enti_seed; monthly HDD senza dir locale). La mappa canonica
+    # (da dataset.name nello scan) è la fonte ultima.
+    from toolkit.domain.catalog import _scan_workspace_configs
+
+    configs = _scan_workspace_configs(ws)
+    if hint_str in configs:
+        return Path(configs[hint_str]["config_path"]).resolve()
 
     raise FileNotFoundError(
         f"Nessun dataset trovato per '{hint_str}'.\n"

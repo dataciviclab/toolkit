@@ -122,3 +122,27 @@ def test_resolve_config_path_not_found(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="Nessun dataset trovato"):
         resolve_config_path("slug-inesistente", workspace=tmp_path)
+
+
+@pytest.mark.contract
+def test_resolve_config_path_dir_totally_different(tmp_path):
+    """Dir completamente diversa dallo slug → risolve via mappa scan.
+
+    Regressione: la dir può non corrispondere al slug in nessuna forma
+    (es. anag-enti vs ca_anag_enti_seed; monthly HDD senza dir locale).
+    Fallback Stage 4: mappa slug→config_path da dataset.name.
+    """
+    from toolkit.core.discovery import resolve_config_path
+
+    # Repo con dir "anag-enti" ma slug "ca_anag_enti_seed" (dataset.name)
+    repo = tmp_path / "open-conto-annuale"
+    (repo / "datasets" / "anag-enti").mkdir(parents=True)
+    (repo / "datasets" / "anag-enti" / "dataset.yml").write_text(
+        "dataset:\n  name: 'ca_anag_enti_seed'\n  source_id: 'openbdap'\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        resolve_config_path("ca_anag_enti_seed", workspace=tmp_path)
+        == (repo / "datasets" / "anag-enti" / "dataset.yml").resolve()
+    )

@@ -12,8 +12,6 @@ run_state, parquet_schema) — qui solo proiezione e arricchimento di catalogo.
 Derive-mode:
 - ``local`` (default): schemi e anni dai parquet locali e dai run records.
   Nessuna lettura GCS.
-- ``check-gcs``: come local, più verifica di presenza dei parquet pubblici
-  (object_exists) per segnalare gli URL non risolti.
 """
 
 from __future__ import annotations
@@ -60,8 +58,6 @@ def _mart_ok(manifest: DatasetManifest) -> bool:
 def build_clean_catalog(
     layout: RepoLayout,
     existing: dict[str, Any] | None = None,
-    derive_mode: str = "local",
-    check_gcs: bool = False,
     slug: str | None = None,
     semantic_types_path: Path | None = None,
     path_contract: PathContract | None = None,
@@ -72,8 +68,6 @@ def build_clean_catalog(
         layout: Struttura del repo (dataset_dirs, source_repo).
         existing: Catalogo precedente (metadata editoriali preservati:
             name/description/source/stage umani, role/semantic_type colonne).
-        derive_mode: ``"local"`` (default) o ``"check-gcs"``.
-        check_gcs: alias per derive_mode="check-gcs" (compat coi vecchi flag).
         slug: Limita a un singolo slug (per test e debug).
         semantic_types_path: Path a semantic_types.yaml (opzionale).
         path_contract: Contratto GCS (default: layout DI, year).
@@ -84,8 +78,6 @@ def build_clean_catalog(
         sono escluse e segnalate. Gli errori validation indicano un artifact
         non conforme allo schema.
     """
-    if derive_mode == "check-gcs" or check_gcs:
-        derive_mode = "check-gcs"
     contract = path_contract or PathContract()
     alias_map = load_semantic_types(semantic_types_path)
 
@@ -182,32 +174,8 @@ def build_clean_catalog(
         "datasets": sorted(datasets, key=lambda d: d["slug"]),
     }
 
-    if derive_mode == "check-gcs":
-        derive_errors.extend(_check_gcs_locations(catalog, contract))
-
     # Validazione: sul registry completo (registry.schema.json), non per sezione.
     return catalog, {"derive": derive_errors, "validation": []}
-
-
-def _check_gcs_locations(catalog: dict[str, Any], contract: PathContract) -> list[str]:
-    """Verifica che le location gs:// risolvano ad almeno un parquet pubblico."""
-    from lab_connectors.gcs import object_exists
-    from lab_connectors.gcs.paths import parse_gs_url
-
-    errors: list[str] = []
-    for ds in catalog.get("datasets", []):
-        loc = ds.get("location") or {}
-        path = loc.get("path", "")
-        if not path.startswith("gs://"):
-            continue
-        bucket, key = parse_gs_url(path)
-        if "*" in key:
-            prefix = key.split("*")[0].rstrip("/") + "/"
-            if not object_exists(bucket, prefix + "pipeline_run.json"):
-                errors.append(f"{ds['slug']}: nessun pipeline_run.json pubblicato in {prefix}")
-        elif not object_exists(bucket, key):
-            errors.append(f"{ds['slug']}: parquet non trovato su GCS ({path})")
-    return errors
 
 
 # ---------------------------------------------------------------------------
@@ -483,7 +451,6 @@ def build_codelists(
 def build_registry(
     layout: RepoLayout,
     *,
-    derive_mode: str = "local",
     path_contract: PathContract | None = None,
     existing_catalog: dict[str, Any] | None = None,
     existing_signals: dict[str, Any] | None = None,
@@ -507,7 +474,6 @@ def build_registry(
     catalog, cc_errors = build_clean_catalog(
         layout,
         existing=existing_catalog,
-        derive_mode=derive_mode,
         semantic_types_path=semantic_types_path,
         path_contract=path_contract,
         slug=slug,

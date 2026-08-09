@@ -256,6 +256,15 @@ def build_mart_catalog(
                 entry["min_rows"] = rule["min_rows"]
             if runs_cache[manifest.slug]:
                 entry["run"] = runs_cache[manifest.slug]
+            # Tabella con years esplicite = multi-anno: il runner la scrive
+            # flat (data/mart/{dataset}/{table}.parquet, no dir anno) → la
+            # location pubblicata deve essere flat. Tabella per-anno → year.
+            table_years = table.get("years")
+            if table_years:
+                # Flat: stessa struttura del runner multi-anno.
+                entry["location"] = contract.mart_location(manifest.slug, name, year=None)
+                marts.append(entry)
+                continue
             year = max(manifest.years, default=None)
             if contract.mart_layout == "year" and year is None:
                 derive_errors.append(

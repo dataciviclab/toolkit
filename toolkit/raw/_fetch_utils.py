@@ -24,7 +24,15 @@ from toolkit.core.registry import registry
 def _format_args(args: dict, year: int) -> dict:
     formatted = {}
     for k, v in (args or {}).items():
-        if isinstance(v, str) and "{year}" in v:
+        if isinstance(v, Path):
+            # _normalize_paths converte i path relativi in PosixPath: il
+            # placeholder {year} va sostituito anche su valori Path (es.
+            # raw.sources[].args.path per local_file).
+            if "{year}" in str(v):
+                formatted[k] = Path(str(v).replace("{year}", str(year)))
+            else:
+                formatted[k] = v
+        elif isinstance(v, str) and "{year}" in v:
             # replace instead of str.format to avoid conflicts with SPARQL {} braces
             formatted[k] = v.replace("{year}", str(year))
         else:

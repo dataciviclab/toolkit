@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from toolkit.raw._fetch_utils import _format_args
@@ -15,6 +17,22 @@ class TestFormatArgs:
         args = {"url": "https://example.com/data{year}.csv"}
         result = _format_args(args, 2023)
         assert result["url"] == "https://example.com/data2023.csv"
+
+    def test_format_args_path_year_substitution(self) -> None:
+        """local_file path normalized to Path still substitutes {year}.
+
+        Regression: _normalize_paths converts args.path to a PosixPath; the
+        {year} placeholder must be replaced on Path values too.
+        """
+        args = {"path": Path("/repo/_local/seed/dati/{year}/ETA_{year}.CSV")}
+        result = _format_args(args, 2024)
+        assert result["path"] == Path("/repo/_local/seed/dati/2024/ETA_2024.CSV")
+
+    def test_format_args_path_without_year_untouched(self) -> None:
+        """Path without {year} is returned unchanged (same type)."""
+        args = {"path": Path("/repo/anagrafica/_data/CompartoContratto.CSV")}
+        result = _format_args(args, 2024)
+        assert result["path"] == Path("/repo/anagrafica/_data/CompartoContratto.CSV")
 
     def test_format_args_no_url_suffix_by_year(self) -> None:
         """Without url_suffix_by_year, output is unchanged."""

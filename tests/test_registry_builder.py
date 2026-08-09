@@ -581,3 +581,54 @@ class TestRepoDatasetDirs:
         (repo / "README.md").write_text("x", encoding="utf-8")
 
         assert repo_dataset_dirs(repo) == ()
+
+
+class TestMartMultiYearLocation:
+    """Mart con years esplicite → location flat; per-anno → year.
+
+    Regressione issue #463: il runner scrive i mart multi-anno flat
+    (data/mart/{dataset}/{table}.parquet), ma il builder li pubblicava con
+    path anno inesistente (year=max). Ora tabella con years → flat.
+    """
+
+    @pytest.mark.contract
+    def test_multi_year_mart_flat(self, tmp_path: Path) -> None:
+        """Tabella con years esplicite → path flat (no dir anno)."""
+        from toolkit.registry.builders import build_mart_catalog
+        from toolkit.registry.layout import RepoLayout
+        from toolkit.registry.paths import PathContract
+
+        ds_dir = tmp_path / "datasets" / "my-ds"
+        ds_dir.mkdir(parents=True)
+        (ds_dir / "dataset.yml").write_text(
+            "root: '../../out'\n"
+            "dataset:\n"
+            "  name: 'my_dataset'\n"
+            "  source_id: 'src'\n"
+            "  years: [2024, 2025]\n"
+            "mart:\n"
+            "  tables:\n"
+            "    - name: 'mart_trend'\n"
+            "      sql: 'sql/mart_trend.sql'\n"
+            "      years: [2024, 2025]\n"
+            "    - name: 'mart_sintesi'\n"
+            "      sql: 'sql/mart_sintesi.sql'\n",
+            encoding="utf-8",
+        )
+
+        layout = RepoLayout(
+            repo_root=tmp_path, dataset_dirs=("datasets",), source_repo="dataciviclab/test"
+        )
+        contract = PathContract(prefix="test", clean_layout="year", mart_layout="year")
+        catalog, errors = build_mart_catalog(layout, path_contract=contract)
+
+        assert not errors["derive"], errors["derive"]
+        by_table = {m["table"]: m for m in catalog["marts"]}
+        # multi-anno → flat
+        assert by_table["mart_trend"]["location"]["path"] == (
+            "gs://dataciviclab-mart/test/my_dataset/mart_trend.parquet"
+        )
+        # per-anno → year
+        assert by_table["mart_sintesi"]["location"]["path"] == (
+            "gs://dataciviclab-mart/test/my_dataset/2025/mart_sintesi.parquet"
+        )

@@ -161,7 +161,17 @@ def load_manifest(yml_path: Path) -> DatasetManifest | None:
     except Exception:
         description = ""
 
-    tables = tuple({"name": t.name, "sql": t.sql} for t in cfg.mart.tables if t.name)
+    # years esplicite: tabella multi-anno → scritta flat dal runner (no
+    # dir anno); il builder le pubblica flat. years assente = per-anno.
+    tables = tuple(
+        {
+            "name": t.name,
+            "sql": t.sql,
+            **({"years": t.years} if t.years else {}),
+        }
+        for t in cfg.mart.tables
+        if t.name
+    )
     rules: dict[str, dict[str, Any]] = {}
     validate = cfg.mart.validate
     if validate is not None and validate.table_rules:

@@ -64,12 +64,15 @@ class PathContract:
     # ── Mart ───────────────────────────────────────────────────────────────
 
     def mart_parquet_url(self, dataset: str, table: str, year: int | None = None) -> str:
-        """URL gs:// del parquet mart per dataset+tabella."""
+        """URL gs:// del parquet mart per dataset+tabella.
+
+        ``year=None`` = mart multi-anno (years esplicite nel config): il
+        runner lo scrive flat ``{dataset}/{table}.parquet`` (nessuna dir
+        anno) → anche con ``mart_layout="year"`` l'URL è flat.
+        """
         base = self._prefixed(MART_BUCKET)
-        if self.mart_layout == "flat":
+        if self.mart_layout == "flat" or year is None:
             return f"{base}/{dataset}/{table}.parquet"
-        if year is None:
-            raise ValueError("mart_layout='year' richiede year per l'URL mart")
         return f"{base}/{dataset}/{year}/{table}.parquet"
 
     def mart_location(self, dataset: str, table: str, year: int | None = None) -> dict[str, Any]:

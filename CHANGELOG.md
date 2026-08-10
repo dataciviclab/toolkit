@@ -1,3 +1,14 @@
+## [1.49.4] - 2026-08-10
+
+### Added
+
+- **Comando `toolkit registry build`** (PR #468): genera `registry.json` del repo corrente senza wrapper per-repo. Scopre le sezioni dati per convenzione (`repo_dataset_dirs`), deriva `source_repo` dal git remote, legge existing con `datasets+marts+signals` → **fix del bug #465** (i wrapper legacy non passavano `marts` → i run dei mart sparivano a ogni rigenerazione CI). PathContract via flag (`--prefix`, `--flat`), dry-run di default. Sostituisce i 6 `scripts/build_registry.py` dei repo.
+
+### Changed
+
+- **Ordine chiavi canonico nel registry** (PR #468): `_canonicalize_registry` in `build_registry` dopo `_merge_existing_runs` — ordine deterministico per datasets/marts/signals. Prima l'ordine di inserimento del dict variava a ogni rigenerazione → PR post-merge illeggibili (#815/#817).
+- **Drop fallback legacy reader** (PR #468): rimossi `_load_legacy`, `LEGACY_TO_SECTION`; `load_repo_registry` ora ritorna solo `dict | None` (niente più `is_legacy`). Tutti i repo hanno `registry.json` dopo la #818, il fallback era codice morto.
+
 ## [1.49.3] - 2026-08-10
 
 ### Fixed

@@ -152,15 +152,11 @@ def build_clean_catalog(
                 f"{manifest.slug}__{t.get('name')}" for t in manifest.mart_tables if t.get("name")
             ]
 
-        # Blocco run (ultimo run record del toolkit). Se il run record locale
-        # manca (CI post-merge senza parquet/run per i dataset non rieseguiti),
-        # preserva il run storico dall'entry editoriale — stesso pattern di
-        # build_signals (existing_signals).
+        # Blocco run (ultimo run record del toolkit). Il fallback sull'existing
+        # è centralizzato in _merge_existing_runs (build_registry).
         run_rec = latest_run_record(str(manifest.yml_path))
         if run_block(run_rec):
             entry["run"] = run_block(run_rec)
-        elif old and old.get("run"):
-            entry["run"] = old["run"]
 
         datasets.append(entry)
 
@@ -267,7 +263,6 @@ def build_mart_catalog(
 def build_signals(
     layout: RepoLayout,
     topic: str = "pipeline_state",
-    existing_signals: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, list[str]]]:
     """Costruisce pipeline_signals per ACB (repo-signals standard).
 
@@ -275,19 +270,9 @@ def build_signals(
     mart; error = struttura rotta (clean.sql mancante per dataset non-compose).
     NOTA: status=ok NON significa pubblicato (vedi clean_catalog.stage).
 
-    ``existing_signals``: signals committato (pipeline_signals.json del repo).
-    Preserva il blocco ``run`` dei dataset che non hanno run record locale
-    (sempre il caso in CI post-merge: i parquet/run di chi non è stato
-    rieseguito non sono nel runner). Stesso pattern di ``existing_catalog``
-    per il clean: i run storici non devono sparire a ogni rigenerazione.
+    Il fallback sui run storici (run record locale mancante in CI) è
+    centralizzato in ``_merge_existing_runs`` (build_registry).
     """
-    # Index dei run storici dal signals committato (chiave: slug senza prefisso)
-    existing_runs: dict[str, dict[str, Any]] = {}
-    if existing_signals:
-        for s in existing_signals.get("signals", []) or []:
-            if s.get("run"):
-                existing_runs[str(s.get("id", "")).removeprefix("compose:")] = s["run"]
-
     signals: list[dict[str, Any]] = []
     compose_ids: set[str] = set()
 
@@ -328,9 +313,6 @@ def build_signals(
         run_rec = latest_run_record(str(manifest.yml_path))
         if run_block(run_rec):
             signal["run"] = run_block(run_rec)
-        elif manifest.slug in existing_runs:
-            # Nessun run locale (CI senza parquet) → preserva il run storico
-            signal["run"] = existing_runs[manifest.slug]
         signals.append(signal)
 
         # Prefisso "compose:" per i manifest in sezione compose del layout
@@ -484,7 +466,7 @@ def build_registry(
         slug=slug,
     )
     marts, mc_errors = build_mart_catalog(layout, path_contract=path_contract, slug=slug)
-    signals, ps_errors = build_signals(layout, existing_signals=existing_signals)
+    signals, ps_errors = build_signals(layout)
     codelists, cl_errors = build_codelists(layout)
     graph = build_entity_graph(catalog, semantic_types_path=semantic_types_path)
 
@@ -505,6 +487,17 @@ def build_registry(
         },
     }
 
+    # Preserva i run storici: in CI post-merge i dataset non rieseguiti non
+    # hanno run record locali, quindi i blocco run sparirebbero a ogni
+    # rigenerazione. Un UNICO pass centralizzato (dopo la costruzione delle
+    # sezioni) ripopola i run mancanti da existing — niente fallback duplicati
+    # nei singoli builder.
+    registry = _merge_existing_runs(
+        registry,
+        existing_catalog=existing_catalog,
+        existing_signals=existing_signals,
+    )
+
     registry_errors = validate_artifact(registry, "registry.schema.json")
     errors = {
         "datasets": cc_errors,
@@ -515,6 +508,61 @@ def build_registry(
         "registry": {"derive": [], "validation": registry_errors},
     }
     return {"registry": registry, "errors": errors}
+
+
+def _merge_existing_runs(
+    registry: dict[str, Any],
+    *,
+    existing_catalog: dict[str, Any] | None = None,
+    existing_signals: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Ripopola i blocco ``run`` mancanti dall'existing registry (CI).
+
+    Quando il run record locale manca (post-merge: i dataset non rieseguiti
+    non sono nel runner), le entry derivate non hanno ``run``. L'existing
+    (registry.json committato) preserva lo storico.
+
+    Chiavi:
+    - datasets: ``slug``
+    - marts: ``dataset`` (il run è per dataset, non per tabella)
+    - signals: ``id`` (con prefisso ``compose:`` per i compose)
+
+    Il run locale vince sempre; l'existing interviene solo dove manca.
+    """
+
+    def _index(
+        payload: dict | None, key: str, section: str = "datasets"
+    ) -> dict[str, dict[str, Any]]:
+        idx: dict[str, dict[str, Any]] = {}
+        if not payload:
+            return idx
+        for entry in payload.get(section, []) or []:
+            run = entry.get("run")
+            if run and entry.get(key):
+                idx[entry[key]] = run
+        return idx
+
+    datasets_run = _index(existing_catalog, "slug")
+    marts_run = _index(existing_catalog, "dataset", section="marts")
+    signals_run: dict[str, dict[str, Any]] = {}
+    if existing_signals:
+        for s in existing_signals.get("signals", []) or []:
+            if s.get("run") and s.get("id"):
+                signals_run[s["id"]] = s["run"]
+
+    for ds in registry.get("datasets", []) or []:
+        if "run" not in ds and ds.get("slug") in datasets_run:
+            ds["run"] = datasets_run[ds["slug"]]
+
+    for m in registry.get("marts", []) or []:
+        if "run" not in m and m.get("dataset") in marts_run:
+            m["run"] = marts_run[m["dataset"]]
+
+    for s in registry.get("signals", []) or []:
+        if "run" not in s and s.get("id") in signals_run:
+            s["run"] = signals_run[s["id"]]
+
+    return registry
 
 
 # Nomi display delle entità nel grafo (default: il nome entity dal vocabolario).

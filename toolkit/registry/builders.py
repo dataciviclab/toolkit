@@ -498,6 +498,12 @@ def build_registry(
         existing_signals=existing_signals,
     )
 
+    # Ordine chiavi deterministico: le entry derivano da path diversi
+    # (builder, existing, run restore) e l'ordine di inserimento del dict
+    # cambierebbe a ogni rigenerazione → diff rumorosi (v. PR post-merge
+    # #815/#817). Un UNICO pass finalizza l'ordine canonico per sezione.
+    registry = _canonicalize_registry(registry)
+
     registry_errors = validate_artifact(registry, "registry.schema.json")
     errors = {
         "datasets": cc_errors,
@@ -562,6 +568,75 @@ def _merge_existing_runs(
         if "run" not in s and s.get("id") in signals_run:
             s["run"] = signals_run[s["id"]]
 
+    return registry
+
+
+# Ordine canonico delle chiavi per sezione. Le chiavi non elencate vengono
+# accodate in ordine di arrivo (nessuna perdita).
+_CANONICAL_ORDER: dict[str, tuple[str, ...]] = {
+    "datasets": (
+        "slug",
+        "name",
+        "description",
+        "source",
+        "source_id",
+        "period",
+        "years",
+        "tags",
+        "category",
+        "columns",
+        "location",
+        "stage",
+        "registry_source",
+        "mart_refs",
+        "run",
+    ),
+    "marts": (
+        "slug",
+        "dataset",
+        "table",
+        "description",
+        "primary_key",
+        "required_columns",
+        "min_rows",
+        "run",
+        "location",
+    ),
+    "signals": (
+        "id",
+        "source_id",
+        "status",
+        "label",
+        "detail",
+        "action",
+        "years",
+        "run",
+    ),
+}
+
+
+def _canonicalize_entry(entry: dict[str, Any], order: tuple[str, ...]) -> dict[str, Any]:
+    """Riordina le chiavi di una entry secondo l'ordine canonico di sezione.
+
+    Chiavi note → ordine canonico; chiavi extra → accodate in ordine di
+    arrivo (preservate, niente perdite).
+    """
+    out: dict[str, Any] = {}
+    for key in order:
+        if key in entry:
+            out[key] = entry[key]
+    for key, value in entry.items():
+        if key not in out:
+            out[key] = value
+    return out
+
+
+def _canonicalize_registry(registry: dict[str, Any]) -> dict[str, Any]:
+    """Applica l'ordine chiavi canonico a tutte le entry delle sezioni."""
+    for section, order in _CANONICAL_ORDER.items():
+        entries = registry.get(section)
+        if isinstance(entries, list):
+            registry[section] = [_canonicalize_entry(e, order) for e in entries]
     return registry
 
 

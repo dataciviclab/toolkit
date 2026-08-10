@@ -1,3 +1,13 @@
+## [1.49.3] - 2026-08-10
+
+### Fixed
+
+- **clean read default mode** (PR #467): `CleanReadConfig.mode` default tornato a `None` (→ `latest`), non `explicit`. Il refactor dataclass (#435) aveva impostato `mode='explicit'` + `include=[]` → ogni candidate senza `read.mode` esplicito falliva con `No CLEAN input files matched clean.read.include: []`.
+
+### Refactored
+
+- **Fallback run centralizzato** (PR #466): `_merge_existing_runs` in `build_registry` ripopola i run mancanti (datasets/marts/signals) da existing in UN pass. Rimossi i fallback duplicati da `build_signals` (`existing_signals`) e `build_clean_catalog` (`old.run`) — `build_mart_catalog` ora coperto (i run dei mart non sparivano più in CI).
+
 ## [1.49.2] - 2026-08-10
 
 ### Fixed

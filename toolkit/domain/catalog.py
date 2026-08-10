@@ -332,7 +332,7 @@ def _gcs_files_from_registry(workspace: Path = WORKSPACE_ROOT) -> list[dict[str,
     if not workspace.is_dir():
         return files
     for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
-        payload, _is_legacy = load_repo_registry(repo_dir)
+        payload = load_repo_registry(repo_dir)
         if payload is None:
             continue
         # clean: datasets → location
@@ -413,9 +413,8 @@ def _scan_committed_catalogs(workspace: Path = WORKSPACE_ROOT) -> dict[str, dict
     """Scansiona i cataloghi semantici committati nei repo del workspace.
 
     Usa ``load_repo_registry`` (lo stesso reader del resolver GCS): legge il
-    ``registry.json`` unico dei repo migrati (fusion ADR) e il fallback
-    ``clean_catalog.json`` dei repo legacy. Ritorna ``{slug: entry semantica}``
-    con ``_repo`` (nome dir) aggiunto.
+    ``registry.json`` unico dei repo (fusion ADR). Ritorna ``{slug: entry
+    semantica}`` con ``_repo`` (nome dir) aggiunto.
 
     La semantica (columns con role/semantic_type, description, tags, period)
     vive nei registry generati dal registry builder e committati nei repo:
@@ -427,7 +426,7 @@ def _scan_committed_catalogs(workspace: Path = WORKSPACE_ROOT) -> dict[str, dict
     if not workspace.is_dir():
         return result
     for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
-        payload, _is_legacy = load_repo_registry(repo_dir)
+        payload = load_repo_registry(repo_dir)
         if payload is None:
             continue
         for ds in payload.get("datasets", []) or []:

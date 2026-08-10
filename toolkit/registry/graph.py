@@ -66,7 +66,7 @@ def load_workspace_graph(workspace: Path = WORKSPACE_ROOT) -> dict[str, Any]:
         return {"entities": {}, "bridges": [], "repos": []}
 
     for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
-        payload, _is_legacy = load_repo_registry(repo_dir)
+        payload = load_repo_registry(repo_dir)
         repo_entities, repo_bridges = _entity_section(payload)
         if not repo_entities and not repo_bridges:
             continue

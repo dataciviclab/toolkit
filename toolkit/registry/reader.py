@@ -4,10 +4,8 @@ Il registry builder (``toolkit.registry.builders``) genera e i repo committano
 il file unico ``{repo}/registry/registry.json`` (fusion ADR): sezioni
 ``datasets``, ``marts``, ``signals``, ``codelists``, ``entities``.
 
-Compatibilità: se il repo non ha ancora migrato (solo i vecchi
-clean_catalog/mart_catalog/pipeline_signals/codelists separati), il lettore
-cade sui file legacy. Esposizione all'agente (CLI e MCP) via
-``registry list`` / ``registry show <repo> <section>``.
+Esposizione all'agente (CLI e MCP) via ``registry list`` /
+``registry show <repo> <section>``.
 """
 
 from __future__ import annotations
@@ -18,19 +16,8 @@ from typing import Any
 
 from toolkit.core.paths import WORKSPACE_ROOT
 
-# Mappa: nome legacy → sezione del registry.json unico (per compatibilità).
-LEGACY_TO_SECTION = {
-    "clean_catalog": "datasets",
-    "mart_catalog": "marts",
-    "pipeline_signals": "signals",
-    "codelists": "codelists",
-    "entity_graph": "entities",
-}
-
 # Sezioni esposte (ordine stabile per list).
 SECTIONS = ("datasets", "marts", "signals", "codelists", "entities")
-
-EXCLUDED = (".schema.json", "README")
 
 
 def _section_count(section: str, payload: dict[str, Any]) -> int | None:
@@ -48,7 +35,7 @@ def _section_count(section: str, payload: dict[str, Any]) -> int | None:
     return None
 
 
-def _load_registry(repo_dir: Path) -> dict[str, Any] | None:
+def load_repo_registry(repo_dir: Path) -> dict[str, Any] | None:
     """Carica il registry unico del repo (registry.json), o None se assente."""
     path = repo_dir / "registry" / "registry.json"
     if not path.is_file():
@@ -59,88 +46,19 @@ def _load_registry(repo_dir: Path) -> dict[str, Any] | None:
         return None
 
 
-def _load_legacy(repo_dir: Path) -> tuple[dict[str, Any] | None, set[str]]:
-    """Fallback: carica i vecchi artifact separati come dict di sezioni.
-
-    Returns:
-        (payload sezioni, set delle sezioni effettivamente presenti nei file).
-    """
-    registry_dir = repo_dir / "registry"
-    if not registry_dir.is_dir():
-        return None, set()
-    payload: dict[str, Any] = {
-        "datasets": [],
-        "marts": [],
-        "signals": [],
-        "codelists": {},
-        "entities": {},
-    }
-    found_sections: set[str] = set()
-    legacy_files = {
-        "clean_catalog": "datasets",
-        "mart_catalog": "marts",
-        "pipeline_signals": "signals",
-        "codelists": "codelists",
-        "entity_graph": "entities",
-    }
-    for fname, section in legacy_files.items():
-        path = registry_dir / f"{fname}.json"
-        if not path.is_file():
-            continue
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
-        if section == "datasets":
-            payload["datasets"] = data.get("datasets", [])
-        elif section == "marts":
-            payload["marts"] = data.get("marts", [])
-        elif section == "signals":
-            payload["signals"] = data.get("signals", [])
-        elif section == "codelists":
-            payload["codelists"] = data.get("codelists", {})
-        elif section == "entities":
-            payload["entities"] = data
-        found_sections.add(section)
-    if not found_sections:
-        return None, set()
-    return payload, found_sections
-
-
 def _scan_repo(repo_dir: Path) -> list[dict[str, Any]]:
     """Artifact del repo: registry unico (con conteggi per sezione)."""
-    payload = _load_registry(repo_dir)
-    if payload is not None:
-        counts = {section: _section_count(section, payload) for section in SECTIONS}
-        return [
-            {
-                "name": "registry",
-                "size_bytes": (repo_dir / "registry" / "registry.json").stat().st_size,
-                "sections": counts,
-            }
-        ]
-
-    legacy, _sections = _load_legacy(repo_dir)
-    if legacy is not None:
-        counts = {section: _section_count(section, legacy) for section in SECTIONS}
-        return [{"name": "registry", "size_bytes": None, "sections": counts, "legacy": True}]
-
-    return []
-
-
-def load_repo_registry(repo_dir: Path) -> tuple[dict[str, Any] | None, bool]:
-    """Carica il registry di un repo: formato unico o fallback legacy.
-
-    Returns:
-        (payload sezioni, is_legacy). None se il repo non ha registry.
-    """
-    payload = _load_registry(repo_dir)
-    if payload is not None:
-        return payload, False
-    payload, _sections = _load_legacy(repo_dir)
-    if payload is not None:
-        return payload, True
-    return None, False
+    payload = load_repo_registry(repo_dir)
+    if payload is None:
+        return []
+    counts = {section: _section_count(section, payload) for section in SECTIONS}
+    return [
+        {
+            "name": "registry",
+            "size_bytes": (repo_dir / "registry" / "registry.json").stat().st_size,
+            "sections": counts,
+        }
+    ]
 
 
 def list_registries(workspace: Path = WORKSPACE_ROOT) -> dict[str, Any]:
@@ -174,7 +92,6 @@ def show_registry(
         repo: Nome dir del repo (es. ``eurostat``).
         artifact: Sezione da mostrare (``datasets``, ``marts``, ``signals``,
             ``codelists``, ``entities``) o ``registry`` (intero).
-            Accetta anche i nomi legacy (``clean_catalog`` → ``datasets``).
         slug: Se fornito, filtra l'entry (dataset slug, mart slug, signal id,
             codelist name).
 
@@ -182,10 +99,7 @@ def show_registry(
         FileNotFoundError: se il repo/section non esiste nel workspace.
     """
     repo_dir = workspace / repo
-    payload = _load_registry(repo_dir)
-    legacy_sections: set[str] = set()
-    if payload is None:
-        payload, legacy_sections = _load_legacy(repo_dir)
+    payload = load_repo_registry(repo_dir)
 
     if payload is None:
         raise FileNotFoundError(
@@ -193,32 +107,28 @@ def show_registry(
             f"(usa 'toolkit registry list' per i repo disponibili)"
         )
 
-    section = LEGACY_TO_SECTION.get(artifact, artifact)
     if artifact == "registry":
         return {
             "repo": repo,
             "artifact": "registry",
-            "legacy": bool(legacy_sections),
             "data": payload,
         }
-    if section not in SECTIONS:
+    if artifact not in SECTIONS:
         raise FileNotFoundError(
             f"Sezione '{artifact}' non valida (usa una di: registry, " + ", ".join(SECTIONS) + ")"
         )
-    if legacy_sections and section not in legacy_sections:
-        raise FileNotFoundError(f"Sezione '{section}' non presente nel registry di {repo} (legacy)")
-    data = payload.get(section)
+    data = payload.get(artifact)
     if data is None:
-        raise FileNotFoundError(f"Sezione '{section}' non presente nel registry di {repo}")
+        raise FileNotFoundError(f"Sezione '{artifact}' non presente nel registry di {repo}")
 
     if slug:
         return {
             "repo": repo,
-            "artifact": section,
+            "artifact": artifact,
             "slug": slug,
-            "entry": _filter_entry(section, data, slug),
+            "entry": _filter_entry(artifact, data, slug),
         }
-    return {"repo": repo, "artifact": section, "data": data}
+    return {"repo": repo, "artifact": artifact, "data": data}
 
 
 def _filter_entry(section: str, data: Any, slug: str) -> dict[str, Any]:

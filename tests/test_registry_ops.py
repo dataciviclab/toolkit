@@ -20,21 +20,16 @@ def mini_workspace(tmp_path: Path) -> Path:
     """Workspace con due repo: uno con registry, uno senza."""
     euro = tmp_path / "eurostat"
     (euro / "registry").mkdir(parents=True)
-    (euro / "registry" / "clean_catalog.json").write_text(
+    (euro / "registry" / "registry.json").write_text(
         json.dumps(
             {
                 "schema_version": 1,
                 "datasets": [{"slug": "eurostat_gdp_nuts3", "name": "GDP"}],
+                "signals": [{"id": "x"}, {"id": "y"}],
             }
         ),
         encoding="utf-8",
     )
-    (euro / "registry" / "pipeline_signals.json").write_text(
-        json.dumps({"schema_version": "1", "signals": [{"id": "x"}, {"id": "y"}]}),
-        encoding="utf-8",
-    )
-    # Schema: escluso dalla vista
-    (euro / "registry" / "clean_catalog.schema.json").write_text("{}", encoding="utf-8")
 
     (tmp_path / "no-registry-repo").mkdir()
     return tmp_path
@@ -42,7 +37,7 @@ def mini_workspace(tmp_path: Path) -> Path:
 
 @pytest.mark.contract
 def test_list_registries(mini_workspace: Path) -> None:
-    """Lista i repo con artifact, escludendo gli schemi (contract)."""
+    """Lista i repo con artifact (contract)."""
     data = list_registries(mini_workspace)
     assert data["total_repos"] == 1
     repo = data["repos"][0]
@@ -50,7 +45,6 @@ def test_list_registries(mini_workspace: Path) -> None:
     assert len(repo["artifacts"]) == 1
     reg = repo["artifacts"][0]
     assert reg["name"] == "registry"
-    # mini_workspace legacy: clean_catalog (1 ds) + pipeline_signals
     assert reg["sections"]["datasets"] == 1
     assert reg["sections"]["signals"] == 2
 

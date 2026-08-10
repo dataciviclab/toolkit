@@ -1,8 +1,8 @@
-"""toolkit registry — consulta gli artifact registry committati nel workspace.
+"""toolkit registry — consulta e genera gli artifact registry.
 
-Legge i cataloghi generati dal registry builder e committati nei repo
-(``{repo}/registry/*.json``): clean_catalog, mart_catalog, pipeline_signals,
-codelists. Cross-repo, senza riprogettare la discovery.
+Legge i registry.json committati nei repo (fusion ADR): sezioni datasets,
+marts, signals, codelists, entities. Cross-repo, senza riprogettare la
+discovery.
 
 Speculare al tool MCP toolkit_registry.
 """
@@ -26,8 +26,7 @@ def _print_list(data: dict[str, Any]) -> None:
             size_txt = f"  [{size // 1024} KB]" if size is not None else ""
             sections = art.get("sections") or {}
             counts = ", ".join(f"{k}: {v}" for k, v in sections.items() if v is not None)
-            legacy = " (legacy)" if art.get("legacy") else ""
-            typer.echo(f"    registry.json{size_txt}{legacy}  {counts}")
+            typer.echo(f"    registry.json{size_txt}  {counts}")
 
 
 def registry_list(json_output: bool = typer.Option(False, "--json", help="Output JSON")) -> None:

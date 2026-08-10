@@ -739,7 +739,7 @@ class TestSemanticFind:
 
 
 class TestScanCommittedCatalogs:
-    """Scan semantico cross-repo: registry.json unico + fallback legacy.
+    """Scan semantico cross-repo: registry.json unico (fusion ADR).
 
     Regressione fusion ADR: prima leggeva solo ``clean_catalog.json``, quindi
     i repo migrati a ``registry.json`` (eurostat, dcl-bologna) sparivano dal
@@ -747,8 +747,8 @@ class TestScanCommittedCatalogs:
     GCS).
     """
 
-    def test_reads_fusion_registry_and_legacy(self, tmp_path: "Any") -> None:
-        """Repo migrato (registry.json) e legacy (clean_catalog.json) indicizzati."""
+    def test_reads_fusion_registries(self, tmp_path: "Any") -> None:
+        """Repo multipli con registry.json indicizzati."""
         # Repo migrato: registry.json unico con sezione datasets
         migrato = tmp_path / "eurostat"
         (migrato / "registry").mkdir(parents=True)
@@ -771,13 +771,14 @@ class TestScanCommittedCatalogs:
             ),
             encoding="utf-8",
         )
-        # Repo legacy: solo clean_catalog.json
-        legacy = tmp_path / "dataset-incubator"
-        (legacy / "registry").mkdir(parents=True)
-        (legacy / "registry" / "clean_catalog.json").write_text(
+        # Secondo repo: registry.json con un altro dataset
+        di = tmp_path / "dataset-incubator"
+        (di / "registry").mkdir(parents=True)
+        (di / "registry" / "registry.json").write_text(
             json.dumps(
                 {
                     "schema_version": 1,
+                    "repo": "dataset-incubator",
                     "datasets": [
                         {
                             "slug": "anac_bandi_gara",

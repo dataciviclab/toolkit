@@ -354,7 +354,7 @@ def toolkit_sparql_query(
 @mcp.tool(
     description=(
         "Elenca gli artifact registry committati nei repo del workspace "
-        "(registry.json unico fusion, o fallback legacy clean_catalog/mart_catalog/...). "
+        "(registry.json unico fusion). "
         "Ogni repo con registry/ viene elencato con i suoi artifact, "
         "dimensione e conteggio entries per sezione "
         "(datasets, marts, signals, codelists, entities). "
@@ -370,8 +370,7 @@ def toolkit_registry_list() -> dict[str, Any]:
     description=(
         "Mostra un artifact registry committato di un repo del workspace "
         "(es. repo='eurostat', artifact='datasets'). Sezioni: datasets, marts, "
-        "signals, codelists, entities (o 'registry' per l'intero payload; "
-        "accetta anche i nomi legacy clean_catalog/mart_catalog/pipeline_signals/...). "
+        "signals, codelists, entities (o 'registry' per l'intero payload). "
         "Con slug filtra un'entry: dataset slug (datasets), mart slug in formato "
         "{dataset}__{mart} (marts), id (signals), codelist name (codelists). "
         "Il catalogo semantico contiene columns (role, semantic_type), "

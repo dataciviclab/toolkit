@@ -1,7 +1,7 @@
 """Test del grafo entità → dataset aggregato cross-repo.
 
 Fixture: mini-workspace con due repo, ognuno con la sezione entities nel
-registry (fusion e legacy).
+registry.json (fusion).
 
 Marker: contract (output pubblico del tool MCP toolkit_graph).
 """
@@ -18,57 +18,65 @@ from toolkit.registry.graph import DOMAIN_KEYWORDS, filter_graph, load_workspace
 
 @pytest.fixture
 def graph_workspace(tmp_path: Path) -> Path:
-    """Due repo con entities: DI (legacy entity_graph) + eurostat (fusion)."""
-    # DI legacy: entity_graph.json separato
+    """Due repo con entities: DI + eurostat (entrambi registry.json fusion)."""
+    # DI: registry.json unico con sezione entities
     di = tmp_path / "dataset-incubator" / "registry"
     di.mkdir(parents=True)
-    (di / "entity_graph.json").write_text(
+    (di / "registry.json").write_text(
         json.dumps(
             {
                 "schema_version": 1,
+                "repo": "dataset-incubator",
+                "datasets": [],
+                "marts": [],
+                "signals": [],
+                "codelists": {},
                 "entities": {
-                    "Comune": {
-                        "entity": "Comune",
-                        "label": "Comune (ISTAT)",
-                        "datasets": [
-                            {
-                                "slug": "irpef_comunale",
-                                "name": "Irpef Comunale",
-                                "column": "codice_istat_comune",
-                                "semantic_type": "municipality_code",
-                            }
-                        ],
-                        "types": {"municipality_code": 1},
-                    },
-                    "Gara": {
-                        "entity": "Gara",
-                        "label": "Gara / Appalto",
-                        "datasets": [
-                            {
-                                "slug": "anac_bandi_gara",
-                                "name": "Bandi ANAC",
-                                "column": "cig",
-                                "semantic_type": "cig_code",
-                            }
-                        ],
-                        "types": {"cig_code": 1},
-                    },
-                },
-                "bridges": [
-                    {
-                        "from": {
-                            "entity": "Gara",
-                            "dataset": "anac_aggiudicatari",
-                            "via": "cig_code",
-                        },
-                        "to": {
+                    "generated_from": "registry",
+                    "entities": {
+                        "Comune": {
                             "entity": "Comune",
-                            "bridge": "anac_bandi_gara",
-                            "on": "cig",
-                            "semantic_type": "municipality_code",
+                            "label": "Comune (ISTAT)",
+                            "datasets": [
+                                {
+                                    "slug": "irpef_comunale",
+                                    "name": "Irpef Comunale",
+                                    "column": "codice_istat_comune",
+                                    "semantic_type": "municipality_code",
+                                }
+                            ],
+                            "types": {"municipality_code": 1},
                         },
-                    }
-                ],
+                        "Gara": {
+                            "entity": "Gara",
+                            "label": "Gara / Appalto",
+                            "datasets": [
+                                {
+                                    "slug": "anac_bandi_gara",
+                                    "name": "Bandi ANAC",
+                                    "column": "cig",
+                                    "semantic_type": "cig_code",
+                                }
+                            ],
+                            "types": {"cig_code": 1},
+                        },
+                    },
+                    "bridges": [
+                        {
+                            "from": {
+                                "entity": "Gara",
+                                "dataset": "anac_aggiudicatari",
+                                "via": "cig_code",
+                            },
+                            "to": {
+                                "entity": "Comune",
+                                "bridge": "anac_bandi_gara",
+                                "on": "cig",
+                                "semantic_type": "municipality_code",
+                            },
+                        }
+                    ],
+                },
             }
         ),
         encoding="utf-8",

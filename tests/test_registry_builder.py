@@ -468,6 +468,107 @@ class TestRegistryExistingRun:
         assert sig["run"]["run_id"] == "20260101T000000Z_abc123"  # run locale
 
 
+class TestCanonicalize:
+    """Ordine chiavi deterministico nelle entry (diff post-merge puliti).
+
+    Le entry derivano da path diversi (builder, existing, run restore):
+    l'ordine di inserimento del dict cambiava a ogni rigenerazione → diff
+    rumorosi. _canonicalize_registry finalizza un ordine canonico per sezione;
+    le chiavi extra vengono accodate, mai perse.
+    """
+
+    def _build_with_existing(self, tmp_path: Path) -> dict:
+        from toolkit.registry.builders import build_registry
+
+        layout = _make_repo(tmp_path, with_run=True)
+        existing = {
+            "datasets": [
+                {"slug": "my_dataset", "run": {"run_id": "OLD", "year": 2025, "status": "SUCCESS"}}
+            ],
+            "marts": [
+                {
+                    "slug": "my_dataset__mart_trend",
+                    "dataset": "my_dataset",
+                    "table": "mart_trend",
+                    "run": {"run_id": "OLD_mart", "year": 2025, "status": "SUCCESS"},
+                }
+            ],
+        }
+        result = build_registry(
+            layout,
+            existing_catalog=existing,
+            existing_signals={"signals": [{"id": "my_dataset", "run": {"run_id": "OLD_sig"}}]},
+        )
+        return result["registry"]
+
+    @pytest.mark.contract
+    def test_mart_run_position_before_location(self, tmp_path: Path) -> None:
+        """Il run ripristinato da existing va prima di location (canonico)."""
+        reg = self._build_with_existing(tmp_path)
+        mart = next(m for m in reg["marts"] if m["slug"] == "my_dataset__mart_trend")
+        keys = list(mart.keys())
+        assert keys.index("run") < keys.index("location")
+        assert keys[:4] == ["slug", "dataset", "table", "description"]
+
+    @pytest.mark.contract
+    def test_dataset_canonical_order(self, tmp_path: Path) -> None:
+        reg = self._build_with_existing(tmp_path)
+        ds = next(d for d in reg["datasets"] if d["slug"] == "my_dataset")
+        keys = list(ds.keys())
+        canonical = [
+            "slug",
+            "name",
+            "description",
+            "source",
+            "source_id",
+            "period",
+            "years",
+            "tags",
+            "category",
+            "columns",
+            "location",
+            "stage",
+            "registry_source",
+            "mart_refs",
+            "run",
+        ]
+        assert keys == canonical
+
+    @pytest.mark.contract
+    def test_extra_keys_preserved_at_end(self, tmp_path: Path) -> None:
+        """Chiavi non previste dal canonico vengono accodate, non perse."""
+        from toolkit.registry.builders import _canonicalize_entry
+
+        entry = {"z_key": 1, "slug": "a", "a_key": 2}
+        out = _canonicalize_entry(entry, ("slug", "name"))
+        assert list(out.keys()) == ["slug", "z_key", "a_key"]
+        assert out["z_key"] == 1 and out["a_key"] == 2
+
+    @pytest.mark.contract
+    def test_deterministic_across_regenerations(self, tmp_path: Path) -> None:
+        """Due build con existing diverso producono lo stesso ordine chiavi."""
+        from toolkit.registry.builders import build_registry
+
+        layout = _make_repo(tmp_path, with_run=True)
+        e1 = {
+            "datasets": [
+                {"slug": "my_dataset", "run": {"run_id": "OLD", "year": 2025, "status": "SUCCESS"}}
+            ],
+            "marts": [],
+        }
+        e2 = {
+            "datasets": [
+                {"slug": "my_dataset", "run": {"run_id": "NEW", "year": 2026, "status": "SUCCESS"}}
+            ],
+            "marts": [],
+        }
+        r1 = build_registry(layout, existing_catalog=e1)["registry"]
+        r2 = build_registry(layout, existing_catalog=e2)["registry"]
+        ds1 = next(d for d in r1["datasets"] if d["slug"] == "my_dataset")
+        ds2 = next(d for d in r2["datasets"] if d["slug"] == "my_dataset")
+        assert list(ds1.keys()) == list(ds2.keys())
+
+
 class TestEntityGraph:
     """build_entity_graph: entità + bridge dal clean_catalog (5° artifact)."""
 

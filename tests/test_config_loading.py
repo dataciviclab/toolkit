@@ -695,3 +695,51 @@ def test_clean_read_default_mode_is_latest_when_undeclared(tmp_path: Path):
     read = cfg.clean.read
     assert read.mode is None  # default → _selection_params traduce in 'latest'
     assert read.include is None
+
+
+@pytest.mark.contract
+def test_di_candidate_real_config_loads_with_latest_default():
+    """Integrazione: un candidate DI reale si carica e il default read è latest.
+
+    Copia del config di dataset-incubator candidates/mit-incidentalita-
+    mensile-2001-2018 (read con columns esplicite, NESSUN mode/include).
+    Protegge il percorso che #435 rompeva: il refactor dataclass metteva
+    mode='explicit' + include=[] di default → 'No CLEAN input files matched
+    clean.read.include: []'. Il test sintetico in test_clean_read_default
+    *_latest copre il minimo; qui verifichiamo il candidate reale con
+    columns/config_only, che è il caso che ha colpito i run reali.
+    """
+    from pathlib import Path
+
+    from toolkit.clean.run import _selection_params
+
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "di_candidate_mit_incidentalita"
+        / "dataset.yml"
+    )
+    assert fixture.is_file(), f"fixture mancante: {fixture}"
+
+    cfg = load_config(fixture)
+    read = cfg.clean.read
+    # Il candidate reale non dichiara mode/include → default latest, non explicit.
+    assert read.mode is None
+    assert read.include is None
+    assert read.source == "config_only"
+    assert read.columns is not None and len(read.columns) == 15
+    assert read.header is False
+    assert read.skip == 1
+
+    # _selection_params (il punto dove #435 rompeva) traduce in 'latest'.
+    params = _selection_params(
+        {
+            "mode": read.mode,
+            "include": read.include,
+            "glob": read.glob,
+            "prefer_from_raw_run": read.prefer_from_raw_run,
+            "allow_ambiguous": read.allow_ambiguous,
+        },
+        logger=None,
+    )
+    assert params[0] == "latest"

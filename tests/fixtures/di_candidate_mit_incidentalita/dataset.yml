@@ -1,0 +1,70 @@
+root: "../../out"
+schema_version: 1
+
+dataset:
+  name: "mit_incidentalita_mensile"
+  source_id: "mit_opendata"
+  tags: [ambiente, mit, incidentalita]
+  category: ambiente
+  years: [2001]
+  time_coverage:
+    start_year: 2001
+    end_year: 2018
+
+raw:
+  sources:
+    - name: "mit_incidentalita_mensile_csv"
+      type: "http_file"
+      args:
+        url: "https://dati.mit.gov.it/catalog/dataset/f3336ae0-3a6b-4a25-9013-7df0c3750916/resource/121ad29a-1ec3-4f82-b93f-da65bed9e74e/download/incidenti-morti-feriti-ed-indicatori-dellincidentalita-stradale-per-mese-anni-2001-2018.csv"
+        filename: "mit_incidentalita_mensile_2001_2018.csv"
+      primary: true
+
+clean:
+  sql: "sql/clean.sql"
+  required_columns: [mese, anno]
+  read:
+    source: config_only
+    header: false
+    skip: 1
+    delim: ","
+    encoding: "utf-8"
+    null_padding: true
+    columns:
+      mese_raw: "VARCHAR"
+      anno_raw: "VARCHAR"
+      incidenti_raw: "VARCHAR"
+      morti_raw: "VARCHAR"
+      feriti_raw: "VARCHAR"
+      incidenti_mortali_raw: "VARCHAR"
+      perc_incidenti_raw: "VARCHAR"
+      perc_incidenti_mortali_raw: "VARCHAR"
+      perc_morti_raw: "VARCHAR"
+      perc_feriti_raw: "VARCHAR"
+      indice_mortalita_raw: "VARCHAR"
+      indice_gravita_raw: "VARCHAR"
+      indice_lesivita_raw: "VARCHAR"
+      indice_mortalita_spec_raw: "VARCHAR"
+      indice_incidentalita_spec_raw: "VARCHAR"
+  validate:
+    min_rows: 200
+    not_null:
+      - "mese"
+      - "anno"
+      - "incidenti"
+      - "morti"
+      - "feriti"
+
+mart:
+  tables:
+    - name: "mart_mensile"
+      sql: "sql/mart/mart_mensile.sql"
+  required_tables:
+    - "mart_mensile"
+  validate:
+    table_rules:
+      mart_mensile:
+        min_rows: 200
+
+validation:
+  fail_on_error: true

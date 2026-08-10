@@ -403,95 +403,69 @@ def test_codelists_empty_without_dir(tmp_path: Path) -> None:
     assert payload["codelists"] == {}
 
 
-class TestSignalsExisting:
-    """existing_signals: preserva i run storici quando il run locale manca."""
+class TestRegistryExistingRun:
+    """build_registry preserva i run storici da existing quando il run locale manca (CI).
 
-    @pytest.mark.contract
-    def test_preserves_run_from_existing_signals(self, tmp_path: Path) -> None:
-        """CI: nessun run record locale → il run viene dal signals committato."""
-        layout = _make_repo(tmp_path, with_run=False)
-        existing = {
-            "schema_version": "1",
-            "signals": [
-                {
-                    "id": "my_dataset",
-                    "status": "ok",
-                    "run": {"run_id": "20260101T000000Z_abc123", "year": 2025, "status": "SUCCESS"},
-                }
-            ],
-        }
-        payload, errors = build_signals(layout, existing_signals=existing)
-        assert errors == {"derive": [], "validation": []}
-        sig = payload["signals"][0]
-        assert sig["id"] == "my_dataset"
-        assert sig["status"] == "ok"  # struttura derivata dal manifest
-        assert sig["run"]["run_id"] == "20260101T000000Z_abc123"  # run preservato
-        assert sig["run"]["status"] == "SUCCESS"
+    Unico pass centralizzato (_merge_existing_runs) per datasets/marts/signals:
+    in CI post-merge i dataset non rieseguiti non hanno run record locali.
+    """
 
-    @pytest.mark.contract
-    def test_local_run_wins_over_existing(self, tmp_path: Path) -> None:
-        """Run locale presente → vince su existing_signals (non lo sovrascrive)."""
-        layout = _make_repo(tmp_path, with_run=True)
-        existing = {
-            "schema_version": "1",
-            "signals": [
-                {
-                    "id": "my_dataset",
-                    "run": {"run_id": "OLD_run", "year": 2025, "status": "FAILED"},
-                }
-            ],
-        }
-        payload, _errors = build_signals(layout, existing_signals=existing)
-        sig = payload["signals"][0]
-        assert sig["run"]["run_id"] == "20260101T000000Z_abc123"  # run locale, non OLD
+    def _build(self, tmp_path, with_run):
+        from toolkit.registry.builders import build_registry
 
-
-class TestCleanCatalogExistingRun:
-    """existing: preserva il blocco run quando il run locale manca (CI)."""
-
-    @pytest.mark.contract
-    def test_preserves_run_from_existing(self, tmp_path: Path) -> None:
-        """CI: nessun run record locale → il run viene dall'entry editoriale."""
-        from toolkit.registry.builders import build_clean_catalog
-
-        layout = _make_repo(tmp_path, with_run=False)
+        layout = _make_repo(tmp_path, with_run=with_run)
         existing = {
             "datasets": [
                 {
                     "slug": "my_dataset",
-                    "name": "My Dataset",
-                    "description": "desc",
-                    "period": {"start": 2024, "end": 2025},
-                    "columns": [],
-                    "location": {"type": "gcs", "path": "gs://x"},
-                    "run": {"run_id": "20260101T000000Z_abc123", "year": 2025, "status": "SUCCESS"},
+                    "run": {"run_id": "OLD_dataset", "year": 2025, "status": "SUCCESS"},
                 }
+            ],
+            "marts": [
+                {
+                    "slug": "my_dataset__mart_trend",
+                    "dataset": "my_dataset",
+                    "table": "mart_trend",
+                    "run": {"run_id": "OLD_mart", "year": 2025, "status": "SUCCESS"},
+                }
+            ],
+        }
+        existing_signals = {
+            "signals": [
+                {
+                    "id": "my_dataset",
+                    "run": {"run_id": "OLD_signal", "year": 2025, "status": "SUCCESS"},
+                },
             ]
         }
-        catalog, errors = build_clean_catalog(layout, existing=existing)
-        assert not errors["derive"], errors["derive"]
-        ds = next(d for d in catalog["datasets"] if d["slug"] == "my_dataset")
-        assert ds["run"]["run_id"] == "20260101T000000Z_abc123"  # run preservato
+        result = build_registry(
+            layout,
+            existing_catalog=existing,
+            existing_signals=existing_signals,
+        )
+        return result["registry"]
+
+    @pytest.mark.contract
+    def test_preserves_runs_when_local_missing(self, tmp_path: Path) -> None:
+        """CI: nessun run locale → i run vengono da existing (tutte le sezioni)."""
+        reg = self._build(tmp_path, with_run=False)
+        ds = next(d for d in reg["datasets"] if d["slug"] == "my_dataset")
+        assert ds["run"]["run_id"] == "OLD_dataset"
+        mart = next(m for m in reg["marts"] if m["slug"] == "my_dataset__mart_trend")
+        assert mart["run"]["run_id"] == "OLD_mart"
+        sig = next(s for s in reg["signals"] if s["id"] == "my_dataset")
+        assert sig["run"]["run_id"] == "OLD_signal"
 
     @pytest.mark.contract
     def test_local_run_wins_over_existing(self, tmp_path: Path) -> None:
         """Run locale presente → vince su existing (non lo sovrascrive)."""
-        from toolkit.registry.builders import build_clean_catalog
-
-        layout = _make_repo(tmp_path, with_run=True)
-        existing = {
-            "datasets": [
-                {
-                    "slug": "my_dataset",
-                    "columns": [],
-                    "location": {"type": "gcs", "path": "gs://x"},
-                    "run": {"run_id": "OLD_run", "year": 2025, "status": "FAILED"},
-                }
-            ]
-        }
-        catalog, _errors = build_clean_catalog(layout, existing=existing)
-        ds = next(d for d in catalog["datasets"] if d["slug"] == "my_dataset")
+        reg = self._build(tmp_path, with_run=True)
+        ds = next(d for d in reg["datasets"] if d["slug"] == "my_dataset")
         assert ds["run"]["run_id"] == "20260101T000000Z_abc123"  # run locale, non OLD
+        mart = next(m for m in reg["marts"] if m["slug"] == "my_dataset__mart_trend")
+        assert mart["run"]["run_id"] == "20260101T000000Z_abc123"  # run locale
+        sig = next(s for s in reg["signals"] if s["id"] == "my_dataset")
+        assert sig["run"]["run_id"] == "20260101T000000Z_abc123"  # run locale
 
 
 class TestEntityGraph:

@@ -661,3 +661,37 @@ def test_dataset_tags_and_category_with_source_id(tmp_path: Path):
     assert cfg.source_id == "test_source"
     assert cfg.tags == ["tag1", "tag2"]
     assert cfg.category == "test-category"
+
+
+@pytest.mark.contract
+def test_clean_read_default_mode_is_latest_when_undeclared(tmp_path: Path):
+    """Senza clean.read.mode/include, il default deve essere latest (non explicit).
+
+    Regressione: il refactor dataclass (#435) aveva default mode='explicit' +
+    include=[] → ogni candidate senza read.mode falliva con 'No CLEAN input
+    files matched clean.read.include: []'.
+    """
+    (tmp_path / "dataset.yml").write_text(
+        "root: './out'\n"
+        "schema_version: 1\n"
+        "dataset:\n"
+        "  name: 'demo'\n"
+        "  source_id: 'src'\n"
+        "  years: [2024]\n"
+        "raw:\n"
+        "  sources:\n"
+        "    - name: 'demo_source'\n"
+        "      type: 'http_file'\n"
+        "      args:\n"
+        "        url: 'https://example.com/x.csv'\n"
+        "        filename: 'x.csv'\n"
+        "clean:\n"
+        "  read:\n"
+        "    delim: ','\n"
+        "  sql: 'sql/clean.sql'\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(tmp_path / "dataset.yml")
+    read = cfg.clean.read
+    assert read.mode is None  # default → _selection_params traduce in 'latest'
+    assert read.include is None

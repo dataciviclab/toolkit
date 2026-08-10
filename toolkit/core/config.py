@@ -206,8 +206,8 @@ class MartValidationSpec:
 @dataclass
 class CleanReadConfig:
     source: str = "auto"
-    mode: str = "explicit"
-    include: list[str] = field(default_factory=list)
+    mode: str | None = None
+    include: list[str] | None = None
     glob: str = "*"
     prefer_from_raw_run: bool = True
     allow_ambiguous: bool = False

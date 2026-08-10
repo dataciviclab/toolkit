@@ -1,3 +1,13 @@
+## [1.49.2] - 2026-08-10
+
+### Fixed
+
+- **clean_catalog preserva il run storico dall'existing** (PR #465): il blocco `run` era derivato solo dal run record locale — in CI post-merge i dataset non rieseguiti perdevano il run a ogni rigenerazione (emerso dal dispatch su comuni-master). Ora, se il run locale manca, si preserva `existing[].run` (stesso pattern di `build_signals`); il run locale vince sempre.
+
+### Removed
+
+- **check-gcs** (PR #465): `derive_mode="check-gcs"`/`check_gcs` e `_check_gcs_locations` rimossi da `build_clean_catalog`/`build_registry` — segnale informativo non bloccante (derive=warning), nessun consumer lo usa, DI è passato a `gsutil rsync`.
+
 ## [1.49.0] - 2026-08-08
 
 ### Changed

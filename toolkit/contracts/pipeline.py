@@ -76,11 +76,15 @@ _SOURCE_TYPES: list[dict[str, Any]] = [
     },
     {
         "type": "sparql",
-        "description": "Esegue query SPARQL SELECT su endpoint pubblico.",
+        "description": "Esegue query SPARQL SELECT su endpoint pubblico. POST-first con fallback GET; paginazione OFFSET o keyset robusta (retry su errore E pagina vuota da throttle WAF, stop su pagina corta).",
         "args": {
             "endpoint": "URL dello SPARQL endpoint",
             "query": "Query SPARQL SELECT",
             "filename": "nome locale (opzionale)",
+            "accept_format": "'csv' (default) o 'sparql-results+json' (obbligatorio se l'endpoint rifiuta GROUP BY in CSV, es. dati.camera.it)",
+            "pages": "Numero massimo di pagine OFFSET (default 1 = nessuna paginazione). Endpoint con limite righe/query (es. 10k) richiedono pages > 1.",
+            "step": "Righe per pagina (default 10000)",
+            "pagination": "Config paginazione: {'mode': 'offset'} (default) oppure {'mode': 'keyset', 'key': '?var'} — keyset inietta FILTER(?var > last) invece di OFFSET: deterministico, compatibile con Virtuoso che rifiuta ORDER BY+OFFSET (SR353). La query keyset DEVE avere gia' ORDER BY ?var.",
         },
     },
 ]

@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 import time
 import urllib.parse
 from typing import Any
@@ -16,6 +17,8 @@ from typing import Any
 from lab_connectors.http import HttpClient
 
 from toolkit.core.exceptions import DownloadError
+
+log = logging.getLogger(__name__)
 
 
 class SparqlSource:
@@ -30,6 +33,8 @@ class SparqlSource:
         # Retry dedicati per le pagine successive (la prima ha retries in _do_fetch).
         # Un errore su una pagina NON è "fine dati": va ritentato e, se persiste,
         # propagato per far fallire il run invece di troncare silenziosamente.
+        # Lo stesso vale per una pagina VUOTA: i WAF sotto rate-limit servono
+        # 200 vuoti, che non vanno confusi con la fine reale della paginazione.
         self._page_retries = 3
         self._page_retry_delay = 5.0
 
@@ -192,6 +197,7 @@ class SparqlSource:
             raise DownloadError(
                 'pagination mode=keyset requires \'key\' (es. {"mode": "keyset", "key": "?deputato"})'
             )
+        assert keyset_key is None or isinstance(keyset_key, str)
 
         # Se e' richiesta paginazione, assicura che la query abbia LIMIT
         if pages > 1 or pagination_mode == "keyset":
@@ -214,6 +220,7 @@ class SparqlSource:
             return all_bytes, endpoint
 
         if pagination_mode == "keyset":
+            assert keyset_key is not None and isinstance(keyset_key, str)
             all_bytes = self._fetch_keyset_pages(
                 endpoint,
                 query,
@@ -232,10 +239,10 @@ class SparqlSource:
             else:
                 q = f"{q.rstrip().rstrip(';')} OFFSET {page * step}"
 
-            page_bytes = self._fetch_page_with_retry(endpoint, q, accept_format)
+            page_bytes = self._fetch_page_resilient(endpoint, q, accept_format)
 
-            # Se la pagina e' vuota (solo header, nessun dato), fermati —
-            # unica condizione legittima di fine dati.
+            # Se la pagina e' vuota (solo header, nessun dato) anche dopo i
+            # retry anti-throttle → fine reale della paginazione.
             data_start = page_bytes.find(b"\n")
             if data_start < 0 or len(page_bytes) <= data_start + 1:
                 break
@@ -276,6 +283,39 @@ class SparqlSource:
                     time.sleep(self._page_retry_delay)
         raise last_error  # type: ignore[misc]
 
+    def _fetch_page_resilient(
+        self,
+        endpoint: str,
+        q: str,
+        accept_format: str,
+    ) -> bytes:
+        """Fetch di una pagina con retry su pagina VUOTA (throttle WAF).
+
+        I WAF sotto rate-limit rispondono 200 vuoti (header-only CSV o
+        "no results" JSON) che NON vanno confusi con la fine reale della
+        paginazione. Ritenta con backoff prima di dichiarare la fine.
+        Restituisce bytes, possibilmente vuoti (= fine reale dopo i retry).
+        """
+        page_bytes = self._fetch_page_with_retry(endpoint, q, accept_format)
+        for attempt in range(self._page_retries):
+            if not self._is_empty_page(page_bytes):
+                return page_bytes
+            wait = self._page_retry_delay * (2**attempt)
+            log.warning(
+                "SPARQL pagina vuota su %s — probabile throttle, retry in %ds",
+                endpoint,
+                wait,
+            )
+            time.sleep(wait)
+            page_bytes = self._fetch_page_with_retry(endpoint, q, accept_format)
+        return page_bytes
+
+    @staticmethod
+    def _is_empty_page(page_bytes: bytes) -> bool:
+        """True se la pagina è vuota (solo header CSV, nessun dato)."""
+        data_start = page_bytes.find(b"\n")
+        return data_start < 0 or len(page_bytes) <= data_start + 1
+
     def _fetch_keyset_pages(
         self,
         endpoint: str,
@@ -310,11 +350,11 @@ class SparqlSource:
             else:
                 q = q + " " + filter_clause
 
-            page_bytes = self._fetch_page_with_retry(endpoint, q, accept_format)
+            page_bytes = self._fetch_page_resilient(endpoint, q, accept_format)
 
             data_start = page_bytes.find(b"\n")
             if data_start < 0 or len(page_bytes) <= data_start + 1:
-                break  # pagina vuota = fine dati
+                break  # pagina vuota dopo i retry anti-throttle = fine dati
             # Pagina corta (< step) = ultima pagina: concatena e ferma
             if _csv_data_rows(page_bytes) < step:
                 all_bytes = all_bytes + page_bytes[data_start + 1 :]

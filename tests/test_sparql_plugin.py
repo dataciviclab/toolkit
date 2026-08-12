@@ -477,7 +477,8 @@ class TestSparqlPagination:
             assert "OFFSET 2" in query_body
 
     def test_pages_stops_when_page_empty(self):
-        """Se una pagina restituisce 0 righe (header vuoto), ci si ferma prima di pages totali."""
+        """Una pagina vuota viene ritentata (throttle WAF) e, se resta vuota,
+        la paginazione si ferma prima di pages totali."""
         call = [0]
 
         def side_effect(*a, **kw):
@@ -490,14 +491,16 @@ class TestSparqlPagination:
         with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
             mock_cls.return_value.post.side_effect = side_effect
             source = SparqlSource()
-            payload, _ = source.fetch(
-                "https://example.test/sparql",
-                "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
-                pages=5,
-                step=2,
-            )
-            # Pagina 0 ok (2 righe = piena), pagina 1 vuota → stop (2 chiamate)
-            assert mock_cls.return_value.post.call_count == 2
+            with patch("toolkit.plugins.sparql.time.sleep"):
+                payload, _ = source.fetch(
+                    "https://example.test/sparql",
+                    "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
+                    pages=5,
+                    step=2,
+                )
+            # Pagina 0 ok (2 righe = piena); pagina 1 vuota ritentata
+            # (_page_retries=3, qui senza dormire) → stop. 1 + 4 = 5 chiamate.
+            assert mock_cls.return_value.post.call_count == 5
 
     def test_pages_stops_when_page_short(self):
         """Una pagina con meno righe di step = ultima pagina: stop senza OFFSET oltre fine.
@@ -636,19 +639,55 @@ class TestSparqlPagination:
         with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
             mock_cls.return_value.post.side_effect = side_effect
             source = SparqlSource()
-            payload, _ = source.fetch(
-                "https://example.test/sparql",
-                "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 10",
-                pages=1,
-                step=2,
-                pagination={"mode": "keyset", "key": "?s"},
-            )
+            with patch("toolkit.plugins.sparql.time.sleep"):
+                payload, _ = source.fetch(
+                    "https://example.test/sparql",
+                    "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 10",
+                    pages=1,
+                    step=2,
+                    pagination={"mode": "keyset", "key": "?s"},
+                )
             # Pagina 2: FILTER con l'ultimo valore della colonna 's' (bar)
             assert "FILTER(?s > <bar>)" in queries[1], f"pagina 2: {queries[1]}"
             text = payload.decode()
             assert "foo" in text and "baz" in text and "qux" in text
-            # 3 chiamate: K1, K2, pagina vuota (stop)
-            assert len(queries) == 3
+            # 6 chiamate: K1, K2, pagina vuota ritentata 3 volte → stop
+            assert len(queries) == 6
+
+    def test_keyset_recovers_from_throttle_empty_page(self):
+        """Regressione anti-troncamento: una pagina vuota (throttle WAF) nel
+        keyset viene ritentata e, se il retry restituisce dati, si prosegue."""
+        queries: list[str] = []
+
+        def side_effect(*a, **kw):
+            q = a[1].get("query", "") if len(a) > 1 and isinstance(a[1], dict) else ""
+            queries.append(q)
+            if len(queries) == 1:
+                return _http_ok(text=self.CSV_K1, headers={"Content-Type": "text/csv"})
+            if len(queries) == 2:
+                # pagina vuota (throttle) al primo tentativo
+                return _http_ok(text="s,value\n", headers={"Content-Type": "text/csv"})
+            if len(queries) == 3:
+                # retry → dati
+                return _http_ok(text=self.CSV_K2, headers={"Content-Type": "text/csv"})
+            # ultima pagina corta → fine
+            return _http_ok(text=self.CSV_K3, headers={"Content-Type": "text/csv"})
+
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.side_effect = side_effect
+            source = SparqlSource()
+            with patch("toolkit.plugins.sparql.time.sleep"):
+                payload, _ = source.fetch(
+                    "https://example.test/sparql",
+                    "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 10",
+                    pages=1,
+                    step=2,
+                    pagination={"mode": "keyset", "key": "?s"},
+                )
+            text = payload.decode()
+            # La pagina 'throttlata' è stata recuperata dal retry
+            assert "baz" in text and "qux" in text
+            assert "foo" in text
 
     def test_keyset_stops_when_short_page(self):
         """Keyset: pagina corta (< step) = ultima, stop senza ulteriori fetch."""

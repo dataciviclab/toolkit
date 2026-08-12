@@ -18,6 +18,60 @@ from toolkit.raw.run import run_raw
 pytestmark = pytest.mark.policy
 
 
+def test_clean_propagates_duckdb_memory_limit(
+    project_example: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """memory_limit da duckdb.memory_limit arriva a safe_connect nel clean.
+
+    Prova del fuoco per la propagazione config → safe_connect (il parsing
+    è coperto altrove; qui la riga mancante in cmd_run farebbe fallire).
+    """
+    import toolkit.clean.sql_execute as sql_execute_mod
+
+    captured: dict = {}
+    real_safe_connect = sql_execute_mod.safe_connect
+
+    def _spy(*args, **kwargs):
+        captured["config"] = kwargs.get("config")
+        return real_safe_connect(*args, **kwargs)
+
+    monkeypatch.setattr(sql_execute_mod, "safe_connect", _spy)
+
+    _simplify_sql_project(project_example)
+    config_path = project_example / "dataset.yml"
+    with config_path.open("a", encoding="utf-8") as fh:
+        fh.write("\nduckdb:\n")
+        fh.write('  memory_limit: "4GB"\n')
+
+    monkeypatch.chdir(project_example)
+    cfg = load_config(config_path)
+    year = cfg.years[0]
+    logger = NoopLogger()
+
+    run_raw(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.raw,
+        logger,
+        base_dir=cfg.base_dir,
+        output_cfg=cfg.output,
+        clean_cfg=cfg.clean,
+    )
+    run_clean(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.clean,
+        logger,
+        base_dir=cfg.base_dir,
+        output_cfg=cfg.output,
+        memory_limit=cfg.duckdb.memory_limit if cfg.duckdb else None,
+    )
+
+    assert captured.get("config") == {"memory_limit": "4GB"}
+
+
 def _append_output_cfg(config_path: Path, *, artifacts: str) -> None:
     with config_path.open("a", encoding="utf-8") as fh:
         fh.write("\noutput:\n")

@@ -219,10 +219,6 @@ class DuckDBConfig:
             return None
         return DuckDBConfig(memory_limit=d.get("memory_limit"))
 
-    @property
-    def is_set(self) -> bool:
-        return self.memory_limit is not None
-
 
 @dataclass
 class CleanReadConfig:

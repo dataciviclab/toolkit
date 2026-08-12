@@ -50,9 +50,54 @@ def _mart_ok(manifest: DatasetManifest) -> bool:
     return False
 
 
+def _dedup_tags(tags: Iterable[str]) -> list[str]:
+    """Dedup dei tag preservando l'ordine (i dataset.yml possono duplicarli)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for tag in tags:
+        if tag and tag not in seen:
+            seen.add(tag)
+            out.append(tag)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # clean_catalog
 # ---------------------------------------------------------------------------
+
+
+# Chiavi valide per una entry dataset (registry snello): il builder le deriva
+# da dataset.yml/parquet, le entry editoriali preservate (senza parquet locale)
+# vengono filtrate su questi campi — le chiavi morte (run, years,
+# registry_source) non devono tornare dall'existing.
+_DATASET_ENTRY_FIELDS: tuple[str, ...] = (
+    "slug",
+    "name",
+    "description",
+    "source",
+    "source_id",
+    "period",
+    "tags",
+    "category",
+    "columns",
+    "location",
+    "stage",
+    "mart_refs",
+)
+
+
+def _slim_dataset_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    """Filtra una entry dataset (es. editoriale) sulle sole chiavi contratto.
+
+    Ricalcola anche ``role`` delle colonne con ``semantic_type`` → dimension:
+    l'existing storico può avere role sbagliati (es. ``year`` → metric) che il
+    builder deriva correttamente solo sulle entry con parquet locale.
+    """
+    slim = {k: v for k, v in entry.items() if k in _DATASET_ENTRY_FIELDS}
+    for col in slim.get("columns", []) or []:
+        if col.get("semantic_type") and col.get("role") != "dimension":
+            col["role"] = "dimension"
+    return slim
 
 
 def build_clean_catalog(
@@ -98,7 +143,7 @@ def build_clean_catalog(
             # Nessun parquet locale: possibile solo se l'entry è editoriale
             # (preservata) — altrimenti errore e skip.
             if manifest.slug in editorial:
-                datasets.append(editorial[manifest.slug])
+                datasets.append(_slim_dataset_entry(editorial[manifest.slug]))
                 continue
             derive_errors.append(
                 f"{manifest.slug}: nessun parquet clean locale "
@@ -119,17 +164,17 @@ def build_clean_catalog(
             "source": "",
             "source_id": manifest.source_id,
             "period": manifest.period or {"start": years_eff[0], "end": years_eff[-1]},
-            "years": years_eff,
-            "tags": list(manifest.tags),
+            "tags": _dedup_tags(manifest.tags),
             "category": manifest.category,
             "columns": columns,
             "location": contract.clean_location(manifest.slug, years_eff),
             "stage": "incubating",
-            "registry_source": "derive_auto",
         }
 
-        # Merge editoriale: i campi umani sovrascrivono; role/semantic_type
-        # delle colonne preservati se presenti.
+        # Merge editoriale: i campi umani sovrascrivono. role è SEMPRE
+        # derivato (semantic_type/type), mai dall'editoriale: l'existing
+        # storico può avere role sbagliati (es. year→metric) che bloccherebbero
+        # il fix. description e semantic_type restano editabili a mano.
         old = editorial.get(manifest.slug)
         if old:
             for field in ("name", "description", "source", "source_id", "stage", "period"):
@@ -141,8 +186,6 @@ def build_clean_catalog(
                 if oc:
                     if oc.get("description"):
                         col["description"] = oc["description"]
-                    if oc.get("role"):
-                        col["role"] = oc["role"]
                     if oc.get("semantic_type"):
                         col["semantic_type"] = oc["semantic_type"]
 
@@ -152,19 +195,13 @@ def build_clean_catalog(
                 f"{manifest.slug}__{t.get('name')}" for t in manifest.mart_tables if t.get("name")
             ]
 
-        # Blocco run (ultimo run record del toolkit). Il fallback sull'existing
-        # è centralizzato in _merge_existing_runs (build_registry).
-        run_rec = latest_run_record(str(manifest.yml_path))
-        if run_block(run_rec):
-            entry["run"] = run_block(run_rec)
-
         datasets.append(entry)
 
     # Preserva entry editoriali senza parquet locale né derive (es. adottati)
     derived_slugs = {d["slug"] for d in datasets}
     for ds_slug, ds in editorial.items():
         if ds_slug not in derived_slugs:
-            datasets.append(ds)
+            datasets.append(_slim_dataset_entry(ds))
 
     catalog: dict[str, Any] = {
         "schema_version": 1,
@@ -198,33 +235,19 @@ def build_mart_catalog(
     contract = path_contract or PathContract()
     marts: list[dict[str, Any]] = []
     derive_errors: list[str] = []
-    runs_cache: dict[str, dict[str, Any]] = {}
 
     for manifest in iter_manifests(layout):
         if slug and manifest.slug != slug:
             continue
-        run_rec = latest_run_record(str(manifest.yml_path))
-        if manifest.slug not in runs_cache:
-            runs_cache[manifest.slug] = run_block(run_rec) or {}
         for table in manifest.mart_tables:
             name = table.get("name")
             if not name:
                 continue
-            rule = manifest.mart_rules.get(name, {})
             entry: dict[str, Any] = {
                 "slug": f"{manifest.slug}__{name}",
                 "dataset": manifest.slug,
                 "table": name,
-                "description": f"{manifest.slug} — mart {name}",
             }
-            if rule.get("primary_key"):
-                entry["primary_key"] = list(rule["primary_key"])
-            if rule.get("required_columns"):
-                entry["required_columns"] = list(rule["required_columns"])
-            if rule.get("min_rows") is not None:
-                entry["min_rows"] = rule["min_rows"]
-            if runs_cache[manifest.slug]:
-                entry["run"] = runs_cache[manifest.slug]
             # Tabella con years esplicite = multi-anno: il runner la scrive
             # flat (data/mart/{dataset}/{table}.parquet, no dir anno) → la
             # location pubblicata deve essere flat. Tabella per-anno → year.
@@ -308,8 +331,6 @@ def build_signals(
             "detail": detail,
             "action": action,
         }
-        if manifest.years:
-            signal["years"] = list(manifest.years)
         run_rec = latest_run_record(str(manifest.yml_path))
         if run_block(run_rec):
             signal["run"] = run_block(run_rec)
@@ -348,85 +369,43 @@ def _years_label(years: Iterable[int]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# codelists (valori delle dimensioni)
+# codelists (nomi delle dimensioni)
 # ---------------------------------------------------------------------------
-
-
-def _read_codelist_csv(path: Path) -> list[dict[str, Any]]:
-    """Legge un codelist CSV (header, prima riga) in lista di dict.
-
-    Preserva tutte le colonne (es. geo.csv: code, label_en, nuts_level,
-    parent_code). Righe vuote ignorate.
-    """
-    import csv
-
-    rows: list[dict[str, Any]] = []
-    with path.open(encoding="utf-8", newline="") as fh:
-        for row in csv.DictReader(fh):
-            if not row or not any((v or "").strip() for v in row.values()):
-                continue
-            cleaned = {k.strip(): (v or "").strip() for k, v in row.items()}
-            rows.append(cleaned)
-    return rows
-
-
-# Soglia righe per embedding nel JSON: oltre, il codelist è dichiarato in
-# ``large`` (il MCP lo legge dal CSV del repo, come faceva eurostat-mcp).
-MAX_CODELIST_ROWS = 1000
 
 
 def build_codelists(
     layout: RepoLayout,
     codelists_dir: Path | None = None,
 ) -> tuple[dict[str, Any], dict[str, list[str]]]:
-    """Costruisce codelists.json: i valori delle dimensioni del repo.
+    """Costruisce la sezione codelists del registry: i NOMI dei codelist.
 
     Legge ``{repo_root}/codelists/*.csv`` (convenzione eurostat: geo.csv,
-    units.csv, freq.csv, ...). I codelist piccoli (<= MAX_CODELIST_ROWS righe)
-    sono embedded come mappa ``nome → [righe]``; i grandi (es. geo, c_resid)
-    sono elencati in ``large`` — il consumatore li legge dal CSV del repo
-    (pattern del vecchio eurostat-mcp: embedded per i piccoli, file per i
-    grandi). Permette all'agente MCP di risolvere i codici (es. unit='EUR_HAB',
-    geo='ITC4' con parent_code) prima di scrivere le query.
+    units.csv, freq.csv, ...) e pubblica solo i nomi come lista. Il contenuto
+    (le righe) NON è embeddato: è letto dal CSV del repo dal consumer on-demand
+    (pattern eurostat-mcp). Embeddare le righe rendeva il registry enorme
+    (es. eurostat: codelists = 60% del file) senza che alcun consumer leggesse
+    i valori dal registry.
 
     Returns:
         Tuple (payload, errors) con errors = {"derive": [], "validation": [...]}.
-        Se la dir codelists non esiste, ritorna un payload vuoto senza errori
+        Se la dir codelists non esiste, ritorna una lista vuota senza errori
         (codelists è opzionale).
     """
     codelists_dir = codelists_dir or (layout.repo_root / "codelists")
-    codelists: dict[str, Any] = {}
-    large: list[str] = []
-    errors: list[str] = []
 
     if not codelists_dir.is_dir():
         return (
-            {"schema_version": 1, "source_repo": layout.source_repo, "codelists": {}},
+            {"schema_version": 1, "source_repo": layout.source_repo, "codelists": []},
             {"derive": [], "validation": []},
         )
 
-    for csv_path in sorted(codelists_dir.glob("*.csv")):
-        name = csv_path.stem
-        try:
-            rows = _read_codelist_csv(csv_path)
-        except Exception as exc:
-            errors.append(f"codelist {name}: {exc}")
-            continue
-        if not rows:
-            continue
-        if len(rows) > MAX_CODELIST_ROWS:
-            large.append(name)
-        else:
-            codelists[name] = rows
-
+    names = sorted(p.stem for p in codelists_dir.glob("*.csv"))
     payload: dict[str, Any] = {
         "schema_version": 1,
         "source_repo": layout.source_repo,
         "updated_at": str(datetime.now(UTC).date()),
-        "codelists": codelists,
+        "codelists": names,
     }
-    if large:
-        payload["large"] = sorted(large)
     return payload, {"derive": [], "validation": []}
 
 
@@ -478,20 +457,18 @@ def build_registry(
         "datasets": catalog.get("datasets", []),
         "marts": marts.get("marts", []),
         "signals": signals.get("signals", []),
-        "codelists": {k: v for k, v in codelists.items() if k != "schema_version"},
-        "entities": {k: v for k, v in graph.items() if k != "schema_version"},
-        "summary": {
-            "datasets": len(catalog.get("datasets", [])),
-            "marts": len(marts.get("marts", [])),
-            "signals": len(signals.get("signals", [])),
+        "codelists": codelists.get("codelists", []),
+        "entities": {
+            "entities": graph.get("entities", {}),
+            "bridges": graph.get("bridges", []),
         },
     }
 
-    # Preserva i run storici: in CI post-merge i dataset non rieseguiti non
-    # hanno run record locali, quindi i blocco run sparirebbero a ogni
-    # rigenerazione. Un UNICO pass centralizzato (dopo la costruzione delle
-    # sezioni) ripopola i run mancanti da existing — niente fallback duplicati
-    # nei singoli builder.
+    # Preserva i run storici dei signals: in CI post-merge i dataset non
+    # rieseguiti non hanno run record locali, quindi il blocco run sparirebbe
+    # a ogni rigenerazione. Un UNICO pass centralizzato (dopo la costruzione
+    # delle sezioni) ripopola i run mancanti da existing — niente fallback
+    # duplicati nei singoli builder.
     registry = _merge_existing_runs(
         registry,
         existing_catalog=existing_catalog,
@@ -522,47 +499,25 @@ def _merge_existing_runs(
     existing_catalog: dict[str, Any] | None = None,
     existing_signals: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Ripopola i blocco ``run`` mancanti dall'existing registry (CI).
+    """Ripopola i blocco ``run`` mancanti dei signals dall'existing (CI).
 
     Quando il run record locale manca (post-merge: i dataset non rieseguiti
-    non sono nel runner), le entry derivate non hanno ``run``. L'existing
+    non sono nel runner), i signals derivati non hanno ``run``. L'existing
     (registry.json committato) preserva lo storico.
 
-    Chiavi:
-    - datasets: ``slug``
-    - marts: ``dataset`` (il run è per dataset, non per tabella)
-    - signals: ``id`` (con prefisso ``compose:`` per i compose)
+    Solo i signals hanno il blocco ``run`` nel registry snello (datasets/marts
+    non lo portano più: nessun consumer lo legge). Il run locale vince sempre;
+    l'existing interviene solo dove manca.
 
-    Il run locale vince sempre; l'existing interviene solo dove manca.
+    Args:
+        existing_catalog: Conservato per retro-compatibilità della firma;
+            non più usato (datasets/marts non hanno run).
     """
-
-    def _index(
-        payload: dict | None, key: str, section: str = "datasets"
-    ) -> dict[str, dict[str, Any]]:
-        idx: dict[str, dict[str, Any]] = {}
-        if not payload:
-            return idx
-        for entry in payload.get(section, []) or []:
-            run = entry.get("run")
-            if run and entry.get(key):
-                idx[entry[key]] = run
-        return idx
-
-    datasets_run = _index(existing_catalog, "slug")
-    marts_run = _index(existing_catalog, "dataset", section="marts")
     signals_run: dict[str, dict[str, Any]] = {}
     if existing_signals:
         for s in existing_signals.get("signals", []) or []:
             if s.get("run") and s.get("id"):
                 signals_run[s["id"]] = s["run"]
-
-    for ds in registry.get("datasets", []) or []:
-        if "run" not in ds and ds.get("slug") in datasets_run:
-            ds["run"] = datasets_run[ds["slug"]]
-
-    for m in registry.get("marts", []) or []:
-        if "run" not in m and m.get("dataset") in marts_run:
-            m["run"] = marts_run[m["dataset"]]
 
     for s in registry.get("signals", []) or []:
         if "run" not in s and s.get("id") in signals_run:
@@ -581,25 +536,17 @@ _CANONICAL_ORDER: dict[str, tuple[str, ...]] = {
         "source",
         "source_id",
         "period",
-        "years",
         "tags",
         "category",
         "columns",
         "location",
         "stage",
-        "registry_source",
         "mart_refs",
-        "run",
     ),
     "marts": (
         "slug",
         "dataset",
         "table",
-        "description",
-        "primary_key",
-        "required_columns",
-        "min_rows",
-        "run",
         "location",
     ),
     "signals": (
@@ -609,7 +556,6 @@ _CANONICAL_ORDER: dict[str, tuple[str, ...]] = {
         "label",
         "detail",
         "action",
-        "years",
         "run",
     ),
 }
@@ -744,8 +690,6 @@ def build_entity_graph(
 
     return {
         "schema_version": 1,
-        "generated_from": "clean_catalog.json",
         "entities": {e: info for e, info in sorted(nodes.items())},
         "bridges": relations,
-        "summary": {"total_entities": len(nodes), "total_relations": len(relations)},
     }

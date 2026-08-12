@@ -65,12 +65,11 @@ def test_build_dry_run_reports_counts(tmp_path: Path) -> None:
 
 
 @pytest.mark.pure_unit
-def test_build_write_preserves_mart_runs(tmp_path: Path) -> None:
-    """Il comando scrive registry.json e preserva i run dei mart da existing.
+def test_build_write_keeps_registry_slim(tmp_path: Path) -> None:
+    """Il comando scrive registry.json snello: niente run su datasets/marts.
 
-    È il fix del bug #465: i wrapper legacy passavano existing_catalog senza
-    la sezione marts → i run dei mart sparivano a ogni rigenerazione CI.
-    with_run=False simula la CI (nessun run record locale → existing prevale).
+    Registry snello (ADR): il blocco run vive solo nei signals (usato dal
+    dashboard); datasets/marts non lo portano (nessun consumer lo legge).
     """
     _make_repo(tmp_path, with_run=False)
     out = tmp_path / "outreg"
@@ -81,7 +80,9 @@ def test_build_write_preserves_mart_runs(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.stdout + result.stderr
     payload = json.loads((out / "registry.json").read_text(encoding="utf-8"))
     mart = next(m for m in payload["marts"] if m["slug"] == "my_dataset__mart_trend")
-    assert mart["run"]["run_id"] == "OLD"
+    assert "run" not in mart  # registry snello: niente run sui marts
+    ds = next(d for d in payload["datasets"] if d["slug"] == "my_dataset")
+    assert "run" not in ds  # registry snello: niente run sui datasets
     assert payload["source_repo"] == "dataciviclab/toolkit" or payload["source_repo"]
 
 

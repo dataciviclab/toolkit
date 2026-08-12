@@ -100,7 +100,13 @@ def parquet_columns(
     parquet_path: Path | None,
     alias_map: dict[str, str] | None = None,
 ) -> list[dict[str, Any]] | None:
-    """Schema del parquet (via reader runtime) → colonne del catalogo."""
+    """Schema del parquet (via reader runtime) → colonne del catalogo.
+
+    ``role`` è derivato — mai dal tipo DuckDB da solo:
+    - colonna con ``semantic_type`` → dimension (i tipi semantici del
+      vocabolario sono tutti entity/dimension: codici, anni, id, ...);
+    - altrimenti dal tipo DuckDB (VARCHAR/DATE/BOOLEAN → dimension).
+    """
     if parquet_path is None:
         return None
     alias_map = alias_map or {}
@@ -116,14 +122,17 @@ def parquet_columns(
         col_name = str(row.get("name", ""))
         raw_type = str(row.get("type", "")).lower()
         bq_type = DUCKDB_TO_CATALOG.get(raw_type, "VARCHAR")
-        role = "dimension" if bq_type in _DIMENSION_TYPES else "metric"
+        semantic_type = _assign_semantic_type(col_name, alias_map)
+        if semantic_type:
+            role = "dimension"
+        else:
+            role = "dimension" if bq_type in _DIMENSION_TYPES else "metric"
         col_entry: dict[str, Any] = {
             "name": col_name,
             "type": bq_type,
             "role": role,
             "description": "",
         }
-        semantic_type = _assign_semantic_type(col_name, alias_map)
         if semantic_type:
             col_entry["semantic_type"] = semantic_type
         columns.append(col_entry)

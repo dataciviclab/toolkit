@@ -173,10 +173,10 @@ def registry_build(
         raise typer.Exit(code=1)
 
     registry = result["registry"]
-    s = registry["summary"]
     typer.echo(
-        f"registry.json — datasets {s['datasets']}, marts {s['marts']}, "
-        f"signals {s['signals']} (repo: {layout.source_repo})"
+        f"registry.json — datasets {len(registry['datasets'])}, "
+        f"marts {len(registry['marts'])}, "
+        f"signals {len(registry['signals'])} (repo: {layout.source_repo})"
     )
     if not write:
         typer.echo("Dry-run: usa --write per scrivere il file.")

@@ -29,7 +29,7 @@ def _section_count(section: str, payload: dict[str, Any]) -> int | None:
     if section == "signals":
         return len(payload.get("signals") or [])
     if section == "codelists":
-        return len(payload.get("codelists") or {})
+        return len(payload.get("codelists") or [])
     if section == "entities":
         return len((payload.get("entities") or {}).get("entities") or {})
     return None
@@ -150,10 +150,10 @@ def _filter_entry(section: str, data: Any, slug: str) -> dict[str, Any]:
             raise FileNotFoundError(f"Signal '{slug}' non presente in signals")
         return hit
     if section == "codelists":
-        entries = data or {}
+        entries = data or []
         if slug not in entries:
             raise FileNotFoundError(f"Codelist '{slug}' non presente in codelists")
-        return entries[slug]
+        return {"name": slug}
     if section == "entities":
         entities = (data or {}).get("entities") or {}
         if slug not in entities:

@@ -53,13 +53,16 @@ def _build_summary_sql(parquet: Path, dims: list[dict[str, Any]]) -> str:
 
 def _build_top_sql(parquet: Path, col_name: str, top_n: int) -> str:
     ident = q_ident(col_name)
+    # LIMIT top_n + 1: serve a rilevare se ci sono PIÙ valori oltre il limite
+    # (top_truncated). Con LIMIT top_n, una colonna con esattamente top_n
+    # valori distinti risulterebbe falsamente troncata.
     return (
         f"SELECT {ident} AS value, COUNT(*) AS n\n"
         f"FROM read_parquet('{sql_path(parquet)}')\n"
         f"WHERE {ident} IS NOT NULL\n"
         f"GROUP BY {ident}\n"
         f"ORDER BY n DESC, value\n"
-        f"LIMIT {int(top_n)}"
+        f"LIMIT {int(top_n) + 1}"
     )
 
 
@@ -119,11 +122,15 @@ def build_column_values_profile(
             entry["distinct_ratio"] = round(n_distinct / n_rows, 6) if n_rows else None
 
             rows = con.execute(_build_top_sql(parquet, name, top_n)).fetchall()
+            # La query ritorna fino a top_n + 1: oltre top_n c'è sicuramente
+            # troncamento (l'ultimo valore è l'overflow marker).
+            truncated = len(rows) > top_n
+            rows = rows[:top_n]
             top_values = [{"value": _json_safe_value(r[0]), "n": int(r[1])} for r in rows]
             for tv in top_values:
                 tv["pct"] = round(tv["n"] * 100.0 / n_rows, 2) if n_rows else None
             entry["top_values"] = top_values
-            entry["top_truncated"] = len(top_values) >= top_n
+            entry["top_truncated"] = truncated
 
             result["columns"][name] = entry
 

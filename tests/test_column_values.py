@@ -99,6 +99,19 @@ class TestColumnValuesProfile:
         assert len(profile["columns"]["regione"]["top_values"]) == 1
 
     @pytest.mark.contract
+    def test_top_not_truncated_when_exact_match(self, tmp_path: Path) -> None:
+        """Colonna con esattamente top_n valori distinti → NON troncata (edge case)."""
+        parquet = tmp_path / "clean.parquet"
+        _write_parquet(parquet)
+
+        # regione ha 2 valori distinti non-null (Lombardia, Piemonte): con
+        # top_n=2 il flag deve essere False (prima era falso positivo con >=).
+        profile = build_column_values_profile(parquet, _columns_fixture(), top_n=2)
+        regione = profile["columns"]["regione"]
+        assert regione["top_truncated"] is False
+        assert len(regione["top_values"]) == 2
+
+    @pytest.mark.contract
     def test_no_dimensions(self, tmp_path: Path) -> None:
         parquet = tmp_path / "clean.parquet"
         _write_parquet(parquet)

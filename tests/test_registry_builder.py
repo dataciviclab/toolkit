@@ -193,6 +193,59 @@ def test_clean_catalog_missing_parquet_reported(tmp_path: Path) -> None:
     assert catalog["datasets"] == []
 
 
+@pytest.mark.contract
+def test_clean_catalog_slims_editorial_entry_without_parquet(tmp_path: Path) -> None:
+    """Entry editoriale (no parquet locale) preservata MA filtrata dalle chiavi morte.
+
+    La path editoriale è l'unico percorso dove le chiavi legacy dell'existing
+    (run, years, registry_source) potrebbero rientrare nel registry: senza
+    parquet locale l'entry non passa dal builder derivato. Il filtro
+    (_slim_dataset_entry) deve comunque applicarsi, così come il fix role
+    (year → dimension).
+    """
+    layout = _make_repo(tmp_path)
+    import shutil
+
+    shutil.rmtree(layout.repo_root / "out" / "data" / "clean")
+
+    existing = {
+        "datasets": [
+            {
+                "slug": "my_dataset",
+                "name": "My Dataset",
+                "description": "Editoriale",
+                "source_id": "src1",
+                "period": {"start": 2020, "end": 2024},
+                "columns": [
+                    {"name": "anno", "type": "INTEGER", "role": "metric", "semantic_type": "year"},
+                    {"name": "importo", "type": "DOUBLE", "role": "metric"},
+                ],
+                "location": {"type": "gcs", "path": "gs://dataciviclab-clean/my_dataset/"},
+                "stage": "published",
+                # chiavi morte legacy: non devono tornare nel registry
+                "run": {"run_id": "OLD", "year": 2025, "status": "SUCCESS"},
+                "years": [2025],
+                "registry_source": "editorial",
+            }
+        ]
+    }
+
+    catalog, errors = build_clean_catalog(layout, existing=existing)
+    assert errors == {"derive": [], "validation": []}, f"errori inattesi: {errors}"
+    ds = catalog["datasets"][0]
+    assert ds["slug"] == "my_dataset"
+    # chiavi morte filtrate
+    assert "run" not in ds
+    assert "years" not in ds
+    assert "registry_source" not in ds
+    # campi editoriali preservati
+    assert ds["stage"] == "published"
+    assert ds["description"] == "Editoriale"
+    # role corretto anche sull'entry editoriale (year → dimension)
+    roles = {c["name"]: c["role"] for c in ds["columns"]}
+    assert roles == {"anno": "dimension", "importo": "metric"}
+
+
 # ---------------------------------------------------------------------------
 # mart_catalog
 # ---------------------------------------------------------------------------

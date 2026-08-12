@@ -469,11 +469,7 @@ def build_registry(
     # a ogni rigenerazione. Un UNICO pass centralizzato (dopo la costruzione
     # delle sezioni) ripopola i run mancanti da existing — niente fallback
     # duplicati nei singoli builder.
-    registry = _merge_existing_runs(
-        registry,
-        existing_catalog=existing_catalog,
-        existing_signals=existing_signals,
-    )
+    registry = _merge_existing_runs(registry, existing_signals=existing_signals)
 
     # Ordine chiavi deterministico: le entry derivano da path diversi
     # (builder, existing, run restore) e l'ordine di inserimento del dict
@@ -496,7 +492,6 @@ def build_registry(
 def _merge_existing_runs(
     registry: dict[str, Any],
     *,
-    existing_catalog: dict[str, Any] | None = None,
     existing_signals: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Ripopola i blocco ``run`` mancanti dei signals dall'existing (CI).
@@ -508,10 +503,6 @@ def _merge_existing_runs(
     Solo i signals hanno il blocco ``run`` nel registry snello (datasets/marts
     non lo portano più: nessun consumer lo legge). Il run locale vince sempre;
     l'existing interviene solo dove manca.
-
-    Args:
-        existing_catalog: Conservato per retro-compatibilità della firma;
-            non più usato (datasets/marts non hanno run).
     """
     signals_run: dict[str, dict[str, Any]] = {}
     if existing_signals:

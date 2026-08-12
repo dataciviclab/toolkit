@@ -18,6 +18,7 @@ I path relativi sono sempre risolti rispetto alla directory che contiene `datase
 | `config` | `object` | no | policy parser config |
 | `validation` | `object` | no | solo opzioni globali del validation gate |
 | `output` | `object` | no | policy artefatti |
+| `duckdb` | `object` | no | configurazione motore DuckDB (es. `memory_limit`) |
 
 ## dataset
 
@@ -455,6 +456,23 @@ Campi supportati:
 |---|---|---|
 | `output.artifacts` | `str` | `standard` (accettato ma ignorato) |
 | `output.legacy_aliases` | — | rimosso, non ha più effetto |
+
+## duckdb
+
+Configurazione del motore DuckDB per il dataset (opzionale). Il valore viene
+passato a `safe_connect` nel layer clean. Gerarchia: default lab `2GB` →
+`duckdb.memory_limit` (per-dataset) → env `DUCKDB_MEMORY_LIMIT` (per ambiente).
+
+| Campo | Tipo | Default |
+|---|---|---|
+| `duckdb.memory_limit` | `string` | `None` (default lab `2GB`) |
+
+Esempio — dataset con join pesanti nel clean (OOM con il default):
+
+```yaml
+duckdb:
+    memory_limit: "4GB"
+```
 
 ## Legacy supportato
 

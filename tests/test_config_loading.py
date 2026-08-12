@@ -75,6 +75,27 @@ def test_load_config_ok(tmp_path: Path):
     assert cfg.root_source == "base_dir_fallback"
 
 
+@pytest.mark.contract
+def test_load_config_parses_duckdb_memory_limit(tmp_path: Path):
+    """duckdb.memory_limit viene letto e default assente → None."""
+    yml = tmp_path / "dataset.yml"
+    _yml(yml, years=[2024], duckdb={"memory_limit": "4GB"})
+
+    cfg = load_config(yml)
+    assert cfg.duckdb is not None
+    assert cfg.duckdb.memory_limit == "4GB"
+
+
+@pytest.mark.contract
+def test_load_config_duckdb_defaults_to_none(tmp_path: Path):
+    """Senza blocco duckdb: nessun override (default lab 2GB)."""
+    yml = tmp_path / "dataset.yml"
+    _yml(yml, years=[2024])
+
+    cfg = load_config(yml)
+    assert cfg.duckdb is None
+
+
 @pytest.mark.policy
 def test_load_config_parses_mart_transition_config(tmp_path: Path):
     yml = tmp_path / "dataset.yml"

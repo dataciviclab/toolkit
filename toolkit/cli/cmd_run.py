@@ -317,6 +317,7 @@ def run_year(
             support_cfg=dump_cfg_section(cfg.support),
             smoke=sampling_active,
             raw_sources=raw_sources,
+            memory_limit=cfg.duckdb.memory_limit if cfg.duckdb else None,
         ):
             # CLEAN fallito: skip mart per evitare output stale
             layers_to_run = [layer for layer in layers_to_run if layer != "mart"]

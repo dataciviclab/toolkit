@@ -210,6 +210,7 @@ def run_clean(
     support_cfg: list[dict[str, Any]] | None = None,
     smoke: bool = False,
     raw_sources: list[dict[str, Any]] | None = None,
+    memory_limit: str | None = None,
 ):
     clean_cfg = ensure_dict(clean_cfg)
     output_cfg = ensure_dict(output_cfg)
@@ -270,6 +271,7 @@ def run_clean(
         read_mode=read_mode,
         logger=logger,
         sample_rows=sample_rows,
+        memory_limit=memory_limit,
     )
     output_profile = _normalize_output_profile(output_profile)
     output_bytes: int | None = output_path.stat().st_size if output_path.exists() else None

@@ -204,6 +204,23 @@ class MartValidationSpec:
 
 
 @dataclass
+class DuckDBConfig:
+    """Configurazione motore DuckDB per il dataset (blocco ``duckdb:``).
+
+    Es. ``duckdb.memory_limit: "4GB"`` per dataset con join pesanti
+    (il default lab è 2GB via safe_connect).
+    """
+
+    memory_limit: str | None = None
+
+    @staticmethod
+    def from_dict(d: dict | None) -> DuckDBConfig | None:
+        if not d:
+            return None
+        return DuckDBConfig(memory_limit=d.get("memory_limit"))
+
+
+@dataclass
 class CleanReadConfig:
     source: str = "auto"
     mode: str | None = None
@@ -521,6 +538,9 @@ class PipelineConfig:
     mart: MartConfig = field(default_factory=MartConfig)
     support: list[dict] = field(default_factory=list)
 
+    # DuckDB engine settings (blocco ``duckdb:`` opzionale nel dataset.yml)
+    duckdb: DuckDBConfig | None = field(default_factory=DuckDBConfig)
+
     # Global settings
     validation: dict = field(default_factory=lambda: {"fail_on_error": True, "mode": "strict"})
     output: dict = field(default_factory=lambda: {"artifacts": "standard"})
@@ -794,6 +814,7 @@ def load_config(
         clean=CleanConfig.from_dict(data.get("clean")),
         mart=MartConfig.from_dict(data.get("mart")),
         support=support_objects,
+        duckdb=DuckDBConfig.from_dict(data.get("duckdb")),
         validation=data.get("validation", {"fail_on_error": True, "mode": "strict"}),
         output=data.get("output", {"artifacts": "standard"}),
     )

@@ -61,6 +61,7 @@ def _run_sql(
     read_mode: str = "fallback",
     logger=None,
     sample_rows: int | None = None,
+    memory_limit: str | None = None,
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """Execute clean SQL against raw inputs and export result to Parquet.
 
@@ -70,10 +71,16 @@ def _run_sql(
     Standard toolkit macros (``normalize_italian_number``, ``decode_flag``,
     etc.) are automatically loaded at the start of the connection.
 
+    Args:
+        memory_limit: Override DuckDB memory_limit (es. "4GB") per dataset
+            con join pesanti (da ``duckdb.memory_limit`` del dataset.yml).
+            None = default lab (2GB o DUCKDB_MEMORY_LIMIT env).
+
     Returns:
         tuple of (source, params_used, output_profile)
     """
-    with safe_connect() as con:
+    duckdb_config = {"memory_limit": memory_limit} if memory_limit else None
+    with safe_connect(config=duckdb_config) as con:
         _load_standard_macros(con, logger)
         read_info = read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
         if sample_rows is not None:

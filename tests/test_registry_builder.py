@@ -164,9 +164,13 @@ def test_clean_catalog_contract(tmp_path: Path) -> None:
     assert ds["description"] == "Test dataset per il registry builder"  # da registry.description
     assert [c["name"] for c in ds["columns"]] == ["geo", "year", "value"]
     assert ds["mart_refs"] == ["my_dataset__mart_trend"]
-    assert ds["run"]["status"] == "SUCCESS"
-    assert ds["run"]["quality_score"] == {"raw": 100, "clean": 95, "mart": 100}
-    assert ds["run"]["output_bytes"] == {"raw": 6961784, "clean": 9757664}
+    # role derivato: year ha semantic_type → dimension (non metric)
+    roles = {c["name"]: c["role"] for c in ds["columns"]}
+    assert roles == {"geo": "dimension", "year": "dimension", "value": "metric"}
+    # blocco run NON presente (nessun consumer lo legge dai datasets)
+    assert "run" not in ds
+    assert "years" not in ds
+    assert "registry_source" not in ds
 
 
 @pytest.mark.policy
@@ -189,6 +193,59 @@ def test_clean_catalog_missing_parquet_reported(tmp_path: Path) -> None:
     assert catalog["datasets"] == []
 
 
+@pytest.mark.contract
+def test_clean_catalog_slims_editorial_entry_without_parquet(tmp_path: Path) -> None:
+    """Entry editoriale (no parquet locale) preservata MA filtrata dalle chiavi morte.
+
+    La path editoriale è l'unico percorso dove le chiavi legacy dell'existing
+    (run, years, registry_source) potrebbero rientrare nel registry: senza
+    parquet locale l'entry non passa dal builder derivato. Il filtro
+    (_slim_dataset_entry) deve comunque applicarsi, così come il fix role
+    (year → dimension).
+    """
+    layout = _make_repo(tmp_path)
+    import shutil
+
+    shutil.rmtree(layout.repo_root / "out" / "data" / "clean")
+
+    existing = {
+        "datasets": [
+            {
+                "slug": "my_dataset",
+                "name": "My Dataset",
+                "description": "Editoriale",
+                "source_id": "src1",
+                "period": {"start": 2020, "end": 2024},
+                "columns": [
+                    {"name": "anno", "type": "INTEGER", "role": "metric", "semantic_type": "year"},
+                    {"name": "importo", "type": "DOUBLE", "role": "metric"},
+                ],
+                "location": {"type": "gcs", "path": "gs://dataciviclab-clean/my_dataset/"},
+                "stage": "published",
+                # chiavi morte legacy: non devono tornare nel registry
+                "run": {"run_id": "OLD", "year": 2025, "status": "SUCCESS"},
+                "years": [2025],
+                "registry_source": "editorial",
+            }
+        ]
+    }
+
+    catalog, errors = build_clean_catalog(layout, existing=existing)
+    assert errors == {"derive": [], "validation": []}, f"errori inattesi: {errors}"
+    ds = catalog["datasets"][0]
+    assert ds["slug"] == "my_dataset"
+    # chiavi morte filtrate
+    assert "run" not in ds
+    assert "years" not in ds
+    assert "registry_source" not in ds
+    # campi editoriali preservati
+    assert ds["stage"] == "published"
+    assert ds["description"] == "Editoriale"
+    # role corretto anche sull'entry editoriale (year → dimension)
+    roles = {c["name"]: c["role"] for c in ds["columns"]}
+    assert roles == {"anno": "dimension", "importo": "metric"}
+
+
 # ---------------------------------------------------------------------------
 # mart_catalog
 # ---------------------------------------------------------------------------
@@ -205,10 +262,13 @@ def test_mart_catalog_contract(tmp_path: Path) -> None:
     mart = catalog["marts"][0]
     assert mart["slug"] == "my_dataset__mart_trend"
     assert mart["dataset"] == "my_dataset"
-    assert mart["primary_key"] == ["year", "geo"]
-    assert mart["required_columns"] == ["year", "geo", "value"]
-    assert mart["min_rows"] == 10
-    assert mart["run"]["status"] == "SUCCESS"
+    assert mart["table"] == "mart_trend"
+    # registry snello: niente run/description/validation rules (non consumati)
+    assert "run" not in mart
+    assert "description" not in mart
+    assert "primary_key" not in mart
+    assert "required_columns" not in mart
+    assert "min_rows" not in mart
 
 
 @pytest.mark.pure_unit
@@ -255,8 +315,9 @@ def test_signals_contract(tmp_path: Path) -> None:
     sig = payload["signals"][0]
     assert sig["id"] == "my_dataset"
     assert sig["status"] == "ok"
-    assert sig["years"] == [2024, 2025]
     assert sig["run"]["run_id"] == "20260101T000000Z_abc123"
+    # registry snello: years del signal rimosso (non consumato)
+    assert "years" not in sig
 
 
 @pytest.mark.policy
@@ -349,7 +410,7 @@ def test_registry_builder_imports() -> None:
 
 @pytest.mark.contract
 def test_codelists_contract(tmp_path: Path) -> None:
-    """codelists.json espone i valori delle dimensioni dal repo (contract)."""
+    """codelists espone i NOMI dei codelist del repo (contract)."""
     from toolkit.registry.builders import build_codelists
 
     layout = _make_repo(tmp_path)
@@ -366,48 +427,26 @@ def test_codelists_contract(tmp_path: Path) -> None:
 
     payload, errors = build_codelists(layout)
     assert errors == {"derive": [], "validation": []}, f"errori inattesi: {errors}"
-    assert payload["codelists"]["units"] == [
-        {"unit": "EUR_HAB", "label_en": "EUR per inhabitant"},
-        {"unit": "PPS_HAB", "label_en": "PPS per inhabitant"},
-    ]
-    assert payload["codelists"]["geo"] == [
-        {"code": "ITC4", "label_en": "Lombardia", "nuts_level": "3", "parent_code": "ITH"}
-    ]
-
-
-@pytest.mark.pure_unit
-def test_codelists_large_external(tmp_path: Path) -> None:
-    """Codelist oltre la soglia → dichiarato in large, non embedded (policy)."""
-    from toolkit.registry.builders import build_codelists, MAX_CODELIST_ROWS
-
-    layout = _make_repo(tmp_path)
-    cl_dir = tmp_path / "codelists"
-    cl_dir.mkdir()
-    rows = "".join(f"code{i},label{i}\n" for i in range(MAX_CODELIST_ROWS + 5))
-    (cl_dir / "big.csv").write_text("code,label_en\n" + rows, encoding="utf-8")
-
-    payload, errors = build_codelists(layout)
-    assert errors == {"derive": [], "validation": []}
-    assert "big" not in payload["codelists"]
-    assert payload["large"] == ["big"]
+    assert payload["codelists"] == ["geo", "units"]
 
 
 @pytest.mark.pure_unit
 def test_codelists_empty_without_dir(tmp_path: Path) -> None:
-    """Senza dir codelists → payload vuoto, nessun errore (opzionale)."""
+    """Senza dir codelists → lista vuota, nessun errore (opzionale)."""
     from toolkit.registry.builders import build_codelists
 
     layout = _make_repo(tmp_path)
     payload, errors = build_codelists(layout)
     assert errors == {"derive": [], "validation": []}
-    assert payload["codelists"] == {}
+    assert payload["codelists"] == []
 
 
 class TestRegistryExistingRun:
-    """build_registry preserva i run storici da existing quando il run locale manca (CI).
+    """build_registry preserva i run storici dei signals da existing (CI).
 
-    Unico pass centralizzato (_merge_existing_runs) per datasets/marts/signals:
-    in CI post-merge i dataset non rieseguiti non hanno run record locali.
+    Unico pass centralizzato (_merge_existing_runs) sui signals: in CI
+    post-merge i dataset non rieseguiti non hanno run record locali. I
+    datasets/marts nel registry snello non hanno run (nessun consumer).
     """
 
     def _build(self, tmp_path, with_run):
@@ -446,26 +485,22 @@ class TestRegistryExistingRun:
         return result["registry"]
 
     @pytest.mark.contract
-    def test_preserves_runs_when_local_missing(self, tmp_path: Path) -> None:
-        """CI: nessun run locale → i run vengono da existing (tutte le sezioni)."""
+    def test_preserves_signals_run_when_local_missing(self, tmp_path: Path) -> None:
+        """CI: nessun run locale → il run dei signals viene da existing."""
         reg = self._build(tmp_path, with_run=False)
         ds = next(d for d in reg["datasets"] if d["slug"] == "my_dataset")
-        assert ds["run"]["run_id"] == "OLD_dataset"
+        assert "run" not in ds  # datasets snello: nessun run
         mart = next(m for m in reg["marts"] if m["slug"] == "my_dataset__mart_trend")
-        assert mart["run"]["run_id"] == "OLD_mart"
+        assert "run" not in mart  # marts snello: nessun run
         sig = next(s for s in reg["signals"] if s["id"] == "my_dataset")
         assert sig["run"]["run_id"] == "OLD_signal"
 
     @pytest.mark.contract
-    def test_local_run_wins_over_existing(self, tmp_path: Path) -> None:
+    def test_local_signal_run_wins_over_existing(self, tmp_path: Path) -> None:
         """Run locale presente → vince su existing (non lo sovrascrive)."""
         reg = self._build(tmp_path, with_run=True)
-        ds = next(d for d in reg["datasets"] if d["slug"] == "my_dataset")
-        assert ds["run"]["run_id"] == "20260101T000000Z_abc123"  # run locale, non OLD
-        mart = next(m for m in reg["marts"] if m["slug"] == "my_dataset__mart_trend")
-        assert mart["run"]["run_id"] == "20260101T000000Z_abc123"  # run locale
         sig = next(s for s in reg["signals"] if s["id"] == "my_dataset")
-        assert sig["run"]["run_id"] == "20260101T000000Z_abc123"  # run locale
+        assert sig["run"]["run_id"] == "20260101T000000Z_abc123"  # run locale, non OLD
 
 
 class TestCanonicalize:
@@ -502,13 +537,11 @@ class TestCanonicalize:
         return result["registry"]
 
     @pytest.mark.contract
-    def test_mart_run_position_before_location(self, tmp_path: Path) -> None:
-        """Il run ripristinato da existing va prima di location (canonico)."""
+    def test_mart_canonical_order(self, tmp_path: Path) -> None:
+        """Ordine canonico mart: slug, dataset, table, location."""
         reg = self._build_with_existing(tmp_path)
         mart = next(m for m in reg["marts"] if m["slug"] == "my_dataset__mart_trend")
-        keys = list(mart.keys())
-        assert keys.index("run") < keys.index("location")
-        assert keys[:4] == ["slug", "dataset", "table", "description"]
+        assert list(mart.keys()) == ["slug", "dataset", "table", "location"]
 
     @pytest.mark.contract
     def test_dataset_canonical_order(self, tmp_path: Path) -> None:
@@ -522,15 +555,12 @@ class TestCanonicalize:
             "source",
             "source_id",
             "period",
-            "years",
             "tags",
             "category",
             "columns",
             "location",
             "stage",
-            "registry_source",
             "mart_refs",
-            "run",
         ]
         assert keys == canonical
 
@@ -611,7 +641,6 @@ class TestEntityGraph:
         }
         graph = build_entity_graph(catalog)
 
-        assert graph["summary"]["total_entities"] >= 2
         entities = graph["entities"]
         assert "Gara" in entities  # cig_code → entity Gara
         assert "Comune" in entities  # municipality_code → entity Comune
@@ -622,6 +651,9 @@ class TestEntityGraph:
             for b in bridges
         )
         assert graph["schema_version"] == 1
+        # registry snello: niente summary/generated_from (non consumati)
+        assert "summary" not in graph
+        assert "generated_from" not in graph
 
 
 # ---------------------------------------------------------------------------

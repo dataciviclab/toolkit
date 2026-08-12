@@ -90,5 +90,5 @@ def test_section_count_pure() -> None:
     assert _section_count("datasets", {"datasets": [1, 2]}) == 2
     assert _section_count("marts", {"marts": [1]}) == 1
     assert _section_count("signals", {"signals": [1, 2, 3]}) == 3
-    assert _section_count("codelists", {"codelists": {"geo": [], "units": []}}) == 2
+    assert _section_count("codelists", {"codelists": ["geo", "units"]}) == 2
     assert _section_count("entities", {"entities": {"entities": {}}}) == 0

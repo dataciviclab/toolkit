@@ -817,6 +817,7 @@ class CatalogResolver:
         layer: str = "clean",
         year: int | None = None,
         source: str = "all",
+        profile: bool = False,
     ) -> dict[str, Any]:
         """Schema DuckDB + row count per slug.
 
@@ -825,6 +826,8 @@ class CatalogResolver:
             layer: ``"clean"`` (default) o ``"mart"``.
             year: Anno specifico o ``None`` (ultimo disponibile).
             source: ``"gcs"``, ``"workspace"``, ``"all"`` (default).
+            profile: Se True, profila i valori delle colonne dimensionali
+                (cardinalità, null, top-N) — on-demand, off di default.
 
         Raises:
             FileNotFoundError: se slug non trovato nella source richiesta.
@@ -875,6 +878,14 @@ class CatalogResolver:
                         if sc.get("description"):
                             col["description"] = sc["description"]
                 result["_repo"] = sem.get("_repo")
+            # Profilo valori delle colonne dimensionali (on-demand).
+            # Usa le colonne arricchite (role/semantic_type dal catalogo):
+            # il role è la base per decidere cosa profila.
+            if profile:
+                from toolkit.domain.column_values import build_column_values_profile
+
+                profile_data = build_column_values_profile(parquet_path, result.get("columns", []))
+                result["values"] = profile_data
             return result
         except Exception as exc:
             raise RuntimeError(

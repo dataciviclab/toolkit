@@ -46,19 +46,11 @@
       "description": "Health check operativo (ex pipeline_signals.signals)."
     },
     "codelists": {
-      "type": "object",
-      "properties": {
-        "large": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "codelists": {
-          "type": "object"
-        }
+      "type": "array",
+      "items": {
+        "type": "string"
       },
-      "description": "Valori delle dimensioni (ex codelists.json)."
+      "description": "Nomi dei codelist del repo (contenuto letto dal CSV in repo, non embeddato)."
     },
     "entities": {
       "type": "object",
@@ -68,26 +60,9 @@
         },
         "bridges": {
           "type": "array"
-        },
-        "summary": {
-          "type": "object"
         }
       },
       "description": "Grafo entità → dataset (ex entity_graph)."
-    },
-    "summary": {
-      "type": "object",
-      "properties": {
-        "datasets": {
-          "type": "integer"
-        },
-        "marts": {
-          "type": "integer"
-        },
-        "signals": {
-          "type": "integer"
-        }
-      }
     }
   },
   "additionalProperties": true,
@@ -140,10 +115,6 @@
           ],
           "description": "incubating = parquet su GCS ma non in DE; published = ha pagina su data-explorer; deprecated = non piu' mantenuto"
         },
-        "registry_source": {
-          "type": "string",
-          "description": "Origine dell'entry: derive_auto (dal builder) o editorial (mantenuta a mano)."
-        },
         "period": {
           "type": "object",
           "required": [
@@ -161,23 +132,12 @@
           "additionalProperties": false,
           "description": "Copertura temporale dei dati (da time_coverage del dataset.yml)."
         },
-        "years": {
-          "type": "array",
-          "items": {
-            "type": "integer"
-          },
-          "description": "Anni eseguiti dal run (da years del dataset.yml). Opzionale, distinto da period."
-        },
         "mart_refs": {
           "type": "array",
           "items": {
             "type": "string"
           },
           "description": "Slug mart appartenenti al dataset, convention {dataset}__{mart} (vedi mart_catalog.schema.json). Opzionale."
-        },
-        "run": {
-          "$ref": "#/$defs/run",
-          "description": "Ultimo run record del toolkit (fonte canonica: run.schema.json). Opzionale — per la diagnostica dettagliata vedi pipeline_signals.json."
         },
         "columns": {
           "type": "array",
@@ -365,10 +325,6 @@
             "$ref": "#/$defs/column"
           },
           "description": "Schema colonne reale (dal parquet locale in derive_mode=local). Opzionale in v1."
-        },
-        "run": {
-          "$ref": "#/$defs/run",
-          "description": "Ultimo run record del toolkit per il layer mart. Opzionale."
         }
       },
       "additionalProperties": true
@@ -402,12 +358,6 @@
         },
         "action": {
           "type": "string"
-        },
-        "years": {
-          "type": "array",
-          "items": {
-            "type": "integer"
-          }
         },
         "run": {
           "$ref": "#/$defs/run"

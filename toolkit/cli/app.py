@@ -7,6 +7,7 @@ from toolkit.cli.cmd_inspect import register as register_inspect
 from toolkit.cli.cmd_contract import register as register_contract
 from toolkit.cli.cmd_scout import register as register_scout
 from toolkit.cli.cmd_registry import register as register_registry
+from toolkit.cli.cmd_column_values import register as register_column_values
 from toolkit.version import __version__
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -28,6 +29,7 @@ register_inspect(app)
 register_contract(app)
 register_scout(app)
 register_registry(app)
+register_column_values(app)
 
 
 def main():

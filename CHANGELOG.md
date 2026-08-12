@@ -1,3 +1,11 @@
+## [1.50.0] - 2026-08-12
+
+### Added
+
+- **Registry snello** (PR #469): il registry è un catalogo di discovery, non un report di esecuzione. Rimossi i blocchi orfani mai letti dai consumer: `datasets[].run` e `marts[].run` (lo stato operativo vive in `signals[].run`), `years`, `registry_source`, `summary` top-level, `entities.generated_from/summary`, campi mart non usati, contenuto embeddato di `codelists` (resta la lista nomi, le righe si leggono dal CSV del repo on-demand). Fix qualità: role colonne derivato da `semantic_type` (year → dimension, non metric), dedup tags, conteggio codelists corretto nel reader. Registry dei 6 repo dati rigenerati: eurostat -69% (498KB→155KB).
+- **Column-values on-demand** (PR #469): nuovo dominio `build_column_values_profile` (cardinalità HyperLogLog, null, top-N per colonna dimensionale) + CLI `toolkit column-values`. Esposizione MCP senza nuovo tool: flag `profile` (default False) su `toolkit_dataset_overview`.
+- **memory_limit DuckDB configurabile per dataset** (PR #470): blocco opzionale `duckdb.memory_limit` nel dataset.yml per dataset con join pesanti nel clean (OOM a 2GB su >4M righe). Gerarchia: default lab 2GB → `duckdb.memory_limit` → env `DUCKDB_MEMORY_LIMIT` (PR lab-connectors #76). Documentato in `docs/config-schema.md`.
+
 ## [1.49.4] - 2026-08-10
 
 ### Added

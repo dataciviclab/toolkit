@@ -490,6 +490,40 @@ class TestDescribeSlug:
         with pytest.raises(FileNotFoundError):
             resolver.describe_slug("slug_che_non_esiste")
 
+    def test_describe_with_profile_on_demand(
+        self, resolver: CatalogResolver, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """describe_slug con profile=True aggiunge il profilo valori (on-demand)."""
+        fake_preview = {
+            "path": "s3://dataciviclab-clean/anac_bandi_gara/2024/anac_bandi_gara_2024_clean.parquet",
+            "column_count": 2,
+            "columns": [
+                {"name": "cig", "type": "VARCHAR"},
+                {"name": "importo", "type": "DOUBLE"},
+            ],
+            "row_count": 100,
+            "preview": [],
+            "truncated": False,
+            "slug": "anac_bandi_gara",
+            "year": 2024,
+        }
+        monkeypatch.setattr(
+            "toolkit.domain.catalog.parquet_preview", lambda path, limit=5: fake_preview
+        )
+        monkeypatch.setattr(
+            "toolkit.domain.column_values.build_column_values_profile",
+            lambda parquet, columns, top_n=20: {"n_rows": 100, "columns": {}},
+        )
+
+        # Default: nessun profilo (comportamento invariato)
+        result = resolver.describe_slug("anac_bandi_gara")
+        assert "values" not in result
+
+        # profile=True: sezione values presente
+        result_p = resolver.describe_slug("anac_bandi_gara", profile=True)
+        assert "values" in result_p
+        assert result_p["values"] == {"n_rows": 100, "columns": {}}
+
 
 # ---------------------------------------------------------------------------
 # Local workspace merge

@@ -86,6 +86,7 @@ def mcp_dataset_overview(
     layer: str = "clean",
     year: int | None = None,
     source: str = "all",
+    profile: bool = False,
 ) -> dict[str, Any]:
     """Overview di un dataset: schema, row count e preview.
 
@@ -94,16 +95,19 @@ def mcp_dataset_overview(
         layer: ``"clean"`` (default) o ``"mart"``.
         year: Anno specifico o ``None`` (ultimo disponibile).
         source: ``"gcs"``, ``"workspace"``, ``"all"`` (default).
+        profile: Se True, profila i valori delle colonne dimensionali
+            (cardinalità, null, top-N) — on-demand, off di default.
 
     Returns:
-        Dict con slug, year, layer, columns, row_count, preview.
+        Dict con slug, year, layer, columns, row_count, preview (+ ``values``
+        se ``profile=True``).
 
     Raises:
         ToolkitClientError: se slug non trovato o errore DuckDB.
     """
     try:
         resolver = _get_resolver()
-        return resolver.describe_slug(slug, layer=layer, year=year, source=source)
+        return resolver.describe_slug(slug, layer=layer, year=year, source=source, profile=profile)
     except FileNotFoundError as exc:
         raise ToolkitClientError(
             str(exc),

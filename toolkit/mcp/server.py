@@ -234,6 +234,9 @@ def toolkit_find(
 @mcp.tool(
     description="Overview di un dataset: schema colonne (DESCRIBE DuckDB), "
     "conteggio righe e preview dati. "
+    "Con profile=True (on-demand, default False) profila anche i valori delle "
+    "colonne dimensionali (cardinalità, null, top-N) — utile prima di scrivere "
+    "una query. "
     "Parametro source='gcs' (solo pubblicati), 'workspace' (solo sviluppo), "
     "'all' (default) — entrambi, preferisce locale.",
     structured_output=True,
@@ -243,6 +246,7 @@ def toolkit_dataset_overview(
     layer: str = "clean",
     year: int | None = None,
     source: str = "all",
+    profile: bool = False,
 ) -> dict[str, Any]:
     return guard_timed(
         dataset_overview_impl,
@@ -251,6 +255,7 @@ def toolkit_dataset_overview(
         layer=layer,
         year=year,
         source=source,
+        profile=profile,
     )
 
 

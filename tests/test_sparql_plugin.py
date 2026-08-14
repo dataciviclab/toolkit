@@ -648,7 +648,7 @@ class TestSparqlPagination:
                     pagination={"mode": "keyset", "key": "?s"},
                 )
             # Pagina 2: FILTER con l'ultimo valore della colonna 's' (bar)
-            assert "FILTER(?s > <bar>)" in queries[1], f"pagina 2: {queries[1]}"
+            assert 'FILTER(?s > "bar")' in queries[1], f"pagina 2: {queries[1]}"
             text = payload.decode()
             assert "foo" in text and "baz" in text and "qux" in text
             # 6 chiamate: K1, K2, pagina vuota ritentata 3 volte → stop
@@ -711,6 +711,54 @@ class TestSparqlPagination:
             assert mock_cls.return_value.post.call_count == 2
             assert b"quux" in payload  # pagina corta concatenata
 
+    def test_first_page_empty_retries(self):
+        """Regressione: il retry anti-throttle si applica ANCHE alla prima pagina
+        in modalità paginazione (keyset) — un 200 vuoto all'ingresso viene
+        ritentato, non trattato come 'fine dati'."""
+        calls = [0]
+
+        def side_effect(*a, **kw):
+            calls[0] += 1
+            if calls[0] == 1:
+                # prima pagina vuota (throttle WAF)
+                return _http_ok(text="s,value\n", headers={"Content-Type": "text/csv"})
+            if calls[0] == 2:
+                # retry → dati (piena)
+                return _http_ok(text=self.CSV_K1, headers={"Content-Type": "text/csv"})
+            # pagina corta → fine
+            return _http_ok(text=self.CSV_K3, headers={"Content-Type": "text/csv"})
+
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.side_effect = side_effect
+            source = SparqlSource()
+            with patch("toolkit.plugins.sparql.time.sleep"):
+                payload, _ = source.fetch(
+                    "https://example.test/sparql",
+                    "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 10",
+                    pagination={"mode": "keyset", "key": "?s"},
+                    step=2,
+                )
+            # la prima pagina throttlata è stata recuperata dal retry
+            assert b"foo" in payload and b"bar" in payload
+
+    def test_keyset_max_pages_enforced(self):
+        """Regressione: keyset rispetta il tetto ``pages`` — un endpoint che
+        restituisce sempre pagine piene non causa loop infinito."""
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.return_value = _http_ok(
+                text=self.CSV_K1, headers={"Content-Type": "text/csv"}
+            )
+            source = SparqlSource()
+            with patch("toolkit.plugins.sparql.time.sleep"):
+                with pytest.raises(DownloadError, match="exceeded max pages"):
+                    source.fetch(
+                        "https://example.test/sparql",
+                        "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 10",
+                        pagination={"mode": "keyset", "key": "?s"},
+                        step=2,
+                        pages=2,
+                    )
+
     def test_keyset_missing_key_column_raises(self):
         """Keyset: colonna chiave assente nell'output → DownloadError (non silenzio)."""
         csv_p1_no_key = "altra_colonna,value\nfoo,1\nbar,2\n"
@@ -737,3 +785,14 @@ class TestSparqlPagination:
                 "SELECT ?s WHERE { ?s ?p ?o }",
                 pagination={"mode": "keyset"},
             )
+
+
+def test_keyset_literal_types():
+    """_keyset_literal genera il letterale SPARQL corretto per tipo."""
+    from toolkit.plugins.sparql import _keyset_literal
+
+    uri = "http://dati.camera.it/ocd/deputato.rdf/d1_19"
+    assert _keyset_literal(uri) == f"<{uri}>"
+    assert _keyset_literal("12345") == "12345"
+    assert _keyset_literal("bar") == '"bar"'
+    assert _keyset_literal('say "hi"') == '"say \\"hi\\""'

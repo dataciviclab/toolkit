@@ -10,6 +10,7 @@ import csv
 import io
 import json
 import logging
+import re
 import time
 import urllib.parse
 from typing import Any
@@ -165,7 +166,9 @@ class SparqlSource:
         - ``{"mode": "keyset", "key": "?var"}``: paginazione keyset. La query
           DEVE avere gia' ``ORDER BY ?var``. Le pagine successive iniettano
           ``FILTER(?var > <ultimo_valore>)`` al posto di OFFSET — deterministico
-          e compatibile con i limiti Virtuoso.
+          e compatibile con i limiti Virtuoso. ``pages`` funge da tetto di
+          sicurezza (se > 1); la chiave funziona al meglio se URI, ma il
+          FILTER genera il letterale corretto anche per numeri e stringhe.
 
         Args:
             endpoint: SPARQL endpoint URL.
@@ -207,7 +210,14 @@ class SparqlSource:
         # Prima pagina — con retry+backoff dedicati: su endpoint instabili
         # (es. Camera 503/500 intermittenti) la prima query pesante riceve
         # spesso il 503 iniziale; _do_fetch ha retries ma senza delay sufficiente.
-        all_bytes = self._fetch_page_with_retry(endpoint, query, accept_format)
+        # In paginazione (OFFSET con pages>1 o keyset) il 200 vuoto sulla prima
+        # pagina è un sintomo di throttle WAF: va ritentato come le pagine 2+.
+        # Con pages==1 (query singola) un risultato vuoto è un errore reale:
+        # fallisce subito, non va mascherato.
+        if pages > 1 or pagination_mode == "keyset":
+            all_bytes = self._fetch_page_resilient(endpoint, query, accept_format)
+        else:
+            all_bytes = self._fetch_page_with_retry(endpoint, query, accept_format)
 
         # Fine dati legittima sulla prima pagina: header vuoto o pagina corta
         # (< step righe di dati). Su endpoint come Camera l'OFFSET oltre la fine
@@ -228,16 +238,13 @@ class SparqlSource:
                 keyset_key,
                 step,
                 all_bytes,
+                max_pages=pages,
             )
             return all_bytes, endpoint
 
         # Paginazione OFFSET: pagine successive, concatena CSV (saltando l'header)
         for page in range(1, pages):
-            q = query
-            if "offset" not in q.lower():
-                q = f"{q.rstrip().rstrip(';')} OFFSET {page * step}"
-            else:
-                q = f"{q.rstrip().rstrip(';')} OFFSET {page * step}"
+            q = f"{query.rstrip().rstrip(';')} OFFSET {page * step}"
 
             page_bytes = self._fetch_page_resilient(endpoint, q, accept_format)
 
@@ -324,24 +331,40 @@ class SparqlSource:
         key: str,
         step: int,
         all_bytes: bytes,
+        max_pages: int = 1,
     ) -> bytes:
         """Paginazione keyset: inietta FILTER(?key > <last>) nelle pagine successive.
 
         Deterministico e compatibile con endpoint Virtuoso che rifiutano
         ORDER BY + OFFSET (SR353) — es. dati.camera.it.
+
+        ``max_pages`` è il tetto di sicurezza (il contratto ``pages``): se <= 1
+        (default, nessun limite esplicito) si usa un cap alto per evitare loop
+        infiniti se la chiave non è monotona o l'endpoint degrada il FILTER.
+
+        La chiave funziona al meglio con URI; per altri tipi il FILTER genera
+        il letterale corretto (numero, stringa, URI).
         """
         if not key.startswith("?"):
             key = f"?{key}"
         # normalizza: niente ';' finale per poter concatenare la clausola
         base_query = query.rstrip().rstrip(";")
+        page_n = 0
+        safety_max = max_pages if max_pages > 1 else 1000
 
         while True:
+            page_n += 1
+            if page_n > safety_max:
+                raise DownloadError(
+                    "SPARQL keyset pagination exceeded max pages "
+                    f"({safety_max}) — key non monotona o FILTER degradato?"
+                )
             last_value = _csv_last_value(all_bytes, key.lstrip("?"))
             if last_value is None:
                 break
             # Inietta il FILTER prima del ORDER BY / LIMIT (se presenti)
             q = base_query
-            filter_clause = f"FILTER({key} > <{last_value}>)"
+            filter_clause = f"FILTER({key} > {_keyset_literal(last_value)})"
             for kw in ("ORDER BY", "LIMIT", "OFFSET"):
                 idx = q.upper().rfind(kw)
                 if idx != -1:
@@ -539,3 +562,19 @@ def _csv_last_value(csv_bytes: bytes, key_col: str) -> str | None:
         if len(row) > idx and row[idx]:
             last = row[idx]
     return last
+
+
+def _keyset_literal(value: str) -> str:
+    """Rappresenta un valore come letterale SPARQL per il FILTER keyset.
+
+    - URI (http/https) → <uri>
+    - numero (intero o decimale) → valore nudo
+    - altrimenti (stringa) → "stringa" con escape delle virgolette
+    """
+    v = value.strip()
+    if v.startswith(("http://", "https://")):
+        return f"<{v}>"
+    if re.fullmatch(r"-?\d+(\.\d+)?", v):
+        return v
+    escaped = v.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'

@@ -19,12 +19,15 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           extra-packages: -e ".[dev]"
-      - name: Ruff
-        run: python -m ruff check .
-      - name: Mypy
-        run: python -m mypy toolkit/
-      - name: Pytest
-        run: python -m pytest -p pytest_cov -n auto -q -p no:cacheprovider -m "not smoke" --cov=toolkit --cov-report=term-missing --cov-report=xml --cov-fail-under=81
+      - uses: dataciviclab/.github/actions/python-ci@main
+        with:
+          lint_paths: "."
+          mypy_paths: "toolkit/"
+          test_dir: "tests"
+          pytest_args: "-p pytest_cov -n auto -q -p no:cacheprovider -m \"not smoke\""
+          cov_module: "toolkit"
+          cov_report: "term-missing xml"
+          cov_threshold: "81"
       - name: Upload Coverage Artifact
         if: always() && hashFiles('coverage.xml') != ''
         uses: actions/upload-artifact@v7

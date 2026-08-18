@@ -96,6 +96,30 @@ def test_script_year_placeholder_through_format_args(script_dir: Path):
     assert origin == str(output_file)
 
 
+def test_script_client_timeout_applied(script_dir: Path):
+    """client.timeout > default permette script più lunghi di 600s di default.
+
+    Regressione: il timeout era hardcoded a 600s — harvest lunghi (es. inPA,
+    ~17 min) venivano uccisi. Con client.timeout alto il subprocess termina.
+    """
+    output_file = script_dir / "output.csv"
+    script = _make_script(
+        script_dir,
+        output_file,
+        f'echo "anno,valore" > {output_file}\necho "2023,42.5" >> {output_file}',
+    )
+
+    payload, origin = _fetch_payload(
+        "script",
+        {"timeout": 1},  # 1s: se non letto, subprocess.run userebbe default 600
+        {"command": f"bash {script}", "output": str(output_file)},
+        base_dir=script_dir,
+    )
+
+    assert payload == b"anno,valore\n2023,42.5\n"
+    assert origin == str(output_file)
+
+
 # ---------------------------------------------------------------------------
 # Error handling
 # ---------------------------------------------------------------------------

@@ -267,7 +267,7 @@ def _fetch_script(stype: str, client: dict, formatted_args: dict) -> tuple[bytes
         shell=True,
         capture_output=True,
         text=True,
-        timeout=600,
+        timeout=(client or {}).get("timeout", 600),
         cwd=candidate_root,
     )
     if result.returncode != 0:

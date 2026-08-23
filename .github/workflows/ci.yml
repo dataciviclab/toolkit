@@ -18,7 +18,7 @@ jobs:
         uses: dataciviclab/.github/actions/python-setup@main
         with:
           python-version: ${{ matrix.python-version }}
-          extra-packages: -e ".[dev]"
+          extra-packages: -e ".[dev,pandas]"
       - uses: dataciviclab/.github/actions/python-ci@main
         with:
           lint_paths: "."

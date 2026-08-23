@@ -31,6 +31,25 @@ def generate_full_scaffold(
     years = inferred_years or [2024]
     final_url = probe_result.get("final_url", "")
 
+    # Infer years from profile's anno column if available
+    if inferred_years is None and profile:
+        anno_col = _find_anno_col(profile)
+        if anno_col:
+            anno_values = profile.get("date_raw_values", {}).get(anno_col, [])
+            if not anno_values:
+                # Try reading from column values in mapping
+                anno_values = profile.get("column_values", {}).get(anno_col, [])
+            if anno_values:
+                unique_years = sorted(
+                    {
+                        int(v)
+                        for v in anno_values
+                        if v and str(v).isdigit() and 1900 <= int(v) <= 2100
+                    }
+                )
+                if unique_years:
+                    years = unique_years
+
     config = _build_config_dict(
         safe_name,
         years,
@@ -101,6 +120,9 @@ def _build_config_dict(
         suggested = propose_clean_read(enriched)
         if suggested:
             config["clean"]["read"] = suggested
+        # Propose robust mode when profiling detected CSV errors
+        if profile.get("robust_read_suggested") or profile.get("_robust_read_suggested"):
+            config["clean"]["read_mode"] = "robust"
 
     vs = validation_suggestions or suggest_validation(profile)
     if vs:
@@ -205,6 +227,13 @@ def _http_file_dict(url: str, slug: str) -> dict[str, Any]:
     }
 
 
+def _find_anno_col(profile: dict[str, Any]) -> str | None:
+    """Find a year/anno column name in the profile."""
+    from toolkit.scaffold.clean import _find_anno_raw_column
+
+    return _find_anno_raw_column(profile)
+
+
 def _enrich_profile(profile: dict[str, Any], probe: dict[str, Any]) -> dict[str, Any]:
     enriched = dict(profile)
     for k in (
@@ -231,7 +260,7 @@ def suggest_validation(profile: dict[str, Any] | None) -> dict[str, Any]:
     if cols:
         from toolkit.scaffold.clean import _snake_case
 
-        rules["required_columns"] = [_snake_case(c) for c in cols[:5]]
+        rules["required_columns"] = [_snake_case(c) for c in cols]
     if rc:
         rules["min_rows"] = max(1, int(rc * 0.5))
         rules["mart_min_rows"] = 1

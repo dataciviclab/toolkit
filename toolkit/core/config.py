@@ -820,58 +820,6 @@ def load_config(
     )
 
 
-# ---------------------------------------------------------------------------
-# Backward-compat aliases for types previously exported from config_models
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class ConfigPolicy:
-    """Empty policy config — kept for backward compat."""
-
-    pass
-
-
-@dataclass
-class DatasetBlock:
-    """Dataset identity block — kept for backward compat.
-
-    Note: In the new config, dataset name/years/tags are directly on PipelineConfig.
-    """
-
-    name: str = ""
-    years: list[int] = field(default_factory=list)
-    source_id: str | None = None
-    time_coverage: Any = None
-    tags: list[str] = field(default_factory=list)
-    category: str | None = None
-
-
-@dataclass
-class TimeCoverage:
-    mode: str = "full_series"
-    start_year: int = 2020
-    end_year: int = 2024
-
-
-@dataclass
-class OutputConfig:
-    artifacts: str = "standard"
-
-
-@dataclass
-class SupportDatasetConfig:
-    name: str = ""
-    config: Path = Path(".")
-    years: list[int] = field(default_factory=list)
-
-
-@dataclass
-class GlobalValidationConfig:
-    fail_on_error: bool = True
-    mode: str = "strict"
-
-
 def _check_unknown_keys(data: dict, *, strict: bool, path: Path) -> None:
     """Basic unknown key check for strict mode."""
     allowed = {

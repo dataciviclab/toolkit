@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import pandas as pd
+if TYPE_CHECKING:
+    import pandas as pd
 
 from toolkit.core.constants import RAW_INPUT_VIEW, RAW_INPUT_DF_VIEW
 from toolkit.core.sql_utils import parse_column_value
@@ -29,6 +30,8 @@ def _load_normalized_csv_frame(
     read_cfg: dict[str, Any],
     columns: dict[str, str],
 ) -> pd.DataFrame:
+    import pandas as pd
+
     encoding = normalize_encoding(read_cfg.get("encoding")) or "utf-8"
     trim_whitespace = bool(read_cfg.get("trim_whitespace", True))
     header = bool(read_cfg.get("header", True))
@@ -94,6 +97,8 @@ def _load_aligned_by_header(
     If the column is missing from the header, fills with empty string.
     Extra CSV columns not in expected_names are ignored.
     """
+    import pandas as pd
+
     kwargs = _normalized_csv_reader_kwargs(read_cfg)
     header = bool(read_cfg.get("header", True))
 
@@ -148,6 +153,7 @@ def _execute_normalized_csv_read(
     Reads each input file with the CSV reader into a pandas DataFrame,
     concatenates if multiple files, registers as DuckDB view ``raw_input``.
     """
+    import pandas as pd
 
     columns = read_cfg.get("columns")
     if not columns:

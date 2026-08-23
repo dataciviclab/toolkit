@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-import pandas as pd
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 from toolkit.core.constants import RAW_INPUT_VIEW, RAW_INPUT_DF_VIEW
@@ -38,6 +39,8 @@ def _load_excel_frame(
     read_cfg: dict[str, Any],
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Load a single Excel file into a DataFrame with configured columns / header / skip."""
+    import pandas as pd
+
     header = bool(read_cfg.get("header", True))
     skip = int(read_cfg["skip"]) if read_cfg.get("skip") is not None else 0
     trim_whitespace = read_cfg.get("trim_whitespace", True)
@@ -87,6 +90,8 @@ def _execute_excel_read(
     logger,
 ) -> dict[str, Any]:
     """Execute Excel read: load each file, concatenate, register as DuckDB view ``raw_input``."""
+    import pandas as pd
+
     frames: list[pd.DataFrame] = []
     params_used: dict[str, Any] | None = None
 

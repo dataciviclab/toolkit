@@ -29,6 +29,84 @@ from toolkit.profile._sniff_delimiter import sniff_decimal, sniff_delim, suggest
 from toolkit.profile._column_profile import _build_mapping_suggestions, _normalize_colname
 
 
+# ---------------------------------------------------------------------------
+# Date format detection (moved from scaffold/clean.py to fix dependency inversion)
+# ---------------------------------------------------------------------------
+
+_DATE_FORMAT_GROUPS: list[tuple[str, ...]] = [
+    ("%d/%m/%Y", "%m/%d/%Y"),  # slash 4-digit
+    ("%d-%m-%Y", "%m-%d-%Y"),  # dash 4-digit
+    ("%d/%m/%y", "%m/%d/%y"),  # slash 2-digit
+    ("%d-%m-%y", "%m-%d-%y"),  # dash 2-digit
+    ("%Y/%m/%d",),  # ISO con slash
+]
+
+
+def _try_strptime(value: str, fmt: str) -> bool:
+    """Try to parse a date string with the given strptime format."""
+    import datetime
+
+    try:
+        datetime.datetime.strptime(value, fmt)
+        return True
+    except ValueError:
+        return False
+
+
+def suggest_dateformat(profile: dict[str, Any]) -> str | None:
+    """Detect non-ISO date format from raw date values in the profile.
+
+    Uses ``date_raw_values`` (extracted from raw CSV *before* DuckDB
+    converts dates) and ``datetime.strptime`` for validation.
+
+    Each column picks its best format (>=60% of its non-empty values).
+    Only suggests a ``dateformat`` if EVERY column picks the SAME format.
+    """
+    date_raw = profile.get("date_raw_values", {})
+    if not date_raw:
+        return None
+
+    col_formats: dict[str, str] = {}
+    for col, values in date_raw.items():
+        non_empty = [v for v in values if v]
+        total = len(non_empty)
+        if total == 0:
+            continue
+
+        best_fmt: str | None = None
+        best_score = 0
+
+        for fmt_group in _DATE_FORMAT_GROUPS:
+            if len(fmt_group) == 1:
+                fmt = fmt_group[0]
+                count = sum(1 for v in non_empty if _try_strptime(v, fmt))
+                if count > best_score:
+                    best_score = count
+                    best_fmt = fmt
+            else:
+                dmy_fmt, mdy_fmt = fmt_group
+                dmy_count = sum(1 for v in non_empty if _try_strptime(v, dmy_fmt))
+                mdy_count = sum(1 for v in non_empty if _try_strptime(v, mdy_fmt))
+                if dmy_count > mdy_count and dmy_count > best_score:
+                    best_score = dmy_count
+                    best_fmt = dmy_fmt
+                elif mdy_count > dmy_count and mdy_count > best_score:
+                    best_score = mdy_count
+                    best_fmt = mdy_fmt
+
+        if best_fmt is not None and best_score >= total * 0.6:
+            col_formats[col] = best_fmt
+
+    if not col_formats:
+        return None
+
+    unique = set(col_formats.values())
+    if len(unique) == 1:
+        return unique.pop()
+
+    return None
+
+
 def _safe_mkdir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
 
@@ -171,9 +249,7 @@ def build_suggested_read_cfg(
 
     # Propaga dateformat se non gia' in source_cfg
     if "dateformat" not in cfg and data.get("date_raw_values"):
-        from toolkit.scaffold.clean import _suggest_dateformat
-
-        fmt = _suggest_dateformat(data)
+        fmt = suggest_dateformat(data)
         if fmt:
             cfg["dateformat"] = fmt
 

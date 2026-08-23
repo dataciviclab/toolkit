@@ -269,7 +269,7 @@ class TestSuggestMartSql:
         cols: list[str] = []
         profile: dict[str, Any] = {"mapping_suggestions": {}}
         sql = suggest_mart_sql(cols, profile)
-        assert "Sostituisci" in sql
+        assert "sostituisci" in sql
         assert "SELECT * FROM clean_input" in sql
 
     @pytest.mark.pure_unit
@@ -303,9 +303,9 @@ class TestSuggestValidation:
             "row_count": 100,
         }
         val = suggest_validation(profile)
-        assert "clean" in val
-        assert val["clean"]["validate"]["required_columns"] == ["a", "b", "c"]
-        assert val["clean"]["validate"]["min_rows"] <= 100
+        assert "required_columns" in val
+        assert val["required_columns"] == ["a", "b", "c"]
+        assert val["min_rows"] <= 100
 
     @pytest.mark.pure_unit
     def test_empty_profile(self) -> None:

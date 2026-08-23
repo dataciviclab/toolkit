@@ -10,12 +10,12 @@ from typing import Any
 
 import pytest
 
+from toolkit.profile.raw import suggest_dateformat as _suggest_dateformat
 from toolkit.scaffold.clean import (
     _columns_spec,
     _find_anno_raw_column,
     _has_anno_column,
     _select_expr,
-    _suggest_dateformat,
     generate_clean_sql,
 )
 

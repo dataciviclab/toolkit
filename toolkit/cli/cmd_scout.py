@@ -21,12 +21,9 @@ from typing import Any
 import typer
 
 from toolkit.cli.cmd_run import run_init as _run_init
-from toolkit.scout.http import DEFAULT_TIMEOUT, fetch_content
-from toolkit.scaffold.full import (
-    generate_full_scaffold,
-    suggest_validation,
-)
+from toolkit.scaffold.full import generate_full_scaffold
 from toolkit.scaffold.sources import infer_ext, slugify
+from toolkit.scout.http import DEFAULT_TIMEOUT, fetch_content
 from toolkit.scout.infer import (
     infer_granularity_from_name_and_columns,
     infer_topics,
@@ -186,41 +183,11 @@ def scout_url(
 # ---------------------------------------------------------------------------
 
 
-def _scaffold_file(
+def _profile_sample(
+    sample_path: Path,
     url: str,
-    probe_result: dict[str, Any],
-    *,
-    run_raw: bool = False,
-    slug: str | None = None,
-) -> None:
-    """Scarica sample, profila, inferisce, genera scaffold.
-
-    Args:
-        url: URL del file da scaricare.
-        probe_result: Risultato del probe (dict).
-        run_raw: Se True, esegue raw run dopo scaffold.
-        slug: Slug personalizzato. Se None, auto-generato da url.
-    """
-    slug = slug or slugify(url)
-    tmp_dir = Path(tempfile.gettempdir())
-    tmp_name = f"scout_{slug}_{uuid.uuid4().hex[:8]}"
-
-    # 1. Download sample
-    typer.echo("Downloading sample...")
-    try:
-        fetched = fetch_content(url, max_bytes=_SAMPLE_SIZE, timeout=30)
-    except RuntimeError as exc:
-        typer.echo(f"error: failed to fetch {url}: {exc}", err=True)
-        raise typer.Exit(code=1)
-
-    content = fetched["content"]
-    ct = fetched.get("content_type") or probe_result.get("content_type", "")
-    ext = infer_ext(url, ct)
-    sample_path = tmp_dir / f"{tmp_name}{ext}"
-    sample_path.write_bytes(content)
-    typer.echo(f"  Saved {len(content)} bytes to {sample_path}")
-
-    # 2. Sniff + Profile
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Sniff + profile a downloaded sample file. Returns (profile, sniff_hints)."""
     from toolkit.profile.raw import profile_with_read_cfg, sniff_source_file
 
     sniff_hints = sniff_source_file(sample_path)
@@ -228,7 +195,6 @@ def _scaffold_file(
     typer.echo(f"  Delimiter: {sniff_hints.get('delim_suggested')}")
     typer.echo(f"  Columns: {sniff_hints.get('columns_preview')}")
 
-    # XLSX → profiling via openpyxl (stesso reader del runtime clean)
     binary_fmt = sniff_hints.get("is_binary_file")
     if binary_fmt in ("xlsx", "xls"):
         from toolkit.profile.raw import profile_excel
@@ -250,49 +216,65 @@ def _scaffold_file(
 
         profile = profile_with_read_cfg(sample_path, sniff_hints, read_cfg)
 
-        # 3. Retry skip se 0 colonne
         retry_skip = _resolve_columns(profile, sniff_hints, read_cfg, sample_path)
         if retry_skip is not None and retry_skip != sniff_hints.get("skip_suggested"):
             sniff_hints["skip_suggested"] = retry_skip
             read_cfg["skip"] = retry_skip
             profile = profile_with_read_cfg(sample_path, sniff_hints, read_cfg)
 
-    # 4. Propaga robust_read_suggested a profile per generate_full_scaffold
-    # Il flag puo' venire da sniff_hints (sniff_source_file) o da profile
-    # (profile_with_read_cfg, specie dopo retry con robust_preset).
+    return profile, sniff_hints
+
+
+def _scaffold_file(
+    url: str,
+    probe_result: dict[str, Any],
+    *,
+    run_raw: bool = False,
+    slug: str | None = None,
+) -> None:
+    """Download sample, profile, generate scaffold via orchestrator."""
+    slug = slug or slugify(url)
+    tmp_dir = Path(tempfile.gettempdir())
+    tmp_name = f"scout_{slug}_{uuid.uuid4().hex[:8]}"
+
+    # 1. Download sample
+    typer.echo("Downloading sample...")
+    try:
+        fetched = fetch_content(url, max_bytes=_SAMPLE_SIZE, timeout=30)
+    except RuntimeError as exc:
+        typer.echo(f"error: failed to fetch {url}: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    content = fetched["content"]
+    ct = fetched.get("content_type") or probe_result.get("content_type", "")
+    ext = infer_ext(url, ct)
+    sample_path = tmp_dir / f"{tmp_name}{ext}"
+    sample_path.write_bytes(content)
+    typer.echo(f"  Saved {len(content)} bytes to {sample_path}")
+
+    # 2. Sniff + Profile
+    profile, sniff_hints = _profile_sample(sample_path, url)
+
+    # 3. Propagate robust_read_suggested
     if sniff_hints.get("robust_read_suggested") or profile.get("robust_read_suggested"):
         profile["_robust_read_suggested"] = True
+        probe_result["robust_read_suggested"] = True
 
-    # 5. Clean read via scaffold canonico
-    from toolkit.scaffold.clean import propose_clean_read
-
-    enriched = dict(profile)
-    for k in (
-        "encoding_suggested",
-        "delim_suggested",
-        "decimal_suggested",
-        "skip_suggested",
-        "header_line",
-        "true_header_line",
-        "robust_read_suggested",
-    ):
-        if sniff_hints.get(k) is not None:
-            enriched[k] = sniff_hints[k]
-
-    clean_read = propose_clean_read(enriched)
-
-    # 5. Legge i valori anno dal sample (se colonna Anno presente)
+    # 4. Infer years + granularity + topics
     year_values = _read_year_values_from_sample(sample_path, sniff_hints, profile)
     if year_values:
         typer.echo(f"  Year values in data: {sorted(year_values)}")
 
-    # 6. Inferenze
     norm_cols = (
         profile.get("columns_norm") or profile.get("columns_raw") or profile.get("columns") or []
     )
     col_names = [str(c) for c in norm_cols]
 
-    inferred_years = suggest_years(column_names=col_names, profile=profile, year_values=year_values)
+    inferred_years = suggest_years(
+        column_names=col_names,
+        profile=profile,
+        year_values=year_values,
+    )
     typer.echo(f"  Suggested years: {inferred_years}")
 
     granularity = infer_granularity_from_name_and_columns(slug, col_names)
@@ -300,54 +282,48 @@ def _scaffold_file(
 
     topics = infer_topics(f"{slug} {' '.join(col_names)}")
     if topics:
-        top_topics = [t["topic"] for t in topics[:3]]
-        typer.echo(f"  Topics: {', '.join(top_topics)}")
+        typer.echo(f"  Topics: {', '.join(t['topic'] for t in topics[:3])}")
 
-    validation = suggest_validation(profile)
-    if validation:
-        typer.echo("  Validation rules: suggested")
-
-    # 6. Genera scaffold
-    out_dir = Path(slug)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
+    # 5. Enrich probe_result for orchestrator
     probe_result["inferred_granularity"] = granularity
     probe_result["inferred_topics"] = topics
+    for key in (
+        "encoding_suggested",
+        "delim_suggested",
+        "decimal_suggested",
+        "skip_suggested",
+        "header_line",
+        "true_header_line",
+    ):
+        if sniff_hints.get(key) is not None:
+            probe_result[key] = sniff_hints[key]
 
+    # 6. Generate scaffold (one call)
     files = generate_full_scaffold(
         slug,
         probe_result,
-        clean_read=clean_read,
         profile=profile,
         inferred_years=inferred_years,
-        validation_suggestions=validation,
     )
 
-    for rel_path, content in files.items():
+    # 7. Write files
+    out_dir = Path(slug)
+    for rel_path, file_content in files.items():
         full_path = out_dir / rel_path
         full_path.parent.mkdir(parents=True, exist_ok=True)
-        full_path.write_text(content, encoding="utf-8")
-
+        full_path.write_text(file_content, encoding="utf-8")
     (out_dir / "notebooks").mkdir(exist_ok=True)
 
-    columns_count = len(
-        clean_read.get("columns") or profile.get("columns_raw") or profile.get("columns_norm") or []
-    )
     typer.echo(f"\nDataset YAML generated: {out_dir / 'dataset.yml'}")
-    typer.echo(f"  clean.read.columns: {columns_count} columns")
     typer.echo(f"  years: {inferred_years}")
     typer.echo(f"  source_type: {probe_result.get('source_type', 'file')}")
-    typer.echo("  sql/clean.sql:      generated (with type casts)")
-    typer.echo("  sql/mart.sql:       generated (skeleton)")
-    typer.echo("  README.md, notes.md, notebooks/: created")
+    typer.echo("  sql/clean.sql, sql/mart.sql: generated")
 
-    # 7. Opzionalmente raw run
+    # 8. Optional raw run
     if run_raw:
         _run_bootstrap(str(out_dir / "dataset.yml"))
 
-    # 9. Cleanup
     sample_path.unlink(missing_ok=True)
-
     if not run_raw:
         typer.echo(f"\nNext: toolkit run all --config {out_dir / 'dataset.yml'}")
 
@@ -373,69 +349,43 @@ def _scaffold_ckan(
     run_raw: bool = False,
     slug: str | None = None,
 ) -> None:
-    """Scaffold per risorsa CKAN.
-
-    Tenta nell'ordine:
-    1. **DataStore schema** (se ``datastore_active=True``) — colonne e tipi
-       via ``datastore_search?limit=0``, nessun download.
-    2. **Download + profiling CSV** (comportamento attuale).
-    3. **Scaffold minimale** via ``generate_full_scaffold`` (fallback).
-    """
+    """Scaffold per risorsa CKAN. Tenta DataStore → CSV profiling → minimal."""
     resources = probe_result.get("ckan_resources") or []
     if not resources:
         typer.echo("error: no CKAN resources available", err=True)
         raise typer.Exit(code=1)
 
-    # Prova DataStore se la prima risorsa lo supporta
+    slug = slug or slugify(url)
+
+    # Try DataStore schema first
     if resources[0].get("datastore_active"):
-        first = resources[0]
-        slug = slug or slugify(url)
         try:
             from toolkit.scout.http import fetch_ckan_datastore_schema
             from toolkit.scaffold.clean import profile_from_datastore
 
-            fields = fetch_ckan_datastore_schema(url, first["id"])
+            fields = fetch_ckan_datastore_schema(url, resources[0]["id"])
             if fields:
                 profile = profile_from_datastore(fields)
-                scaffold_files = generate_full_scaffold(
+                files = generate_full_scaffold(
                     slug,
                     probe_result,
                     profile=profile,
-                    inferred_years=[2024],
                 )
-                out_dir = _write_scaffold_files(slug, scaffold_files)
-
-                typer.echo(f"\nCKAN DataStore scaffold generated: {out_dir / 'dataset.yml'}")
-                typer.echo(f"  clean.sql with {len(fields)} columns from DataStore schema")
+                out_dir = _write_scaffold_files(slug, files)
+                typer.echo(f"\nCKAN DataStore scaffold: {out_dir / 'dataset.yml'}")
+                typer.echo(f"  clean.sql with {len(fields)} columns")
                 return
         except Exception:
             typer.echo("  DataStore schema fetch failed, trying CSV profiling...")
 
-    first_url = resources[0]["url"]
+    # Fallback: download + profile first resource
     try:
-        _scaffold_file(first_url, probe_result, run_raw=run_raw, slug=slug)
-        return
+        _scaffold_file(resources[0]["url"], probe_result, run_raw=run_raw, slug=slug)
     except (typer.Exit, Exception):
-        typer.echo("  Warning: profiling failed for resource, generating minimal scaffold")
-        _scaffold_minimal_ckan(url, probe_result, slug=slug)
-
-
-def _scaffold_minimal_ckan(
-    url: str,
-    probe_result: dict[str, Any],
-    *,
-    slug: str | None = None,
-) -> None:
-    """Genera scaffold minimale CKAN quando il profiling fallisce.
-
-    Delega a ``generate_full_scaffold`` senza profile per ottenere
-    dataset.yml, clean.sql placeholder e mart.sql skeleton.
-    """
-    slug = slug or slugify(url)
-    scaffold_files = generate_full_scaffold(slug, probe_result)
-    out_dir = _write_scaffold_files(slug, scaffold_files)
-    typer.echo(f"\nMinimal dataset YAML generated: {out_dir / 'dataset.yml'}")
-    typer.echo("  clean.read, clean.sql, mart.sql: manual editing required")
+        typer.echo("  Warning: profiling failed, generating minimal scaffold")
+        files = generate_full_scaffold(slug, probe_result)
+        out_dir = _write_scaffold_files(slug, files)
+        typer.echo(f"\nMinimal scaffold: {out_dir / 'dataset.yml'}")
 
 
 def _scaffold_html(
@@ -465,76 +415,11 @@ def _scaffold_sparql(
     run_raw: bool = False,
     slug: str | None = None,
 ) -> None:
-    """Scaffold per endpoint SPARQL."""
+    """Scaffold per endpoint SPARQL — uses orchestrator."""
     slug = slug or slugify(url)
-    from toolkit.scaffold.sources import block_sparql as _generate_raw_sources_block_sparql
-
-    sparql_info = probe_result.get("sparql_info") or {}
-    datasets = sparql_info.get("datasets") or []
-
-    lines = [
-        "# Auto-generated by toolkit scout --scaffold",
-        "# Review and adjust the SPARQL query before running",
-        "",
-        'root: "../../out"',
-        "schema_version: 1",
-        "",
-        "dataset:",
-        f'  name: "{slug}"',
-        "  years: [2024]",
-        "",
-        "raw:",
-        "  output_policy: overwrite",
-        "  sources:",
-    ]
-    # Usa la prima query disponibile o una SELECT base
-    sample_query = "SELECT * WHERE { ?s ?p ?o } LIMIT 1000"
-    lines.extend(_generate_raw_sources_block_sparql(url, sample_query))
-    lines.append("")
-    lines.append("clean:")
-    lines.append('  sql: "sql/clean.sql"')
-    lines.append("")
-    lines.append("mart:")
-    lines.append("  tables:")
-    lines.append(f'    - name: "{slug}"')
-    lines.append('      sql: "sql/mart.sql"')
-
-    out_dir = Path(slug)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "dataset.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-    clean_sql_path = out_dir / "sql" / "clean.sql"
-    clean_sql_path.parent.mkdir(parents=True, exist_ok=True)
-    clean_sql_path.write_text(
-        "-- SPARQL source: transform raw CSV to clean tabular.\nSELECT * FROM raw_input\n",
-        encoding="utf-8",
-    )
-
-    mart_sql_path = out_dir / "sql" / "mart.sql"
-    if not mart_sql_path.exists():
-        mart_sql_path.parent.mkdir(parents=True, exist_ok=True)
-        mart_sql_path.write_text(
-            "-- Default mart: SELECT * FROM clean_input.\nSELECT * FROM clean_input\n",
-            encoding="utf-8",
-        )
-
-    (out_dir / "README.md").write_text(
-        f"# {slug}\n\nFonte SPARQL: {url}\n\n"
-        "## Domanda\n\n-\n\n"
-        "## Dataset\n\n-\n\n"
-        "## Stato\n\n- intake\n",
-        encoding="utf-8",
-    )
-    (out_dir / "notes.md").write_text(
-        "## Tecnico\n\n- Fonte SPARQL\n"
-        f"- Endpoint: {url}\n"
-        f"- Dataset trovati: {len(datasets)}\n\n"
-        "## Analitico\n\n-\n\n"
-        "## Cautele\n\n- Verificare rate limiting dell'endpoint SPARQL\n",
-        encoding="utf-8",
-    )
-
-    # run_raw non supportato per SPARQL — usa: toolkit run all -c dataset.yml
+    files = generate_full_scaffold(slug, probe_result)
+    _write_scaffold_files(slug, files)
+    typer.echo(f"\nSPARQL scaffold generated: {Path(slug) / 'dataset.yml'}")
 
 
 def _scaffold_sdmx(
@@ -544,85 +429,20 @@ def _scaffold_sdmx(
     run_raw: bool = False,
     slug: str | None = None,
 ) -> None:
-    """Scaffold per endpoint SDMX."""
+    """Scaffold per endpoint SDMX — uses orchestrator."""
     slug = slug or slugify(url)
-    from toolkit.scaffold.sources import block_sdmx as _generate_raw_sources_block_sdmx
-
     sdmx_info = probe_result.get("sdmx_info") or {}
     year_min = sdmx_info.get("year_min")
     year_max = sdmx_info.get("year_max")
+    years = list(range(year_min, year_max + 1)) if year_min and year_max else None
 
-    if year_min and year_max:
-        inferred_years = list(range(year_min, year_max + 1))
-    else:
-        inferred_years = [2024]
-
-    # Scaffold minimo per SDMX (no profiling CSV)
-    # generate_full_scaffold non usato perché SDMX ha template diverso
-    # (dataset.yml sovrascritto qui sotto)
-
-    # Sovrascrivi dataset.yml con configurazione SDMX
-    lines = [
-        "# Auto-generated by toolkit scout --scaffold",
-        "# Review and adjust before running",
-        "",
-        'root: "../../out"',
-        "schema_version: 1",
-        "",
-        "dataset:",
-        f'  name: "{slug}"',
-        "  years: " + _fmt_years(inferred_years),
-        "",
-        "raw:",
-        "  output_policy: overwrite",
-        "  sources:",
-    ]
-    lines.extend(_generate_raw_sources_block_sdmx(sdmx_info, url))
-    lines.append("")
-    lines.append("clean:")
-    lines.append('  sql: "sql/clean.sql"')
-    lines.append("")
-    lines.append("mart:")
-    lines.append("  tables:")
-    lines.append(f'    - name: "{slug}"')
-    lines.append('      sql: "sql/mart.sql"')
-
-    out_dir = Path(slug)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "dataset.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-    # clean.sql generico per SDMX
-    clean_sql_path = out_dir / "sql" / "clean.sql"
-    clean_sql_path.parent.mkdir(parents=True, exist_ok=True)
-    clean_sql_path.write_text(
-        "-- SDMX flow: transform raw SDMX to clean tabular.\n"
-        "-- Personalizza estrazione delle dimensioni e misure.\n"
-        "SELECT * FROM raw_input\n",
-        encoding="utf-8",
+    files = generate_full_scaffold(
+        slug,
+        probe_result,
+        inferred_years=years,
     )
-
-    mart_sql_path = out_dir / "sql" / "mart.sql"
-    if not mart_sql_path.exists():
-        mart_sql_path.parent.mkdir(parents=True, exist_ok=True)
-        mart_sql_path.write_text(
-            "-- Default mart: SELECT * FROM clean_input.\nSELECT * FROM clean_input\n",
-            encoding="utf-8",
-        )
-
-    (out_dir / "README.md").write_text(
-        f"# {slug}\n\nFonte: {url}\n\n## Domanda\n\n-\n\n## Dataset\n\n-\n\n## Stato\n\n- intake\n",
-        encoding="utf-8",
-    )
-    (out_dir / "notes.md").write_text(
-        "## Tecnico\n\n- Fonte SDMX\n\n"
-        "## Analitico\n\n-\n\n"
-        "## Cautele\n\n- Verificare completezza serie storica\n",
-        encoding="utf-8",
-    )
-    (out_dir / "notebooks").mkdir(exist_ok=True)
-
-    typer.echo(f"\nDataset YAML generated: {out_dir / 'dataset.yml'}")
-    typer.echo("  source_type: sdmx")
+    out_dir = _write_scaffold_files(slug, files)
+    typer.echo(f"\nSDMX scaffold generated: {out_dir / 'dataset.yml'}")
     typer.echo(f"  flow: {sdmx_info.get('flow_id', '?')}")
     if year_min and year_max:
         typer.echo(f"  years: {year_min}-{year_max}")
@@ -720,12 +540,6 @@ def _run_bootstrap(config_path: str) -> None:
     typer.echo("[scout] Raw run completed.")
     typer.echo(f"Next: toolkit run clean --config {config_path}")
     typer.echo(f"      toolkit run mart --config {config_path}")
-
-
-def _fmt_years(years: list[int]) -> str:
-    if len(years) <= 4:
-        return "[" + ", ".join(str(y) for y in years) + "]"
-    return f"[{years[0]}..{years[-1]}]"
 
 
 # ---------------------------------------------------------------------------

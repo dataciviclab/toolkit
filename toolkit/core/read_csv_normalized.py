@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 
 from toolkit.core.constants import RAW_INPUT_VIEW, RAW_INPUT_DF_VIEW
-from toolkit.core.read_sql_utils import _parse_column_value
+from toolkit.core.sql_utils import parse_column_value
 from toolkit.core.io import normalize_encoding
 
 
@@ -39,7 +39,7 @@ def _load_normalized_csv_frame(
     # The projection/copy step applies the rename separately.
     raw_names: list[str] = []
     for raw_name, value in columns.items():
-        actual_raw, _ = _parse_column_value(raw_name, value)
+        actual_raw, _ = parse_column_value(raw_name, value)
         raw_names.append(actual_raw)
     expected_names = raw_names
     expected_len = len(expected_names)

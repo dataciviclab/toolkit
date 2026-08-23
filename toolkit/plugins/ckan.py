@@ -2,14 +2,107 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import zipfile
 from typing import Any
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import parse_qs, urlparse, urlunparse
 
 from lab_connectors.http import HttpClient
 
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins._http_utils import truncate_at_line
+
+# ---------------------------------------------------------------------------
+# CKAN detection constants + pure helpers (shared with toolkit.scout.http)
+# ---------------------------------------------------------------------------
+
+# HTML signatures for CKAN detection
+CKAN_SIGNATURES = (
+    b"data-view-embed",  # embedded data view
+    b"/api/3/action",  # CKAN API reference
+    b"ckan-",  # CSS class prefix
+    b'"package_id"',  # JSON package reference
+    b'generator" content="CKAN',  # HTML meta generator tag
+    b"powered by CKAN",  # footer text
+    b'data-module="dataset',  # CKAN dataset module
+)
+
+
+def detect_ckan_in_html(html_bytes: bytes) -> bool:
+    """Rileva se HTML contiene firme CKAN."""
+    return any(sig in html_bytes for sig in CKAN_SIGNATURES)
+
+
+def extract_ckan_dataset_id(url: str, html_text: str = "") -> str | None:
+    """Estrae dataset ID CKAN da URL o HTML.
+
+    Ordine: UUID in query param → UUID/slug in path → API reference in HTML.
+    """
+    # UUID in query param ?id=...
+    match = re.search(r"[?&]id=([a-f0-9-]{36,})", url, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    # UUID o slug in path /dataset/...
+    match = re.search(r"/dataset/([^/?#]+)", url, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    # Da HTML: /api/3/action/package_show?id=...
+    if html_text:
+        api_match = re.search(r'["\']?(/api/3/action/package_show\?id=[^"\'<>\s]+)', html_text)
+        if api_match:
+            qs = api_match.group(1).split("?", 1)[-1]
+            parsed = parse_qs(qs)
+            if "id" in parsed:
+                return parsed["id"][0]
+    return None
+
+
+def ckan_portal_base(url: str) -> str:
+    """Estrae il base path del portale CKAN da un URL qualsiasi.
+
+    Normalizza URL nella forma:
+      - ``https://portale.it/opendata/dataset/slug`` → ``https://portale.it/opendata``
+      - ``https://portale.it/opendata/api/3/action/package_show?id=...`` → ``https://portale.it/opendata``
+      - ``https://portale.it/dataset/slug`` → ``https://portale.it``
+      - ``https://dati.gov.it/opendata`` → ``https://dati.gov.it/opendata``
+
+    Returns:
+        URL base del portale (schema + netloc + path), senza trailing slash.
+    """
+    parsed = urlparse(url)
+    root = f"{parsed.scheme}://{parsed.netloc}"
+    path = parsed.path.rstrip("/")
+
+    # Toglie /dataset/{slug} o /dataset/...  (es. /opendata/dataset/foo → /opendata)
+    ds_match = re.search(r"^(.*?)/dataset/", path)
+    if ds_match:
+        path = ds_match.group(1).rstrip("/")
+        return f"{root}{path}" if path else root
+
+    # Toglie /api/3/action/package_show (es. /opendata/api/3/action/package_show → /opendata)
+    api_match = re.search(r"^(.*?)/api/3/action/package_show/?$", path)
+    if api_match:
+        path = api_match.group(1).rstrip("/")
+        return f"{root}{path}" if path else root
+
+    # Toglie /api/3/action (es. /opendata/api/3/action → /opendata)
+    api_match = re.search(r"^(.*?)/api/3/action/?$", path)
+    if api_match:
+        path = api_match.group(1).rstrip("/")
+        return f"{root}{path}" if path else root
+
+    # Toglie /api/3 o /api
+    api_match = re.search(r"^(.*?)/api(/[123])?/?$", path)
+    if api_match:
+        path = api_match.group(1).rstrip("/")
+        return f"{root}{path}" if path else root
+
+    # Nessun pattern CKAN riconosciuto — usa il path così com'è
+    return f"{root}{path}" if path else root
+
+
+# Backward compat alias
+_ckan_portal_base = ckan_portal_base
 
 
 def _normalize_datastore_search_url(portal_url: str) -> str:

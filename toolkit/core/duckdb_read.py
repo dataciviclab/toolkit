@@ -11,10 +11,7 @@ from toolkit.core.constants import RAW_INPUT_VIEW, RAW_INPUT_SOURCE_VIEW
 from toolkit.core.input_file import RawInputFile
 from toolkit.core.read_csv_normalized import _execute_normalized_csv_read
 from toolkit.core.read_excel import _execute_excel_read
-from toolkit.core.read_sql_utils import (
-    _parse_column_value,
-    csv_trim_projection,
-)
+from toolkit.core.sql_utils import csv_trim_projection, parse_column_value
 from toolkit.core.sql_utils import q_ident, quote_list, sql_path
 from toolkit.core.csv_read import (
     csv_read_option_strings,
@@ -65,7 +62,7 @@ def _csv_read_options(
     if columns:
         columns_csv: dict[str, str] = {}  # raw_name -> dtype for DuckDB columns={}
         for raw_name, value in columns.items():
-            _, dtype = _parse_column_value(raw_name, value)
+            _, dtype = parse_column_value(raw_name, value)
             columns_csv[raw_name] = dtype
         source_columns = columns_csv
         # Mutate read_cfg["columns"] so csv_read_option_strings sees clean types
@@ -204,7 +201,7 @@ def _execute_csv_read(
             for raw_name in source_columns:
                 value = original_columns.get(raw_name) if original_columns else None
                 if value is not None:
-                    clean_name, _ = _parse_column_value(raw_name, value)
+                    clean_name, _ = parse_column_value(raw_name, value)
                 else:
                     clean_name = raw_name
                 if clean_name != raw_name:

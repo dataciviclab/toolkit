@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import re
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 from lab_connectors.http import HttpClient
 
@@ -30,24 +30,18 @@ EXTENDED_EXTENSIONS = CANDIDATE_EXTENSIONS + (".sdmx", ".tds", ".xml")
 # Tipi preview supportati dal profiler toolkit
 _PREVIEW_KINDS = frozenset({"csv", "json", "xlsx", "xls", "tsv"})
 
-# Firma HTML per rilevare CKAN
-_CKAN_SIGNATURES = (
-    b"data-view-embed",  # embedded data view
-    b"/api/3/action",  # CKAN API reference
-    b"ckan-",  # CSS class prefix
-    b'"package_id"',  # JSON package reference
-    b'generator" content="CKAN',  # HTML meta generator tag
-    b"powered by CKAN",  # footer text
-    b'data-module="dataset',  # CKAN dataset module
-)
+# ---------------------------------------------------------------------------
+# Re-imports from plugins (canonical source of truth)
+# ---------------------------------------------------------------------------
 
-# Namespace SDMX per XML parsing
-_SDMX_NS = {
-    "message": "http://www.sdmx.org/resources/sdmxml/schemas/v2_1/message",
-    "structure": "http://www.sdmx.org/resources/sdmxml/schemas/v2_1/structure",
-    "common": "http://www.sdmx.org/resources/sdmxml/schemas/v2_1/common",
-    "generic": "http://www.sdmx.org/resources/sdmxml/schemas/v2_1/data/generic",
-}
+from toolkit.plugins.ckan import (  # noqa: E402
+    CKAN_SIGNATURES as _CKAN_SIGNATURES,  # noqa: F401
+    ckan_portal_base as _ckan_portal_base,
+    detect_ckan_in_html,  # noqa: F401
+    extract_ckan_dataset_id,  # noqa: F401
+)
+from toolkit.plugins.sdmx import SDMX_NS_FULL as _SDMX_NS  # noqa: E402
+from toolkit.plugins.sdmx import is_sdmx_url  # noqa: E402, F401
 
 _YEAR_RE = re.compile(r"(?<!\d)(19\d{2}|20[012]\d)(?!\d)")
 
@@ -129,12 +123,6 @@ def resolve_preview_kind(
             return "XLS"
 
     return None
-
-
-def is_sdmx_url(url: str) -> bool:
-    """Rileva se URL punta a un endpoint SDMX."""
-    lowered = url.lower()
-    return any(pattern in lowered for pattern in ("/dataflow/", "/sdmx/", "sdmx", "?flow="))
 
 
 def is_sparql_endpoint(url: str, content_type: str | None = None) -> bool:
@@ -345,81 +333,8 @@ def fetch_html_body(
 
 
 # ---------------------------------------------------------------------------
-# CKAN detection + fetch
+# CKAN fetch (uses detection helpers imported from plugins.ckan)
 # ---------------------------------------------------------------------------
-
-
-def detect_ckan_in_html(html_bytes: bytes) -> bool:
-    """Rileva se HTML contiene firme CKAN."""
-    return any(sig in html_bytes for sig in _CKAN_SIGNATURES)
-
-
-def extract_ckan_dataset_id(url: str, html_text: str = "") -> str | None:
-    """Estrae dataset ID CKAN da URL o HTML.
-
-    Ordine: UUID in query param → UUID/slug in path → API reference in HTML.
-    """
-    # UUID in query param ?id=...
-    match = re.search(r"[?&]id=([a-f0-9-]{36,})", url, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    # UUID o slug in path /dataset/...
-    match = re.search(r"/dataset/([^/?#]+)", url, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    # Da HTML: /api/3/action/package_show?id=...
-    if html_text:
-        api_match = re.search(r'["\']?(/api/3/action/package_show\?id=[^"\'<>\s]+)', html_text)
-        if api_match:
-            qs = api_match.group(1).split("?", 1)[-1]
-            parsed = parse_qs(qs)
-            if "id" in parsed:
-                return parsed["id"][0]
-    return None
-
-
-def _ckan_portal_base(url: str) -> str:
-    """Estrae il base path del portale CKAN da un URL qualsiasi.
-
-    Normalizza URL nella forma:
-      - ``https://portale.it/opendata/dataset/slug`` → ``https://portale.it/opendata``
-      - ``https://portale.it/opendata/api/3/action/package_show?id=...`` → ``https://portale.it/opendata``
-      - ``https://portale.it/dataset/slug`` → ``https://portale.it``
-      - ``https://dati.gov.it/opendata`` → ``https://dati.gov.it/opendata``
-
-    Returns:
-        URL base del portale (schema + netloc + path), senza trailing slash.
-    """
-    parsed = urlparse(url)
-    root = f"{parsed.scheme}://{parsed.netloc}"
-    path = parsed.path.rstrip("/")
-
-    # Toglie /dataset/{slug} o /dataset/...  (es. /opendata/dataset/foo → /opendata)
-    ds_match = re.search(r"^(.*?)/dataset/", path)
-    if ds_match:
-        path = ds_match.group(1).rstrip("/")
-        return f"{root}{path}" if path else root
-
-    # Toglie /api/3/action/package_show (es. /opendata/api/3/action/package_show → /opendata)
-    api_match = re.search(r"^(.*?)/api/3/action/package_show/?$", path)
-    if api_match:
-        path = api_match.group(1).rstrip("/")
-        return f"{root}{path}" if path else root
-
-    # Toglie /api/3/action (es. /opendata/api/3/action → /opendata)
-    api_match = re.search(r"^(.*?)/api/3/action/?$", path)
-    if api_match:
-        path = api_match.group(1).rstrip("/")
-        return f"{root}{path}" if path else root
-
-    # Toglie /api/3 o /api
-    api_match = re.search(r"^(.*?)/api(/[123])?/?$", path)
-    if api_match:
-        path = api_match.group(1).rstrip("/")
-        return f"{root}{path}" if path else root
-
-    # Nessun pattern CKAN riconosciuto — usa il path così com'è
-    return f"{root}{path}" if path else root
 
 
 def fetch_ckan_package(

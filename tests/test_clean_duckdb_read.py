@@ -4,12 +4,13 @@ import logging
 from pathlib import Path
 
 from lab_connectors.duckdb import safe_connect
-import pandas as pd
 import pytest
 import yaml
 
 from toolkit.core import duckdb_read
 from toolkit.clean.read_config import load_suggested_read, resolve_clean_read_cfg
+
+pd = pytest.importorskip("pandas")
 
 
 @pytest.mark.policy

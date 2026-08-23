@@ -6,7 +6,6 @@ from typing import Any
 from toolkit.core.duckdb_read import SUPPORTED_INPUT_EXTS
 from toolkit.clean.read_config import resolve_clean_read_cfg
 from toolkit.clean.input_selection import select_raw_input
-from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict
 from toolkit.core.input_file import RawInputFile, enrich_input_files
 from toolkit.core.metadata import (
@@ -80,9 +79,6 @@ def _write_rendered_sql(
     *,
     output_cfg: dict[str, Any] | None,
 ) -> Path | None:
-    if not should_write("clean", "rendered_sql", {"output": output_cfg or {}}):
-        return None
-
     run_dir = out_dir / "_run"
     run_dir.mkdir(parents=True, exist_ok=True)
     rendered_sql_path = run_dir / "clean_rendered.sql"

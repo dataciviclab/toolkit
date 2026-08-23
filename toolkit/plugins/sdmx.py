@@ -18,6 +18,13 @@ SDMX_NS = {
     "str": "http://www.sdmx.org/resources/sdmxml/schemas/v2_1/structure",
 }
 
+# Extended namespace map (includes generic data namespace — used by scout for XML parsing)
+SDMX_NS_FULL = {
+    **SDMX_NS,
+    "common": "http://www.sdmx.org/resources/sdmxml/schemas/v2_1/common",
+    "generic": "http://www.sdmx.org/resources/sdmxml/schemas/v2_1/data/generic",
+}
+
 # ── Eurostat (ESTAT) — profilo agenzia dedicato ───────────────────────────────
 # L'API Eurostat non segue la convenzione SDMX-REST canonica di ISTAT:
 #   - dati: `data/{flow}/{key}?format=TSV` (nessuna versione nel path;
@@ -639,3 +646,14 @@ class SdmxSource:
                     f"allowed: {allowed[:10]}{ellipsis}"
                 )
         return self._estat_fetch_tsv(flow, key)
+
+
+# ---------------------------------------------------------------------------
+# SDMX URL detection (shared with toolkit.scout.http)
+# ---------------------------------------------------------------------------
+
+
+def is_sdmx_url(url: str) -> bool:
+    """Rileva se URL punta a un endpoint SDMX."""
+    lowered = url.lower()
+    return any(pattern in lowered for pattern in ("/dataflow/", "/sdmx/", "sdmx", "?flow="))

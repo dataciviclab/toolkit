@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from toolkit.core.artifacts import should_write
 from toolkit.core.config import ensure_dict, parse_bool
 from toolkit.core.metadata import (
     config_hash_for_year,
@@ -155,7 +154,6 @@ def run_raw(
     primary_output_file = _choose_primary_output(manifest_sources, logger)
     primary_output_path = out_dir / primary_output_file
     profile_hints = None
-    profile_ctx = {"clean": clean_cfg or {}, "output": output_cfg or {}}
     if primary_output_path.exists() and primary_output_path.suffix.lower() in {
         ".csv",
         ".tsv",
@@ -165,26 +163,25 @@ def run_raw(
     }:
         try:
             profile_hints = sniff_source_file(primary_output_path)
-            if should_write("profile", "raw_profile", profile_ctx):
-                raw_profile = profile_raw(
-                    out_dir,
-                    dataset,
-                    year,
-                    read_cfg=(clean_cfg or {}).get("read", {}),
-                    primary_file=primary_output_path,
-                )
-                profile_dir = out_dir / "_profile"
-                write_raw_profile(profile_dir, raw_profile)
-                logger.info("RAW profile -> %s", profile_dir / RAW_PROFILE)
+            raw_profile = profile_raw(
+                out_dir,
+                dataset,
+                year,
+                read_cfg=(clean_cfg or {}).get("read", {}),
+                primary_file=primary_output_path,
+            )
+            profile_dir = out_dir / "_profile"
+            write_raw_profile(profile_dir, raw_profile)
+            logger.info("RAW profile -> %s", profile_dir / RAW_PROFILE)
 
-                scaffold_clean_if_missing(
-                    raw_profile.__dict__,
-                    dataset,
-                    year,
-                    base_dir or Path("."),
-                    clean_cfg,
-                    logger,
-                )
+            scaffold_clean_if_missing(
+                raw_profile.__dict__,
+                dataset,
+                year,
+                base_dir or Path("."),
+                clean_cfg,
+                logger,
+            )
         except Exception as exc:
             logger.warning(
                 "RAW profile/scaffold generation failed: %s: %s", type(exc).__name__, exc

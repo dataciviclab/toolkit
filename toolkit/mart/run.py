@@ -6,7 +6,6 @@ from typing import Any
 
 from lab_connectors.duckdb import safe_connect
 
-from toolkit.core.artifacts import should_write
 from toolkit.core.constants import CLEAN_INPUT_VIEW
 from toolkit.core.config import ensure_dict
 from toolkit.core.layer_profile import (
@@ -134,10 +133,8 @@ def run_mart_multi_year(
     base_ctx["years"] = years_csv
     base_ctx["years_csv"] = years_csv
 
-    run_dir: Path | None = None
-    if should_write("mart", "rendered_sql", {"output": output_cfg or {}}):
-        run_dir = multi_year_dir / "_run"
-        run_dir.mkdir(parents=True, exist_ok=True)
+    run_dir = multi_year_dir / "_run"
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     written: list[Path] = []
     executed: list[dict[str, Any]] = []
@@ -456,10 +453,8 @@ def run_mart(
             support=flatten_support_template_ctx(support_payloads),
         )
 
-        run_dir: Path | None = None
-        if should_write("mart", "rendered_sql", {"output": output_cfg or {}}):
-            run_dir = mart_dir / "_run"
-            run_dir.mkdir(parents=True, exist_ok=True)
+        run_dir = mart_dir / "_run"
+        run_dir.mkdir(parents=True, exist_ok=True)
 
         written: list[Path] = []
         executed: list[dict[str, Any]] = []

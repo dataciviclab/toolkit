@@ -487,6 +487,38 @@ class RawSourceConfig:
             headers=client.get("headers") if isinstance(client, dict) else None,
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        """Replacement for old Pydantic model_dump().
+
+        Ricostruisce il blocco ``client`` annidato (timeout/retries/user_agent/
+        headers) invece di appiattirlo a livello source — così i plugin che
+        leggono ``source.get("client")`` vedono il client del dataset.yml.
+        """
+        result: dict[str, Any] = {
+            "name": self.name,
+            "type": self.type,
+            "args": self.args,
+        }
+        if self.year is not None:
+            result["year"] = self.year
+        if self.primary:
+            result["primary"] = True
+        if self.inject_column is not None:
+            result["inject_column"] = self.inject_column
+        client = {
+            k: v
+            for k, v in (
+                ("timeout", self.timeout),
+                ("retries", self.retries),
+                ("user_agent", self.user_agent),
+                ("headers", self.headers),
+            )
+            if v is not None
+        }
+        if client:
+            result["client"] = client
+        return result
+
 
 @dataclass
 class RawConfig:

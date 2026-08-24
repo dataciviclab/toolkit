@@ -81,15 +81,6 @@ def run_raw(
     for i, source in enumerate(sources):
         stype = source.get("type") or source.get("plugin") or "http_file"
         client = source.get("client", {}) or {}
-        # I campi client appiattiti a livello source (timeout, retries, ...) da
-        # RawSourceConfig.to_dict() vanno iniettati nel client se il blocco
-        # `client:` non è presente nel dataset.yml (backward-compat).
-        if not client and "client" not in source:
-            client = {
-                k: v
-                for k, v in source.items()
-                if k in ("timeout", "retries", "user_agent", "headers") and v is not None
-            }
         args = source.get("args", {}) or {}
         name = source.get("name") or source.get("id") or f"source_{i + 1}"
         source_written: list[str] = []

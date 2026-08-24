@@ -527,6 +527,21 @@ class RawConfig:
     extractor: dict | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
+    def to_dict(self) -> dict[str, Any]:
+        """Replacement for old Pydantic model_dump().
+
+        I source sono dumpati col loro ``to_dict()`` (che ricostruisce il blocco
+        ``client`` annidato), non con ``asdict`` che li appiattisce.
+        """
+        result: dict[str, Any] = {
+            "sources": [s.to_dict() for s in self.sources],
+        }
+        if self.output_policy != "versioned":
+            result["output_policy"] = self.output_policy
+        if self.extractor is not None:
+            result["extractor"] = self.extractor
+        return result
+
     @staticmethod
     def from_dict(d: dict | None) -> RawConfig:
         if not d:

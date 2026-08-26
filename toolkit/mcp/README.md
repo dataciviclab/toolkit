@@ -3,33 +3,50 @@
 Server MCP locale, read-only, per ispezionare la pipeline e il catalogo
 dataset del DataCivicLab.
 
-## Tool esposti (13)
+## Tool esposti (5)
 
-### Catalogo (slug-based — GCS + workspace)
+Ogni tool ha un parametro `action` che fa da dispatch.
 
-- `toolkit_find` — cerca dataset per slug, source, layer, stage, run status
-- `toolkit_dataset_overview` — schema colonne + row count + preview per slug
+### `toolkit_dataset` — ispezione dataset
 
-### Pipeline (config-based — dataset.yml locale)
+| Action | Params chiave | Cosa fa |
+|---|---|---|
+| `find` | query, layer, limit, source, stage, status_filter | Cerca dataset per slug/testo/source |
+| `overview` | slug, layer, year, source, profile | Schema colonne + row count + preview |
+| `status` | config_path, year, since, until | Stato completo: paths, readiness, run_stats |
+| `preflight` | config_path, years | Diagnostica pre-run: valida config, verifica fonti |
+| `schema-diff` | config_path | Confronto segnali schema raw cross-year |
 
-- `toolkit_contract` — **nuovo** contratti pipeline per agenti AI: tipi fonte
-  raw, view names (raw_input/clean_input), macro SQL, regole validazione,
-  formati numerici. Chiamare PRIMA di scrivere dataset.yml/clean.sql/mart.sql
-  con --layer raw|clean|mart|all
-- `toolkit_layer` — query unificata RAW/CLEAN/MART: schema, preview, profile, SQL. Due modalita':
-  `config_path` (pipeline locale) o `datasets` (catalogo GCS/workspace)
-- `toolkit_status` — stato completo dataset: paths, summary, readiness, run_stats, info
-- `toolkit_schema_diff` — confronto segnali schema raw cross-year
-- `toolkit_preflight` — pre-flight check: valida config, verifica fonti, quality score
-- `toolkit_list_runs` — run record con filtri (status, data, limit)
+### `toolkit_query` — query dati
 
-### Scout fonti
+| Action | Params chiave | Cosa fa |
+|---|---|---|
+| `run` | datasets, sql, layer, mode, year, limit, dry_run | SQL su raw/clean/mart (catalog o pipeline mode) |
+| `preview` | url, known_encoding, known_delim, known_decimal, known_skip | Preview remoto CSV/TSV |
 
-- `toolkit_probe_url(url, routed=False)` — probe HTTP con routing automatico opzionale
-- `toolkit_ckan_package_show` — fetch metadati dataset CKAN
-- `toolkit_html_extract_links` — estrae link dati da pagina HTML
-- `toolkit_sparql_query` — SPARQL SELECT su endpoint pubblico
-- `toolkit_preview_url` — preview remoto CSV/TSV (HEAD + Range + sniff + DuckDB)
+### `toolkit_pipeline` — contratti, run history, registry
+
+| Action | Params chiave | Cosa fa |
+|---|---|---|
+| `contract` | layer | Contratti pipeline (raw/clean/mart/all) |
+| `runs` | config_path, year, since, until, status, limit | Run record con filtri |
+| `registry_list` | — | Elenca artifact registry committati |
+| `registry_show` | repo, artifact, slug | Mostra artifact registry |
+| `graph` | by_key, by_dataset, by_registry, by_domain | Mappa relazioni cross-dataset |
+
+### `toolkit_source` — fonti dati esterne
+
+| Action | Params chiave | Cosa fa |
+|---|---|---|
+| `probe` | url, timeout, routed | Probe HTTP: reachability, status code, content-type |
+| `ckan` | endpoint, package_id, timeout | Fetch metadati dataset CKAN |
+| `links` | url, timeout | Estrae link dati da pagina HTML |
+| `sparql` | endpoint, query, timeout, max_rows | SPARQL SELECT su endpoint pubblico |
+
+### `toolkit_contract` — backward compat
+
+Parametro `layer='raw'|'clean'|'mart'|'all'`. Mantiene compatibilità con
+codice esistente che usa il formato contratti.
 
 ## Config workspace
 
@@ -46,11 +63,9 @@ Sostituire il path del `command` con il Python reale del clone locale.
 
 ## Note tecniche
 
-- I tool catalogo usano i `registry.json` committati nei repo del workspace
+- I tool usano i `registry.json` committati nei repo del workspace
   (fusion ADR — path GCS esatti per repo) come fonte per i dataset pubblicati
-- `toolkit_find` unifica GCS + workspace locale (clean parquet + dataset.yml)
-- `list_candidates` (discovery.py) rimosso: usa `toolkit_find(source="workspace")`
-- `toolkit_layer(mode=sql, datasets=[...])` usa DuckDB con CTE multipli
+- `toolkit_dataset(action="find")` unifica GCS + workspace locale (clean parquet + dataset.yml)
+- `toolkit_query(action="run", mode=sql, datasets=[...])` usa DuckDB con CTE multipli
   e scope validation (blocca DDL, read_parquet, tabelle non consentite)
-- `inspect_paths/schema/profile` sono stati rimossi come tool MCP —
-  coperti da `toolkit_status` e `toolkit_layer(mode="schema")`
+- Le implementazioni `*_ops.py` non sono cambiate — solo il layer MCP in `server.py`

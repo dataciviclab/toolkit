@@ -11,6 +11,7 @@ Verifica che _fetch_script:
 """
 
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -97,27 +98,29 @@ def test_script_year_placeholder_through_format_args(script_dir: Path):
 
 
 def test_script_client_timeout_applied(script_dir: Path):
-    """client.timeout > default permette script più lunghi di 600s di default.
+    """client.timeout è letto e applicato al subprocess.
 
     Regressione: il timeout era hardcoded a 600s — harvest lunghi (es. inPA,
-    ~17 min) venivano uccisi. Con client.timeout alto il subprocess termina.
+    ~17 min) venivano uccisi anche con client.timeout dichiarato perché il
+    client non arrivava a _fetch_script (appiattito dal config).
+
+    Prova del fuoco: se il timeout NON fosse letto, il subprocess userebbe il
+    default 600s e un `sleep 5` completerebbe senza errore → il test fallirebbe.
+    Con client.timeout=1 il subprocess viene ucciso dopo ~1s → TimeoutExpired.
     """
-    output_file = script_dir / "output.csv"
     script = _make_script(
         script_dir,
-        output_file,
-        f'echo "anno,valore" > {output_file}\necho "2023,42.5" >> {output_file}',
+        script_dir / "never.csv",
+        'echo "inizio" > never.csv\nsleep 5\n',
     )
 
-    payload, origin = _fetch_payload(
-        "script",
-        {"timeout": 1},  # 1s: se non letto, subprocess.run userebbe default 600
-        {"command": f"bash {script}", "output": str(output_file)},
-        base_dir=script_dir,
-    )
-
-    assert payload == b"anno,valore\n2023,42.5\n"
-    assert origin == str(output_file)
+    with pytest.raises(subprocess.TimeoutExpired):
+        _fetch_payload(
+            "script",
+            {"timeout": 1},
+            {"command": f"bash {script}", "output": "never.csv"},
+            base_dir=script_dir,
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,20 @@
+## [1.51.0] - 2026-08-26
+
+### Added
+
+- **Timeout configurabile per source `script`** (PR #475): `raw.sources[].client.timeout` (default 600s) — abilita harvest lunghi via script (es. inPA: OPEN ~13 min, CLOSED ~17 min) che prima venivano uccisi dal limite fisso. Fix a livello config: `RawConfig.to_dict`/`RawSourceConfig.to_dict` ricostruiscono il blocco `client` annidato (prima `asdict` lo appiattiva e i plugin vedevano un client vuoto). Test di regressione che prende la regressione vera (script con `sleep 5` + timeout 1s → `TimeoutExpired`).
+
+### Changed
+
+- **Toolkit lean — rimozione codice morto e consolidamento moduli** (PR #476): rimossi reader/plugin/utility non usati, consolidati moduli duplicati (es. `read_sql_utils`).
+- **Refactor scaffold `full.py`** (PR #477): semplificazione con `yaml_dumps`, dependency inversion, `required_columns` complete in robust mode.
+- **MCP: 16 → 5 tool aggregati** (PR #474): `dataset`, `query`, `pipeline`, `source`, `contract` al posto dei singoli wrapper.
+- **Sparql: paginazione robusta** (PR #472): keyset + retry anti-troncamento + docs.
+
+### Fixed
+
+- **Timeout script source** (PR #475): vedi Added — harvest lunghi non venivano più uccisi.
+
 ## [1.50.0] - 2026-08-12
 
 ### Added

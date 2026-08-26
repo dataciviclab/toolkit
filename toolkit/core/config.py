@@ -487,6 +487,38 @@ class RawSourceConfig:
             headers=client.get("headers") if isinstance(client, dict) else None,
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        """Replacement for old Pydantic model_dump().
+
+        Ricostruisce il blocco ``client`` annidato (timeout/retries/user_agent/
+        headers) invece di appiattirlo a livello source — così i plugin che
+        leggono ``source.get("client")`` vedono il client del dataset.yml.
+        """
+        result: dict[str, Any] = {
+            "name": self.name,
+            "type": self.type,
+            "args": self.args,
+        }
+        if self.year is not None:
+            result["year"] = self.year
+        if self.primary:
+            result["primary"] = True
+        if self.inject_column is not None:
+            result["inject_column"] = self.inject_column
+        client = {
+            k: v
+            for k, v in (
+                ("timeout", self.timeout),
+                ("retries", self.retries),
+                ("user_agent", self.user_agent),
+                ("headers", self.headers),
+            )
+            if v is not None
+        }
+        if client:
+            result["client"] = client
+        return result
+
 
 @dataclass
 class RawConfig:
@@ -494,6 +526,21 @@ class RawConfig:
     output_policy: str = "versioned"
     extractor: dict | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Replacement for old Pydantic model_dump().
+
+        I source sono dumpati col loro ``to_dict()`` (che ricostruisce il blocco
+        ``client`` annidato), non con ``asdict`` che li appiattisce.
+        """
+        result: dict[str, Any] = {
+            "sources": [s.to_dict() for s in self.sources],
+        }
+        if self.output_policy != "versioned":
+            result["output_policy"] = self.output_policy
+        if self.extractor is not None:
+            result["extractor"] = self.extractor
+        return result
 
     @staticmethod
     def from_dict(d: dict | None) -> RawConfig:

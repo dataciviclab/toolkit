@@ -191,8 +191,9 @@ def toolkit_query(
     known_skip: int | None = None,
 ) -> dict[str, Any]:
     if action == "run":
-        if not sql:
-            raise ToolkitClientError("run richiede sql", ErrorCode.INVALID_PARAMS)
+        needs_sql = mode == "sql"
+        if needs_sql and not sql:
+            raise ToolkitClientError("run con mode=sql richiede sql", ErrorCode.INVALID_PARAMS)
         if not datasets and not config_path:
             raise ToolkitClientError(
                 "run richiede datasets o config_path", ErrorCode.INVALID_PARAMS

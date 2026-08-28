@@ -106,8 +106,20 @@ def test_toolkit_query_run(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_query_run_missing_sql() -> None:
-    with pytest.raises(ToolkitClientError, match="run richiede sql"):
+    with pytest.raises(ToolkitClientError, match="richiede sql"):
         mcp_server.toolkit_query(action="run", datasets=["terna"])
+
+
+def test_toolkit_query_run_schema_mode_no_sql_needed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """mode='schema' non dovrebbe richiedere SQL."""
+
+    def fake_layer(**kwargs):
+        assert kwargs.get("mode") == "schema"
+        return {"columns": [{"name": "col1"}]}
+
+    monkeypatch.setattr(mcp_server, "layer_query_impl", fake_layer)
+    result = mcp_server.toolkit_query(action="run", datasets=["terna"], mode="schema")
+    assert "columns" in result
 
 
 def test_toolkit_query_preview(monkeypatch: pytest.MonkeyPatch) -> None:

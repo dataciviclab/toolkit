@@ -470,6 +470,8 @@ class RawSourceConfig:
     retries: int | None = None
     user_agent: str | None = None
     headers: dict[str, str] | None = None
+    # Per-source extractor override (es. unzip_first_csv per ZIP raw)
+    extractor: dict | None = None
 
     @staticmethod
     def from_dict(d: dict) -> RawSourceConfig:
@@ -485,6 +487,7 @@ class RawSourceConfig:
             retries=client.get("retries") if isinstance(client, dict) else None,
             user_agent=client.get("user_agent") if isinstance(client, dict) else None,
             headers=client.get("headers") if isinstance(client, dict) else None,
+            extractor=d.get("extractor") if isinstance(d.get("extractor"), dict) else None,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -517,6 +520,8 @@ class RawSourceConfig:
         }
         if client:
             result["client"] = client
+        if self.extractor is not None:
+            result["extractor"] = self.extractor
         return result
 
 

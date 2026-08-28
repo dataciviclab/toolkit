@@ -18,6 +18,9 @@ from typing import Any
 
 from lab_connectors.mcp import create_mcp_server, guard_timed
 
+from toolkit.mcp.errors import ToolkitClientError
+from lab_connectors.mcp.errors import ErrorCode
+
 from .toolkit_client import (
     list_runs as list_runs_impl,
     mcp_ckan_package_show as ckan_package_show_impl,
@@ -113,7 +116,7 @@ def toolkit_dataset(
         )
     if action == "overview":
         if not slug:
-            return {"error": "missing_param", "message": "overview richiede slug"}
+            raise ToolkitClientError("overview richiede slug", ErrorCode.INVALID_PARAMS)
         return guard_timed(
             dataset_overview_impl,
             "toolkit_dataset_overview",
@@ -125,7 +128,7 @@ def toolkit_dataset(
         )
     if action == "status":
         if not config_path:
-            return {"error": "missing_param", "message": "status richiede config_path"}
+            raise ToolkitClientError("status richiede config_path", ErrorCode.INVALID_PARAMS)
         return guard_timed(
             dataset_status_impl,
             "toolkit_dataset_status",
@@ -136,18 +139,18 @@ def toolkit_dataset(
         )
     if action == "preflight":
         if not config_path:
-            return {"error": "missing_param", "message": "preflight richiede config_path"}
+            raise ToolkitClientError("preflight richiede config_path", ErrorCode.INVALID_PARAMS)
         from toolkit.domain.preflight import run_preflight
 
         return guard_timed(run_preflight, "toolkit_dataset_preflight", config_path, years_arg=years)
     if action == "schema-diff":
         if not config_path:
-            return {"error": "missing_param", "message": "schema-diff richiede config_path"}
+            raise ToolkitClientError("schema-diff richiede config_path", ErrorCode.INVALID_PARAMS)
         return guard_timed(schema_diff_impl, "toolkit_dataset_schema_diff", config_path)
-    return {
-        "error": "invalid_action",
-        "message": f"Azione '{action}' non valida. Usare: find, overview, status, preflight, schema-diff",
-    }
+    raise ToolkitClientError(
+        f"Azione '{action}' non valida. Usare: find, overview, status, preflight, schema-diff",
+        ErrorCode.INVALID_PARAMS,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -189,9 +192,11 @@ def toolkit_query(
 ) -> dict[str, Any]:
     if action == "run":
         if not sql:
-            return {"error": "missing_param", "message": "run richiede sql"}
+            raise ToolkitClientError("run richiede sql", ErrorCode.INVALID_PARAMS)
         if not datasets and not config_path:
-            return {"error": "missing_param", "message": "run richiede datasets o config_path"}
+            raise ToolkitClientError(
+                "run richiede datasets o config_path", ErrorCode.INVALID_PARAMS
+            )
         return guard_timed(
             layer_query_impl,
             "toolkit_query_run",
@@ -208,7 +213,7 @@ def toolkit_query(
         )
     if action == "preview":
         if not url:
-            return {"error": "missing_param", "message": "preview richiede url"}
+            raise ToolkitClientError("preview richiede url", ErrorCode.INVALID_PARAMS)
         return guard_timed(
             preview_url_impl,
             "toolkit_query_preview",
@@ -218,10 +223,10 @@ def toolkit_query(
             known_decimal=known_decimal,
             known_skip=known_skip,
         )
-    return {
-        "error": "invalid_action",
-        "message": f"Azione '{action}' non valida. Usare: run, preview",
-    }
+    raise ToolkitClientError(
+        f"Azione '{action}' non valida. Usare: run, preview",
+        ErrorCode.INVALID_PARAMS,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -273,7 +278,7 @@ def toolkit_pipeline(
         return CONTRACTS
     if action == "runs":
         if not config_path:
-            return {"error": "missing_param", "message": "runs richiede config_path"}
+            raise ToolkitClientError("runs richiede config_path", ErrorCode.INVALID_PARAMS)
         return guard_timed(
             list_runs_impl,
             "toolkit_pipeline_runs",
@@ -289,7 +294,9 @@ def toolkit_pipeline(
         return guard_timed(registry_list_impl, "toolkit_pipeline_registry_list")
     if action == "registry_show":
         if not repo or not artifact:
-            return {"error": "missing_param", "message": "registry_show richiede repo e artifact"}
+            raise ToolkitClientError(
+                "registry_show richiede repo e artifact", ErrorCode.INVALID_PARAMS
+            )
         return guard_timed(
             registry_show_impl, "toolkit_pipeline_registry_show", repo, artifact, slug
         )
@@ -302,10 +309,10 @@ def toolkit_pipeline(
             by_registry=by_registry,
             by_domain=by_domain,
         )
-    return {
-        "error": "invalid_action",
-        "message": f"Azione '{action}' non valida. Usare: contract, runs, registry_list, registry_show, graph",
-    }
+    raise ToolkitClientError(
+        f"Azione '{action}' non valida. Usare: contract, runs, registry_list, registry_show, graph",
+        ErrorCode.INVALID_PARAMS,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +343,7 @@ def toolkit_source(
 ) -> dict[str, Any]:
     if action == "probe":
         if not url:
-            return {"error": "missing_param", "message": "probe richiede url"}
+            raise ToolkitClientError("probe richiede url", ErrorCode.INVALID_PARAMS)
         impl = probe_url_routed_impl if routed else probe_url_impl
         name = "toolkit_source_probe"
         if routed:
@@ -344,24 +351,26 @@ def toolkit_source(
         return guard_timed(impl, name, url, timeout)
     if action == "ckan":
         if not endpoint or not package_id:
-            return {"error": "missing_param", "message": "ckan richiede endpoint e package_id"}
+            raise ToolkitClientError(
+                "ckan richiede endpoint e package_id", ErrorCode.INVALID_PARAMS
+            )
         return guard_timed(
             ckan_package_show_impl, "toolkit_source_ckan", endpoint, package_id, timeout
         )
     if action == "links":
         if not url:
-            return {"error": "missing_param", "message": "links richiede url"}
+            raise ToolkitClientError("links richiede url", ErrorCode.INVALID_PARAMS)
         return guard_timed(html_extract_links_impl, "toolkit_source_links", url, timeout)
     if action == "sparql":
         if not endpoint or not query:
-            return {"error": "missing_param", "message": "sparql richiede endpoint e query"}
+            raise ToolkitClientError("sparql richiede endpoint e query", ErrorCode.INVALID_PARAMS)
         return guard_timed(
             sparql_query_impl, "toolkit_source_sparql", endpoint, query, timeout, max_rows
         )
-    return {
-        "error": "invalid_action",
-        "message": f"Azione '{action}' non valida. Usare: probe, ckan, links, sparql",
-    }
+    raise ToolkitClientError(
+        f"Azione '{action}' non valida. Usare: probe, ckan, links, sparql",
+        ErrorCode.INVALID_PARAMS,
+    )
 
 
 # ---------------------------------------------------------------------------

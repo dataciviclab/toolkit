@@ -48,8 +48,8 @@ def test_toolkit_dataset_overview(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_dataset_overview_missing_slug() -> None:
-    result = mcp_server.toolkit_dataset(action="overview")
-    assert "error" in result
+    with pytest.raises(ToolkitClientError, match="overview richiede slug"):
+        mcp_server.toolkit_dataset(action="overview")
 
 
 def test_toolkit_dataset_status(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -62,8 +62,8 @@ def test_toolkit_dataset_status(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_dataset_status_missing_config() -> None:
-    result = mcp_server.toolkit_dataset(action="status")
-    assert "error" in result
+    with pytest.raises(ToolkitClientError, match="status richiede config_path"):
+        mcp_server.toolkit_dataset(action="status")
 
 
 def test_toolkit_dataset_preflight(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -85,8 +85,8 @@ def test_toolkit_dataset_schema_diff(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_dataset_invalid_action() -> None:
-    result = mcp_server.toolkit_dataset(action="bogus")
-    assert result["error"] == "invalid_action"
+    with pytest.raises(ToolkitClientError, match="non valida"):
+        mcp_server.toolkit_dataset(action="bogus")
 
 
 # ---------------------------------------------------------------------------
@@ -106,8 +106,8 @@ def test_toolkit_query_run(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_query_run_missing_sql() -> None:
-    result = mcp_server.toolkit_query(action="run", datasets=["terna"])
-    assert "error" in result
+    with pytest.raises(ToolkitClientError, match="run richiede sql"):
+        mcp_server.toolkit_query(action="run", datasets=["terna"])
 
 
 def test_toolkit_query_preview(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -120,8 +120,8 @@ def test_toolkit_query_preview(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_query_invalid_action() -> None:
-    result = mcp_server.toolkit_query(action="bogus")
-    assert result["error"] == "invalid_action"
+    with pytest.raises(ToolkitClientError, match="non valida"):
+        mcp_server.toolkit_query(action="bogus")
 
 
 # ---------------------------------------------------------------------------
@@ -180,8 +180,8 @@ def test_toolkit_pipeline_graph(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_pipeline_invalid_action() -> None:
-    result = mcp_server.toolkit_pipeline(action="bogus")
-    assert result["error"] == "invalid_action"
+    with pytest.raises(ToolkitClientError, match="non valida"):
+        mcp_server.toolkit_pipeline(action="bogus")
 
 
 # ---------------------------------------------------------------------------
@@ -230,8 +230,8 @@ def test_toolkit_source_sparql(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_source_invalid_action() -> None:
-    result = mcp_server.toolkit_source(action="bogus")
-    assert result["error"] == "invalid_action"
+    with pytest.raises(ToolkitClientError, match="non valida"):
+        mcp_server.toolkit_source(action="bogus")
 
 
 # ---------------------------------------------------------------------------

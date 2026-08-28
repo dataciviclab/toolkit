@@ -150,7 +150,13 @@ def toolkit_dataset(
             raise ToolkitClientError("preflight richiede config_path", ErrorCode.INVALID_PARAMS)
         from toolkit.domain.preflight import run_preflight
 
-        return guard_timed(run_preflight, "toolkit_dataset_preflight", config_path, years_arg=years)
+        result = guard_timed(
+            run_preflight, "toolkit_dataset_preflight", config_path, years_arg=years
+        )
+        # Trim: strip nulls da ogni source entry
+        if "sources" in result:
+            result["sources"] = [shape(s) for s in result["sources"]]
+        return shape(result)
     if action == "schema-diff":
         if not config_path:
             raise ToolkitClientError("schema-diff richiede config_path", ErrorCode.INVALID_PARAMS)

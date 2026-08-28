@@ -27,7 +27,6 @@ from .toolkit_client import (
     mcp_ckan_package_show as ckan_package_show_impl,
     mcp_html_extract_links as html_extract_links_impl,
     mcp_preview_url as preview_url_impl,
-    mcp_probe_url as probe_url_impl,
     mcp_probe_url_routed as probe_url_routed_impl,
     mcp_sparql_query as sparql_query_impl,
     schema_diff as schema_diff_impl,
@@ -340,7 +339,7 @@ def toolkit_pipeline(
     description=(
         "Fonti dati esterne: probe HTTP, CKAN, HTML links, SPARQL.\n\n"
         "Actions:\n"
-        "- probe: reachability HTTP (params: url, timeout, routed)\n"
+        "- probe: reachability + routing auto (params: url, timeout)\n"
         "- ckan: fetch dataset CKAN (params: endpoint, package_id, timeout)\n"
         "- links: estrai link dati da pagina HTML (params: url, timeout)\n"
         "- sparql: query SPARQL SELECT (params: endpoint, query, timeout, max_rows)"
@@ -354,17 +353,12 @@ def toolkit_source(
     package_id: str | None = None,
     query: str | None = None,
     timeout: int = 30,
-    routed: bool = False,
     max_rows: int = 500,
 ) -> dict[str, Any]:
     if action == "probe":
         if not url:
             raise ToolkitClientError("probe richiede url", ErrorCode.INVALID_PARAMS)
-        impl = probe_url_routed_impl if routed else probe_url_impl
-        name = "toolkit_source_probe"
-        if routed:
-            return shape(guard_timed(impl, f"{name}_routed", url, timeout))
-        return shape(guard_timed(impl, name, url, timeout))
+        return shape(guard_timed(probe_url_routed_impl, "toolkit_source_probe", url, timeout))
     if action == "ckan":
         if not endpoint or not package_id:
             raise ToolkitClientError(

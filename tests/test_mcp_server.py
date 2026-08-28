@@ -204,7 +204,7 @@ def test_toolkit_source_probe(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_probe(url, timeout):
         return {"status_code": 200}
 
-    monkeypatch.setattr(mcp_server, "probe_url_impl", fake_probe)
+    monkeypatch.setattr(mcp_server, "probe_url_routed_impl", fake_probe)
     result = mcp_server.toolkit_source(action="probe", url="https://example.gov.it")
     assert result["status_code"] == 200
 
@@ -251,7 +251,7 @@ def test_toolkit_source_invalid_action() -> None:
 
 
 def test_tool_returns_payload_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mcp_server, "probe_url_impl", lambda url, timeout: {"ok": True})
+    monkeypatch.setattr(mcp_server, "probe_url_routed_impl", lambda url, timeout: {"ok": True})
     result = mcp_server.toolkit_source(action="probe", url="https://example.gov.it", timeout=15)
     assert result == {"ok": True}
 
@@ -262,7 +262,7 @@ def test_toolkit_source_probe_error_has_error_code(monkeypatch: pytest.MonkeyPat
     def failing_impl(url: str, timeout: int) -> dict:
         raise ToolkitClientError("test probe error")
 
-    monkeypatch.setattr(mcp_server, "probe_url_impl", failing_impl)
+    monkeypatch.setattr(mcp_server, "probe_url_routed_impl", failing_impl)
     payload = mcp_server.toolkit_source(action="probe", url="https://example.gov.it", timeout=15)
     assert "error" in payload
     assert "message" in payload

@@ -180,6 +180,23 @@ def test_filter_by_domain_unknown(graph_workspace: Path) -> None:
 
 
 @pytest.mark.contract
+def test_filter_by_dataset_also_filters_bridges(graph_workspace: Path) -> None:
+    """by_dataset deve filtrare anche i bridge, non solo le entità."""
+    graph = load_workspace_graph(graph_workspace)
+
+    # Il bridge referenzia anac_aggiudicatari (from) e anac_bandi_gara (to)
+    assert len(graph["bridges"]) == 1
+
+    # Filtra per anac_bandi_gara → il bridge ha to.dataset == anac_bandi_gara
+    res = filter_graph(graph, by_dataset="anac_bandi_gara")
+    assert len(res["bridges"]) == 1
+
+    # Filtra per un dataset che non è in nessun bridge → 0 bridges
+    res = filter_graph(graph, by_dataset="irpef_comunale")
+    assert len(res["bridges"]) == 0
+
+
+@pytest.mark.contract
 def test_domain_keywords_cover_clean_query_contract() -> None:
     """I domini del graph coprono quelli di clean-query (parità di contratto)."""
     expected = {"appalti", "enti", "territorio", "giustizia", "scuola", "progetti", "economia"}

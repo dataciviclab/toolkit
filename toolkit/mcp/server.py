@@ -134,7 +134,7 @@ def toolkit_dataset(
     if action == "status":
         if not config_path:
             raise ToolkitClientError("status richiede config_path", ErrorCode.INVALID_PARAMS)
-        return guard_timed(
+        result = guard_timed(
             dataset_status_impl,
             "toolkit_dataset_status",
             config_path,
@@ -142,6 +142,9 @@ def toolkit_dataset(
             since=since,
             until=until,
         )
+        # Trim: paths_info è sovrapposto con summary
+        result.pop("paths_info", None)
+        return shape(result)
     if action == "preflight":
         if not config_path:
             raise ToolkitClientError("preflight richiede config_path", ErrorCode.INVALID_PARAMS)

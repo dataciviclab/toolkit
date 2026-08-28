@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 from lab_connectors.mcp import create_mcp_server, guard_timed
+from toolkit.mcp.response import shape
 
 from toolkit.mcp.errors import ToolkitClientError
 from lab_connectors.mcp.errors import ErrorCode
@@ -104,7 +105,7 @@ def toolkit_dataset(
     years: str | None = None,
 ) -> dict[str, Any]:
     if action == "find":
-        return guard_timed(
+        result = guard_timed(
             find_impl,
             "toolkit_dataset_find",
             query=query,
@@ -114,10 +115,14 @@ def toolkit_dataset(
             stage=stage,
             status_filter=status_filter,
         )
+        # Strip nulls da ogni entry del catalogo
+        if "datasets" in result:
+            result["datasets"] = [shape(ds) for ds in result["datasets"]]
+        return result
     if action == "overview":
         if not slug:
             raise ToolkitClientError("overview richiede slug", ErrorCode.INVALID_PARAMS)
-        return guard_timed(
+        result = guard_timed(
             dataset_overview_impl,
             "toolkit_dataset_overview",
             slug=slug,
@@ -126,6 +131,7 @@ def toolkit_dataset(
             source=source,
             profile=profile,
         )
+        return shape(result)
     if action == "status":
         if not config_path:
             raise ToolkitClientError("status richiede config_path", ErrorCode.INVALID_PARAMS)
@@ -215,7 +221,7 @@ def toolkit_query(
     if action == "preview":
         if not url:
             raise ToolkitClientError("preview richiede url", ErrorCode.INVALID_PARAMS)
-        return guard_timed(
+        result = guard_timed(
             preview_url_impl,
             "toolkit_query_preview",
             url,
@@ -224,6 +230,7 @@ def toolkit_query(
             known_decimal=known_decimal,
             known_skip=known_skip,
         )
+        return shape(result)
     raise ToolkitClientError(
         f"Azione '{action}' non valida. Usare: run, preview",
         ErrorCode.INVALID_PARAMS,
@@ -348,8 +355,8 @@ def toolkit_source(
         impl = probe_url_routed_impl if routed else probe_url_impl
         name = "toolkit_source_probe"
         if routed:
-            return guard_timed(impl, f"{name}_routed", url, timeout)
-        return guard_timed(impl, name, url, timeout)
+            return shape(guard_timed(impl, f"{name}_routed", url, timeout))
+        return shape(guard_timed(impl, name, url, timeout))
     if action == "ckan":
         if not endpoint or not package_id:
             raise ToolkitClientError(

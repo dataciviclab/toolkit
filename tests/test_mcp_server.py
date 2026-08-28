@@ -20,7 +20,6 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_query",
         "toolkit_pipeline",
         "toolkit_source",
-        "toolkit_contract",
     }
 
 
@@ -244,37 +243,6 @@ def test_toolkit_source_sparql(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_toolkit_source_invalid_action() -> None:
     with pytest.raises(ToolkitClientError, match="non valida"):
         mcp_server.toolkit_source(action="bogus")
-
-
-# ---------------------------------------------------------------------------
-# toolkit_contract (backward compat)
-# ---------------------------------------------------------------------------
-
-
-def test_toolkit_contract_structure() -> None:
-    result = mcp_server.toolkit_contract(layer="all")
-    assert "version" in result
-    assert "pipeline" in result
-    assert "clean" in result
-    assert "mart" in result
-    assert "constants" in result
-    assert "tldr" in result
-
-    clean = result["clean"]
-    assert clean["sql_source"]["view"] == "raw_input"
-    assert len(clean["macros"]) >= 8
-
-    raw_only = mcp_server.toolkit_contract(layer="raw")
-    assert raw_only["layer"] == "raw"
-    assert "source_types" in raw_only
-
-    clean_only = mcp_server.toolkit_contract(layer="clean")
-    assert clean_only["layer"] == "clean"
-    assert clean_only["sql_source"]["view"] == "raw_input"
-
-    mart_only = mcp_server.toolkit_contract(layer="mart")
-    assert mart_only["layer"] == "mart"
-    assert mart_only["sql_source"]["view"] == "clean_input"
 
 
 # ---------------------------------------------------------------------------

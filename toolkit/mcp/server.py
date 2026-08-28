@@ -55,14 +55,13 @@ mcp = create_mcp_server(
     instructions=(
         "Toolkit pipeline server — ispeziona dataset, esegue query, "
         "e fornisce contratti per agenti AI.\n\n"
-        "5 tool aggregati:\n"
+        "4 tool:\n"
         "- toolkit_dataset: find, overview, status, preflight, schema-diff\n"
         "- toolkit_query: run (SQL su raw/clean/mart), preview (URL CSV/TSV)\n"
         "- toolkit_pipeline: contract, runs, registry_list/show, graph\n"
-        "- toolkit_source: probe HTTP, CKAN, HTML links, SPARQL\n"
-        "- toolkit_contract: contratti pipeline (backward compat)\n\n"
+        "- toolkit_source: probe HTTP, CKAN, HTML links, SPARQL\n\n"
         "📌 PRIMA di scrivere clean.sql o mart.sql: chiama "
-        "toolkit_contract(layer='clean') per view name (raw_input), "
+        "toolkit_pipeline(action='contract', layer='clean') per view name (raw_input), "
         "macro disponibili, regole validazione e formati numerici."
     ),
 )
@@ -379,29 +378,6 @@ def toolkit_source(
         f"Azione '{action}' non valida. Usare: probe, ckan, links, sparql",
         ErrorCode.INVALID_PARAMS,
     )
-
-
-# ---------------------------------------------------------------------------
-# toolkit_contract — backward compat
-# ---------------------------------------------------------------------------
-
-
-@mcp.tool(
-    description=(
-        "Contratti pipeline toolkit. Usalo PRIMA di scrivere clean.sql o mart.sql "
-        "per conoscere view names (raw_input, clean_input), macro, regole validazione. "
-        "Parametro layer='raw' | 'clean' | 'mart' | 'all' (default)."
-    ),
-    structured_output=True,
-)
-def toolkit_contract(layer: str = "all") -> dict[str, Any]:
-    from toolkit.contracts.pipeline import CONTRACTS
-
-    if layer == "all":
-        return CONTRACTS
-    if layer in CONTRACTS:
-        return {"layer": layer, **CONTRACTS[layer]}
-    return CONTRACTS
 
 
 if __name__ == "__main__":

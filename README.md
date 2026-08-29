@@ -105,7 +105,7 @@ Il toolkit risolve i path relativi, esegue SQL su DuckDB e produce output in `ro
 
 ## Integrazione AI (MCP)
 
-Il toolkit espone **5 tool** MCP aggregati per agenti AI e IDE:
+Il toolkit espone **4 tool** MCP aggregati per agenti AI e IDE:
 
 | Tool | Azioni | Cosa fa |
 |---|---|---|
@@ -113,7 +113,6 @@ Il toolkit espone **5 tool** MCP aggregati per agenti AI e IDE:
 | `toolkit_query` | run, preview | SQL su raw/clean/mart, preview URL CSV/TSV |
 | `toolkit_pipeline` | contract, runs, registry_list, registry_show, graph | Contratti, run history, registry, grafo relazioni |
 | `toolkit_source` | probe, ckan, links, sparql | Probe HTTP, CKAN, HTML links, SPARQL |
-| `toolkit_contract` | (unico) | Contratti pipeline (backward compat) |
 
 Config IDE (`.mcp.json`):
 ```json

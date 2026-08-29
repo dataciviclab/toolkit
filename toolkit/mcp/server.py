@@ -1,13 +1,12 @@
 """Toolkit MCP server.
 
-Espone 5 tool aggregati per ispezione dataset, query, pipeline e fonti.
+Espone 4 tool aggregati per ispezione dataset, query, pipeline e fonti.
 
 Tool:
 - toolkit_dataset: find, overview, status, preflight, schema-diff
 - toolkit_query: run (SQL), preview (URL CSV/TSV)
 - toolkit_pipeline: contract, runs, registry_list, registry_show, graph
 - toolkit_source: probe, ckan, links, sparql
-- toolkit_contract: contratti pipeline (backward compat)
 
 Usa ``lab_connectors.mcp`` per init standardizzato, error handling e logging.
 """

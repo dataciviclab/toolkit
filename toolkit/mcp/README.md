@@ -38,15 +38,10 @@ Ogni tool ha un parametro `action` che fa da dispatch.
 
 | Action | Params chiave | Cosa fa |
 |---|---|---|
-| `probe` | url, timeout, routed | Probe HTTP: reachability, status code, content-type |
+| `probe` | url, timeout | Probe HTTP: reachability + routing auto |
 | `ckan` | endpoint, package_id, timeout | Fetch metadati dataset CKAN |
 | `links` | url, timeout | Estrae link dati da pagina HTML |
 | `sparql` | endpoint, query, timeout, max_rows | SPARQL SELECT su endpoint pubblico |
-
-### `toolkit_contract` — backward compat
-
-Parametro `layer='raw'|'clean'|'mart'|'all'`. Mantiene compatibilità con
-codice esistente che usa il formato contratti.
 
 ## Config workspace
 

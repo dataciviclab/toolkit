@@ -20,7 +20,6 @@ def test_mcp_server_registers_expected_tools() -> None:
         "toolkit_query",
         "toolkit_pipeline",
         "toolkit_source",
-        "toolkit_contract",
     }
 
 
@@ -48,8 +47,8 @@ def test_toolkit_dataset_overview(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_dataset_overview_missing_slug() -> None:
-    result = mcp_server.toolkit_dataset(action="overview")
-    assert "error" in result
+    with pytest.raises(ToolkitClientError, match="overview richiede slug"):
+        mcp_server.toolkit_dataset(action="overview")
 
 
 def test_toolkit_dataset_status(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -62,8 +61,8 @@ def test_toolkit_dataset_status(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_dataset_status_missing_config() -> None:
-    result = mcp_server.toolkit_dataset(action="status")
-    assert "error" in result
+    with pytest.raises(ToolkitClientError, match="status richiede config_path"):
+        mcp_server.toolkit_dataset(action="status")
 
 
 def test_toolkit_dataset_preflight(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -85,8 +84,8 @@ def test_toolkit_dataset_schema_diff(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_dataset_invalid_action() -> None:
-    result = mcp_server.toolkit_dataset(action="bogus")
-    assert result["error"] == "invalid_action"
+    with pytest.raises(ToolkitClientError, match="non valida"):
+        mcp_server.toolkit_dataset(action="bogus")
 
 
 # ---------------------------------------------------------------------------
@@ -106,8 +105,20 @@ def test_toolkit_query_run(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_query_run_missing_sql() -> None:
-    result = mcp_server.toolkit_query(action="run", datasets=["terna"])
-    assert "error" in result
+    with pytest.raises(ToolkitClientError, match="richiede sql"):
+        mcp_server.toolkit_query(action="run", datasets=["terna"])
+
+
+def test_toolkit_query_run_schema_mode_no_sql_needed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """mode='schema' non dovrebbe richiedere SQL."""
+
+    def fake_layer(**kwargs):
+        assert kwargs.get("mode") == "schema"
+        return {"columns": [{"name": "col1"}]}
+
+    monkeypatch.setattr(mcp_server, "layer_query_impl", fake_layer)
+    result = mcp_server.toolkit_query(action="run", datasets=["terna"], mode="schema")
+    assert "columns" in result
 
 
 def test_toolkit_query_preview(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -120,8 +131,8 @@ def test_toolkit_query_preview(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_query_invalid_action() -> None:
-    result = mcp_server.toolkit_query(action="bogus")
-    assert result["error"] == "invalid_action"
+    with pytest.raises(ToolkitClientError, match="non valida"):
+        mcp_server.toolkit_query(action="bogus")
 
 
 # ---------------------------------------------------------------------------
@@ -180,8 +191,8 @@ def test_toolkit_pipeline_graph(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_pipeline_invalid_action() -> None:
-    result = mcp_server.toolkit_pipeline(action="bogus")
-    assert result["error"] == "invalid_action"
+    with pytest.raises(ToolkitClientError, match="non valida"):
+        mcp_server.toolkit_pipeline(action="bogus")
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +204,7 @@ def test_toolkit_source_probe(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_probe(url, timeout):
         return {"status_code": 200}
 
-    monkeypatch.setattr(mcp_server, "probe_url_impl", fake_probe)
+    monkeypatch.setattr(mcp_server, "probe_url_routed_impl", fake_probe)
     result = mcp_server.toolkit_source(action="probe", url="https://example.gov.it")
     assert result["status_code"] == 200
 
@@ -230,39 +241,8 @@ def test_toolkit_source_sparql(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_toolkit_source_invalid_action() -> None:
-    result = mcp_server.toolkit_source(action="bogus")
-    assert result["error"] == "invalid_action"
-
-
-# ---------------------------------------------------------------------------
-# toolkit_contract (backward compat)
-# ---------------------------------------------------------------------------
-
-
-def test_toolkit_contract_structure() -> None:
-    result = mcp_server.toolkit_contract(layer="all")
-    assert "version" in result
-    assert "pipeline" in result
-    assert "clean" in result
-    assert "mart" in result
-    assert "constants" in result
-    assert "tldr" in result
-
-    clean = result["clean"]
-    assert clean["sql_source"]["view"] == "raw_input"
-    assert len(clean["macros"]) >= 8
-
-    raw_only = mcp_server.toolkit_contract(layer="raw")
-    assert raw_only["layer"] == "raw"
-    assert "source_types" in raw_only
-
-    clean_only = mcp_server.toolkit_contract(layer="clean")
-    assert clean_only["layer"] == "clean"
-    assert clean_only["sql_source"]["view"] == "raw_input"
-
-    mart_only = mcp_server.toolkit_contract(layer="mart")
-    assert mart_only["layer"] == "mart"
-    assert mart_only["sql_source"]["view"] == "clean_input"
+    with pytest.raises(ToolkitClientError, match="non valida"):
+        mcp_server.toolkit_source(action="bogus")
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +251,7 @@ def test_toolkit_contract_structure() -> None:
 
 
 def test_tool_returns_payload_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mcp_server, "probe_url_impl", lambda url, timeout: {"ok": True})
+    monkeypatch.setattr(mcp_server, "probe_url_routed_impl", lambda url, timeout: {"ok": True})
     result = mcp_server.toolkit_source(action="probe", url="https://example.gov.it", timeout=15)
     assert result == {"ok": True}
 
@@ -282,7 +262,7 @@ def test_toolkit_source_probe_error_has_error_code(monkeypatch: pytest.MonkeyPat
     def failing_impl(url: str, timeout: int) -> dict:
         raise ToolkitClientError("test probe error")
 
-    monkeypatch.setattr(mcp_server, "probe_url_impl", failing_impl)
+    monkeypatch.setattr(mcp_server, "probe_url_routed_impl", failing_impl)
     payload = mcp_server.toolkit_source(action="probe", url="https://example.gov.it", timeout=15)
     assert "error" in payload
     assert "message" in payload

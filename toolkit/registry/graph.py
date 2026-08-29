@@ -163,6 +163,18 @@ def filter_graph(
                 entities_filtered[entity_name] = filtered_info
         entities = entities_filtered
 
+        # Filtra anche i bridge: mantieni solo quelli che referenziano dataset matching
+        if by_dataset:
+            matched_slugs = {ds["slug"] for e in entities.values() for ds in e.get("datasets", [])}
+            bridges = [
+                b
+                for b in bridges
+                if b.get("from", {}).get("dataset", "") in matched_slugs
+                or b.get("to", {}).get("dataset", "") in matched_slugs
+                or b.get("to", {}).get("bridge", "") in matched_slugs
+                or b.get("from", {}).get("bridge", "") in matched_slugs
+            ]
+
     total_datasets = sum(len(e["datasets"]) for e in entities.values())
 
     return {

@@ -480,9 +480,9 @@ def test_ensure_dict_preserves_validate_alias() -> None:
         ),
     )
 
-    from toolkit.cli.common import dump_cfg_section
+    from toolkit.core.config import ensure_dict
 
-    clean_dict = dump_cfg_section(cfg.clean)
+    clean_dict = ensure_dict(cfg.clean)
     assert "validate" in clean_dict, (
         f"expected 'validate' key in clean_dict, got keys: {list(clean_dict.keys())}"
     )
@@ -491,7 +491,7 @@ def test_ensure_dict_preserves_validate_alias() -> None:
     assert v["not_null"] == ["val"]
     assert v["ranges"]["a"]["min"] == 0
 
-    mart_dict = dump_cfg_section(cfg.mart)
+    mart_dict = ensure_dict(cfg.mart)
     assert "validate" in mart_dict, (
         f"expected 'validate' key in mart_dict, got keys: {list(mart_dict.keys())}"
     )

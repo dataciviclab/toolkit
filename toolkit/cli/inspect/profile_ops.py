@@ -13,7 +13,8 @@ from typing import Any
 
 import typer
 
-from toolkit.cli.common import dump_cfg_section, load_cfg_and_logger
+from toolkit.cli.common import load_cfg_and_logger
+from toolkit.core.config import ensure_dict
 from toolkit.domain.common import iter_selected_years
 from toolkit.domain.profile import csv_preview
 from toolkit.core.paths import layer_year_dir
@@ -26,7 +27,7 @@ def run_profile(cfg: ToolkitConfig, years: list[int], logger: Logger) -> None:
 
     Chiamabile sia da inspect/profile che da cmd_profile (deprecato).
     """
-    clean_cfg: dict[str, Any] = dump_cfg_section(cfg.clean) or {}
+    clean_cfg: dict[str, Any] = ensure_dict(cfg.clean) or {}
 
     for y in years:
         raw_dir = layer_year_dir(cfg.root, "raw", cfg.dataset, y)

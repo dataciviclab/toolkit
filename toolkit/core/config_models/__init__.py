@@ -1,11 +1,11 @@
-"""
-Shim per backward compat: re-esporta tutti i simboli dal nuovo config.py.
+"""DEPRECATED: questo modulo e' un shim per backward compat.
 
-In precedenza questo package conteneva 24 modelli Pydantic in 9 file.
-Ora tutto e' centralizzato in toolkit.core.config con semplici dataclass.
+Usa direttamente ``toolkit.core.config`` per tutti i simboli.
 """
 
 from __future__ import annotations
+
+import warnings
 
 from toolkit.core.config import (
     CleanConfig,
@@ -31,7 +31,13 @@ from toolkit.core.config import (
     parse_bool,
 )
 
-# Old name used by some consumers
+warnings.warn(
+    "toolkit.core.config_models is deprecated. Import directly from toolkit.core.config instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+# Legacy aliases (kept for backward compat, will be removed in a future version)
 load_config_model = load_config
 ToolkitConfigModel = PipelineConfig
 

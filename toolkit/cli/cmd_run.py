@@ -9,7 +9,7 @@ from typing import Any
 
 import typer
 
-from toolkit.cli.common import load_cfg_and_logger
+from toolkit.cli.common import load_cfg_and_logger, resolve_run_context
 from toolkit.core.config import ensure_dict
 from toolkit.core.sql_validation import validate_sql_dry_run
 from toolkit.clean.run import run_clean
@@ -30,6 +30,14 @@ class ValidationGateError(RuntimeError):
     """Layer validation failed in strict mode."""
 
     pass
+
+
+class RunContextError(RuntimeError):
+    """Pipeline run failed, but context with partial validation is available."""
+
+    def __init__(self, message: str, context: Any):
+        super().__init__(message)
+        self.context = context
 
 
 def _validation_runner(layer_name: str):
@@ -158,6 +166,108 @@ def _print_execution_plan(
     typer.echo("")
 
 
+def _execute_layer(
+    layer_name: str,
+    layer_fn,
+    cfg,
+    year: int,
+    context,
+    base_logger,
+    *args,
+    sample_mode: bool = False,
+    fail_on_error: bool = False,
+    validation_mode: str = "strict",
+    **kwargs,
+) -> dict[str, Any]:
+    """Execute a layer + validation. Returns {'ok', 'validations', 'has_warnings'}.
+
+    Pure function: no nonlocal state, no side effects beyond context updates.
+    Pipeline-specific params (sample_mode, fail_on_error, validation_mode) are
+    extracted from kwargs and not forwarded to the layer function.
+    """
+    layer_validations: dict[str, dict[str, Any]] = {}
+    has_warnings = False
+
+    layer_logger = bind_logger(base_logger, layer=layer_name)
+    context.start_layer(layer_name)
+    try:
+        metrics = layer_fn(*args, logger=layer_logger, **kwargs)
+        context.complete_layer(layer_name)
+        if isinstance(metrics, dict):
+            context.set_layer_metrics(layer_name, **metrics)
+
+        summary = _validate_layer(layer_name, cfg, year, layer_logger, sample_mode=sample_mode)
+        context.set_validation(layer_name, summary)
+        layer_validations[layer_name] = summary
+
+        gate_ok = _apply_validation_gate(
+            summary,
+            layer_name=layer_name,
+            validation_mode=validation_mode,
+            fail_on_error=fail_on_error,
+            logger=layer_logger,
+        )
+        if not gate_ok:
+            has_warnings = True
+
+        return {"ok": True, "validations": layer_validations, "has_warnings": has_warnings}
+    except Exception as exc:
+        context.fail_layer(layer_name, str(exc))
+        if fail_on_error:
+            context.fail_run(str(exc))
+            if isinstance(exc, ValidationGateError):
+                raise
+            raise RunContextError(str(exc), context) from exc
+        has_warnings = True
+        base_logger.warning(
+            "SKIP %s layer for %s (%s) — source unreachable? %s",
+            layer_name,
+            cfg.dataset,
+            year,
+            exc,
+        )
+        return {"ok": False, "validations": layer_validations, "has_warnings": has_warnings}
+
+
+def _validate_layer(
+    layer_name: str,
+    cfg,
+    year: int,
+    logger,
+    *,
+    sample_mode: bool = False,
+) -> dict[str, Any]:
+    """Run validation on a completed layer. Returns validation summary dict."""
+    validation_kwargs = {}
+    if layer_name in ("clean", "mart"):
+        validation_kwargs["sample_mode"] = sample_mode
+    return _validation_runner(layer_name)(cfg, year, logger, **validation_kwargs)
+
+
+def _apply_validation_gate(
+    summary: dict[str, Any],
+    *,
+    layer_name: str,
+    validation_mode: str,
+    fail_on_error: bool,
+    logger,
+) -> bool:
+    """Decide pass/fail/warn from validation summary. Returns True if ok."""
+    if summary.get("passed", False):
+        return True
+
+    message = f"{layer_name.upper()} validation failed"
+    if validation_mode == "strict" and fail_on_error:
+        raise ValidationGateError(message)
+    if validation_mode == "warn_only":
+        logger.warning(
+            "VALIDATION %s (%s) — warn_only mode, continuing",
+            layer_name.upper(),
+            message,
+        )
+    return False
+
+
 def run_year(
     cfg,
     year: int,
@@ -222,126 +332,104 @@ def run_year(
     sample_mode = sample_rows is not None or sample_bytes is not None
 
     validations: dict[str, dict[str, Any]] = {}
-
-    def _execute_layer(layer_name: str, target, *args, **kwargs) -> bool:
-        """Esegue un layer e restituisce True se ok, False se fallito.
-
-        Con fail_on_error: false, il fallimento viene loggato ma non
-        ri-lanciato. I layer downstream vengono skippati.
-
-        validation_mode:
-          strict (default): gli errori di validazione bloccano se fail_on_error=True
-          warn_only: gli errori di validazione diventano warning, la pipeline continua
-        """
-        nonlocal run_has_validation_warnings
-        nonlocal validations
-
-        layer_logger = bind_logger(base_logger, layer=layer_name)
-        context.start_layer(layer_name)
-        try:
-            metrics = target(*args, logger=layer_logger, **kwargs)
-            context.complete_layer(layer_name)
-            if isinstance(metrics, dict):
-                context.set_layer_metrics(layer_name, **metrics)
-
-            validation_kwargs = {}
-            if layer_name in ("clean", "mart"):
-                validation_kwargs["sample_mode"] = sample_mode
-            summary = _validation_runner(layer_name)(cfg, year, layer_logger, **validation_kwargs)
-            context.set_validation(layer_name, summary)
-            validations[layer_name] = summary
-            if not summary.get("passed", False):
-                message = f"{layer_name.upper()} validation failed"
-                if validation_mode == "strict" and fail_on_error:
-                    raise ValidationGateError(message)
-                run_has_validation_warnings = True
-                if validation_mode == "warn_only":
-                    layer_logger.warning(
-                        "VALIDATION %s (%s) — warn_only mode, continuing",
-                        layer_name.upper(),
-                        message,
-                    )
-            return True
-        except Exception as exc:
-            context.fail_layer(layer_name, str(exc))
-            if fail_on_error:
-                context.fail_run(str(exc))
-                raise
-            run_has_validation_warnings = True
-            base_logger.warning(
-                "SKIP %s layer for %s (%s) — source unreachable? %s",
-                layer_name,
-                cfg.dataset,
-                year,
-                exc,
-            )
-            return False
+    _run_error: Exception | None = None
 
     source_id = cfg.source_id
 
-    if "raw" in layers_to_run:
-        if not _execute_layer(
-            "raw",
-            run_raw,
-            cfg.dataset,
-            year,
-            cfg.root,
-            ensure_dict(cfg.raw),
-            base_dir=cfg.base_dir,
-            run_id=context.run_id,
-            output_cfg=ensure_dict(cfg.output),
-            clean_cfg=ensure_dict(cfg.clean),
-            sample_bytes=sample_bytes,
-            source_id=source_id,
-        ):
-            # RAW fallito: skip layer downstream (clean, mart)
-            # per evitare output stale con dati di run precedenti
-            layers_to_run = []
+    try:
+        if "raw" in layers_to_run:
+            result = _execute_layer(
+                "raw",
+                run_raw,
+                cfg,
+                year,
+                context,
+                base_logger,
+                cfg.dataset,
+                year,
+                cfg.root,
+                ensure_dict(cfg.raw),
+                base_dir=cfg.base_dir,
+                run_id=context.run_id,
+                output_cfg=ensure_dict(cfg.output),
+                clean_cfg=ensure_dict(cfg.clean),
+                sample_bytes=sample_bytes,
+                source_id=source_id,
+                sample_mode=sample_mode,
+                fail_on_error=fail_on_error,
+                validation_mode=validation_mode,
+            )
+            validations.update(result["validations"])
+            run_has_validation_warnings = run_has_validation_warnings or result["has_warnings"]
+            if not result["ok"]:
+                layers_to_run = []
 
-    # Il resolver dei support deve sapere se il campionamento e' attivo
-    # (root override in {root}/smoke), non solo se --smoke e' stato usato
-    sampling_active = smoke or sample_rows is not None or sample_bytes is not None
+        sampling_active = smoke or sample_rows is not None or sample_bytes is not None
 
-    if "clean" in layers_to_run and not cfg.is_mart_only:
-        raw_sources = ensure_dict(cfg.raw).get("sources", [])
-        if not _execute_layer(
-            "clean",
-            run_clean,
-            cfg.dataset,
-            year,
-            cfg.root,
-            ensure_dict(cfg.clean),
-            base_dir=cfg.base_dir,
-            output_cfg=ensure_dict(cfg.output),
-            sample_rows=sample_rows,
-            source_id=source_id,
-            support_cfg=ensure_dict(cfg.support),
-            smoke=sampling_active,
-            raw_sources=raw_sources,
-            memory_limit=cfg.duckdb.memory_limit if cfg.duckdb else None,
-        ):
-            # CLEAN fallito: skip mart per evitare output stale
-            layers_to_run = [layer for layer in layers_to_run if layer != "mart"]
+        if "clean" in layers_to_run and not cfg.is_mart_only:
+            raw_sources = ensure_dict(cfg.raw).get("sources", [])
+            result = _execute_layer(
+                "clean",
+                run_clean,
+                cfg,
+                year,
+                context,
+                base_logger,
+                cfg.dataset,
+                year,
+                cfg.root,
+                ensure_dict(cfg.clean),
+                base_dir=cfg.base_dir,
+                output_cfg=ensure_dict(cfg.output),
+                sample_rows=sample_rows,
+                source_id=source_id,
+                support_cfg=ensure_dict(cfg.support),
+                smoke=sampling_active,
+                raw_sources=raw_sources,
+                memory_limit=cfg.duckdb.memory_limit if cfg.duckdb else None,
+                sample_mode=sample_mode,
+                fail_on_error=fail_on_error,
+                validation_mode=validation_mode,
+            )
+            validations.update(result["validations"])
+            run_has_validation_warnings = run_has_validation_warnings or result["has_warnings"]
+            if not result["ok"]:
+                layers_to_run = [layer for layer in layers_to_run if layer != "mart"]
 
-    if "mart" in layers_to_run and cfg.has_single_year_mart:
-        _execute_layer(
-            "mart",
-            run_mart,
-            cfg.dataset,
-            year,
-            cfg.root,
-            ensure_dict(cfg.mart),
-            base_dir=cfg.base_dir,
-            clean_cfg=ensure_dict(cfg.clean),
-            output_cfg=ensure_dict(cfg.output),
-            support_cfg=ensure_dict(cfg.support),
-            source_id=source_id,
-            smoke=sampling_active,
-        )
-    elif "mart" in layers_to_run and cfg.has_multi_year_mart:
-        _skip_mart_validation(cfg, year, context, validations)
+        if "mart" in layers_to_run and cfg.has_single_year_mart:
+            result = _execute_layer(
+                "mart",
+                run_mart,
+                cfg,
+                year,
+                context,
+                base_logger,
+                cfg.dataset,
+                year,
+                cfg.root,
+                ensure_dict(cfg.mart),
+                base_dir=cfg.base_dir,
+                clean_cfg=ensure_dict(cfg.clean),
+                output_cfg=ensure_dict(cfg.output),
+                support_cfg=ensure_dict(cfg.support),
+                source_id=source_id,
+                smoke=sampling_active,
+                sample_mode=sample_mode,
+                fail_on_error=fail_on_error,
+                validation_mode=validation_mode,
+            )
+            validations.update(result["validations"])
+            run_has_validation_warnings = run_has_validation_warnings or result["has_warnings"]
+        elif "mart" in layers_to_run and cfg.has_multi_year_mart:
+            _skip_mart_validation(cfg, year, context, validations)
+    except Exception as exc:
+        _run_error = exc
+        # Le validations parziali sono nel context (settate prima dell'eccezione)
+        validations.update(context.validations)
 
     context.complete_run(success_with_warnings=run_has_validation_warnings)
+    if _run_error is not None:
+        raise _run_error from None
     return context
 
 
@@ -534,20 +622,15 @@ def _make_step_cmd(step: str):
             False, "--dry-run", help="Print execution plan without executing"
         ),
     ):
-        dry_flag = dry_run if isinstance(dry_run, bool) else False
-
-        sample_rows_final = 1000 if smoke else sample_rows
-        sample_bytes_final = 1048576 if smoke else sample_bytes
-
-        # Qualsiasi forma di campionamento (--smoke, --sample-rows, --sample-bytes)
-        # isola l'output in {root}/smoke per evitare contaminazione dei dati reali
-        sampling_active = sample_rows_final is not None or sample_bytes_final is not None
-        root_override_final = root
-        if sampling_active and not root and config is not None:
-            _cfg0, _ = load_cfg_and_logger(config)
-            root_override_final = str(_cfg0.root / "smoke")
-
-        cfg, logger = load_cfg_and_logger(config, root_override=root_override_final)
+        params = resolve_run_context(
+            config,
+            smoke=smoke,
+            sample_rows=sample_rows,
+            sample_bytes=sample_bytes,
+            root=root,
+            dry_run=dry_run,
+        )
+        cfg, logger = params.cfg, params.logger
 
         years_arg = years if isinstance(years, str) else None
         year_arg = year if isinstance(year, int) else None
@@ -558,18 +641,21 @@ def _make_step_cmd(step: str):
                 cfg,
                 year,
                 step=_step,
-                dry_run=dry_flag,
+                dry_run=params.dry_run,
                 logger=logger,
-                sample_rows=sample_rows_final,
-                sample_bytes=sample_bytes_final,
+                sample_rows=params.sample_rows,
+                sample_bytes=params.sample_bytes,
                 smoke=smoke,
             )
 
         # Multi-year mart: run once per dataset after per-year processing
         if _step in ("all", "mart"):
-            _sampling = sample_rows_final is not None or sample_bytes_final is not None
             _maybe_run_multi_year_mart(
-                cfg, selected_years, dry_run=dry_flag, logger=logger, sampling_active=_sampling
+                cfg,
+                selected_years,
+                dry_run=params.dry_run,
+                logger=logger,
+                sampling_active=params.sampling_active,
             )
 
     cmd.__name__ = f"run_{_step}_cmd"
@@ -892,19 +978,19 @@ def _run_pipeline(
         Dict con ``status`` (``passed``/``failed``), ``steps`` (per anno),
         ``config``, ``years``, e readiness per ogni layer.
     """
-    dry_flag = dry_run if isinstance(dry_run, bool) else False
-
-    sample_rows_final = 1000 if smoke else sample_rows
-    sample_bytes_final = 1048576 if smoke else sample_bytes
-    sample_mode = sample_rows_final is not None or sample_bytes_final is not None
-
-    sampling_active = sample_rows_final is not None or sample_bytes_final is not None
-    root_override_final = root
-    if sampling_active and not root and config is not None:
-        _cfg0, _ = load_cfg_and_logger(config)
-        root_override_final = str(_cfg0.root / "smoke")
-
-    cfg, logger = load_cfg_and_logger(config, root_override=root_override_final)
+    params = resolve_run_context(
+        config,
+        smoke=smoke,
+        sample_rows=sample_rows,
+        sample_bytes=sample_bytes,
+        root=root,
+        dry_run=dry_run,
+    )
+    cfg, logger = params.cfg, params.logger
+    dry_flag = params.dry_run
+    sample_rows_final = params.sample_rows
+    sample_bytes_final = params.sample_bytes
+    sample_mode = params.sampling_active
     years_arg = years if isinstance(years, str) else None
     selected_years = iter_selected_years(cfg, year_arg=None, years_arg=years_arg)
 
@@ -949,108 +1035,22 @@ def _run_pipeline(
             )
 
     # Process support datasets (ADR-005: ensure — skip se output presenti, materializza se manca)
-    support_entries = cfg.support or []
-    if support_entries:
-        from toolkit.core.support import materialize_support, resolve_support_payloads
+    from toolkit.core.support import resolve_and_run_support
 
-        logger.info(
-            "RUN — processing %d support dataset(s) before candidate",
-            len(support_entries),
-        )
-        for entry in support_entries:
-            entry_dict = ensure_dict(entry)
-            stype = str(entry_dict.get("type") or "dataset")
-
-            if dry_flag:
-                logger.info(
-                    "  [dry-run] support: %s — type=%s years=%s",
-                    entry.name,
-                    stype,
-                    getattr(entry, "years", []),
-                )
-                continue
-
-            try:
-                payloads = resolve_support_payloads(
-                    [entry_dict],
-                    require_exists=False,
-                    smoke=smoke,
-                    root=cfg.root,
-                )
-                payload = payloads[0]
-            except Exception as exc:
-                logger.error("Support: cannot resolve %s: %s", entry.name, exc)
-                results["status"] = "failed"
-                break
-
-            if payload["all_outputs_exist"] and not refresh_support:
-                logger.info("  reuse support %s (output presenti)", entry.name)
-                continue
-
-            if stype == "dataset":
-                try:
-                    if sample_mode:
-                        _sup0, _ = load_cfg_and_logger(str(entry.config))
-                        support_cfg, support_logger = load_cfg_and_logger(
-                            str(entry.config),
-                            root_override=str(_sup0.root / "smoke"),
-                        )
-                    else:
-                        support_cfg, support_logger = load_cfg_and_logger(str(entry.config))
-                except Exception as exc:
-                    logger.error("Support: cannot load config %s: %s", entry.config, exc)
-                    results["status"] = "failed"
-                    break
-
-                for sy in entry.years:
-                    logger.info("Support: running %s year=%s", entry.name, sy)
-                    try:
-                        ctx = run_year(
-                            support_cfg,
-                            sy,
-                            step="all",
-                            logger=support_logger,
-                            sample_rows=sample_rows_final,
-                            sample_bytes=sample_bytes_final,
-                            smoke=smoke,
-                        )
-                    except Exception as exc:
-                        logger.error("Support run failed: %s year=%s — %s", entry.name, sy, exc)
-                        results["status"] = "failed"
-                        break
-
-                    all_support_passed = all(
-                        ctx.validations.get(layer, {}).get("passed", False)
-                        for layer in ("raw", "clean", "mart")
-                    )
-                    if not all_support_passed:
-                        logger.error("Support validation failed: %s year=%s", entry.name, sy)
-                        results["status"] = "failed"
-                        break
-
-                if results["status"] == "failed":
-                    break
-            else:
-                # codelist / file: materializza (fetch / command) — output verificato mancante
-                logger.info("Support: materializing %s (%s)", entry.name, stype)
-                try:
-                    materialize_support(entry_dict, root=cfg.root, smoke=smoke)
-                except Exception as exc:
-                    logger.error("Support materialization failed: %s — %s", entry.name, exc)
-                    results["status"] = "failed"
-                    break
-                try:
-                    payloads = resolve_support_payloads(
-                        [entry_dict], require_exists=False, smoke=smoke, root=cfg.root
-                    )
-                    if not payloads[0]["all_outputs_exist"]:
-                        logger.error("Support materialization produced no output: %s", entry.name)
-                        results["status"] = "failed"
-                        break
-                except Exception as exc:
-                    logger.error("Support: cannot re-resolve %s: %s", entry.name, exc)
-                    results["status"] = "failed"
-                    break
+    support_status = resolve_and_run_support(
+        cfg,
+        logger=logger,
+        dry_run=dry_flag,
+        smoke=smoke,
+        sample_rows=sample_rows_final,
+        sample_bytes=sample_bytes_final,
+        sample_mode=sample_mode,
+        refresh=refresh_support,
+        run_year_fn=run_year,
+        load_cfg_fn=load_cfg_and_logger,
+    )
+    if support_status == "failed":
+        results["status"] = "failed"
 
     # ── Candidate ────────────────────────────────────────────────────────
     candidate_blocked = results["status"] == "failed" and not dry_flag
@@ -1061,6 +1061,7 @@ def _run_pipeline(
 
         for year in selected_years:
             results["steps"][str(year)] = {"run": "running", "validate": "running"}
+            ctx = None
             try:
                 logger.info("Run %s — year=%s", run_step, year)
                 ctx = run_year(
@@ -1073,9 +1074,35 @@ def _run_pipeline(
                     sample_bytes=sample_bytes_final,
                     smoke=smoke,
                 )
+            except ValidationGateError as exc:
+                logger.error("Run %s year=%s fallito: %s", run_step, year, exc)
+                results["steps"][str(year)] = {
+                    "run": "failed",
+                    "validate": "failed",
+                    "error": str(exc),
+                    "validations": {},
+                }
+                results["status"] = "failed"
+                break
+            except RunContextError as exc:
+                logger.error("Run %s year=%s fallito: %s", run_step, year, exc)
+                ctx = exc.context
+                results["steps"][str(year)] = {
+                    "run": "failed",
+                    "validate": "failed",
+                    "error": str(exc),
+                    "validations": ctx.validations,
+                }
+                results["status"] = "failed"
+                break
             except Exception as exc:
                 logger.error("Run %s year=%s fallito: %s", run_step, year, exc)
-                results["steps"][str(year)] = {"run": "failed", "validate": "failed"}
+                results["steps"][str(year)] = {
+                    "run": "failed",
+                    "validate": "failed",
+                    "error": str(exc),
+                    "validations": {},
+                }
                 results["status"] = "failed"
                 break
 
@@ -1158,10 +1185,14 @@ def _execute_pipeline(
     typer.echo(f"status: {status}")
     for y, s in results.get("steps", {}).items():
         typer.echo(f"  {y}: run={s['run']} validate={s['validate']}")
-        lyrs = s.get("layers", {})
+        # Show error if run failed with exception
+        if s.get("error"):
+            typer.echo(f"       ✗ {s['error']}")
+        lyrs = s.get("layers") or {}
+        validations = s.get("validations") or {}
         for lname in ("raw", "clean", "mart"):
             ln = lyrs.get(lname) or {}
-            lv = ln.get("validation") or {}
+            lv = validations.get(lname) or ln.get("validation") or {}
             ok = lv.get("ok")
             qs = lv.get("quality_score")
             icon = "✅" if ok else ("🔴" if ok is False else "·")
@@ -1196,6 +1227,11 @@ def _execute_pipeline(
                 if parts
                 else f"       {lname}: {icon}"
             )
+            # Show validation errors and warnings inline
+            for err in lv.get("errors", []):
+                typer.echo(f"         ✗ {err}")
+            for warn in lv.get("warnings", []):
+                typer.echo(f"         ⚠ {warn}")
         typer.echo(
             f"       readiness: {s.get('readiness', '?')}  ({s.get('checks_ok', 0)}/{s.get('checks', 0)})"
         )

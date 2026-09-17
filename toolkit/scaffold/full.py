@@ -229,9 +229,9 @@ def _http_file_dict(url: str, slug: str) -> dict[str, Any]:
 
 def _find_anno_col(profile: dict[str, Any]) -> str | None:
     """Find a year/anno column name in the profile."""
-    from toolkit.scaffold.clean import _find_anno_raw_column
+    from toolkit.scaffold.clean import find_anno_raw_column
 
-    return _find_anno_raw_column(profile)
+    return find_anno_raw_column(profile)
 
 
 def _enrich_profile(profile: dict[str, Any], probe: dict[str, Any]) -> dict[str, Any]:

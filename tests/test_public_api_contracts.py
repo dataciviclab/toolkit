@@ -14,7 +14,6 @@ from toolkit.profile import (
     profile_with_read_cfg,
     sniff_source_file,
     write_raw_profile,
-    write_suggested_read_yml,
 )
 from toolkit.raw import run_raw, run_raw_validation, validate_raw_output
 
@@ -68,7 +67,6 @@ def test_profile_exports() -> None:
         "profile_with_read_cfg",
         "sniff_source_file",
         "write_raw_profile",
-        "write_suggested_read_yml",
     ]
     assert RawProfile.__name__ == "RawProfile"
     assert profile_pkg.PreviewResult.__name__ == "PreviewResult"
@@ -79,4 +77,3 @@ def test_profile_exports() -> None:
     assert callable(sniff_source_file)
     assert callable(build_suggested_read_cfg)
     assert callable(write_raw_profile)
-    assert callable(write_suggested_read_yml)

@@ -632,9 +632,8 @@ class PipelineConfig:
         return has_single_year or has_hierarchy
 
 
-# Backward compat aliases
+# Backward compat alias
 ToolkitConfig = PipelineConfig
-ToolkitConfigModel = PipelineConfig
 
 
 # ---------------------------------------------------------------------------
@@ -645,19 +644,16 @@ ToolkitConfigModel = PipelineConfig
 def ensure_dict(cfg: Any) -> Any:
     """Convert a config section to a plain dict for runner layers.
 
-    Handles dataclasses, old Pydantic models, dicts, and lists.
+    Handles dataclasses, dicts, and lists.
 
     Nota: per le dataclass i campi a ``None`` vengono esclusi
     (``{k: v ... if v is not None}``). I consumer devono usare
-    ``.get()``, non ``in``/``.keys()``. Questo replica il comportamento
-    del vecchio ``cli.common.dump_cfg_section`` (rimosso).
+    ``.get()``, non ``in``/``.keys()``.
     """
     if hasattr(cfg, "to_dict"):
         return cfg.to_dict()
     if hasattr(cfg, "__dataclass_fields__"):
         return {k: v for k, v in asdict(cfg).items() if v is not None}
-    if hasattr(cfg, "model_dump"):
-        return cfg.model_dump(by_alias=True, exclude_none=True, exclude_unset=True)
     if isinstance(cfg, list):
         return [ensure_dict(item) for item in cfg]
     if isinstance(cfg, dict):

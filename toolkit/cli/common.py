@@ -4,10 +4,7 @@ from __future__ import annotations
 from toolkit.core.config import ensure_dict, load_config
 from toolkit.core.logging import get_logger
 
-# Re-export per backward compat dei consumer CLI
-__all__ = ["dump_cfg_section", "load_cfg_and_logger"]
-
-dump_cfg_section = ensure_dict
+__all__ = ["ensure_dict", "load_cfg_and_logger"]
 
 
 def load_cfg_and_logger(

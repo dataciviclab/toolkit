@@ -103,7 +103,7 @@ def profile_from_datastore(fields: list[dict[str, Any]]) -> dict[str, Any]:
 # moved to profile/raw.py (fixes dependency inversion: profile → scaffold)
 
 
-def _find_anno_raw_column(profile: dict[str, Any]) -> str | None:
+def find_anno_raw_column(profile: dict[str, Any]) -> str | None:
     """Find the raw column name that looks like a year column.
 
     Returns the raw (un-normalized) column name, or None if no year column
@@ -124,7 +124,7 @@ def _find_anno_raw_column(profile: dict[str, Any]) -> str | None:
 
 def _has_anno_column(profile: dict[str, Any]) -> bool:
     """Check if any raw column name looks like a year column after normalization."""
-    return _find_anno_raw_column(profile) is not None
+    return find_anno_raw_column(profile) is not None
 
 
 def _select_expr(
@@ -311,7 +311,7 @@ def generate_clean_sql(
     # WHERE clause: filter out null years when the CSV has a real anno column.
     # This mirrors real clean.sql patterns (e.g. terna, civile-flussi).
     if has_real_anno:
-        anno_raw = _find_anno_raw_column(profile)
+        anno_raw = find_anno_raw_column(profile)
         if anno_raw is not None:
             # Use TRY_CAST for safety — some years may be non-integer (e.g. "2024a")
             sql_lines.append(f'WHERE try_cast("{anno_raw}" AS INTEGER) IS NOT NULL')

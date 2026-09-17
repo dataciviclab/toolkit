@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 COMMON_DELIMS = [";", ",", "\t", "|"]
 
 
-def sniff_delim(sample_text: str) -> Optional[str]:
+def sniff_delim(sample_text: str) -> str | None:
     lines = [ln for ln in sample_text.splitlines() if ln.strip()][:25]
     if not lines:
         return None
@@ -25,7 +24,7 @@ def sniff_delim(sample_text: str) -> Optional[str]:
     return sorted(scores.items(), key=lambda kv: (kv[1][0], kv[1][1], kv[1][2]), reverse=True)[0][0]
 
 
-def sniff_decimal(sample_text: str, delim: Optional[str] = None) -> Optional[str]:
+def sniff_decimal(sample_text: str, delim: str | None = None) -> str | None:
     if delim is None:
         # Legacy (senza delim): conteggio regex su tutto il chunk.
         chunk = sample_text[:200_000]
@@ -64,7 +63,7 @@ def sniff_decimal(sample_text: str, delim: Optional[str] = None) -> Optional[str
     return "," if comma_dec >= dot_dec else "."
 
 
-def suggest_skip(sample_text: str, delim: Optional[str]) -> int:
+def suggest_skip(sample_text: str, delim: str | None) -> int:
     if not delim:
         return 0
     lines = [ln for ln in sample_text.splitlines() if ln.strip()][:5]

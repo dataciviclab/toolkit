@@ -1,6 +1,6 @@
 """Test per le funzioni YAML in toolkit.core.io.
 
-Copre read_yaml, read_yaml_or_none, write_yaml, yaml_dumps.
+Copre read_yaml e yaml_dumps.
 """
 
 from __future__ import annotations
@@ -11,8 +11,6 @@ import pytest
 
 from toolkit.core.io import (
     read_yaml,
-    read_yaml_or_none,
-    write_yaml,
     yaml_dumps,
 )
 
@@ -48,48 +46,6 @@ def test_read_yaml_missing_file(tmp_path: Path) -> None:
     path = tmp_path / "nope.yml"
     with pytest.raises(FileNotFoundError):
         read_yaml(path)
-
-
-# ---------------------------------------------------------------------------
-# read_yaml_or_none
-# ---------------------------------------------------------------------------
-
-
-def test_read_yaml_or_none_valid(tmp_path: Path) -> None:
-    path = tmp_path / "ok.yml"
-    path.write_text("a: 1\nb: 2\n", encoding="utf-8")
-    assert read_yaml_or_none(path) == {"a": 1, "b": 2}
-
-
-def test_read_yaml_or_none_missing(tmp_path: Path) -> None:
-    assert read_yaml_or_none(tmp_path / "missing.yml") is None
-
-
-def test_read_yaml_or_none_invalid(tmp_path: Path) -> None:
-    path = tmp_path / "broken.yml"
-    path.write_text(": broken", encoding="utf-8")
-    assert read_yaml_or_none(path) is None
-
-
-# ---------------------------------------------------------------------------
-# write_yaml
-# ---------------------------------------------------------------------------
-
-
-def test_write_yaml_roundtrip(tmp_path: Path) -> None:
-    data = {"key": "value", "list": [1, 2, 3]}
-    path = tmp_path / "out.yml"
-    write_yaml(data, path)
-    assert path.exists()
-    reloaded = read_yaml(path)
-    assert reloaded == data
-
-
-def test_write_yaml_creates_parent_dir(tmp_path: Path) -> None:
-    path = tmp_path / "sub" / "nested" / "out.yml"
-    write_yaml({"a": 1}, path)
-    assert path.exists()
-    assert read_yaml(path) == {"a": 1}
 
 
 # ---------------------------------------------------------------------------

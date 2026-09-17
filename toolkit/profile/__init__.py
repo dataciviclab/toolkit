@@ -9,7 +9,6 @@ from toolkit.profile.raw import (
     profile_with_read_cfg,
     sniff_source_file,
     write_raw_profile,
-    write_suggested_read_yml,
 )
 
 __all__ = [
@@ -22,5 +21,4 @@ __all__ = [
     "profile_with_read_cfg",
     "sniff_source_file",
     "write_raw_profile",
-    "write_suggested_read_yml",
 ]

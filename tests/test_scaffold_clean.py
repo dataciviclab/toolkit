@@ -1,6 +1,6 @@
 """Tests per toolkit/scaffold/clean.py — generazione clean.sql.
 
-pure_unit: _select_expr, _columns_spec, generate_clean_sql, _find_anno_raw_column
+pure_unit: _select_expr, _columns_spec, generate_clean_sql, find_anno_raw_column
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import pytest
 from toolkit.profile.raw import suggest_dateformat as _suggest_dateformat
 from toolkit.scaffold.clean import (
     _columns_spec,
-    _find_anno_raw_column,
+    find_anno_raw_column,
     _has_anno_column,
     _select_expr,
     generate_clean_sql,
@@ -203,7 +203,7 @@ class TestSuggestDateformat:
 
 
 # ---------------------------------------------------------------------------
-# pure_unit: _find_anno_raw_column / _has_anno_column
+# pure_unit: find_anno_raw_column / _has_anno_column
 # ---------------------------------------------------------------------------
 
 
@@ -219,7 +219,7 @@ class TestFindAnnoColumn:
                 "Valore": {"type": "float"},
             },
         }
-        assert _find_anno_raw_column(profile) == "Anno"
+        assert find_anno_raw_column(profile) == "Anno"
         assert _has_anno_column(profile) is True
 
     @pytest.mark.pure_unit
@@ -229,7 +229,7 @@ class TestFindAnnoColumn:
             "mapping_suggestions": {},
             "columns_raw": ["Anno", "Nome", "Valore"],
         }
-        assert _find_anno_raw_column(profile) == "Anno"
+        assert find_anno_raw_column(profile) == "Anno"
         assert _has_anno_column(profile) is True
 
     @pytest.mark.pure_unit
@@ -239,7 +239,7 @@ class TestFindAnnoColumn:
             profile: dict[str, Any] = {
                 "mapping_suggestions": {col_name: {"type": "int"}},
             }
-            assert _find_anno_raw_column(profile) == col_name, f"Failed for {col_name}"
+            assert find_anno_raw_column(profile) == col_name, f"Failed for {col_name}"
 
     @pytest.mark.pure_unit
     def test_no_anno_column(self) -> None:
@@ -250,13 +250,13 @@ class TestFindAnnoColumn:
                 "Valore": {"type": "float"},
             },
         }
-        assert _find_anno_raw_column(profile) is None
+        assert find_anno_raw_column(profile) is None
         assert _has_anno_column(profile) is False
 
     @pytest.mark.pure_unit
     def test_empty_profile(self) -> None:
         """Profilo vuoto → None / False."""
-        assert _find_anno_raw_column({}) is None
+        assert find_anno_raw_column({}) is None
         assert _has_anno_column({}) is False
 
 

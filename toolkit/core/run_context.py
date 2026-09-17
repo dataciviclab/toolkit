@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from toolkit.core.run_records import get_run_dir, write_run_record
 from toolkit.version import __version__ as _toolkit_version
@@ -28,7 +28,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _duration_seconds(started: Optional[str], finished: Optional[str]) -> Optional[float]:
+def _duration_seconds(started: str | None, finished: str | None) -> float | None:
     if started is None or finished is None:
         return None
     try:
@@ -39,7 +39,7 @@ def _duration_seconds(started: Optional[str], finished: Optional[str]) -> Option
         return None
 
 
-def _empty_layer_metrics() -> Dict[str, Any]:
+def _empty_layer_metrics() -> dict[str, Any]:
     return {"output_rows": None, "output_bytes": None, "col_count": None, "tables_count": None}
 
 
@@ -87,7 +87,7 @@ class RunContext:
     def path(self) -> Path:
         return self._path
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         layers_out = {}
         for layer, info in self.layers.items():
             layers_out[layer] = {
@@ -114,7 +114,7 @@ class RunContext:
             "error": self.error,
         }
 
-    def _layer(self, layer: str) -> Dict[str, Any]:
+    def _layer(self, layer: str) -> dict[str, Any]:
         if layer not in self.layers:
             raise ValueError(f"Unknown layer: {layer}")
         return self.layers[layer]
@@ -146,7 +146,7 @@ class RunContext:
         self.error = error_msg
         self.save()
 
-    def set_validation(self, layer: str, summary: Dict[str, Any]) -> None:
+    def set_validation(self, layer: str, summary: dict[str, Any]) -> None:
         if layer not in self.validations:
             raise ValueError(f"Unknown validation layer: {layer}")
         self.validations[layer] = summary
@@ -156,11 +156,11 @@ class RunContext:
         self,
         layer: str,
         *,
-        output_rows: Optional[int] = None,
-        output_bytes: Optional[int] = None,
-        col_count: Optional[int] = None,
-        tables_count: Optional[int] = None,
-        source_urls: Optional[list[str]] = None,
+        output_rows: int | None = None,
+        output_bytes: int | None = None,
+        col_count: int | None = None,
+        tables_count: int | None = None,
+        source_urls: list[str] | None = None,
     ) -> None:
         info = self._layer(layer)
         info["metrics"] = {

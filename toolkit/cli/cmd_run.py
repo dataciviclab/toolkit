@@ -9,7 +9,8 @@ from typing import Any
 
 import typer
 
-from toolkit.cli.common import dump_cfg_section, load_cfg_and_logger
+from toolkit.cli.common import load_cfg_and_logger
+from toolkit.core.config import ensure_dict
 from toolkit.core.sql_validation import validate_sql_dry_run
 from toolkit.clean.run import run_clean
 from toolkit.clean.validate import run_clean_validation
@@ -285,11 +286,11 @@ def run_year(
             cfg.dataset,
             year,
             cfg.root,
-            dump_cfg_section(cfg.raw),
+            ensure_dict(cfg.raw),
             base_dir=cfg.base_dir,
             run_id=context.run_id,
-            output_cfg=dump_cfg_section(cfg.output),
-            clean_cfg=dump_cfg_section(cfg.clean),
+            output_cfg=ensure_dict(cfg.output),
+            clean_cfg=ensure_dict(cfg.clean),
             sample_bytes=sample_bytes,
             source_id=source_id,
         ):
@@ -302,19 +303,19 @@ def run_year(
     sampling_active = smoke or sample_rows is not None or sample_bytes is not None
 
     if "clean" in layers_to_run and not cfg.is_mart_only:
-        raw_sources = dump_cfg_section(cfg.raw).get("sources", [])
+        raw_sources = ensure_dict(cfg.raw).get("sources", [])
         if not _execute_layer(
             "clean",
             run_clean,
             cfg.dataset,
             year,
             cfg.root,
-            dump_cfg_section(cfg.clean),
+            ensure_dict(cfg.clean),
             base_dir=cfg.base_dir,
-            output_cfg=dump_cfg_section(cfg.output),
+            output_cfg=ensure_dict(cfg.output),
             sample_rows=sample_rows,
             source_id=source_id,
-            support_cfg=dump_cfg_section(cfg.support),
+            support_cfg=ensure_dict(cfg.support),
             smoke=sampling_active,
             raw_sources=raw_sources,
             memory_limit=cfg.duckdb.memory_limit if cfg.duckdb else None,
@@ -329,11 +330,11 @@ def run_year(
             cfg.dataset,
             year,
             cfg.root,
-            dump_cfg_section(cfg.mart),
+            ensure_dict(cfg.mart),
             base_dir=cfg.base_dir,
-            clean_cfg=dump_cfg_section(cfg.clean),
-            output_cfg=dump_cfg_section(cfg.output),
-            support_cfg=dump_cfg_section(cfg.support),
+            clean_cfg=ensure_dict(cfg.clean),
+            output_cfg=ensure_dict(cfg.output),
+            support_cfg=ensure_dict(cfg.support),
             source_id=source_id,
             smoke=sampling_active,
         )
@@ -412,11 +413,11 @@ def _maybe_run_multi_year_mart(
             cfg.dataset,
             selected_years,
             cfg.root,
-            dump_cfg_section(cfg.mart),
+            ensure_dict(cfg.mart),
             logger,
             base_dir=cfg.base_dir,
-            output_cfg=dump_cfg_section(cfg.output),
-            support_cfg=dump_cfg_section(cfg.support),
+            output_cfg=ensure_dict(cfg.output),
+            support_cfg=ensure_dict(cfg.support),
             source_id=cfg.source_id,
             smoke=sampling_active,
         )
@@ -957,7 +958,7 @@ def _run_pipeline(
             len(support_entries),
         )
         for entry in support_entries:
-            entry_dict = dump_cfg_section(entry)
+            entry_dict = ensure_dict(entry)
             stype = str(entry_dict.get("type") or "dataset")
 
             if dry_flag:

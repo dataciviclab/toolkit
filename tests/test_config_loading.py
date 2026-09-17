@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from toolkit.core.config import load_config
-from toolkit.core.config_models import load_config_model
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +150,7 @@ def test_load_config_model_rejects_invalid_mart_transition_bool(tmp_path: Path):
     _yml(yml, mart={"validate": {"transition": {"warn_removed_columns": "maybe"}}})
 
     with pytest.raises(ValueError) as e:
-        load_config_model(yml)
+        load_config(yml)
 
     assert "boolean-like" in str(e.value)
 
@@ -523,7 +522,7 @@ def test_load_config_allows_root_outside_repo_without_repo_root_guard(tmp_path: 
 
 @pytest.mark.contract
 def test_project_example_config_parses_in_strict_mode():
-    cfg = load_config_model(Path("project-example") / "dataset.yml", strict_config=True)
+    cfg = load_config(Path("project-example") / "dataset.yml", strict_config=True)
 
     assert cfg.dataset == "project_example"
     assert len(cfg.raw.sources) == 1

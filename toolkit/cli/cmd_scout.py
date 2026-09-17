@@ -486,12 +486,12 @@ def _read_year_values_from_sample(
 
     Usa ``csv.DictReader`` con le stesse opzioni dello sniff per
     leggere le prime righe e trovare la colonna che sembra "anno"
-    (normalizzata via ``_find_anno_raw_column``).
+    (normalizzata via ``find_anno_raw_column``).
     Restituisce un set di anni interi (vuoto se non trovata).
     """
-    from toolkit.scaffold.clean import _find_anno_raw_column
+    from toolkit.scaffold.clean import find_anno_raw_column
 
-    anno_col = _find_anno_raw_column(profile)
+    anno_col = find_anno_raw_column(profile)
     if not anno_col:
         return set()
 

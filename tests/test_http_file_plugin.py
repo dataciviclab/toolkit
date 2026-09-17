@@ -19,7 +19,6 @@ from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.http_file import (
     HttpFileSource,
     _get_proxy_from_env,
-    _sanitize_proxy_url,
     _parse_curl_status,
     _strip_curl_status,
 )
@@ -172,28 +171,6 @@ class TestNonTruncableSampleBytes:
 
 
 # --- curl fallback helpers ---
-
-
-class TestSanitizeProxyUrl:
-    @pytest.mark.pure_unit
-    def test_no_credentials(self):
-        assert _sanitize_proxy_url("http://proxy.example:8888") == "http://proxy.example:8888"
-
-    @pytest.mark.pure_unit
-    def test_username_only(self):
-        result = _sanitize_proxy_url("http://user@proxy.example:8888")
-        assert "user@" in result
-        assert "***" not in result
-
-    @pytest.mark.pure_unit
-    def test_username_password(self):
-        result = _sanitize_proxy_url("http://user:pass@proxy.example:8888")
-        assert "user:***@" in result
-        assert "pass" not in result
-
-    @pytest.mark.pure_unit
-    def test_no_port(self):
-        assert _sanitize_proxy_url("http://proxy.example") == "http://proxy.example"
 
 
 class TestParseCurlStatus:

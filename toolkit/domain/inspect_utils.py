@@ -112,11 +112,16 @@ def _read_parquet_row_count(parquet_path: Path | None) -> int | None:
 
 
 def _read_parquet_preview(parquet_path: Path, limit: int = 10) -> dict[str, Any]:
+    """Legge schema + prime N righe da un parquet."""
     if not parquet_path.exists():
         raise FileNotFoundError(f"Parquet non trovato: {parquet_path}")
+    if parquet_path.suffix not in (".parquet",):
+        raise ValueError(f"Formato non supportato: {parquet_path.suffix}. Solo .parquet.")
     result = parquet_preview(parquet_path, limit=limit)
     if not result["columns"]:
         raise RuntimeError(f"Lettura schema parquet fallita per {parquet_path}")
+    result.pop("path", None)
+    result.pop("sql", None)
     return result
 
 

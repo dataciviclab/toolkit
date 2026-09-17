@@ -37,19 +37,6 @@ def strip_nulls(d: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def compact(d: dict[str, Any], keep: list[str]) -> dict[str, Any]:
-    """Mantiene solo le chiavi presenti in *keep*.
-
-    Utile per ridurre response verbose a campi essenziali.
-
-    Esempio::
-
-        compact({"a": 1, "b": 2, "c": 3}, keep=["a", "c"])
-        # → {"a": 1, "c": 3}
-    """
-    return {k: v for k, v in d.items() if k in keep}
-
-
 def strip_empty_lists(d: dict[str, Any]) -> dict[str, Any]:
     """Rimuove ricorsivamente chiavi con lista vuota [].
 

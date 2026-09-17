@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Tuple
 
 COMMON_ENCODINGS = ["utf-8", "latin-1", "windows-1252", "CP1252"]
 
@@ -15,7 +14,7 @@ _XLS_MAGIC = b"\xd0\xcf\x11\xe0"
 _XLSX_ZIP_MAGIC = b"PK\x03\x04"
 
 
-def is_binary_file(filepath: Path) -> Optional[str]:
+def is_binary_file(filepath: Path) -> str | None:
     """Detect binary file format from magic bytes.
 
     Returns 'xls', 'xlsx', 'zip', or None.
@@ -36,7 +35,7 @@ def is_binary_file(filepath: Path) -> Optional[str]:
     return None
 
 
-def _try_decode(filepath: Path, enc: str) -> Optional[str]:
+def _try_decode(filepath: Path, enc: str) -> str | None:
     try:
         with filepath.open("r", encoding=enc, errors="strict") as f:
             return f.read(200_000)
@@ -44,7 +43,7 @@ def _try_decode(filepath: Path, enc: str) -> Optional[str]:
         return None
 
 
-def sniff_encoding(filepath: Path) -> Tuple[str, str]:
+def sniff_encoding(filepath: Path) -> tuple[str, str]:
     for enc in COMMON_ENCODINGS:
         txt = _try_decode(filepath, enc)
         if txt is not None:

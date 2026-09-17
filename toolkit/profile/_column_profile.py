@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # tokens tipici che vogliamo suggerire come nullify
 NULL_TOKENS_DEFAULT = ["", "-", "n.d.", "n.d", "ND", "NA", "N/A", "null", "NULL"]
@@ -15,8 +15,8 @@ def _normalize_colname(c: str) -> str:
     return c
 
 
-def _sample_values(sample_rows: List[Dict[str, Any]], col: str, limit: int = 25) -> List[str]:
-    vals: List[str] = []
+def _sample_values(sample_rows: list[dict[str, Any]], col: str, limit: int = 25) -> list[str]:
+    vals: list[str] = []
     for r in sample_rows:
         if col not in r:
             continue
@@ -32,7 +32,7 @@ def _sample_values(sample_rows: List[Dict[str, Any]], col: str, limit: int = 25)
     return vals
 
 
-def _detect_parse_kind(values: List[str]) -> Optional[str]:
+def _detect_parse_kind(values: list[str]) -> str | None:
     pct = sum(1 for v in values if "%" in v)
     if pct >= max(2, int(len(values) * 0.3)):
         return "percent_it"
@@ -50,7 +50,7 @@ def _detect_parse_kind(values: List[str]) -> Optional[str]:
     return None
 
 
-def _detect_type(values: List[str], parse_kind: Optional[str]) -> str:
+def _detect_type(values: list[str], parse_kind: str | None) -> str:
     if parse_kind in ("percent_it", "number_it"):
         return "float"
 
@@ -71,7 +71,7 @@ def _detect_type(values: List[str], parse_kind: Optional[str]) -> str:
     return "str"
 
 
-def _suggest_nullify(values: List[str]) -> List[str]:
+def _suggest_nullify(values: list[str]) -> list[str]:
     hits = set()
     for v in values:
         if v in NULL_TOKENS_DEFAULT:
@@ -80,7 +80,7 @@ def _suggest_nullify(values: List[str]) -> List[str]:
     return out
 
 
-def _suggest_normalize(colname: str, detected_type: str) -> Optional[List[str]]:
+def _suggest_normalize(colname: str, detected_type: str) -> list[str] | None:
     if detected_type == "str":
         if any(k in colname.lower() for k in ["comune", "prov", "reg", "nome", "citt"]):
             return ["trim", "title", "collapse_spaces"]

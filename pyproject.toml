@@ -107,17 +107,18 @@ version = { attr = "toolkit.version.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--timeout=30"
+addopts = "--timeout=30 -m \"not smoke\""
+pythonpath = "."
 markers = [
-    "contract: interfaccia pubblica, artifact format, contratto API",
-    "policy: regola non ovvia o comportamento cross-component",
-    "pure_unit: logica pura non banale isolata",
-    "adapter: adapter a servizio esterno (nostro wrapping)",
-    "smoke: test che fa chiamate HTTP reali (richiede connettività esterna)",
-    "regression: bug fix documentato in issue/PR",
-    "core: test core del toolkit (aggiunto automaticamente da conftest.py)",
-    "advanced: test avanzati del toolkit (aggiunto automaticamente da conftest.py)",
-    "compat: test compatibilità (aggiunto automaticamente da conftest.py)",
+    "contract: public API, artifact format, CLI stable output",
+    "policy: non-obvious Lab rule not derivable from source",
+    "pure_unit: non-trivial pure logic (no side effects)",
+    "adapter: external service adapter (our logic around external calls)",
+    "smoke: end-to-end golden-path smoke only",
+    "regression: documented bug fix (requires issue/PR link in docstring)",
+    "core: release-critical tests for the public contract and canonical workflow",
+    "advanced: supported but non-happy-path or secondary engine behavior",
+    "compat: compatibility and legacy-shim coverage",
 ]
 
 [tool.ruff]

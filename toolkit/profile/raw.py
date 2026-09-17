@@ -11,7 +11,7 @@ import csv
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, cast
 
 import duckdb
 from lab_connectors.duckdb import safe_connect
@@ -122,7 +122,7 @@ def _preview_columns(header_line: str | None, delim: str | None) -> list[str]:
     return [_normalize_colname(part) for part in parts if part.strip()]
 
 
-def sniff_source_file(filepath: Path) -> Dict[str, Any]:
+def sniff_source_file(filepath: Path) -> dict[str, Any]:
     """Pure source sniffing: encoding, delimiter, decimal, skip, header.
 
     Does not read the file with DuckDB — only inspects raw bytes/text to
@@ -209,11 +209,11 @@ def sniff_source_file(filepath: Path) -> Dict[str, Any]:
 
 
 def build_suggested_read_cfg(
-    profile: "RawProfile | Dict[str, Any]",
-    read_cfg: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    profile: "RawProfile | dict[str, Any]",
+    read_cfg: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     data = profile if isinstance(profile, dict) else asdict(profile)
-    cfg: Dict[str, Any] = {}
+    cfg: dict[str, Any] = {}
 
     source_cfg = dict(read_cfg or {})
     for key in (
@@ -264,7 +264,7 @@ def build_suggested_read_cfg(
     return normalize_read_cfg(cfg)
 
 
-def _pick_data_file(files: List[Path]) -> Path:
+def _pick_data_file(files: list[Path]) -> Path:
     preferred = [p for p in files if p.suffix.lower() in {".csv", ".tsv", ".txt", ".php", ".gz"}]
     if preferred:
         return preferred[0]
@@ -275,11 +275,11 @@ def _pick_data_file(files: List[Path]) -> Path:
 
 
 def _effective_profile_read_cfg(
-    read_cfg: Optional[Dict[str, Any]],
+    read_cfg: dict[str, Any] | None,
     *,
     encoding: str,
-    delim: Optional[str],
-    decimal: Optional[str],
+    delim: str | None,
+    decimal: str | None,
     skip: int,
 ) -> dict[str, Any]:
     effective_read_cfg = dict(read_cfg) if isinstance(read_cfg, dict) else {}
@@ -363,7 +363,7 @@ def _sample_profile_rows(
     return sample_rows, missingness_top, null_counts
 
 
-def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def profile_excel(file0: Path, read_cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     """Profile an Excel file using the same pandas reader as ``clean.read_excel``.
 
     Reuses ``_load_excel_frame`` from ``clean.read_excel`` to stay in sync
@@ -410,8 +410,8 @@ def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[s
     missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
 
     # Mapping suggestions — no DuckDB types for Excel, use empty
-    mapping_suggestions: Dict[str, Any] = {}
-    duckdb_types: List[str] = []
+    mapping_suggestions: dict[str, Any] = {}
+    duckdb_types: list[str] = []
 
     return {
         "columns_raw": columns_raw,
@@ -428,9 +428,9 @@ def profile_excel(file0: Path, read_cfg: Dict[str, Any] | None = None) -> Dict[s
 
 def profile_with_read_cfg(
     file0: Path,
-    sniff_hints: Dict[str, Any],
+    sniff_hints: dict[str, Any],
     effective_read_cfg: dict[str, Any],
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Profile a file using DuckDB with a specific read configuration.
 
     This is the "runtime" half of profiling: it reads the file exactly as
@@ -646,30 +646,30 @@ class RawProfile:
     year: int
     file_used: str
 
-    encoding_suggested: Optional[str]
-    delim_suggested: Optional[str]
-    decimal_suggested: Optional[str]
+    encoding_suggested: str | None
+    delim_suggested: str | None
+    decimal_suggested: str | None
     skip_suggested: int
     robust_read_suggested: bool
 
-    header_line: Optional[str]
-    columns_raw: List[str]
-    columns_norm: List[str]
-    row_count: Optional[int]
+    header_line: str | None
+    columns_raw: list[str]
+    columns_norm: list[str]
+    row_count: int | None
 
-    missingness_top: List[Dict[str, Any]]
-    sample_rows: List[Dict[str, Any]]
-    mapping_suggestions: Dict[str, Any]
-    date_raw_values: Dict[str, List[str]]
+    missingness_top: list[dict[str, Any]]
+    sample_rows: list[dict[str, Any]]
+    mapping_suggestions: dict[str, Any]
+    date_raw_values: dict[str, list[str]]
 
-    warnings: List[str]
+    warnings: list[str]
 
 
 def profile_raw(
     raw_dir: Path,
     dataset: str,
     year: int,
-    read_cfg: Optional[Dict[str, Any]] = None,
+    read_cfg: dict[str, Any] | None = None,
     *,
     primary_file: Path | None = None,
 ) -> RawProfile:
@@ -825,12 +825,12 @@ def write_raw_profile(
     profile: RawProfile,
     *,
     write_canonical: bool = True,
-) -> Dict[str, Path]:
+) -> dict[str, Path]:
     _safe_mkdir(out_dir)
 
     p_raw_json = out_dir / RAW_PROFILE
     payload = asdict(profile)
-    written: Dict[str, Path] = {}
+    written: dict[str, Path] = {}
 
     if write_canonical:
         write_json_atomic(p_raw_json, payload)

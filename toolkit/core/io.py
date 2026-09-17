@@ -5,6 +5,8 @@ import math
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 
 def _json_safe_default(o: Any) -> Any:
     """Handle non-standard types that json.dumps cannot serialize.
@@ -124,7 +126,7 @@ def read_json_or_none(path: Path) -> dict[str, Any] | None:
 _YAML_CACHE: dict[tuple[str, int, int], Any] = {}
 
 
-def _yaml_cache_key(path: Path) -> tuple[str, int, int] | None:
+def yaml_cache_key(path: Path) -> tuple[str, int, int] | None:
     try:
         st = path.stat()
     except OSError:
@@ -149,15 +151,13 @@ def read_yaml(path: Path) -> Any:
         ValueError: if the file cannot be parsed as YAML.
         OSError: if the file cannot be read.
     """
-    import yaml as _yaml
-
-    key = _yaml_cache_key(path)
+    key = yaml_cache_key(path)
     if key is not None and key in _YAML_CACHE:
         return _YAML_CACHE[key]
 
     try:
-        data = _yaml.safe_load(path.read_text(encoding="utf-8"))
-    except _yaml.YAMLError as exc:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
         raise ValueError(f"YAML parse error in {path}: {exc}") from exc
 
     if key is not None:
@@ -174,6 +174,4 @@ def yaml_dumps(data: Any) -> str:
     Returns:
         YAML-formatted string.
     """
-    import yaml as _yaml
-
-    return _yaml.safe_dump(data, default_flow_style=False, sort_keys=False)
+    return yaml.safe_dump(data, default_flow_style=False, sort_keys=False)

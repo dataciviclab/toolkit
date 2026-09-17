@@ -14,8 +14,7 @@ pytestmark = pytest.mark.contract
 
 def _copy_project_example(dst: Path) -> Path:
     src = Path("project-example")
-    shutil.copytree(src, dst)
-    shutil.rmtree(dst / "_smoke_out", ignore_errors=True)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     return dst / "dataset.yml"
 
 

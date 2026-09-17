@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from tests.helpers import write_parquet
+
 import pytest
 
 from toolkit.registry.builders import (
@@ -91,14 +93,13 @@ RUN_RECORD = {
 }
 
 
-def _write_parquet(path: Path) -> None:
-    import duckdb
-
+def _make_parquet(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with duckdb.connect() as con:
-        con.execute("CREATE TABLE t (geo VARCHAR, year INTEGER, value DOUBLE)")
-        con.execute("INSERT INTO t VALUES ('ITC4', 2024, 1.5), ('ITH3', 2024, 2.5)")
-        con.execute(f"COPY t TO '{path}' (FORMAT parquet)")
+    write_parquet(
+        path,
+        "CREATE TABLE t (geo VARCHAR, year INTEGER, value DOUBLE); "
+        "INSERT INTO t VALUES ('ITC4', 2024, 1.5), ('ITH3', 2024, 2.5)",
+    )
 
 
 def _write_run_record(runs_root: Path, slug: str, year: int = 2024) -> None:
@@ -133,8 +134,8 @@ def _make_repo(
         (ds_dir / "sql" / "clean.sql").write_text("SELECT 1", encoding="utf-8")
 
     out = tmp_path / "out"
-    _write_parquet(out / "data" / "clean" / name / "2024" / f"{name}_2024_clean.parquet")
-    _write_parquet(out / "data" / "clean" / name / "2025" / f"{name}_2025_clean.parquet")
+    _make_parquet(out / "data" / "clean" / name / "2024" / f"{name}_2024_clean.parquet")
+    _make_parquet(out / "data" / "clean" / name / "2025" / f"{name}_2025_clean.parquet")
     if with_run:
         _write_run_record(out / "data" / "_runs", name)
 

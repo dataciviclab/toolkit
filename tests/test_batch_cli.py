@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -9,22 +8,18 @@ import shutil
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
+from tests.helpers import write_text
 
 pytestmark = pytest.mark.contract
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
-def _write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(textwrap.dedent(content).strip() + "\n", encoding="utf-8")
-
-
 def _write_batch_project(project_dir: Path, dataset: str, year: int) -> Path:
     (project_dir / "data").mkdir(parents=True, exist_ok=True)
     shutil.copy(FIXTURES_DIR / "it_small.csv", project_dir / "data" / "it_small.csv")
 
-    _write_text(
+    write_text(
         project_dir / "sql" / "clean.sql",
         """
         SELECT
@@ -34,7 +29,7 @@ def _write_batch_project(project_dir: Path, dataset: str, year: int) -> Path:
         FROM raw_input
         """,
     )
-    _write_text(
+    write_text(
         project_dir / "sql" / "mart.sql",
         """
         SELECT
@@ -44,7 +39,7 @@ def _write_batch_project(project_dir: Path, dataset: str, year: int) -> Path:
         GROUP BY anno
         """,
     )
-    _write_text(
+    write_text(
         project_dir / "dataset.yml",
         f"""
         schema_version: 1

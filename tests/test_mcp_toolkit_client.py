@@ -27,10 +27,11 @@ pytestmark = pytest.mark.contract
 # ── Helper ───────────────────────────────────────────────────────────
 
 
-def _write_parquet(path: Path, sql: str = "SELECT 1 AS id") -> None:
+def _make_parquet(path: Path, sql: str = "SELECT 1 AS id") -> None:
     """Scrive un parquet minimale."""
     from lab_connectors.duckdb import safe_connect
 
+    path.parent.mkdir(parents=True, exist_ok=True)
     with safe_connect() as conn:
         conn.execute(f"COPY ({sql}) TO '{path}' (FORMAT PARQUET)")
 
@@ -53,11 +54,11 @@ def _make_project_smoke(
     root = dst / "_smoke_out"
     clean_dir = root / "data" / "clean" / slug / str(year)
     clean_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(clean_dir / f"{slug}_{year}_clean.parquet", "SELECT 'a' AS cat, 1 AS val")
+    _make_parquet(clean_dir / f"{slug}_{year}_clean.parquet", "SELECT 'a' AS cat, 1 AS val")
 
     mart_dir = root / "data" / "mart" / slug / str(year)
     mart_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(mart_dir / "rd_by_regione.parquet", "SELECT 'x' AS k, 10 AS v")
+    _make_parquet(mart_dir / "rd_by_regione.parquet", "SELECT 'x' AS k, 10 AS v")
 
     return config_path, slug, year
 
@@ -136,13 +137,13 @@ def _make_fake_outputs(
     # clean parquet
     clean_dir = base_dir / "data" / "clean" / slug / str(year)
     clean_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(clean_dir / f"{slug}_{year}_clean.parquet")
+    _make_parquet(clean_dir / f"{slug}_{year}_clean.parquet")
 
     # mart parquet(s)
     mart_dir = base_dir / "data" / "mart" / slug / str(year)
     mart_dir.mkdir(parents=True, exist_ok=True)
     for t in tables:
-        _write_parquet(mart_dir / f"{t}.parquet")
+        _make_parquet(mart_dir / f"{t}.parquet")
 
 
 @pytest.mark.parametrize(
@@ -186,11 +187,11 @@ def test_review_readiness_enriched_layers_shape(
 
     clean_dir = root / "data" / "clean" / dataset / str(year)
     clean_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet")
+    _make_parquet(clean_dir / f"{dataset}_{year}_clean.parquet")
 
     mart_dir = root / "data" / "mart" / dataset / str(year)
     mart_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(mart_dir / "mart_t.parquet")
+    _make_parquet(mart_dir / "mart_t.parquet")
 
     payload = review_readiness(str(config_path), year)
     layers = payload.get("layers", {})
@@ -424,12 +425,12 @@ def test_clean_preview(
 
     clean_dir = root / "data" / "clean" / dataset / str(year)
     clean_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(clean_dir / f"{dataset}_{year}_clean.parquet")
+    _make_parquet(clean_dir / f"{dataset}_{year}_clean.parquet")
 
     mart_dir = root / "data" / "mart" / dataset / str(year)
     mart_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(mart_dir / "rd_by_regione.parquet")
-    _write_parquet(mart_dir / "rd_by_provincia.parquet")
+    _make_parquet(mart_dir / "rd_by_regione.parquet")
+    _make_parquet(mart_dir / "rd_by_provincia.parquet")
 
     kwargs = {"year": year, "limit": 5}
     if layer == "mart":
@@ -570,11 +571,11 @@ def test_resolver_custom_root(tmp_path):
     custom_root = tmp_path / "dataset-incubator" / "custom_out"
     clean_dir = custom_root / "data" / "clean" / slug / "2024"
     clean_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(clean_dir / f"{slug}_2024_clean.parquet")
+    _make_parquet(clean_dir / f"{slug}_2024_clean.parquet")
 
     mart_dir = custom_root / "data" / "mart" / slug / "2024"
     mart_dir.mkdir(parents=True, exist_ok=True)
-    _write_parquet(mart_dir / f"mart_{slug}.parquet")
+    _make_parquet(mart_dir / f"mart_{slug}.parquet")
 
     _make_candidate_run_for_resolver(tmp_path, slug, root=custom_root)
 

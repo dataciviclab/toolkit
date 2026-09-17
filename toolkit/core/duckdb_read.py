@@ -41,6 +41,8 @@ class ReadInfo:
 
 def _csv_read_options(
     read_cfg: dict[str, Any],
+    *,
+    input_files: list[RawInputFile] | None = None,
 ) -> tuple[list[str], dict[str, Any], dict[str, str] | None]:
     """Build DuckDB read_csv options, track params, extract source columns.
 
@@ -78,7 +80,13 @@ def _csv_read_options(
 
     # Build the shared option strings, then prepend union_by_name and
     # append header/skip (which are layer-specific).
-    opts = ["union_by_name=true"] + csv_read_option_strings(read_cfg)
+    # Skip union_by_name when explicit columns are provided (they define the
+    # schema, so sniffing is unnecessary and can conflict) or when
+    # auto_detect=false with multiple files (different column counts).
+    auto_detect = read_cfg.get("auto_detect")
+    multi_file = len(input_files) > 1 if input_files else False
+    use_union = not source_columns and not (auto_detect is False and multi_file)
+    opts = (["union_by_name=true"] if use_union else []) + csv_read_option_strings(read_cfg)
     opts.append(f"header={'true' if parser_header else 'false'}")
     if parser_skip is not None:
         opts.append(f"skip={parser_skip}")
@@ -176,7 +184,7 @@ def _execute_csv_read(
     # This is needed for csv_trim_projection to perform the rename.
     original_columns = read_cfg.get("columns")
 
-    opts, params_used, source_columns = _csv_read_options(read_cfg)
+    opts, params_used, source_columns = _csv_read_options(read_cfg, input_files=input_files)
     if sample_size is not None:
         opts.append(f"sample_size={int(sample_size)}")
         params_used["sample_size"] = int(sample_size)

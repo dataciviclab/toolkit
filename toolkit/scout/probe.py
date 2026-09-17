@@ -24,7 +24,6 @@ from toolkit.scout.http import (
     DEFAULT_USER_AGENT,
     detect_ckan_in_html,
     discover_ckan_resources,
-    extract_candidate_links,
     extract_ckan_dataset_id,
     fetch_ckan_package,
     fetch_html_body,
@@ -36,6 +35,7 @@ from toolkit.scout.http import (
     probe_url_headers,
     resolve_preview_kind,
 )
+from toolkit.scout.link_extractor import extract_candidate_links
 
 __all__ = [
     "probe_url",

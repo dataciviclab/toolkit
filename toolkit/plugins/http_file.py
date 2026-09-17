@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-from urllib.parse import urlparse, urlunparse
 
 from lab_connectors.http import HttpClient
 
@@ -67,26 +66,6 @@ class HttpFileSource:
 
         err = result.err
         raise DownloadError(str(err) if err else f"Failed to fetch {url}")
-
-
-def _sanitize_proxy_url(proxy: str) -> str:
-    """Rimuove credenziali da URL proxy per log sicuri."""
-    parsed = urlparse(proxy)
-    if parsed.password:
-        return urlunparse(
-            parsed._replace(
-                netloc=f"{parsed.username}:***@{parsed.hostname}"
-                f"{':' + str(parsed.port) if parsed.port else ''}"
-            )
-        )
-    if parsed.username:
-        return urlunparse(
-            parsed._replace(
-                netloc=f"{parsed.username}@{parsed.hostname}"
-                f"{':' + str(parsed.port) if parsed.port else ''}"
-            )
-        )
-    return proxy
 
 
 def _get_proxy_from_env() -> str | None:

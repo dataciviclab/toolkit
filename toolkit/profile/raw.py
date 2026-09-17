@@ -22,7 +22,7 @@ from toolkit.core.csv_read import (
     robust_preset,
 )
 from toolkit.core.sql_utils import sql_str
-from toolkit.core.paths import RAW_PROFILE, RAW_SUGGESTED_READ
+from toolkit.core.paths import RAW_PROFILE
 from toolkit.core.io import write_json_atomic
 from toolkit.profile._sniff_encoding import is_binary_file as _is_binary_file, sniff_encoding
 from toolkit.profile._sniff_delimiter import sniff_decimal, sniff_delim, suggest_skip
@@ -262,28 +262,6 @@ def build_suggested_read_cfg(
         cfg.setdefault("ignore_errors", True)
 
     return normalize_read_cfg(cfg)
-
-
-def write_suggested_read_yml(out_dir: Path, profile: "RawProfile | Dict[str, Any]") -> Path:
-    _safe_mkdir(out_dir)
-    suggested_read = build_suggested_read_cfg(profile)
-
-    lines = ["clean:", "  read:"]
-    for key, value in suggested_read.items():
-        if isinstance(value, str):
-            escaped = value.replace('"', '\\"')
-            rendered = f'"{escaped}"'
-        elif isinstance(value, bool):
-            rendered = "true" if value else "false"
-        elif value is None:
-            rendered = "null"
-        else:
-            rendered = str(value)
-        lines.append(f"    {key}: {rendered}")
-
-    p = out_dir / RAW_SUGGESTED_READ
-    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return p
 
 
 def _pick_data_file(files: List[Path]) -> Path:

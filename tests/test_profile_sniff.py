@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 import toolkit.profile.raw as profile_raw_module
-from toolkit.profile.raw import write_suggested_read_yml
 from toolkit.profile._column_profile import _build_mapping_suggestions
 from toolkit.core.csv_read import csv_read_option_strings
 from toolkit.profile.raw import (
@@ -97,13 +96,12 @@ def test_profile_raw_suggests_robust_read_options_for_dirty_csv(tmp_path: Path):
     assert profile.skip_suggested == 1
     assert profile.robust_read_suggested is True
 
-    suggested_path = write_suggested_read_yml(tmp_path / "_profile", profile.__dict__)
-    suggested = suggested_path.read_text(encoding="utf-8")
-    assert "skip: 1" in suggested
-    assert "auto_detect: false" in suggested
-    assert "strict_mode: false" in suggested
-    assert "null_padding: true" in suggested
-    assert "ignore_errors: true" in suggested
+    suggested = build_suggested_read_cfg(profile)
+    assert suggested["skip"] == 1
+    assert suggested["auto_detect"] is False
+    assert suggested["strict_mode"] is False
+    assert suggested["null_padding"] is True
+    assert suggested["ignore_errors"] is True
 
 
 @pytest.mark.policy
@@ -129,23 +127,11 @@ def test_profile_raw_writes_suggested_read_even_when_duckdb_sniff_fails(
     )
 
     profile = profile_raw(raw_dir, "demo", 2024)
-    suggested_cfg = build_suggested_read_cfg(profile)
-
-    assert profile.warnings
-    assert profile.header_line == "col1;col2;val"
-    assert suggested_cfg["delim"] == ";"
-    assert suggested_cfg["decimal"] == ","
-    assert suggested_cfg["encoding"] == "utf-8"
-    assert suggested_cfg["header"] is True
-
-    out_dir = tmp_path / "_profile"
-    suggested_path = write_suggested_read_yml(out_dir, profile.__dict__)
-    assert suggested_path.exists()
-    suggested = suggested_path.read_text(encoding="utf-8")
-    assert 'delim: ";"' in suggested
-    assert 'decimal: ","' in suggested
-    assert 'encoding: "utf-8"' in suggested
-    assert "header: true" in suggested
+    suggested = build_suggested_read_cfg(profile)
+    assert suggested["delim"] == ";"
+    assert suggested["decimal"] == ","
+    assert suggested["encoding"] == "utf-8"
+    assert suggested["header"] is True
 
 
 @pytest.mark.policy

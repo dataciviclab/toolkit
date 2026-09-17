@@ -7,11 +7,11 @@ import pytest
 
 from toolkit.scout.http import (
     detect_ckan_in_html,
-    extract_candidate_links,
     extract_ckan_dataset_id,
     is_file_like,
     is_html_content,
 )
+from toolkit.scout.link_extractor import extract_candidate_links
 from toolkit.scaffold.sources import slugify
 
 

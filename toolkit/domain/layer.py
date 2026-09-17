@@ -23,6 +23,7 @@ from toolkit.core.config import load_config
 from toolkit.core.duckdb_shape import parquet_preview
 from toolkit.core.io import read_json_or_none, read_yaml
 from toolkit.core.paths import RAW_PROFILE, RAW_SUGGESTED_READ
+from toolkit.domain.inspect_utils import _read_parquet_preview
 from toolkit.domain.path_resolver import payload_for_year as _payload_for_year
 
 # ---------------------------------------------------------------------------
@@ -251,20 +252,6 @@ def raw_profile(config_path: str, year: int | None = None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Preview mode
 # ---------------------------------------------------------------------------
-
-
-def _read_parquet_preview(parquet_path: Path, limit: int = 10) -> dict[str, Any]:
-    """Legge schema + prime N righe da un parquet."""
-    from toolkit.core.duckdb_shape import parquet_preview
-
-    if not parquet_path.exists():
-        raise FileNotFoundError(f"Parquet non trovato: {parquet_path}")
-    if parquet_path.suffix not in (".parquet",):
-        raise ValueError(f"Formato non supportato: {parquet_path.suffix}. Solo .parquet.")
-    result = parquet_preview(parquet_path, limit=limit)
-    result.pop("path", None)
-    result.pop("sql", None)
-    return result
 
 
 def clean_preview(

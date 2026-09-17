@@ -136,6 +136,15 @@ def _resolve_dataset_entry(
         mart_dir = layer_year_dir(support_cfg.root, "mart", support_cfg.dataset, year)
         mart_by_table[table.name] = str(mart_dir / f"{table.name}.parquet")
 
+    # Build clean glob pattern to include all years (not just the first)
+    # when the support dataset has multiple years configured.
+    clean_value: str | None = year_payloads[0]["clean"] if year_payloads else None
+    if clean_value and len(years) > 1:
+        first_clean = Path(clean_value)
+        clean_value = str(
+            first_clean.parent.parent / "*" / f"{support_cfg.dataset}_*_clean.parquet"
+        )
+
     return {
         "name": name,
         "type": "dataset",
@@ -146,7 +155,7 @@ def _resolve_dataset_entry(
         "outputs": all_outputs,
         "mart": (str(mart_paths[0]) if mart_paths else None),
         "mart_by_table": mart_by_table,
-        "clean": (year_payloads[0]["clean"] if year_payloads else None),
+        "clean": clean_value,
         "path": None,
         "all_outputs_exist": all(yp["all_outputs_exist"] for yp in year_payloads)
         if year_payloads

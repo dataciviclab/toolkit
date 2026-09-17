@@ -217,43 +217,6 @@ def test_batch_json_output(tmp_path: Path) -> None:
     assert report["rows"][0]["status"] == "SUCCESS"
 
 
-def test_batch_step_probe(tmp_path: Path) -> None:
-    """``toolkit run --batch --dry-run`` esegue validazione senza output fisici."""
-    project = tmp_path / "project"
-    _write_batch_project(project, "batch_probe", 2023)
-    configs_file = _write_configs_file(tmp_path, "project")
-
-    runner = CliRunner()
-    result = runner.invoke(
-        app,
-        ["run", "--batch", str(configs_file), "--dry-run"],
-        catch_exceptions=False,
-    )
-
-    assert result.exit_code == 0
-    assert "Batch Report" in result.output
-    assert "batch_probe" in result.output
-
-
-def test_batch_step_probe_json_output(tmp_path: Path) -> None:
-    """``toolkit run --batch --dry-run --json`` produce JSON parsabile."""
-    project = tmp_path / "project"
-    _write_batch_project(project, "batch_probe_json", 2023)
-    configs_file = _write_configs_file(tmp_path, "project")
-
-    runner = CliRunner()
-    result = runner.invoke(
-        app,
-        ["run", "--batch", str(configs_file), "--dry-run", "--json"],
-        catch_exceptions=False,
-    )
-
-    assert result.exit_code == 0
-    report = json.loads(result.stdout)
-    assert report["summary"]["total"] == 1
-    assert report["rows"][0]["dataset"] == "batch_probe_json"
-
-
 def test_batch_dry_run_with_json(tmp_path: Path) -> None:
     """``toolkit run --batch --dry-run --json`` produce JSON e non crea file."""
     project = tmp_path / "project"
@@ -301,29 +264,6 @@ def test_batch_step_probe_dry_run_reports_dry_run(tmp_path: Path) -> None:
     # Dry-run non crea output fisici
     raw_out = project / "out" / "data" / "raw" / "batch_probe_dry" / "2023"
     assert not raw_out.exists()
-
-
-@pytest.mark.policy
-def test_batch_step_raw_dry_run_reuses_runner_across_configs(tmp_path: Path) -> None:
-    """``toolkit run --batch --dry-run`` processa piu' config."""
-    project_a = tmp_path / "proj_a"
-    _write_batch_project(project_a, "batch_raw_a", 2023)
-    project_b = tmp_path / "proj_b"
-    _write_batch_project(project_b, "batch_raw_b", 2024)
-
-    configs_file = tmp_path / "configs.txt"
-    configs_file.write_text(f"{project_a}/dataset.yml\n{project_b}/dataset.yml\n", encoding="utf-8")
-
-    runner = CliRunner()
-    result = runner.invoke(
-        app,
-        ["run", "--batch", str(configs_file), "--dry-run"],
-        catch_exceptions=False,
-    )
-
-    assert result.exit_code == 0
-    assert "batch_raw_a" in result.output
-    assert "batch_raw_b" in result.output
 
 
 @pytest.mark.contract

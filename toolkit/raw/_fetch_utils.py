@@ -84,6 +84,9 @@ def _infer_ext(stype: str, formatted_args: dict, origin: str | None = None) -> s
         path_str = str(formatted_args.get("path", ""))
         return _infer_from_url(path_str)
 
+    if stype == "script" and origin:
+        return _infer_from_url(origin)
+
     return ".bin"
 
 

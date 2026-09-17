@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import textwrap
 import zipfile
 from pathlib import Path
 
@@ -16,16 +15,12 @@ import pytest
 from typer.testing import CliRunner
 
 from toolkit.cli.app import app
+from tests.helpers import write_text
 
 pytestmark = [pytest.mark.contract, pytest.mark.core]
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 RUNNER = CliRunner()
-
-
-def _write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(textwrap.dedent(content).strip() + "\n", encoding="utf-8")
 
 
 def _invoke(args: list[str]) -> pytest.CapturedResult:
@@ -47,15 +42,15 @@ def _setup_project(tmp_path: Path, dataset: str = "smoke_test", year: int = 2024
     """Crea dataset.yml + SQL + CSV fixture per test e2e standard."""
     (tmp_path / "data").mkdir(parents=True)
     shutil.copy(FIXTURES_DIR / "it_small.csv", tmp_path / "data" / "it_small.csv")
-    _write_text(
+    write_text(
         tmp_path / "sql" / "clean.sql",
         """SELECT comune, CAST(anno AS INTEGER) AS anno, CAST(valore AS DOUBLE) AS valore FROM raw_input""",
     )
-    _write_text(
+    write_text(
         tmp_path / "sql" / "mart.sql",
         """SELECT anno, SUM(valore) AS totale FROM clean_input GROUP BY anno""",
     )
-    _write_text(
+    write_text(
         tmp_path / "dataset.yml",
         f"""
         schema_version: 1
@@ -170,15 +165,15 @@ def test_zip_extractor(tmp_path: Path):
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.write(FIXTURES_DIR / "zip_small.csv", arcname="zip_payload.csv")
 
-    _write_text(
+    write_text(
         project / "sql" / "clean.sql",
         """SELECT capoluogo, CAST(punteggio AS INTEGER) AS punteggio FROM raw_input""",
     )
-    _write_text(
+    write_text(
         project / "sql" / "mart_scores.sql",
         """SELECT COUNT(*) AS righe, SUM(punteggio) AS totale FROM clean_input""",
     )
-    _write_text(
+    write_text(
         project / "dataset.yml",
         """
         schema_version: 1
@@ -240,15 +235,15 @@ def test_year_template_in_path(tmp_path: Path):
     (project / "data").mkdir(parents=True)
     shutil.copy(FIXTURES_DIR / "it_small.csv", project / "data" / "it_small_2024.csv")
 
-    _write_text(
+    write_text(
         project / "sql" / "clean.sql",
         """SELECT comune, CAST(anno AS INTEGER) AS anno, CAST(valore AS DOUBLE) AS valore FROM raw_input""",
     )
-    _write_text(
+    write_text(
         project / "sql" / "mart.sql",
         """SELECT anno, SUM(valore) AS totale FROM clean_input GROUP BY anno""",
     )
-    _write_text(
+    write_text(
         project / "dataset.yml",
         """
         schema_version: 1
@@ -315,15 +310,15 @@ def test_multi_year_mart(tmp_path: Path):
     shutil.copy(FIXTURES_DIR / "it_small.csv", project / "data" / "it_small_2024.csv")
     shutil.copy(FIXTURES_DIR / "it_small.csv", project / "data" / "it_small_2025.csv")
 
-    _write_text(
+    write_text(
         project / "sql" / "clean.sql",
         """SELECT comune, CAST(anno AS INTEGER) AS anno, CAST(valore AS DOUBLE) AS valore FROM raw_input""",
     )
-    _write_text(
+    write_text(
         project / "sql" / "clean_union.sql",
         """SELECT * FROM clean_input""",
     )
-    _write_text(
+    write_text(
         project / "dataset.yml",
         """
         schema_version: 1

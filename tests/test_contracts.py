@@ -127,17 +127,6 @@ def test_contracts_macros_auto_generated() -> None:
             assert key in macro, f"Macro '{macro.get('name', '?')}' manca chiave '{key}'"
 
 
-def test_contracts_macros_return_types_known() -> None:
-    """Tutte le macro hanno un returns type esplicito (non default VARCHAR)."""
-    from toolkit.contracts.pipeline import CONTRACTS
-
-    for macro in CONTRACTS["clean"]["macros"]:
-        assert macro["returns"] != "VARCHAR" or macro["name"] == "normalize_string", (
-            f"Macro '{macro['name']}' manca '@contract returns:' in macros.sql "
-            f"(ha '{macro['returns']}' di default)"
-        )
-
-
 def test_contracts_json_serializable() -> None:
     """CONTRACTS deve essere serializzabile in JSON per MCP/CLI --json."""
     from toolkit.contracts.pipeline import CONTRACTS

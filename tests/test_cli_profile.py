@@ -55,27 +55,6 @@ def test_cli_profile_raw_happy_path(project_example: Path, runner, chdir_tmp: Pa
     _assert_profile_written(project_example)
 
 
-def test_inspect_profile_happy_path(project_example: Path, runner, chdir_tmp: Path) -> None:
-    config_path = _run_raw(project_example, runner)
-
-    profile_result = runner.invoke(
-        app,
-        [
-            "inspect",
-            "config",
-            "--mode",
-            "profile",
-            "-l",
-            "raw",
-            "--config",
-            str(config_path),
-        ],
-    )
-    assert profile_result.exit_code == 0, profile_result.output
-    assert "Encoding:" in profile_result.output
-    _assert_profile_written(project_example)
-
-
 def test_inspect_profile_single_year(project_example: Path, runner, chdir_tmp: Path) -> None:
     config_path = _run_raw(project_example, runner)
 

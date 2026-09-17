@@ -71,7 +71,13 @@ class TestCatalogMode:
         )
         assert r["mode"] == "sql"
 
-    def test_invalid_slug(self) -> None:
+    def test_invalid_slug(self, monkeypatch: MonkeyPatch) -> None:
+        import toolkit.domain.catalog as cat
+
+        monkeypatch.setattr(cat, "_gcs_files_from_registry", lambda ws=None: [])
+        monkeypatch.setattr(cat, "_scan_workspace_parquets", lambda ws=None: [])
+        monkeypatch.setattr(cat, "_scan_committed_catalogs", lambda ws=None: {})
+        monkeypatch.setattr(cat, "_scan_workspace_configs", lambda ws=None, stage="all": {})
         with pytest.raises(FileNotFoundError):
             layer_query(datasets=["x"], layer="clean", mode="sql", sql="SELECT 1")
 

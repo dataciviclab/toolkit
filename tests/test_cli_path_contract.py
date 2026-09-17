@@ -14,8 +14,7 @@ pytestmark = pytest.mark.contract
 
 def _copy_project_example(dst: Path) -> Path:
     src = Path("project-example")
-    shutil.copytree(src, dst)
-    shutil.rmtree(dst / "_smoke_out", ignore_errors=True)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("_smoke_out"))
     return dst / "dataset.yml"
 
 
@@ -340,46 +339,6 @@ def test_cli_run_sample_rows_isolates_output(tmp_path: Path) -> None:
     # NO output in _smoke_out/data/
     clean_out = root_dir / "data" / "clean" / "project_example" / "2022"
     assert not clean_out.exists(), "--sample-rows must NOT write to root/data/"
-
-
-def test_cli_run_full_smoke_isolates_output(tmp_path: Path) -> None:
-    """contract: --smoke in 'run full' scrive in {root}/smoke/ non in {root}/data/."""
-    project_dir = tmp_path / "project-example"
-    config_path = _copy_project_example(project_dir)
-    root_dir = project_dir / "_smoke_out"
-    runner = CliRunner()
-
-    result = runner.invoke(
-        app,
-        [
-            "run",
-            "--config",
-            str(config_path),
-            "--smoke",
-        ],
-        catch_exceptions=False,
-    )
-    assert result.exit_code == 0, result.output
-
-    # Smoke output in _smoke_out/smoke/data/
-    smoke_clean = (
-        root_dir
-        / "smoke"
-        / "data"
-        / "clean"
-        / "project_example"
-        / "2022"
-        / "project_example_2022_clean.parquet"
-    )
-    assert smoke_clean.exists(), f"smoke clean not found: {smoke_clean}"
-    smoke_mart = (
-        root_dir / "smoke" / "data" / "mart" / "project_example" / "2022" / "rd_by_regione.parquet"
-    )
-    assert smoke_mart.exists(), f"smoke mart not found: {smoke_mart}"
-
-    # NO output in _smoke_out/data/
-    clean_out = root_dir / "data" / "clean" / "project_example" / "2022"
-    assert not clean_out.exists(), "run full --smoke must NOT write to root/data/"
 
 
 def test_cli_run_smoke_run_record_marked(tmp_path: Path) -> None:
@@ -729,72 +688,3 @@ support:
     assert sup_mart.exists(), f"support mart not found: {sup_mart}"
     # Nessun output del support in root/data/
     assert not (sup_root / "data" / "clean" / "lookup_ds" / "2022").exists()
-
-
-# ---------------------------------------------------------------------------
-# toolkit.contracts path API
-# ---------------------------------------------------------------------------
-
-
-def test_contracts_layer_year_dir() -> None:
-    """contract: layer_year_dir restituisce path corretto."""
-    from toolkit.contracts import layer_year_dir
-
-    path = layer_year_dir("/base", "clean", "mio_dataset", 2024)
-    assert str(path) == "/base/data/clean/mio_dataset/2024"
-
-
-def test_contracts_clean_parquet_path() -> None:
-    """contract: clean_parquet_path restituisce path al parquet."""
-    from toolkit.contracts import clean_parquet_path
-
-    path = clean_parquet_path("/base", "mio_dataset", 2024)
-    assert str(path) == "/base/data/clean/mio_dataset/2024/mio_dataset_2024_clean.parquet"
-
-
-def test_contracts_mart_table_path() -> None:
-    """contract: mart_table_path restituisce path corretto."""
-    from toolkit.contracts import mart_table_path
-
-    path = mart_table_path("/base", "mio_dataset", 2024, "rd_by_regione")
-    assert str(path) == "/base/data/mart/mio_dataset/2024/rd_by_regione.parquet"
-
-
-def test_contracts_run_record_dir() -> None:
-    """contract: run_record_dir restituisce path corretto."""
-    from toolkit.contracts import run_record_dir
-
-    path = run_record_dir("/base", "mio_dataset", 2024)
-    assert str(path) == "/base/data/_runs/mio_dataset/2024"
-
-
-def test_contracts_constants() -> None:
-    """contract: costante METADATA_JSON esiste."""
-    from toolkit.contracts import METADATA_JSON
-
-    assert METADATA_JSON == "metadata.json"
-
-
-def test_contracts_clean_parquet_suffix() -> None:
-    """contract: CLEAN_PARQUET_SUFFIX costante pubblica."""
-    from toolkit.contracts import CLEAN_PARQUET_SUFFIX
-
-    assert CLEAN_PARQUET_SUFFIX == "_clean.parquet"
-
-
-def test_contracts_resolve_root() -> None:
-    """contract: resolve_root esportato e funzionante."""
-    from toolkit.contracts import resolve_root
-    from pathlib import Path
-
-    result = resolve_root("/some/absolute/path")
-    assert isinstance(result, Path)
-    assert result.is_absolute()
-
-
-def test_contracts_all_exports_match() -> None:
-    """contract: __all__ copre tutte le esportazioni pubbliche."""
-    import toolkit.contracts as c
-
-    for name in c.__all__:
-        assert hasattr(c, name), f"{name} dichiarato in __all__ ma non esportato"

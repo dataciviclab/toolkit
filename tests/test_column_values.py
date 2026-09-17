@@ -18,30 +18,29 @@ from toolkit.domain.column_values import (
     build_column_values_profile,
     generate_workspace_column_values,
 )
+from tests.helpers import write_parquet
 
 pytest.importorskip("duckdb")
 
 runner = CliRunner()
 
+_FIXTURE_SQL = (
+    "CREATE TABLE t (regione VARCHAR, provincia VARCHAR, "
+    "anno INTEGER, valore DOUBLE, attivo BOOLEAN)"
+)
+_FIXTURE_DATA = (
+    "INSERT INTO t VALUES "
+    "('Lombardia', 'MI', 2024, 10.5, true), "
+    "('Lombardia', 'MI', 2024, 12.0, true), "
+    "('Lombardia', 'BG', 2024, 9.5, false), "
+    "('Piemonte', 'TO', 2024, 7.0, true), "
+    "(NULL, NULL, 2024, 5.0, NULL)"
+)
 
-def _write_parquet(path: Path) -> None:
-    import duckdb
 
+def _make_parquet(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with duckdb.connect() as con:
-        con.execute(
-            "CREATE TABLE t (regione VARCHAR, provincia VARCHAR, "
-            "anno INTEGER, valore DOUBLE, attivo BOOLEAN)"
-        )
-        con.execute(
-            "INSERT INTO t VALUES "
-            "('Lombardia', 'MI', 2024, 10.5, true), "
-            "('Lombardia', 'MI', 2024, 12.0, true), "
-            "('Lombardia', 'BG', 2024, 9.5, false), "
-            "('Piemonte', 'TO', 2024, 7.0, true), "
-            "(NULL, NULL, 2024, 5.0, NULL)"
-        )
-        con.execute(f"COPY t TO '{path}' (FORMAT parquet)")
+    write_parquet(path, f"{_FIXTURE_SQL}; {_FIXTURE_DATA}")
 
 
 def _columns_fixture() -> list[dict]:
@@ -58,7 +57,7 @@ class TestColumnValuesProfile:
     @pytest.mark.contract
     def test_happy_path_dimensions_only(self, tmp_path: Path) -> None:
         parquet = tmp_path / "clean.parquet"
-        _write_parquet(parquet)
+        _make_parquet(parquet)
 
         profile = build_column_values_profile(parquet, _columns_fixture(), top_n=10)
 
@@ -81,7 +80,7 @@ class TestColumnValuesProfile:
     @pytest.mark.contract
     def test_boolean_and_date_values_json_safe(self, tmp_path: Path) -> None:
         parquet = tmp_path / "clean.parquet"
-        _write_parquet(parquet)
+        _make_parquet(parquet)
 
         profile = build_column_values_profile(parquet, _columns_fixture(), top_n=10)
         # valore booleano serializzabile in JSON
@@ -92,7 +91,7 @@ class TestColumnValuesProfile:
     @pytest.mark.contract
     def test_top_truncated(self, tmp_path: Path) -> None:
         parquet = tmp_path / "clean.parquet"
-        _write_parquet(parquet)
+        _make_parquet(parquet)
 
         profile = build_column_values_profile(parquet, _columns_fixture(), top_n=1)
         assert profile["columns"]["regione"]["top_truncated"] is True
@@ -102,7 +101,7 @@ class TestColumnValuesProfile:
     def test_top_not_truncated_when_exact_match(self, tmp_path: Path) -> None:
         """Colonna con esattamente top_n valori distinti → NON troncata (edge case)."""
         parquet = tmp_path / "clean.parquet"
-        _write_parquet(parquet)
+        _make_parquet(parquet)
 
         # regione ha 2 valori distinti non-null (Lombardia, Piemonte): con
         # top_n=2 il flag deve essere False (prima era falso positivo con >=).
@@ -114,7 +113,7 @@ class TestColumnValuesProfile:
     @pytest.mark.contract
     def test_no_dimensions(self, tmp_path: Path) -> None:
         parquet = tmp_path / "clean.parquet"
-        _write_parquet(parquet)
+        _make_parquet(parquet)
 
         profile = build_column_values_profile(
             parquet, [{"name": "valore", "type": "DOUBLE", "role": "metric"}]
@@ -130,7 +129,7 @@ class TestColumnValuesBatch:
         # workspace/repo/section/slug/dataset.yml + parquet clean
         repo_root = tmp_path / "repo-a"
         parquet = repo_root / "out" / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
-        _write_parquet(parquet)
+        _make_parquet(parquet)
         ds_dir = repo_root / "datasets" / "demo"
         ds_dir.mkdir(parents=True)
         yml = """
@@ -161,7 +160,7 @@ dataset:
             parquet = (
                 repo_root / "out" / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
             )
-            _write_parquet(parquet)
+            _make_parquet(parquet)
             ds_dir = repo_root / "datasets" / "demo"
             ds_dir.mkdir(parents=True)
             yml = """
@@ -223,7 +222,7 @@ class TestColumnValuesCli:
     @pytest.mark.contract
     def test_json_output(self, tmp_path: Path) -> None:
         parquet = tmp_path / "out" / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
-        _write_parquet(parquet)
+        _make_parquet(parquet)
 
         # mini-repo: dataset.yml con root relativo che punta a out/
         ds_dir = tmp_path / "datasets" / "demo"
@@ -256,7 +255,7 @@ dataset:
     @pytest.mark.contract
     def test_writes_json_file(self, tmp_path: Path) -> None:
         parquet = tmp_path / "out" / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
-        _write_parquet(parquet)
+        _make_parquet(parquet)
 
         ds_dir = tmp_path / "datasets" / "demo"
         ds_dir.mkdir(parents=True)

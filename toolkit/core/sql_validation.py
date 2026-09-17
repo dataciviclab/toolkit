@@ -219,7 +219,7 @@ def validate_sql_dry_run(cfg, *, year: int, layers: list[str], dry_run: bool = F
     # ── Config check (zero network I/O, sempre) ─────────────────────────
     from toolkit.domain.preflight import run_config_check
 
-    config_check = run_config_check(cfg, cfg.base_dir / "dataset.yml")
+    config_check = run_config_check(cfg, None)
     if not config_check.get("ok", False):
         for err in config_check.get("errors", []):
             _logger.error("CONFIG ERR: %s", err)

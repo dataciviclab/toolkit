@@ -646,8 +646,14 @@ class TestEdgeCases:
 
     def test_resolver_cache_independence(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Due resolver non condividono la cache dei file GCS."""
-        r1 = CatalogResolver()
-        r2 = CatalogResolver()
+        import toolkit.domain.catalog as cat
+
+        monkeypatch.setattr(cat, "_scan_committed_catalogs", lambda ws=None: {})
+        monkeypatch.setattr(cat, "_scan_workspace_configs", lambda ws=None, stage="all": {})
+        monkeypatch.setattr(cat, "_scan_workspace_parquets", lambda ws=None: [])
+
+        r1 = CatalogResolver(include_local=False)
+        r2 = CatalogResolver(include_local=False)
 
         calls: list[int] = []
 
@@ -655,7 +661,7 @@ class TestEdgeCases:
             calls.append(1)
             return _FAKE_MANIFEST["files"]
 
-        monkeypatch.setattr("toolkit.domain.catalog._gcs_files_from_registry", tracking_gcs_files)
+        monkeypatch.setattr(cat, "_gcs_files_from_registry", tracking_gcs_files)
 
         r1.list_datasets(query="anac")
         r2.list_datasets(query="anac")

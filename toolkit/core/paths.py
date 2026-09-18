@@ -26,10 +26,33 @@ def find_repos(workspace: Path | None = None) -> dict[str, Path]:
     """Trova tutti i repo nel workspace scanando ricorsivamente.
 
     Wrapper che delega a ``lab_connectors.workspace.find_repos()``.
+    Fallback a iterdir() se il modulo non è disponibile.
     """
-    from lab_connectors.workspace import find_repos as _find_repos
+    try:
+        from lab_connectors.workspace import find_repos as _find_repos
 
-    return _find_repos(workspace)
+        return _find_repos(workspace)
+    except ImportError:
+        # Fallback: iterdir depth-1 per compatibilità con lab-connectors senza workspace
+        ws = (workspace or WORKSPACE_ROOT).resolve()
+        repos: dict[str, Path] = {}
+        if not ws.is_dir():
+            return repos
+        for p in sorted(ws.iterdir()):
+            if not p.is_dir():
+                continue
+            if (p / "registry" / "registry.json").is_file():
+                import json
+
+                try:
+                    with open(p / "registry" / "registry.json") as f:
+                        data = json.load(f)
+                    slug = data.get("repo") or data.get("slug")
+                    if slug:
+                        repos[slug] = p
+                except (json.JSONDecodeError, OSError):
+                    pass
+        return repos
 
 
 def _to_pure_path(path: str | os.PathLike[str]) -> PurePath:

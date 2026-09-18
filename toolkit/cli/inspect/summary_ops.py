@@ -103,16 +103,30 @@ def _print_validation_details(layer_name: str, vpath: Path) -> None:
         typer.echo(f"    {' '.join(details)}")
 
 
+def _find_data_root(path: Path) -> Path:
+    """Trova la root dei dati (out/data/) partendo da un path."""
+    current = path
+    for _ in range(10):
+        if current.name == "data" and current.parent.name == "out":
+            return current
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    # Fallback: parents[3] per backward compat
+    return path.parents[3]
+
+
 def _print_layer_profiles(dataset: str, year: int, layers: dict[str, Any]) -> None:
     clean_layer = layers.get("clean", {})
     clean_output = clean_layer.get("output")
     if clean_output and Path(clean_output).exists():
-        root = Path(clean_output).parents[3]
+        root = _find_data_root(Path(clean_output))
     else:
         clean_dir = clean_layer.get("dir")
         if not clean_dir or not Path(clean_dir).exists():
             return
-        root = Path(clean_dir).parents[3]
+        root = _find_data_root(Path(clean_dir))
     profiles = load_layer_profile_summaries(root, dataset, year)
     if profiles is None:
         return

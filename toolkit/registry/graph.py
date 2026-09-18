@@ -65,12 +65,14 @@ def load_workspace_graph(workspace: Path = WORKSPACE_ROOT) -> dict[str, Any]:
     if not workspace.is_dir():
         return {"entities": {}, "bridges": [], "repos": []}
 
-    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
+    from toolkit.core.paths import find_repos
+
+    for repo_slug, repo_dir in find_repos(workspace).items():
         payload = load_repo_registry(repo_dir)
         repo_entities, repo_bridges = _entity_section(payload)
         if not repo_entities and not repo_bridges:
             continue
-        repos.append(repo_dir.name)
+        repos.append(repo_slug)
 
         for name, info in repo_entities.items():
             if name not in entities:

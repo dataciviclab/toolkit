@@ -17,6 +17,21 @@ WORKSPACE_ROOT = Path(
 TOOLKIT_ROOT = _TOOLKIT_ROOT
 
 
+# ---------------------------------------------------------------------------
+# Repo discovery — delega a lab_connectors.workspace
+# ---------------------------------------------------------------------------
+
+
+def find_repos(workspace: Path | None = None) -> dict[str, Path]:
+    """Trova tutti i repo nel workspace scanando ricorsivamente.
+
+    Wrapper che delega a ``lab_connectors.workspace.find_repos()``.
+    """
+    from lab_connectors.workspace import find_repos as _find_repos
+
+    return _find_repos(workspace)
+
+
 def _to_pure_path(path: str | os.PathLike[str]) -> PurePath:
     raw = os.fspath(path)
     if "\\" in raw or re.match(r"^[A-Za-z]:[\\/]", raw):

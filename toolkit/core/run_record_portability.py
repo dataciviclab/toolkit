@@ -28,6 +28,21 @@ _PORTABLE_RUN_PATH_FIELDS: set[tuple[str, ...]] = {
 
 
 def _root_from_run_dir(run_dir: Path) -> Path:
+    """Trova la root dei dati (out/data/) partendo da una run directory.
+
+    Walk up dalla run directory cercando ``out/data/`` invece di
+    assumere una profondità fissa con ``parents[3]``.
+    """
+    current = run_dir
+    for _ in range(10):  # max 10 levels up
+        if current.name == "data" and current.parent.name == "out":
+            return current
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+    # Fallback: usa parents[3] per backward compat
     return run_dir.parents[3]
 
 

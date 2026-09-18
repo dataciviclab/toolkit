@@ -72,10 +72,12 @@ def list_registries(workspace: Path = WORKSPACE_ROOT) -> dict[str, Any]:
     if not workspace.is_dir():
         return {"repos": repos, "total_repos": 0}
 
-    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
+    from toolkit.core.paths import find_repos
+
+    for repo_slug, repo_dir in find_repos(workspace).items():
         artifacts = _scan_repo(repo_dir)
         if artifacts:
-            repos.append({"repo": repo_dir.name, "artifacts": artifacts})
+            repos.append({"repo": repo_slug, "artifacts": artifacts})
 
     return {"repos": repos, "total_repos": len(repos)}
 

@@ -1,3 +1,21 @@
+## [1.52.0] - 2026-09-17
+
+### Added
+
+- **Comando `toolkit validate`** (PR #482): validazione standalone degli output di layer senza rilanciare la pipeline. Legge parquet/metadata da disco e applica le regole di validazione definite in dataset.yml. Supporta `--layer`, `--year`, `--years`, `--json`. Output CLI mostra errori/warnings inline con `✗`/`⚠`.
+
+### Changed
+
+- **Decomposizione `cmd_run.py` orchestrator** (PR #482): estratte `resolve_run_context` (deduplica config+sampling), `resolve_and_run_support` (support orchestration in `core/support.py`), `_execute_layer`拆 da closure con `nonlocal` a 3 funzioni pure (`_execute_layer`, `_validate_layer`, `_apply_validation_gate`). `RunContextError` dedicata per propagare il context anche in caso di eccezione.
+- **Output CLI `toolkit run` migliorato** (PR #482): errori e warnings di validazione mostrati inline (`✗`/`⚠`), dettagli per layer (row count, col count, tables, rules).
+- **MCP: reduce noise** (PR #478): strip nulls, fix bugs, unify errors.
+- **Cleanup codice morto** (PR #479): rimossi alias legacy, duplicazioni, modernizzazione typing.
+- **Test cleanup** (PR #480): rimossi test comfort, consolidamento ridondanze, fix 2 test lenti.
+
+### Fixed
+
+- **duckdb_read: `union_by_name`** (PR #481): skip quando colonne sono esplicite + supporto glob multi-anno.
+
 ## [1.51.0] - 2026-08-26
 
 ### Added

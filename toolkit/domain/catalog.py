@@ -24,7 +24,7 @@ from lab_connectors.gcs.paths import CLEAN_BUCKET, MART_BUCKET
 
 from toolkit.core.duckdb_shape import parquet_preview
 from toolkit.core.io import read_json_or_none, read_yaml
-from toolkit.core.paths import WORKSPACE_ROOT
+from toolkit.core.paths import WORKSPACE_ROOT, find_repos
 
 # ---------------------------------------------------------------------------
 # Costanti
@@ -147,11 +147,7 @@ def _scan_workspace_parquets(workspace: Path = WORKSPACE_ROOT) -> list[dict[str,
     # Dedup per clean (3-tuple) e mart (4-tuple con table).
     seen: set[tuple[str, int | None, str] | tuple[str, int | None, str, str]] = set()
 
-    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
-        # Solo repo dati: registry/ (artifact committati) o datasets/ (layout).
-        if not (repo_dir / "registry").is_dir() and not (repo_dir / "datasets").is_dir():
-            continue
-
+    for repo_slug, repo_dir in find_repos(workspace).items():
         # Clean parquet
         for fpath in repo_dir.rglob("*_clean.parquet"):
             parsed = _parse_clean_filename(fpath.name)
@@ -244,7 +240,7 @@ def _scan_workspace_configs(
     results: dict[str, dict[str, Any]] = {}
     dirs_to_scan: list[tuple[str, Path]] = []
 
-    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
+    for repo_slug, repo_dir in find_repos(workspace).items():
         for section in repo_dataset_dirs(repo_dir):
             section_dir = repo_dir / section
             if not section_dir.is_dir():
@@ -331,7 +327,7 @@ def _gcs_files_from_registry(workspace: Path = WORKSPACE_ROOT) -> list[dict[str,
     files: list[dict[str, Any]] = []
     if not workspace.is_dir():
         return files
-    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
+    for repo_slug, repo_dir in find_repos(workspace).items():
         payload = load_repo_registry(repo_dir)
         if payload is None:
             continue
@@ -425,7 +421,7 @@ def _scan_committed_catalogs(workspace: Path = WORKSPACE_ROOT) -> dict[str, dict
     result: dict[str, dict[str, Any]] = {}
     if not workspace.is_dir():
         return result
-    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
+    for repo_slug, repo_dir in find_repos(workspace).items():
         payload = load_repo_registry(repo_dir)
         if payload is None:
             continue

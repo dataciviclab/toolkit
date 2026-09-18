@@ -72,6 +72,7 @@ def resolve_config_path(
         )
 
     # ── Stage 3: risoluzione slug nei repo del workspace ──────────────
+    from toolkit.core.paths import find_repos
     from toolkit.registry.layout import repo_dataset_dirs
 
     # Lo slug canonico è dataset.name (underscore); la dir è un contenitore
@@ -79,7 +80,7 @@ def resolve_config_path(
     hint_forms = {hint_str, hint_str.replace("_", "-")}
 
     searched: list[str] = []
-    for repo_dir in sorted(p for p in ws.iterdir() if p.is_dir()):
+    for repo_slug, repo_dir in find_repos(ws).items():
         for section in repo_dataset_dirs(repo_dir):
             section_dir = repo_dir / section
             if not section_dir.is_dir():

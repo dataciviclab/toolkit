@@ -197,8 +197,9 @@ def generate_workspace_column_values(
     out_dir.mkdir(parents=True, exist_ok=True)
     written_slugs: set[str] = set()
 
-    repos = sorted(p for p in workspace_root.iterdir() if p.is_dir())
-    for repo_dir in repos:
+    from toolkit.core.paths import find_repos
+
+    for repo_slug, repo_dir in find_repos(workspace_root).items():
         sections = repo_dataset_dirs(repo_dir)
         if not sections:
             continue

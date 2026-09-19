@@ -75,6 +75,36 @@ def load_semantic_types(path: Path | None = None) -> dict[str, str]:
     return alias_map
 
 
+def load_valid_types(path: Path | None = None) -> set[str]:
+    """Carica i nomi validi di semantic_type dal vocabolario (chiavi di ``types``)."""
+    if path is None:
+        path = DEFAULT_SEMANTIC_TYPES
+    if not path.is_file():
+        return set()
+    import yaml
+
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return set((data.get("types") or {}).keys())
+
+
+def normalize_semantic_type(
+    value: str,
+    alias_map: dict[str, str],
+    valid_types: set[str],
+) -> str | None:
+    """Normalizza un semantic_type potenzialmente errato.
+
+    Se ``value`` è un tipo valido → lo restituisce.
+    Se è un alias → risolve al tipo corretto.
+    Altrimenti → None (tipo irrecuperabile).
+    """
+    if not value:
+        return None
+    if value in valid_types:
+        return value
+    return alias_map.get(value.lower())
+
+
 def _assign_semantic_type(col_name: str, alias_map: dict[str, str]) -> str | None:
     return alias_map.get(col_name.lower())
 

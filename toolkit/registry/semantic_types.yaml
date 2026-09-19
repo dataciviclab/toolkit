@@ -192,8 +192,12 @@ types:
     description: "Codice meccanografico scuola MIM"
     entity: Scuola
     aliases: [codice_scuola, codicescuola, codice_meccanografico, cod_scuola]
+    bridge:
+      via: mim_anagrafica_scuole_statali
+      on_column: codice_comune_scuola
+      to: cadastral_code
     weight: 15
-    note: "Può risalire al comune via mim_anagrafica_scuole_statali"
+    note: "Ponte al comune via cadastral_code (codice catastale Belfiore nella tabella MIM)."
 
   # ═══════════════════════════════════════════════════════════════════════
   # CHIAVI ENTE (bridge BDAP)
@@ -212,7 +216,7 @@ types:
   miur_code:
     description: "Codice ente MIUR"
     entity: Ente
-    aliases: [codice_ente_miur, codice_ente_miur]
+    aliases: [codice_ente_miur]
     bridge:
       via: bdap_anagrafe_enti
       on_column: codice_ente_miur
@@ -285,12 +289,19 @@ types:
     weight: 15
     note: "ID locale Senato — NON coincide con persona_id Camera (numerazioni diverse). Ponte tra rami via nominativo o senato_firmatari.deputato_url."
 
+  deputato_id:
+    description: "ID numerico del deputato (Camera — estratto da ocd/deputato.rdf/d{id}_). Uguale a persona_id nel contesto Camera."
+    entity: Persona
+    aliases: [deputato_id]
+    weight: 15
+    note: "ID Camera, numericamente uguale a persona_id. Nessun bridge necessario — join diretto su persona_id nei dataset Camera."
+
   ddl_id:
     description: "Identificativo numerico del disegno di legge (osr:idDdl — numerazione interna Senato, condivisa tra senato_ddl e senato_firmatari)"
     entity: Atto legislativo
-    aliases: [ddl_id, id_ddl]
+    aliases: [ddl_id, id_ddl, atto_num]
     weight: 15
-    note: "NON è l'id dell'URI /ddl/N (numerazione diversa) — usare osr:idDdl per il join tra senato_ddl e senato_firmatari."
+    note: "NON è l'id dell'URI /ddl/N (numerazione diversa) — usare osr:idDdl per il join tra senato_ddl e senato_firmatari. atto_num è alias in senato-akn."
 
   gruppo_parlamentare:
     description: "URI del gruppo parlamentare (es. ocd/gruppoParlamentare.rdf/gr1612 — Camera)"
@@ -307,3 +318,58 @@ types:
     entity: Procedimento
     aliases: [numero_ricorso, NUMERO_RICORSO, NUMERO_PROVVEDIMENTO, n_ricorso]
     weight: 20
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # CIVIC ONTOLOGY — PROGRAMMAZIONE E FONDI
+  # ═══════════════════════════════════════════════════════════════════════
+
+  programma_code:
+    description: "Codice programma operativo (FESR/FSE/PNRR/BDAP)"
+    entity: Programma
+    aliases: [codice_programma, OC_CODICE_PROGRAMMA, programma, cod_programma]
+    bridge:
+      via: opencoesione_progetti_esteso
+      on_column: CUP
+      to: cup_code
+    weight: 15
+    note: "In PNRR la missione (M1-M5) funge da programma. In FESR/FSE il codice è OC_CODICE_PROGRAMMA (es. 2021IT16RFPR005). In BDAP è codice_missione+codice_programma."
+
+  fondo_code:
+    description: "Codice o nome fondo finanziario (FESR, FSE+, FSC, PNRR)"
+    entity: Fondo
+    aliases: [fondo, FONDO_COMUNITARIO, tipo_fondo, fondo_finanziario]
+    weight: 10
+    note: "In OpenCoesione: FONDO_COMUNITARIO (FESR/FSE+/JTF). In PNRR: 'PNRR'. In FSC: 'FSC'."
+
+  indicatore_code:
+    description: "Codice indicatore di valutazione o monitoraggio"
+    entity: Indicatore
+    aliases: [codice_indicatore, COD_INDICATORE_1, indicatore, cod_indicatore]
+    bridge:
+      via: pnrr_indicatori_target
+      on_column: cup
+      to: cup_code
+    weight: 10
+    note: "In PNRR: codice_indicatore con valore_programmato/realizzato. In FESR/FSE: COD_INDICATORE_1 (copertura ~2%)."
+
+  target_value:
+    description: "Valore target/programmato di un indicatore"
+    entity: Target
+    aliases: [valore_programmato, PROGRAMMATO_INDICATORE_1, target, valore_target]
+    weight: 8
+    note: "Collegato a indicatore_code. In PNRR è in pnrr_indicatori_target (357K righe)."
+
+  policy_code:
+    description: "Codice obiettivo tematico o policy (tema sintetico, obiettivo tematico)"
+    entity: Policy
+    aliases: [OC_TEMA_SINTETICO, COD_OB_TEMATICO, obiettivo_tematico, tema, cod_tema]
+    weight: 10
+    note: "In OpenCoesione: OC_TEMA_SINTETICO (10 temi). In FESR: COD_OB_TEMATICO."
+
+  obiettivo_code:
+    description: "Obiettivo specifico di un programma (descrizione missione/misura)"
+    entity: Obiettivo
+    aliases: [descrizione_missione, descrizione_misura, descrizione_submisura,
+              OC_DESCRIZIONE_PROGRAMMA, descrizione_obiettivo]
+    weight: 10
+    note: "In PNRR: descrizione_missione/misura/submisura. In FESR/FSE: OC_DESCRIZIONE_PROGRAMMA."

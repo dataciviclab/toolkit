@@ -95,6 +95,38 @@ def _git_source_repo(repo_root: Path) -> str:
     return repo_root.name
 
 
+def _setup_build(
+    repo_root: Path,
+    prefix: str,
+    flat: bool,
+    out_dir: Path,
+) -> tuple:
+    """Setup condiviso per registry build: layout + contract + existing."""
+    from toolkit.registry.layout import RepoLayout, repo_dataset_dirs
+    from toolkit.registry.paths import PathContract
+
+    sections = repo_dataset_dirs(repo_root)
+    if not sections:
+        typer.echo(
+            f"ERRORE: nessuna sezione dati in {repo_root} (nessuna dir con {{slug}}/dataset.yml)",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    layout = RepoLayout(
+        repo_root=repo_root,
+        dataset_dirs=sections,
+        source_repo=_git_source_repo(repo_root),
+    )
+    contract = PathContract(
+        prefix=prefix,
+        clean_layout="flat" if flat else "year",
+        mart_layout="flat" if flat else "year",
+    )
+    existing_path = out_dir / "registry.json"
+    return layout, contract, existing_path
+
+
 def registry_build(
     repo: str = typer.Option(None, "--repo", help="Root del repo (default: CWD)"),
     prefix: str = typer.Option("", "--prefix", help="Prefisso GCS (es. 'eurostat')"),
@@ -119,13 +151,11 @@ def registry_build(
         toolkit registry build --prefix eurostat --flat --write
         toolkit registry build --write --only-entities  # solo grafo dopo cambio semantic_types
     """
-    from toolkit.registry.builders import build_registry, build_entity_graph
-    from toolkit.registry.layout import RepoLayout, repo_dataset_dirs
-    from toolkit.registry.paths import PathContract
+    from toolkit.registry.builders import build_registry, build_entity_graph, build_clean_catalog
 
     repo_root = Path(repo).resolve() if repo else Path.cwd()
     out_dir = repo_root / out
-    existing_path = out_dir / "registry.json"
+    layout, contract, existing_path = _setup_build(repo_root, prefix, flat, out_dir)
 
     # ── Modalità --only-entities: rigenera solo la sezione entities ──
     if only_entities:
@@ -136,23 +166,9 @@ def registry_build(
             raise typer.Exit(code=1)
 
         existing = json.loads(existing_path.read_text(encoding="utf-8"))
-
-        # Ricostruisci il catalogo per avere le colonne con semantic_type
-        sections = repo_dataset_dirs(repo_root)
-        layout = RepoLayout(
-            repo_root=repo_root,
-            dataset_dirs=sections,
-            source_repo=_git_source_repo(repo_root),
-        )
-        contract = PathContract(prefix=prefix, clean_layout="flat" if flat else "year")
-        from toolkit.registry.builders import build_clean_catalog
-
         catalog, _ = build_clean_catalog(layout, path_contract=contract)
-
-        # Rigenera solo il grafo
         graph = build_entity_graph(catalog)
 
-        # Aggiorna la sezione entities nel registry esistente
         existing["entities"] = {
             "entities": graph.get("entities", {}),
             "bridges": graph.get("bridges", []),
@@ -175,25 +191,6 @@ def registry_build(
         return
 
     # ── Modalità normale: rigenera tutto ──
-    sections = repo_dataset_dirs(repo_root)
-    if not sections:
-        typer.echo(
-            f"ERRORE: nessuna sezione dati in {repo_root} (nessuna dir con {{slug}}/dataset.yml)",
-            err=True,
-        )
-        raise typer.Exit(code=1)
-
-    layout = RepoLayout(
-        repo_root=repo_root,
-        dataset_dirs=sections,
-        source_repo=_git_source_repo(repo_root),
-    )
-    contract = PathContract(
-        prefix=prefix,
-        clean_layout="flat" if flat else "year",
-        mart_layout="flat" if flat else "year",
-    )
-
     existing_catalog = None
     existing_signals = None
     if existing_path.is_file():

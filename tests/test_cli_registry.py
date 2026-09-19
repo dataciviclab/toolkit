@@ -92,3 +92,84 @@ def test_build_no_datasets_dir_fails(tmp_path: Path) -> None:
     result = runner.invoke(app, ["registry", "build", "--repo", str(tmp_path)], obj={})
     assert result.exit_code != 0
     assert "nessuna sezione dati" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# --only-entities flag
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.pure_unit
+def test_only_entities_dry_run(tmp_path: Path) -> None:
+    """--only-entities dry-run: ricalcola solo le entities senza scrivere."""
+    _make_repo(tmp_path, with_run=False)
+    out = tmp_path / "registry"
+    # Prima genera il registry completo
+    result = runner.invoke(
+        app, ["registry", "build", "--repo", str(tmp_path), "--write", "--out", str(out)], obj={}
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+
+    # Poi dry-run --only-entities
+    result2 = runner.invoke(
+        app,
+        ["registry", "build", "--repo", str(tmp_path), "--only-entities", "--out", str(out)],
+        obj={},
+    )
+    assert result2.exit_code == 0, result2.stdout + result2.stderr
+    assert "entities" in result2.stdout
+    assert "Dry-run" in result2.stdout
+
+
+@pytest.mark.pure_unit
+def test_only_entities_preserves_other_sections(tmp_path: Path) -> None:
+    """--only-entities --write: rigenera solo entities, preserva datasets/marts/signals."""
+    _make_repo(tmp_path, with_run=False)
+    out = tmp_path / "registry"
+    # Prima genera tutto
+    runner.invoke(
+        app, ["registry", "build", "--repo", str(tmp_path), "--write", "--out", str(out)], obj={}
+    )
+    payload_before = json.loads((out / "registry.json").read_text(encoding="utf-8"))
+    ds_before = len(payload_before["datasets"])
+    marts_before = len(payload_before["marts"])
+    signals_before = len(payload_before["signals"])
+
+    # Poi --only-entities --write
+    result = runner.invoke(
+        app,
+        [
+            "registry",
+            "build",
+            "--repo",
+            str(tmp_path),
+            "--only-entities",
+            "--write",
+            "--out",
+            str(out),
+        ],
+        obj={},
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+
+    payload_after = json.loads((out / "registry.json").read_text(encoding="utf-8"))
+    # Datasets, marts, signals invariati
+    assert len(payload_after["datasets"]) == ds_before
+    assert len(payload_after["marts"]) == marts_before
+    assert len(payload_after["signals"]) == signals_before
+    # Entities potrebbe essere diverso (ricostruito)
+    assert "entities" in payload_after
+
+
+@pytest.mark.pure_unit
+def test_only_entities_fails_without_existing_registry(tmp_path: Path) -> None:
+    """--only-entities senza registry.json esistente → errore."""
+    _make_repo(tmp_path, with_run=False)
+    out = tmp_path / "registry"
+    result = runner.invoke(
+        app,
+        ["registry", "build", "--repo", str(tmp_path), "--only-entities", "--out", str(out)],
+        obj={},
+    )
+    assert result.exit_code != 0
+    assert "registry.json non esistente" in result.stderr

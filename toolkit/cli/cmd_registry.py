@@ -95,29 +95,16 @@ def _git_source_repo(repo_root: Path) -> str:
     return repo_root.name
 
 
-def registry_build(
-    repo: str = typer.Option(None, "--repo", help="Root del repo (default: CWD)"),
-    prefix: str = typer.Option("", "--prefix", help="Prefisso GCS (es. 'eurostat')"),
-    flat: bool = typer.Option(False, "--flat", help="Layout flat per clean+mart (no year)"),
-    write: bool = typer.Option(False, "--write", help="Scrive registry.json (default: dry-run)"),
-    out: str = typer.Option("registry", "--out", help="Dir di output (default: registry)"),
-) -> None:
-    """Genera registry.json del repo (auto-discovery, fusion ADR).
-
-    Sostituisce i wrapper ``scripts/build_registry.py`` per-repo: scopre le
-    sezioni dati per convenzione (``repo_dataset_dirs``) e deriva ``source_repo``
-    dal git remote. Il PathContract si configura con i flag (default: root/year).
-
-    Uso:
-        toolkit registry build                     # dry-run sul repo corrente
-        toolkit registry build --write             # scrive registry/registry.json
-        toolkit registry build --prefix eurostat --flat --write
-    """
-    from toolkit.registry.builders import build_registry
+def _setup_build(
+    repo_root: Path,
+    prefix: str,
+    flat: bool,
+    out_dir: Path,
+) -> tuple:
+    """Setup condiviso per registry build: layout + contract + existing."""
     from toolkit.registry.layout import RepoLayout, repo_dataset_dirs
     from toolkit.registry.paths import PathContract
 
-    repo_root = Path(repo).resolve() if repo else Path.cwd()
     sections = repo_dataset_dirs(repo_root)
     if not sections:
         typer.echo(
@@ -136,11 +123,76 @@ def registry_build(
         clean_layout="flat" if flat else "year",
         mart_layout="flat" if flat else "year",
     )
+    existing_path = out_dir / "registry.json"
+    return layout, contract, existing_path
 
+
+def registry_build(
+    repo: str = typer.Option(None, "--repo", help="Root del repo (default: CWD)"),
+    prefix: str = typer.Option("", "--prefix", help="Prefisso GCS (es. 'eurostat')"),
+    flat: bool = typer.Option(False, "--flat", help="Layout flat per clean+mart (no year)"),
+    write: bool = typer.Option(False, "--write", help="Scrive registry.json (default: dry-run)"),
+    out: str = typer.Option("registry", "--out", help="Dir di output (default: registry)"),
+    only_entities: bool = typer.Option(
+        False,
+        "--only-entities",
+        help="Rigenera solo la sezione entities (dopo cambio semantic_types)",
+    ),
+) -> None:
+    """Genera registry.json del repo (auto-discovery, fusion ADR).
+
+    Sostituisce i wrapper ``scripts/build_registry.py`` per-repo: scopre le
+    sezioni dati per convenzione (``repo_dataset_dirs``) e deriva ``source_repo``
+    dal git remote. Il PathContract si configura con i flag (default: root/year).
+
+    Uso:
+        toolkit registry build                     # dry-run sul repo corrente
+        toolkit registry build --write             # scrive registry/registry.json
+        toolkit registry build --prefix eurostat --flat --write
+        toolkit registry build --write --only-entities  # solo grafo dopo cambio semantic_types
+    """
+    from toolkit.registry.builders import build_registry, build_entity_graph, build_clean_catalog
+
+    repo_root = Path(repo).resolve() if repo else Path.cwd()
     out_dir = repo_root / out
+    layout, contract, existing_path = _setup_build(repo_root, prefix, flat, out_dir)
+
+    # ── Modalità --only-entities: rigenera solo la sezione entities ──
+    if only_entities:
+        if not existing_path.is_file():
+            typer.echo(
+                "ERRORE: registry.json non esistente — usa `registry build --write` prima", err=True
+            )
+            raise typer.Exit(code=1)
+
+        existing = json.loads(existing_path.read_text(encoding="utf-8"))
+        catalog, _ = build_clean_catalog(layout, path_contract=contract)
+        graph = build_entity_graph(catalog)
+
+        existing["entities"] = {
+            "entities": graph.get("entities", {}),
+            "bridges": graph.get("bridges", []),
+        }
+
+        typer.echo(
+            f"entities aggiornate: {len(existing['entities']['entities'])} entità, "
+            f"{len(existing['entities']['bridges'])} bridge"
+        )
+
+        if not write:
+            typer.echo("Dry-run: usa --write per scrivere il file.")
+            return
+
+        existing_path.write_text(
+            json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        typer.echo(f"scritto {existing_path} (solo entities)")
+        return
+
+    # ── Modalità normale: rigenera tutto ──
     existing_catalog = None
     existing_signals = None
-    existing_path = out_dir / "registry.json"
     if existing_path.is_file():
         try:
             existing = json.loads(existing_path.read_text(encoding="utf-8"))

@@ -101,6 +101,11 @@ def registry_build(
     flat: bool = typer.Option(False, "--flat", help="Layout flat per clean+mart (no year)"),
     write: bool = typer.Option(False, "--write", help="Scrive registry.json (default: dry-run)"),
     out: str = typer.Option("registry", "--out", help="Dir di output (default: registry)"),
+    only_entities: bool = typer.Option(
+        False,
+        "--only-entities",
+        help="Rigenera solo la sezione entities (dopo cambio semantic_types)",
+    ),
 ) -> None:
     """Genera registry.json del repo (auto-discovery, fusion ADR).
 
@@ -112,12 +117,64 @@ def registry_build(
         toolkit registry build                     # dry-run sul repo corrente
         toolkit registry build --write             # scrive registry/registry.json
         toolkit registry build --prefix eurostat --flat --write
+        toolkit registry build --write --only-entities  # solo grafo dopo cambio semantic_types
     """
-    from toolkit.registry.builders import build_registry
+    from toolkit.registry.builders import build_registry, build_entity_graph
     from toolkit.registry.layout import RepoLayout, repo_dataset_dirs
     from toolkit.registry.paths import PathContract
 
     repo_root = Path(repo).resolve() if repo else Path.cwd()
+    out_dir = repo_root / out
+    existing_path = out_dir / "registry.json"
+
+    # ── Modalità --only-entities: rigenera solo la sezione entities ──
+    if only_entities:
+        if not existing_path.is_file():
+            typer.echo(
+                "ERRORE: registry.json non esistente — usa `registry build --write` prima", err=True
+            )
+            raise typer.Exit(code=1)
+
+        existing = json.loads(existing_path.read_text(encoding="utf-8"))
+
+        # Ricostruisci il catalogo per avere le colonne con semantic_type
+        sections = repo_dataset_dirs(repo_root)
+        layout = RepoLayout(
+            repo_root=repo_root,
+            dataset_dirs=sections,
+            source_repo=_git_source_repo(repo_root),
+        )
+        contract = PathContract(prefix=prefix, clean_layout="flat" if flat else "year")
+        from toolkit.registry.builders import build_clean_catalog
+
+        catalog, _ = build_clean_catalog(layout, path_contract=contract)
+
+        # Rigenera solo il grafo
+        graph = build_entity_graph(catalog)
+
+        # Aggiorna la sezione entities nel registry esistente
+        existing["entities"] = {
+            "entities": graph.get("entities", {}),
+            "bridges": graph.get("bridges", []),
+        }
+
+        typer.echo(
+            f"entities aggiornate: {len(existing['entities']['entities'])} entità, "
+            f"{len(existing['entities']['bridges'])} bridge"
+        )
+
+        if not write:
+            typer.echo("Dry-run: usa --write per scrivere il file.")
+            return
+
+        existing_path.write_text(
+            json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        typer.echo(f"scritto {existing_path} (solo entities)")
+        return
+
+    # ── Modalità normale: rigenera tutto ──
     sections = repo_dataset_dirs(repo_root)
     if not sections:
         typer.echo(
@@ -137,10 +194,8 @@ def registry_build(
         mart_layout="flat" if flat else "year",
     )
 
-    out_dir = repo_root / out
     existing_catalog = None
     existing_signals = None
-    existing_path = out_dir / "registry.json"
     if existing_path.is_file():
         try:
             existing = json.loads(existing_path.read_text(encoding="utf-8"))

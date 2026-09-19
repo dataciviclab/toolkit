@@ -278,9 +278,9 @@ types:
   person_id:
     description: "ID numerico della persona fisica (es. 302103 da ocd/persona.rdf/p302103 — Camera/Senato/Governo)"
     entity: Persona
-    aliases: [persona_id, person_id, id_persona, codice_persona]
+    aliases: [persona_id, person_id, id_persona, codice_persona, deputato_id]
     weight: 15
-    note: "Chiave standard del sistema parlamentare (deputati, senatori, membri governo). Ponte tra rami via URI persona."
+    note: "Chiave standard del sistema parlamentare (deputati, senatori, membri governo). deputato_id è alias — numericamente uguale a persona_id nel contesto Camera."
 
   senator_id:
     description: "ID numerico del senatore (es. 3923 da dati.senato.it/senatore/3923 — id locale Senato)"
@@ -288,13 +288,6 @@ types:
     aliases: [senatore_id]
     weight: 15
     note: "ID locale Senato — NON coincide con persona_id Camera (numerazioni diverse). Ponte tra rami via nominativo o senato_firmatari.deputato_url."
-
-  deputato_id:
-    description: "ID numerico del deputato (Camera — estratto da ocd/deputato.rdf/d{id}_). Uguale a persona_id nel contesto Camera."
-    entity: Persona
-    aliases: [deputato_id]
-    weight: 15
-    note: "ID Camera, numericamente uguale a persona_id. Nessun bridge necessario — join diretto su persona_id nei dataset Camera."
 
   ddl_id:
     description: "Identificativo numerico del disegno di legge (osr:idDdl — numerazione interna Senato, condivisa tra senato_ddl e senato_firmatari)"

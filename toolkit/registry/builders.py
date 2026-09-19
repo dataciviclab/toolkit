@@ -16,6 +16,7 @@ Derive-mode:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +33,8 @@ from toolkit.registry.schema_reader import (
     normalize_semantic_type,
 )
 from toolkit.registry.validation import validate_artifact
+
+log = logging.getLogger(__name__)
 
 
 def _section_of(manifest: DatasetManifest, layout: RepoLayout) -> str:
@@ -196,6 +199,13 @@ def build_clean_catalog(
                         normalized = normalize_semantic_type(old_st, alias_map, valid_types)
                         if normalized:
                             col["semantic_type"] = normalized
+                        else:
+                            log.warning(
+                                "%s.%s: semantic_type '%s' non nel vocabolario — droppato",
+                                manifest.slug,
+                                col["name"],
+                                old_st,
+                            )
 
         # Link ai mart (convention {dataset}__{mart})
         if manifest.mart_tables:

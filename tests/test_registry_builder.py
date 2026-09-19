@@ -247,6 +247,64 @@ def test_clean_catalog_slims_editorial_entry_without_parquet(tmp_path: Path) -> 
     assert roles == {"anno": "dimension", "importo": "metric"}
 
 
+@pytest.mark.pure_unit
+def test_clean_catalog_normalizes_semantic_type_from_editorial(tmp_path: Path) -> None:
+    """semantic_type editoriale viene normalizzato: alias → tipo valido, invalido → droppato.
+
+    Il parquet del fixture ha colonne (geo, year, value). L'editorial merge
+    sovrascrive solo semantic_type per colonne che esistono nel derivato.
+    """
+    layout = _make_repo(tmp_path)
+
+    existing = {
+        "datasets": [
+            {
+                "slug": "my_dataset",
+                "name": "My Dataset",
+                "description": "",
+                "source_id": "src1",
+                "period": {"start": 2020, "end": 2024},
+                "columns": [
+                    # alias valido: atto_num → ddl_id (ma "geo" non è un alias, serve uno che matchi)
+                    {
+                        "name": "year",
+                        "type": "INTEGER",
+                        "role": "metric",
+                        "semantic_type": "atto_num",
+                    },
+                    # tipo valido: resta invariato
+                    {
+                        "name": "geo",
+                        "type": "VARCHAR",
+                        "role": "dimension",
+                        "semantic_type": "nuts_code",
+                    },
+                    # tipo invalido: droppato
+                    {
+                        "name": "value",
+                        "type": "DOUBLE",
+                        "role": "metric",
+                        "semantic_type": "tipo_fantasma",
+                    },
+                ],
+                "location": {"type": "gcs", "path": "gs://dataciviclab-clean/my_dataset/"},
+                "stage": "incubating",
+            }
+        ]
+    }
+
+    catalog, _ = build_clean_catalog(layout, existing=existing)
+    ds = catalog["datasets"][0]
+    cols = {c["name"]: c for c in ds["columns"]}
+
+    # alias normalizzato: year ha semantic_type "atto_num" → "ddl_id"
+    assert cols["year"].get("semantic_type") == "ddl_id"
+    # tipo valido preservato
+    assert cols["geo"].get("semantic_type") == "nuts_code"
+    # tipo invalido droppato
+    assert "semantic_type" not in cols["value"]
+
+
 # ---------------------------------------------------------------------------
 # mart_catalog
 # ---------------------------------------------------------------------------

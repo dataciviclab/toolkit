@@ -33,6 +33,9 @@ def _load_normalized_csv_frame(
     import pandas as pd
 
     encoding = normalize_encoding(read_cfg.get("encoding")) or "utf-8"
+    # utf-8-sig strips BOM automatically if present, safe fallback for utf-8
+    if encoding.lower() in ("utf-8",):
+        encoding = "utf-8-sig"
     trim_whitespace = bool(read_cfg.get("trim_whitespace", True))
     header = bool(read_cfg.get("header", True))
     skip = int(read_cfg.get("skip") or 0)

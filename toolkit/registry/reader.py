@@ -53,7 +53,7 @@ def _section_count(section: str, data: Any) -> int | None:
     if section == "codelists":
         return len(data.get("codelists") or [])
     if section == "entities":
-        return len((data.get("entities") or {}).get("entities") or [])
+        return len((data.get("entities") or {}).get("entities") or {})
     return None
 
 

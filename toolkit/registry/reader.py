@@ -175,12 +175,14 @@ def show_registry(
 
 def _get_section_data(reg: Registry, artifact: str) -> Any:
     """Estrae i dati raw di una sezione dal Registry tipizzato."""
+    from dataclasses import asdict
+
     if artifact == "datasets":
-        return [registry_to_dict(ds) for ds in reg.datasets]
+        return [asdict(ds) for ds in reg.datasets]
     if artifact == "marts":
-        return [registry_to_dict(m) for m in reg.marts]
+        return [asdict(m) for m in reg.marts]
     if artifact == "signals":
-        return [registry_to_dict(s) for s in reg.signals]
+        return [asdict(s) for s in reg.signals]
     if artifact == "codelists":
         return reg.codelists
     if artifact == "entities":

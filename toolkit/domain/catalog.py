@@ -336,8 +336,6 @@ def _scan_registries(
         - ``gcs_files``: lista di file GCS dai registry
         - ``semantic``: dict slug → entry semantica con ``_repo``
     """
-    from lab_connectors.registry.client import registry_to_dict
-
     from toolkit.registry.layout import workspace_repo_dirs
     from toolkit.registry.reader import load_repo_registry_typed
 
@@ -384,7 +382,9 @@ def _scan_registries(
 
         # Semantic data (da _scan_committed_catalogs)
         for ds in reg.datasets:
-            entry = registry_to_dict(ds)
+            from dataclasses import asdict
+
+            entry = asdict(ds)
             entry["_repo"] = repo_dir.name
             semantic[ds.slug] = entry
 
@@ -438,36 +438,6 @@ SEMANTIC_FIELDS = (
     "period",
     "mart_refs",
 )
-
-
-def _scan_committed_catalogs(workspace: Path = WORKSPACE_ROOT) -> dict[str, dict[str, Any]]:
-    """Scansiona i cataloghi semantici committati nei repo del workspace.
-
-    Usa ``load_repo_registry_typed`` (lo stesso reader del resolver GCS): legge il
-    ``registry.json`` unico dei repo (fusion ADR). Ritorna ``{slug: entry
-    semantica}`` con ``_repo`` (nome dir) aggiunto.
-
-    La semantica (columns con role/semantic_type, description, tags, period)
-    vive nei registry generati dal registry builder e committati nei repo:
-    qui diventa la fonte per il find semantico del resolver.
-    """
-    from lab_connectors.registry.client import registry_to_dict
-
-    from toolkit.registry.layout import workspace_repo_dirs
-    from toolkit.registry.reader import load_repo_registry_typed
-
-    result: dict[str, dict[str, Any]] = {}
-    if not workspace.is_dir():
-        return result
-    for repo_dir in workspace_repo_dirs(workspace):
-        reg = load_repo_registry_typed(repo_dir)
-        if reg is None:
-            continue
-        for ds in reg.datasets:
-            entry = registry_to_dict(ds)
-            entry["_repo"] = repo_dir.name
-            result[ds.slug] = entry
-    return result
 
 
 def _semantic_query_hits(

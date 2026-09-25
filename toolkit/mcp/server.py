@@ -72,13 +72,14 @@ mcp = create_mcp_server(
 
 @mcp.tool(
     description=(
-        "Ispezione dataset: find, overview, status, preflight, schema-diff.\n\n"
+        "Ispezione dataset: find, overview, status, preflight, schema-diff, related.\n\n"
         "Actions:\n"
         "- find: cerca dataset per slug/testo/source (params: query, layer, limit, source, stage, status_filter)\n"
         "- overview: schema colonne + conteggio + preview (params: slug, layer, year, source, profile)\n"
         "- status: stato completo dataset (params: config_path, year, since, until)\n"
         "- preflight: diagnostica pre-run (params: config_path, years)\n"
-        "- schema-diff: confronto schema raw tra anni (params: config_path)"
+        "- schema-diff: confronto schema raw tra anni (params: config_path)\n"
+        "- related: dataset correlati per tags/category/source/entities (params: slug)"
     ),
     structured_output=True,
 )
@@ -91,7 +92,7 @@ def toolkit_dataset(
     source: str = "all",
     stage: str = "all",
     status_filter: str | None = None,
-    # overview
+    # overview / related
     slug: str | None = None,
     year: int | None = None,
     profile: bool = False,
@@ -159,8 +160,14 @@ def toolkit_dataset(
         if not config_path:
             raise ToolkitClientError("schema-diff richiede config_path", ErrorCode.INVALID_PARAMS)
         return guard_timed(schema_diff_impl, "toolkit_dataset_schema_diff", config_path)
+    if action == "related":
+        if not slug:
+            raise ToolkitClientError("related richiede slug", ErrorCode.INVALID_PARAMS)
+        from toolkit.mcp.catalog_ops import mcp_dataset_related
+
+        return guard_timed(mcp_dataset_related, "toolkit_dataset_related", slug)
     raise ToolkitClientError(
-        f"Azione '{action}' non valida. Usare: find, overview, status, preflight, schema-diff",
+        f"Azione '{action}' non valida. Usare: find, overview, status, preflight, schema-diff, related",
         ErrorCode.INVALID_PARAMS,
     )
 

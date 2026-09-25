@@ -105,15 +105,20 @@ def _scan_repo(repo_dir: Path) -> list[dict[str, Any]]:
 def list_registries(workspace: Path = WORKSPACE_ROOT) -> dict[str, Any]:
     """Elenca i registry committati nei repo del workspace.
 
+    Usa ``workspace_repo_dirs()`` per includere repo annidati
+    (es. ``incubation/``, ``esperimenti-locali/``).
+
     Returns:
         Dict con ``repos`` (lista) e ``total_repos``. Ogni repo:
         ``{repo, artifacts: [{name, size_bytes, sections: {...}}]}``.
     """
+    from toolkit.registry.layout import workspace_repo_dirs
+
     repos: list[dict[str, Any]] = []
     if not workspace.is_dir():
         return {"repos": repos, "total_repos": 0}
 
-    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
+    for repo_dir in workspace_repo_dirs(workspace):
         artifacts = _scan_repo(repo_dir)
         if artifacts:
             repos.append({"repo": repo_dir.name, "artifacts": artifacts})

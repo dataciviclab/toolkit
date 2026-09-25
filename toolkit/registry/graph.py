@@ -54,10 +54,15 @@ def _entity_section(payload: dict[str, Any] | None) -> tuple[dict[str, Any], lis
 def load_workspace_graph(workspace: Path = WORKSPACE_ROOT) -> dict[str, Any]:
     """Grafo aggregato cross-repo: entità fuse per nome + bridge concatenati.
 
+    Usa ``workspace_repo_dirs()`` per includere repo annidati
+    (es. ``incubation/``, ``esperimenti-locali/``).
+
     Returns:
         ``{"entities": {name: {...}}, "bridges": [...], "repos": [nomi]}`` —
         ogni entity ha ``datasets`` (da tutti i repo) e ``types`` sommati.
     """
+    from toolkit.registry.layout import workspace_repo_dirs
+
     entities: dict[str, dict[str, Any]] = {}
     bridges: list[dict[str, Any]] = []
     repos: list[str] = []
@@ -65,7 +70,7 @@ def load_workspace_graph(workspace: Path = WORKSPACE_ROOT) -> dict[str, Any]:
     if not workspace.is_dir():
         return {"entities": {}, "bridges": [], "repos": []}
 
-    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
+    for repo_dir in workspace_repo_dirs(workspace):
         payload = load_repo_registry(repo_dir)
         repo_entities, repo_bridges = _entity_section(payload)
         if not repo_entities and not repo_bridges:

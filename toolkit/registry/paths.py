@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from lab_connectors.gcs.paths import get_bucket, gs_url, resolve
+from lab_connectors.gcs.paths import get_bucket, gs_url
 
 
 @dataclass(frozen=True)
@@ -53,13 +53,20 @@ class PathContract:
         """Location per il clean_catalog (pattern con wildcard se multi-file)."""
         prefix = f"{self.prefix}/" if self.prefix else ""
         if self.clean_layout == "flat":
-            return {"type": "gcs", "path": f"{prefix}{slug}/", "multi_file": False}
+            return {
+                "type": "gcs",
+                "path": gs_url("clean", "clean_parquet_flat", prefix=prefix, slug=slug),
+                "multi_file": False,
+            }
 
         multi = len(years) > 1
         if multi:
-            path = f"{prefix}{slug}/*/{slug}_*_clean.parquet"
+            from lab_connectors.gcs.paths import get_bucket
+
+            bucket = get_bucket("clean")
+            path = f"gs://{bucket}/{prefix}{slug}/*/{slug}_*_clean.parquet"
         else:
-            path = resolve("clean_parquet", prefix=prefix, slug=slug, year=str(years[0]))
+            path = gs_url("clean", "clean_parquet", prefix=prefix, slug=slug, year=str(years[0]))
         return {"type": "gcs", "path": path, "multi_file": multi}
 
     # ── Mart ───────────────────────────────────────────────────────────────

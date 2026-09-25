@@ -178,7 +178,12 @@ def generate_workspace_column_values(
     Returns:
         Esito (processed/written/skipped/errors/duration).
     """
-    from toolkit.registry.layout import RepoLayout, iter_manifests, repo_dataset_dirs
+    from toolkit.registry.layout import (
+        RepoLayout,
+        iter_manifests,
+        repo_dataset_dirs,
+        workspace_repo_dirs,
+    )
     from toolkit.registry.schema_reader import (
         clean_parquet_path,
         load_semantic_types,
@@ -197,7 +202,7 @@ def generate_workspace_column_values(
     out_dir.mkdir(parents=True, exist_ok=True)
     written_slugs: set[str] = set()
 
-    repos = sorted(p for p in workspace_root.iterdir() if p.is_dir())
+    repos = workspace_repo_dirs(workspace_root)
     for repo_dir in repos:
         sections = repo_dataset_dirs(repo_dir)
         if not sections:

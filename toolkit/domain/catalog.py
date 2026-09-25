@@ -130,92 +130,100 @@ def _find_latest_run_status(slug: str, runs_root: Path | None = None) -> str | N
 def _scan_workspace_parquets(workspace: Path = WORKSPACE_ROOT) -> list[dict[str, Any]]:
     """Scansiona il workspace per clean/mart parquet locali (solo repo dati).
 
-    Come ``_scan_committed_catalogs``: solo dir di primo livello con
-    ``registry/`` o ``datasets/`` (eurostat/, dataset-incubator/, dcl-bologna/,
-    ...). Esclude repo non-dati (es. project residui, out/, data/) che
-    non hanno dataset.yml — evitando rglob costosi su decine di repo.
-
-    Clean: ``{slug}/{year}/{slug}_{year}_clean.parquet`` — slug dal filename.
-    Mart: ``{slug}/{year}/mart_{table}.parquet`` (naming canonico della
-    pipeline: il file è ``mart_{table}.parquet``) — slug dalla directory,
-    bucket ``local-mart`` per il layer.
+    Ottimizzazione: invece di rglob sull'intero repo, scan solo le directory
+    ``out/data/`` e ``data/`` dove i parquet vivono effettivamente. Evita
+    di traversare directory massive (es. senato-akn con 13GB di dati raw).
     """
     if not workspace.is_dir():
         return []
 
+    from toolkit.registry.layout import workspace_repo_dirs
+
     entries: list[dict[str, Any]] = []
-    # Dedup per clean (3-tuple) e mart (4-tuple con table).
     seen: set[tuple[str, int | None, str] | tuple[str, int | None, str, str]] = set()
 
-    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
-        # Solo repo dati: registry/ (artifact committati) o datasets/ (layout).
-        if not (repo_dir / "registry").is_dir() and not (repo_dir / "datasets").is_dir():
+    for repo_dir in workspace_repo_dirs(workspace):
+        # Trova le root dei dati: out/data/ o data/ nel repo
+        data_roots = []
+        for candidate in ("out/data", "data"):
+            data_root = repo_dir / candidate
+            if data_root.is_dir():
+                data_roots.append(data_root)
+
+        if not data_roots:
             continue
 
-        # Clean parquet
-        for fpath in repo_dir.rglob("*_clean.parquet"):
-            parsed = _parse_clean_filename(fpath.name)
-            if parsed is None:
-                continue
-            slug, year = parsed
-            rel_path = str(fpath.relative_to(workspace))
-            dedup_key = (slug, year, LOCAL_BUCKET)
-            if dedup_key in seen:
-                continue
-            seen.add(dedup_key)
+        for data_root in data_roots:
+            # Clean parquet: {data_root}/clean/{slug}/{year}/*_clean.parquet
+            clean_root = data_root / "clean"
+            if clean_root.is_dir():
+                for fpath in clean_root.rglob("*_clean.parquet"):
+                    parsed = _parse_clean_filename(fpath.name)
+                    if parsed is None:
+                        continue
+                    slug, year = parsed
+                    rel_path = str(fpath.relative_to(workspace))
+                    dedup_key = (slug, year, LOCAL_BUCKET)
+                    if dedup_key in seen:
+                        continue
+                    seen.add(dedup_key)
 
-            stat = fpath.stat()
-            entries.append(
-                {
-                    "url": str(fpath),
-                    "slug": slug,
-                    "bucket": LOCAL_BUCKET,
-                    "year": year,
-                    "path": rel_path,
-                    "size_bytes": stat.st_size,
-                    "updated": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
-                    "_local": True,
-                }
-            )
+                    stat = fpath.stat()
+                    entries.append(
+                        {
+                            "url": str(fpath),
+                            "slug": slug,
+                            "bucket": LOCAL_BUCKET,
+                            "year": year,
+                            "path": rel_path,
+                            "size_bytes": stat.st_size,
+                            "updated": datetime.fromtimestamp(
+                                stat.st_mtime, tz=timezone.utc
+                            ).isoformat(),
+                            "_local": True,
+                        }
+                    )
 
-        # Mart locali (naming canonico pipeline: mart_{table}.parquet).
-        # Struttura standard: {slug}/{year}/mart_*.parquet; layout legacy
-        # flat: {slug}/mart_*.parquet (anno sconosciuto → None).
-        for fpath in repo_dir.rglob("mart_*.parquet"):
-            parts = fpath.relative_to(repo_dir).parts
-            # parts[-1]=file, parts[-2]=year|slug, parts[-3]=slug (se year)
-            if len(parts) >= 3 and parts[-2].isdigit() and len(parts[-2]) == 4:
-                mart_slug = parts[-3]
-                mart_year: int | None = int(parts[-2])
-            else:
-                mart_slug = parts[-2]
-                mart_year = None
-            rel_path = str(fpath.relative_to(workspace))
-            table = fpath.stem
-            mart_key: tuple[str, int | None, str, str] = (
-                mart_slug,
-                mart_year,
-                LOCAL_MART_BUCKET,
-                table,
-            )
-            if mart_key in seen:
-                continue
-            seen.add(mart_key)
+            # Mart parquet: {data_root}/mart/{slug}/{year}/mart_*.parquet
+            mart_root = data_root / "mart"
+            if mart_root.is_dir():
+                for fpath in mart_root.rglob("mart_*.parquet"):
+                    parts = fpath.relative_to(repo_dir).parts
+                    # parts[-1]=file, parts[-2]=year|slug, parts[-3]=slug (se year)
+                    if len(parts) >= 3 and parts[-2].isdigit() and len(parts[-2]) == 4:
+                        mart_slug = parts[-3]
+                        mart_year: int | None = int(parts[-2])
+                    else:
+                        mart_slug = parts[-2]
+                        mart_year = None
+                    rel_path = str(fpath.relative_to(workspace))
+                    table = fpath.stem
+                    mart_key: tuple[str, int | None, str, str] = (
+                        mart_slug,
+                        mart_year,
+                        LOCAL_MART_BUCKET,
+                        table,
+                    )
+                    if mart_key in seen:
+                        continue
+                    seen.add(mart_key)
 
-            stat = fpath.stat()
-            entries.append(
-                {
-                    "url": str(fpath),
-                    "slug": mart_slug,
-                    "bucket": LOCAL_MART_BUCKET,
-                    "year": mart_year,
-                    "path": rel_path,
-                    "table": table,
-                    "size_bytes": stat.st_size,
-                    "updated": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
-                    "_local": True,
-                }
-            )
+                    stat = fpath.stat()
+                    entries.append(
+                        {
+                            "url": str(fpath),
+                            "slug": mart_slug,
+                            "bucket": LOCAL_MART_BUCKET,
+                            "year": mart_year,
+                            "path": rel_path,
+                            "table": table,
+                            "size_bytes": stat.st_size,
+                            "updated": datetime.fromtimestamp(
+                                stat.st_mtime, tz=timezone.utc
+                            ).isoformat(),
+                            "_local": True,
+                        }
+                    )
 
     return entries
 
@@ -230,13 +238,13 @@ def _scan_workspace_configs(
     convenzione ``repo_dataset_dirs`` (toolkit.registry.layout) — ogni dir di
     primo livello con {slug}/dataset.yml è una sezione dati (datasets/,
     support/, candidates/...). Nuovi repo con layout custom funzionano senza
-    toccare il codice.
+    toccare il codice. Include repo annidati (es. ``incubation/``).
 
     Returns:
         Dict slug → {dataset_name, stage, years, has_clean, has_mart,
                      last_run_status, config_path, root}
     """
-    from toolkit.registry.layout import repo_dataset_dirs
+    from toolkit.registry.layout import repo_dataset_dirs, workspace_repo_dirs
 
     # Nome dir DI → stage legacy (contratto pre-fusion).
     DI_STAGE = {"candidates": "candidates", "compose": "compose", "support_datasets": "support"}
@@ -244,7 +252,7 @@ def _scan_workspace_configs(
     results: dict[str, dict[str, Any]] = {}
     dirs_to_scan: list[tuple[str, Path]] = []
 
-    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
+    for repo_dir in workspace_repo_dirs(workspace):
         for section in repo_dataset_dirs(repo_dir):
             section_dir = repo_dir / section
             if not section_dir.is_dir():
@@ -318,58 +326,81 @@ def _scan_workspace_configs(
     return results
 
 
-def _gcs_files_from_registry(workspace: Path = WORKSPACE_ROOT) -> list[dict[str, Any]]:
-    """File GCS dai registry.json committati (fusion ADR — drop del manifest).
+def _scan_registries(
+    workspace: Path = WORKSPACE_ROOT,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Scan unico dei registry: estrae GCS files + semantica in un solo pass.
 
-    Le location del catalogo sono esatte per repo (layout DI year o eurostat
-    flat): file diretto (``.parquet``) o dir (→ glob ``*.parquet``). I mart
-    hanno la location file diretta. Sostituisce il gcs_manifest.json, che
-    assegnava lo slug ``parts[0]`` (sbagliato per i layout con prefisso org).
+    Returns:
+        Tupla ``(gcs_files, semantic)`` dove:
+        - ``gcs_files``: lista di file GCS dai registry
+        - ``semantic``: dict slug → entry semantica con ``_repo``
     """
-    from toolkit.registry.reader import load_repo_registry
+    from lab_connectors.registry.client import registry_to_dict
 
-    files: list[dict[str, Any]] = []
+    from toolkit.registry.layout import workspace_repo_dirs
+    from toolkit.registry.reader import load_repo_registry_typed
+
+    gcs_files: list[dict[str, Any]] = []
+    semantic: dict[str, dict[str, Any]] = {}
+
     if not workspace.is_dir():
-        return files
-    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
-        payload = load_repo_registry(repo_dir)
-        if payload is None:
+        return gcs_files, semantic
+
+    for repo_dir in workspace_repo_dirs(workspace):
+        reg = load_repo_registry_typed(repo_dir)
+        if reg is None:
             continue
-        # clean: datasets → location
-        for ds in payload.get("datasets", []) or []:
-            loc = ds.get("location") or {}
-            path = loc.get("path", "")
-            if not path or CLEAN_BUCKET not in path:
-                continue
-            url = path if path.endswith(".parquet") else path.rstrip("/") + "/*.parquet"
-            files.append(
-                {
-                    "url": url,
-                    "slug": ds.get("slug", ""),
-                    "bucket": CLEAN_BUCKET,
-                    "year": None,
-                    "path": url,
-                    "_gcs": True,
-                }
-            )
-        # mart: location file diretta (slug = dataset, table = nome tabella)
-        for m in payload.get("marts", []) or []:
-            loc = m.get("location") or {}
-            path = loc.get("path", "")
-            if not path or MART_BUCKET not in path or not path.endswith(".parquet"):
-                continue
-            files.append(
-                {
-                    "url": path,
-                    "slug": m.get("dataset", ""),
-                    "bucket": MART_BUCKET,
-                    "year": None,
-                    "path": path,
-                    "table": m.get("table"),
-                    "_gcs": True,
-                }
-            )
-    return files
+
+        # GCS files (da _gcs_files_from_registry)
+        for ds in reg.datasets:
+            path = ds.location.path
+            if path and CLEAN_BUCKET in path:
+                url = path if path.endswith(".parquet") else path.rstrip("/") + "/*.parquet"
+                gcs_files.append(
+                    {
+                        "url": url,
+                        "slug": ds.slug,
+                        "bucket": CLEAN_BUCKET,
+                        "year": None,
+                        "path": url,
+                        "_gcs": True,
+                    }
+                )
+        for m in reg.marts:
+            path = m.location.path
+            if path and MART_BUCKET in path and path.endswith(".parquet"):
+                gcs_files.append(
+                    {
+                        "url": path,
+                        "slug": m.dataset,
+                        "bucket": MART_BUCKET,
+                        "year": None,
+                        "path": path,
+                        "table": m.table,
+                        "_gcs": True,
+                    }
+                )
+
+        # Semantic data (da _scan_committed_catalogs)
+        for ds in reg.datasets:
+            entry = registry_to_dict(ds)
+            entry["_repo"] = repo_dir.name
+            semantic[ds.slug] = entry
+
+    return gcs_files, semantic
+
+
+def _gcs_files_from_registry(workspace: Path = WORKSPACE_ROOT) -> list[dict[str, Any]]:
+    """File GCS dai registry.json committati (wrapper per backward compat)."""
+    gcs_files, _ = _scan_registries(workspace)
+    return gcs_files
+
+
+def _scan_committed_catalogs(workspace: Path = WORKSPACE_ROOT) -> dict[str, dict[str, Any]]:
+    """Catalogo semantico committato (wrapper per backward compat)."""
+    _, semantic = _scan_registries(workspace)
+    return semantic
 
 
 def _merge_gcs_and_local(
@@ -412,7 +443,7 @@ SEMANTIC_FIELDS = (
 def _scan_committed_catalogs(workspace: Path = WORKSPACE_ROOT) -> dict[str, dict[str, Any]]:
     """Scansiona i cataloghi semantici committati nei repo del workspace.
 
-    Usa ``load_repo_registry`` (lo stesso reader del resolver GCS): legge il
+    Usa ``load_repo_registry_typed`` (lo stesso reader del resolver GCS): legge il
     ``registry.json`` unico dei repo (fusion ADR). Ritorna ``{slug: entry
     semantica}`` con ``_repo`` (nome dir) aggiunto.
 
@@ -420,21 +451,22 @@ def _scan_committed_catalogs(workspace: Path = WORKSPACE_ROOT) -> dict[str, dict
     vive nei registry generati dal registry builder e committati nei repo:
     qui diventa la fonte per il find semantico del resolver.
     """
-    from toolkit.registry.reader import load_repo_registry
+    from lab_connectors.registry.client import registry_to_dict
+
+    from toolkit.registry.layout import workspace_repo_dirs
+    from toolkit.registry.reader import load_repo_registry_typed
 
     result: dict[str, dict[str, Any]] = {}
     if not workspace.is_dir():
         return result
-    for repo_dir in sorted(p for p in workspace.iterdir() if p.is_dir()):
-        payload = load_repo_registry(repo_dir)
-        if payload is None:
+    for repo_dir in workspace_repo_dirs(workspace):
+        reg = load_repo_registry_typed(repo_dir)
+        if reg is None:
             continue
-        for ds in payload.get("datasets", []) or []:
-            slug = ds.get("slug")
-            if slug:
-                entry = dict(ds)
-                entry["_repo"] = repo_dir.name
-                result[slug] = entry
+        for ds in reg.datasets:
+            entry = registry_to_dict(ds)
+            entry["_repo"] = repo_dir.name
+            result[ds.slug] = entry
     return result
 
 
@@ -512,8 +544,8 @@ class CatalogResolver:
         if not self._include_local:
             self._semantic = {}
             return self._semantic
-        self._semantic = _scan_committed_catalogs(self._workspace)
-        return self._semantic
+        self._ensure_registry_scanned()
+        return self._semantic or {}
 
     def _merge_semantic(self, entry: dict[str, Any], semantic: dict[str, Any] | None) -> None:
         """Arricchisce un entry con i campi semantici del catalogo committato."""
@@ -534,8 +566,8 @@ class CatalogResolver:
         """
         if self._gcs_entries is not None:
             return self._gcs_entries
-        self._gcs_entries = _gcs_files_from_registry(self._workspace)
-        return self._gcs_entries
+        self._ensure_registry_scanned()
+        return self._gcs_entries or []
 
     def _load_local_parquets(self) -> list[dict[str, Any]]:
         if self._local_entries is not None:
@@ -554,6 +586,15 @@ class CatalogResolver:
             return self._workspace_configs
         self._workspace_configs = _scan_workspace_configs(self._workspace)
         return self._workspace_configs
+
+    def _ensure_registry_scanned(self) -> None:
+        """Esegue lo scan unico dei registry (GCS + semantica) se non fatto."""
+        if self._gcs_entries is not None:
+            return
+        # Usa le wrapper functions (monkeypatchabili nei test)
+        self._gcs_entries = _gcs_files_from_registry(self._workspace)
+        if self._include_local and self._semantic is None:
+            self._semantic = _scan_committed_catalogs(self._workspace)
 
     # ------------------------------------------------------------------
     # Pubblici

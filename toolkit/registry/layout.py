@@ -67,6 +67,73 @@ def repo_dataset_dirs(repo_dir: Path) -> tuple[str, ...]:
     return tuple(sections)
 
 
+def workspace_repo_dirs(workspace: Path) -> list[Path]:
+    """Trova tutti i repo dati nel workspace, inclusi quelli annidati.
+
+    Scansiona il primo livello del workspace per repo diretti (che hanno
+    ``datasets/``, ``candidates/``, ``compose/``, ``registry/``, ecc.).
+    Per ogni dir di primo livello, verifica anche se contiene sub-repo
+    dati (es. ``esperimenti-locali/inpa-reclutamento/`` o
+    ``incubation/dichiarazioni-italia/``).
+
+    Un repo è considerato "dati" se ha almeno una sezione dati
+    (``repo_dataset_dirs`` non vuota) OPPURE una directory ``registry/``.
+
+    Il risultato è cachato a livello di modulo per evitare scan ripetuti.
+    Usa ``invalidate_workspace_cache()`` per forzare un refresh.
+
+    Returns:
+        Lista ordinata di Path ai root dei repo dati trovati.
+    """
+    global _WORKSPACE_REPO_CACHE
+    cache_key = str(workspace.resolve())
+    if cache_key in _WORKSPACE_REPO_CACHE:
+        return _WORKSPACE_REPO_CACHE[cache_key]
+
+    repos: list[Path] = []
+    if not workspace.is_dir():
+        _WORKSPACE_REPO_CACHE[cache_key] = repos
+        return repos
+    for entry in sorted(p for p in workspace.iterdir() if p.is_dir()):
+        if entry.name.startswith(".") or entry.name in _EXCLUDED_SECTION_DIRS:
+            continue
+        if _is_data_repo(entry):
+            repos.append(entry)
+        # Cerca sub-repo anche se il parent è un repo dati
+        # (es. esperimenti-locali/ ha archivio/ ma anche inpa-reclutamento/)
+        for sub in sorted(p for p in entry.iterdir() if p.is_dir()):
+            if sub.name.startswith(".") or sub.name in _EXCLUDED_SECTION_DIRS:
+                continue
+            if _is_data_repo(sub):
+                repos.append(sub)
+    _WORKSPACE_REPO_CACHE[cache_key] = repos
+    return repos
+
+
+# Module-level cache: workspace_path → repo_dirs list
+_WORKSPACE_REPO_CACHE: dict[str, list[Path]] = {}
+
+
+def invalidate_workspace_cache(workspace: Path | None = None) -> None:
+    """Invalida la cache dei workspace repo dirs.
+
+    Args:
+        workspace: Se fornito, invalida solo quella workspace.
+                  Se None, invalida tutta la cache.
+    """
+    global _WORKSPACE_REPO_CACHE
+    if workspace is None:
+        _WORKSPACE_REPO_CACHE.clear()
+    else:
+        cache_key = str(workspace.resolve())
+        _WORKSPACE_REPO_CACHE.pop(cache_key, None)
+
+
+def _is_data_repo(repo_dir: Path) -> bool:
+    """True se la directory è un repo dati (ha sezioni dati o registry)."""
+    return bool(repo_dataset_dirs(repo_dir)) or (repo_dir / "registry").is_dir()
+
+
 @dataclass(frozen=True)
 class RepoLayout:
     """Struttura dichiarativa di un repo con dataset.yml.

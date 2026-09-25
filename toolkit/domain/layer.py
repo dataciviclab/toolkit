@@ -351,11 +351,9 @@ def _resolve_datasets(
     Returns:
         Dict slug → url HTTPS del parquet.
     """
-    from toolkit.domain.catalog import CatalogResolver
-
     _HTTPS_STORAGE = "https://storage.googleapis.com/"
 
-    resolver = CatalogResolver()
+    resolver = _get_catalog_resolver()
     resolved: dict[str, str] = {}
     for slug in datasets:
         files = resolver.resolve_slug(slug, layer=layer, year=year, table=table)
@@ -366,6 +364,26 @@ def _resolve_datasets(
             url = _HTTPS_STORAGE + url[5:]  # s3:// < 5 len
         resolved[slug] = url
     return resolved
+
+
+def _get_catalog_resolver():
+    """Restituisce un CatalogResolver condiviso (lazy singleton)."""
+    global _CATALOG_RESOLVER
+    if _CATALOG_RESOLVER is None:
+        from toolkit.domain.catalog import CatalogResolver
+
+        _CATALOG_RESOLVER = CatalogResolver()
+    return _CATALOG_RESOLVER
+
+
+# Module-level singleton: condiviso tra chiamate MCP per evitare scan ripetuti
+_CATALOG_RESOLVER = None
+
+
+def invalidate_catalog_resolver() -> None:
+    """Invalida il CatalogResolver condiviso (utile post-run)."""
+    global _CATALOG_RESOLVER
+    _CATALOG_RESOLVER = None
 
 
 def layer_sql(

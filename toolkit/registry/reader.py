@@ -4,15 +4,19 @@ Il registry builder (``toolkit.registry.builders``) genera e i repo committano
 il file unico ``{repo}/registry/registry.json`` (fusion ADR): sezioni
 ``datasets``, ``marts``, ``signals``, ``codelists``, ``entities``.
 
+Utilizza ``lab_connectors.registry`` per il parsing tipizzato dei registry.
+
 Esposizione all'agente (CLI e MCP) via ``registry list`` /
 ``registry show <repo> <section>``.
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
+
+from lab_connectors.registry.client import load_registry_local, registry_to_dict
+from lab_connectors.registry.models import Registry
 
 from toolkit.core.paths import WORKSPACE_ROOT
 
@@ -20,38 +24,75 @@ from toolkit.core.paths import WORKSPACE_ROOT
 SECTIONS = ("datasets", "marts", "signals", "codelists", "entities")
 
 
-def _section_count(section: str, payload: dict[str, Any]) -> int | None:
-    """Conteggio entries di una sezione del registry unico."""
+def _section_count(section: str, data: Any) -> int | None:
+    """Conteggio entries di una sezione del registry.
+
+    Accetta sia un ``Registry`` tipizzato che un raw dict (backward compat).
+    """
+    # Registry tipizzato
+    if hasattr(data, "datasets"):
+        reg = data
+        if section == "datasets":
+            return len(reg.datasets)
+        if section == "marts":
+            return len(reg.marts)
+        if section == "signals":
+            return len(reg.signals)
+        if section == "codelists":
+            return len(reg.codelists)
+        if section == "entities":
+            return len(reg.entities.get("entities") or {})
+        return None
+    # Raw dict (backward compat per test)
     if section == "datasets":
-        return len(payload.get("datasets") or [])
+        return len(data.get("datasets") or [])
     if section == "marts":
-        return len(payload.get("marts") or [])
+        return len(data.get("marts") or [])
     if section == "signals":
-        return len(payload.get("signals") or [])
+        return len(data.get("signals") or [])
     if section == "codelists":
-        return len(payload.get("codelists") or [])
+        return len(data.get("codelists") or [])
     if section == "entities":
-        return len((payload.get("entities") or {}).get("entities") or {})
+        return len((data.get("entities") or {}).get("entities") or [])
     return None
 
 
 def load_repo_registry(repo_dir: Path) -> dict[str, Any] | None:
-    """Carica il registry unico del repo (registry.json), o None se assente."""
+    """Carica il registry unico del repo (registry.json), o None se assente.
+
+    Usa ``lab_connectors.registry.client.load_registry_local`` per il parsing
+    tipizzato, poi converte in dict per backward compat.
+    """
     path = repo_dir / "registry" / "registry.json"
     if not path.is_file():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+        reg = load_registry_local(path)
+        return registry_to_dict(reg)
+    except (ValueError, OSError):
+        return None
+
+
+def load_repo_registry_typed(repo_dir: Path) -> Registry | None:
+    """Carica il registry tipizzato, o None se assente.
+
+    Versione tipizzata di ``load_repo_registry`` per uso interno.
+    """
+    path = repo_dir / "registry" / "registry.json"
+    if not path.is_file():
+        return None
+    try:
+        return load_registry_local(path)
+    except (ValueError, OSError):
         return None
 
 
 def _scan_repo(repo_dir: Path) -> list[dict[str, Any]]:
     """Artifact del repo: registry unico (con conteggi per sezione)."""
-    payload = load_repo_registry(repo_dir)
-    if payload is None:
+    reg = load_repo_registry_typed(repo_dir)
+    if reg is None:
         return []
-    counts = {section: _section_count(section, payload) for section in SECTIONS}
+    counts = {section: _section_count(section, reg) for section in SECTIONS}
     return [
         {
             "name": "registry",
@@ -99,9 +140,9 @@ def show_registry(
         FileNotFoundError: se il repo/section non esiste nel workspace.
     """
     repo_dir = workspace / repo
-    payload = load_repo_registry(repo_dir)
+    reg = load_repo_registry_typed(repo_dir)
 
-    if payload is None:
+    if reg is None:
         raise FileNotFoundError(
             f"Registry non trovato in {workspace}/{repo}/registry/ "
             f"(usa 'toolkit registry list' per i repo disponibili)"
@@ -111,14 +152,15 @@ def show_registry(
         return {
             "repo": repo,
             "artifact": "registry",
-            "data": payload,
+            "data": registry_to_dict(reg),
         }
     if artifact not in SECTIONS:
         raise FileNotFoundError(
             f"Sezione '{artifact}' non valida (usa una di: registry, " + ", ".join(SECTIONS) + ")"
         )
-    data = payload.get(artifact)
-    if data is None:
+
+    data = _get_section_data(reg, artifact)
+    if data is None or (isinstance(data, list) and len(data) == 0):
         raise FileNotFoundError(f"Sezione '{artifact}' non presente nel registry di {repo}")
 
     if slug:
@@ -129,6 +171,21 @@ def show_registry(
             "entry": _filter_entry(artifact, data, slug),
         }
     return {"repo": repo, "artifact": artifact, "data": data}
+
+
+def _get_section_data(reg: Registry, artifact: str) -> Any:
+    """Estrae i dati raw di una sezione dal Registry tipizzato."""
+    if artifact == "datasets":
+        return [registry_to_dict(ds) for ds in reg.datasets]
+    if artifact == "marts":
+        return [registry_to_dict(m) for m in reg.marts]
+    if artifact == "signals":
+        return [registry_to_dict(s) for s in reg.signals]
+    if artifact == "codelists":
+        return reg.codelists
+    if artifact == "entities":
+        return reg.entities
+    return None
 
 
 def _filter_entry(section: str, data: Any, slug: str) -> dict[str, Any]:

@@ -89,11 +89,12 @@ def mcp_dataset_related(slug: str) -> dict[str, Any]:
     """Trova dataset correlati a uno slug.
 
     Restituisce:
-    - same_source: dataset con stesso source_id
-    - same_category: dataset con stessa category
-    - same_tags: dataset che condividono tag
-    - same_entities: dataset che condividono semantic_type (via entity graph)
-    - joinable: dataset joinabili su colonne condivise
+    - summary: frase sintetica dei risultati
+    - same_source: dataset con stesso source_id (max 5)
+    - same_category: dataset con stessa category (max 5)
+    - same_tags: dataset che condividono tag, ordinati per tag sharing (max 5)
+    - joinable: dataset joinabili, ordinati per numero di colonne condivise (max 5)
+    - best_join: dataset migliore per join (più colonne in comune)
     """
     resolver = _get_resolver()
 
@@ -149,14 +150,15 @@ def mcp_dataset_related(slug: str) -> dict[str, Any]:
         ds_tags = set(ds.get("tags") or [])
         shared = target_tags & ds_tags
         if shared:
-            same_tags.append({"slug": ds_slug, "shared_tags": sorted(shared)})
+            same_tags.append({"slug": ds_slug, "shared_tags": sorted(shared), "score": len(shared)})
 
         seen_slugs.add(ds_slug)
 
+    # Ordina same_tags per score decrescente
+    same_tags.sort(key=lambda x: x["score"], reverse=True)
+
     # Entity graph: dataset con stesso semantic_type
-    same_entities = []
-    joinable = []
-    entity_seen = {slug}  # Separate set for entity graph
+    joinable_map: dict[str, dict[str, Any]] = {}  # slug → {columns: [], score: int}
     try:
         from toolkit.registry.graph import load_workspace_graph, filter_graph
 
@@ -172,34 +174,52 @@ def mcp_dataset_related(slug: str) -> dict[str, Any]:
                     if st:
                         target_types.add(st)
 
-        # Per ogni semantic_type, trova altri dataset (usa lo stesso graph)
+        # Per ogni semantic_type, trova altri dataset
         for st in sorted(target_types):
             st_result = filter_graph(graph, by_key=st)
             for entity_info in st_result.get("entities", {}).values():
                 for ds in entity_info.get("datasets", []):
                     ds_slug = ds.get("slug", "")
-                    if ds_slug != slug and ds_slug not in entity_seen:
-                        same_entities.append(
-                            {
-                                "slug": ds_slug,
-                                "semantic_type": st,
-                            }
-                        )
-                        joinable.append(
-                            {
-                                "slug": ds_slug,
-                                "join_column": st,
-                            }
-                        )
-                        entity_seen.add(ds_slug)
+                    if ds_slug != slug:
+                        if ds_slug not in joinable_map:
+                            joinable_map[ds_slug] = {"columns": [], "score": 0}
+                        joinable_map[ds_slug]["columns"].append(st)
+                        joinable_map[ds_slug]["score"] += 1
     except Exception:
         pass  # Graph non disponibile, skip
 
+    # Ordina joinable per score decrescente (più colonne in comune = migliore)
+    joinable_sorted = sorted(joinable_map.items(), key=lambda x: x[1]["score"], reverse=True)
+    joinable = [
+        {"slug": s, "join_columns": info["columns"], "score": info["score"]}
+        for s, info in joinable_sorted
+    ]
+
+    # Best join: il dataset con più colonne in comune
+    best_join = joinable[0] if joinable else None
+
+    # Summary sintetico
+    parts = []
+    if same_source:
+        parts.append(f"{len(same_source)} from same source")
+    if same_category:
+        parts.append(f"{len(same_category)} same category")
+    if same_tags:
+        parts.append(f"{len(same_tags)} share tags")
+    if joinable:
+        parts.append(
+            f"{len(joinable)} joinable ({best_join['score']} cols)"
+            if best_join
+            else f"{len(joinable)} joinable"
+        )
+    summary = f"{slug}: {', '.join(parts)}" if parts else f"{slug}: no related datasets found"
+
     return {
         "slug": slug,
-        "same_source": same_source[:10],
-        "same_category": same_category[:10],
-        "same_tags": same_tags[:10],
-        "same_entities": same_entities[:15],
-        "joinable": joinable[:10],
+        "summary": summary,
+        "same_source": same_source[:5],
+        "same_category": same_category[:5],
+        "same_tags": [{"slug": t["slug"], "shared_tags": t["shared_tags"]} for t in same_tags[:5]],
+        "joinable": joinable[:5],
+        "best_join": best_join,
     }

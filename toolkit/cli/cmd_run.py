@@ -303,7 +303,7 @@ def run_year(
         f" effective_root={cfg.root}"
         f" root_source={cfg.root_source}"
     )
-    base_logger.info(log_ctx)
+    base_logger.debug(log_ctx)
 
     # Backward compat: batch --step probe instrada verso _run_probe
     if step == "probe":
@@ -327,7 +327,7 @@ def run_year(
             typer.echo("")
         return context
 
-    base_logger.info(f"RUN -> step={step} dataset={cfg.dataset} year={year}")
+    base_logger.debug("RUN -> step=%s dataset=%s year=%s", step, cfg.dataset, year)
     run_has_validation_warnings = False
     sample_mode = sample_rows is not None or sample_bytes is not None
 

@@ -126,5 +126,16 @@ def run_raw_validation(root: str | None, dataset: str, year: int, logger) -> dic
         summary=enriched_summary,
         sections=result.sections,
     )
-    logger.info(f"VALIDATE RAW -> (ok={result.ok})")
+    parts = [f"ok={result.ok}"]
+    if hints.get("encoding_suggested"):
+        parts.append(f"enc={hints['encoding_suggested']}")
+    if hints.get("delim_suggested"):
+        parts.append(f"delim={hints['delim_suggested']}")
+    if files:
+        parts.append(f"{len(files)} files")
+    if result.errors:
+        parts.append(f"{len(result.errors)} err")
+    if result.warnings:
+        parts.append(f"{len(result.warnings)} warn")
+    logger.info("VALIDATE RAW -> %s", " ".join(parts))
     return build_validation_summary(result)

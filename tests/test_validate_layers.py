@@ -14,6 +14,13 @@ from toolkit.mart.validate import run_mart_validation, validate_mart
 from toolkit.core.validation import write_validation_json
 
 
+def _noop(*_a, **_k):
+    return None
+
+
+_noop_logger = SimpleNamespace(info=_noop, debug=_noop, warning=_noop, error=_noop)
+
+
 def _assert_portable_json_report(path: Path, *, root: Path, field: str, expected: str):
     payload = json.loads(path.read_text(encoding="utf-8"))
     serialized = json.dumps(payload, ensure_ascii=False)
@@ -253,9 +260,7 @@ def test_run_mart_validation_merges_transition_warnings_into_report(tmp_path: Pa
         },
     )
 
-    summary = run_mart_validation(
-        cfg, 2024, logger=SimpleNamespace(info=lambda *args, **kwargs: None)
-    )
+    summary = run_mart_validation(cfg, 2024, logger=_noop_logger)
 
     assert summary["passed"] is True
     assert summary["warnings_count"] == 2
@@ -335,9 +340,7 @@ def test_run_clean_validation_uses_columns_raw_from_raw_profile(tmp_path: Path):
 
     cfg = make_config(root=root, base_dir=root, dataset=dataset)
 
-    summary = run_clean_validation(
-        cfg, year, logger=SimpleNamespace(info=lambda *args, **kwargs: None)
-    )
+    summary = run_clean_validation(cfg, year, logger=_noop_logger)
 
     assert summary["stats"]["raw_cols"] == len(real_columns)
     assert summary["stats"]["col_drop_count"] == len(real_columns) - 2
@@ -387,7 +390,7 @@ def test_run_clean_validation_raw_probe_source_legacy_autodetect(tmp_path: Path)
     from tests.helpers import make_config
 
     cfg = make_config(root=root, base_dir=root, dataset=dataset)
-    logger = SimpleNamespace(info=lambda *args, **kwargs: None)
+    logger = _noop_logger
 
     result = run_clean_validation(cfg, year, logger=logger)
 
@@ -433,7 +436,7 @@ def test_run_clean_validation_raw_probe_source_unavailable_when_no_raw_file(
     from tests.helpers import make_config
 
     cfg = make_config(root=root, base_dir=root, dataset=dataset)
-    logger = SimpleNamespace(info=lambda *args, **kwargs: None)
+    logger = _noop_logger
 
     result = run_clean_validation(cfg, year, logger=logger)
 
@@ -674,9 +677,7 @@ def test_run_mart_validation_transition_errors_set_ok_false(tmp_path: Path):
         },
     )
 
-    summary = run_mart_validation(
-        cfg, 2024, logger=SimpleNamespace(info=lambda *args, **kwargs: None)
-    )
+    summary = run_mart_validation(cfg, 2024, logger=_noop_logger)
 
     assert summary["passed"] is False, (
         f"Expected failed with fail_on_row_drop_exceeded=True, got: {summary}"

@@ -529,5 +529,16 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
         sections=merged_sections,
     )
 
-    logger.info(f"VALIDATE CLEAN -> (ok={result.ok})")
+    parts = [f"ok={result.ok}"]
+    if clean_row_count is not None:
+        parts.append(f"{clean_row_count} rows")
+    if clean_cols:
+        parts.append(f"{len(clean_cols)} cols")
+    if row_drop_pct is not None:
+        parts.append(f"drop={row_drop_pct}%")
+    if merged_errors:
+        parts.append(f"{len(merged_errors)} err")
+    if merged_warnings:
+        parts.append(f"{len(merged_warnings)} warn")
+    logger.info("VALIDATE CLEAN -> %s", " ".join(parts))
     return build_validation_summary(result)

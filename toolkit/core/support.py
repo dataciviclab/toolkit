@@ -252,9 +252,6 @@ def _resolve_external_entry(
     """
     uri = entry.get("uri")
     years = [int(y) for y in entry.get("years") or []]
-    # backward compat: accept single 'year' field
-    if not years and entry.get("year") is not None:
-        years = [int(entry["year"])]
 
     if not uri:
         bucket = entry.get("bucket")

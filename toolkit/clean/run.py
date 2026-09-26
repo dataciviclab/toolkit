@@ -20,6 +20,7 @@ from toolkit.core.paths import (
     resolve_sql_path,
     serialize_metadata_path,
 )
+from toolkit.core.logging import short_path
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
 from toolkit.clean.sql_execute import _normalize_output_profile, _run_sql
 
@@ -139,9 +140,9 @@ def _select_clean_inputs(
         )
 
     if len(input_files) == 1:
-        logger.info("CLEAN selected RAW input -> %s", input_files[0])
+        logger.debug("CLEAN selected RAW input -> %s", input_files[0])
     else:
-        logger.info("CLEAN selected RAW inputs -> %s", [str(path) for path in input_files])
+        logger.debug("CLEAN selected RAW inputs -> %s", [str(path) for path in input_files])
 
     return input_files
 
@@ -300,9 +301,14 @@ def run_clean(
         metadata_path=metadata_path.name,
         outputs=outputs,
     )
-    logger.info(f"CLEAN -> {output_path}")
     output_rows = int(output_profile.get("row_count") or 0)
     col_count = len(output_profile.get("columns") or [])
+    logger.info(
+        "CLEAN -> %s (%d rows, %d cols)",
+        short_path(output_path, root),
+        output_rows,
+        col_count or 0,
+    )
     return {
         "output_rows": output_rows,
         "output_bytes": output_bytes,

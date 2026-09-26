@@ -27,6 +27,7 @@ from toolkit.core.paths import (
     resolve_sql_path,
     serialize_metadata_path,
 )
+from toolkit.core.logging import short_path
 from toolkit.core.sql_utils import sql_path as _sql_path_quote
 from toolkit.core.support import flatten_support_template_ctx, resolve_support_payloads
 from toolkit.core.template import build_runtime_template_ctx, public_template_ctx, render_template
@@ -568,7 +569,12 @@ def run_mart(
         if table_profiles
         else None
     )
-    logger.info(f"MART -> {mart_dir}")
+    logger.info(
+        "MART -> %s (%d tables, %d rows)",
+        short_path(mart_dir, root),
+        len(written),
+        total_rows,
+    )
     return {
         "output_rows": total_rows,
         "output_bytes": total_bytes,

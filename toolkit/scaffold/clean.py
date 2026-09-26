@@ -205,7 +205,7 @@ def scaffold_clean_if_missing(
     clean_sql_path = Path(base_dir) / clean_sql_rel
 
     if clean_sql_path.exists():
-        logger.info("clean.sql gia esistente, scaffold saltato (%s)", clean_sql_path)
+        logger.debug("clean.sql gia esistente, scaffold saltato (%s)", clean_sql_path)
         return None
 
     scaffold_sql = generate_clean_sql(profile, dataset, year)

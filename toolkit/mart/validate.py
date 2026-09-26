@@ -246,5 +246,17 @@ def run_mart_validation(cfg, year: int, logger, *, sample_mode: bool = False) ->
             sections={"transition": transition_report},
         )
 
-    logger.info(f"VALIDATE MART -> (ok={result.ok})")
+    parts = [f"ok={result.ok}"]
+    rc = result.summary.get("row_counts") or {}
+    tables = result.summary.get("tables") or []
+    if tables:
+        parts.append(f"{len(tables)} tables")
+    if rc:
+        total = sum(rc.values())
+        parts.append(f"{total} rows")
+    if merged_errors:
+        parts.append(f"{len(merged_errors)} err")
+    if merged_warnings:
+        parts.append(f"{len(merged_warnings)} warn")
+    logger.info("VALIDATE MART -> %s", " ".join(parts))
     return build_validation_summary(result)

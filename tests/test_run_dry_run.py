@@ -375,9 +375,9 @@ def test_run_year_logs_effective_root_context(tmp_path: Path, caplog) -> None:
     logger = logging.getLogger("test.run_dry_run")
     logger.handlers = [caplog.handler]
     logger.propagate = False
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
-    with caplog.at_level(logging.INFO, logger="test.run_dry_run"):
+    with caplog.at_level(logging.DEBUG, logger="test.run_dry_run"):
         run_year(cfg, 2022, step="all", dry_run=True, logger=logger)
 
     assert "RUN context | dataset=demo_ds year=2022" in caplog.text

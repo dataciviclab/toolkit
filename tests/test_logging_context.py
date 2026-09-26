@@ -29,12 +29,11 @@ def test_bind_logger_includes_context(caplog):
     message = record.getMessage()
     assert record.name == name
     assert "dataset=ds" in message
-    assert "run_id=run-1234" in message
+    assert "run_id" not in message  # run_id filtrato dal prefisso (rumore)
     assert "layer=clean" in message
     assert getattr(record, "dataset") == "ds"
     assert getattr(record, "year") == 2030
-    assert getattr(record, "run_id") == "run-1234"
-    assert getattr(record, "layer") == "clean"
+    assert getattr(record, "run_id") == "run-1234"  # extra attribute ancora disponibile
 
 
 def test_safe_console_text_falls_back_for_non_utf8_encoding():

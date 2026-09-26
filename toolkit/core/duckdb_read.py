@@ -325,7 +325,7 @@ def _execute_csv_mode(
     logger,
 ) -> ReadInfo:
     params_used = _execute_csv_read(con, input_files, read_cfg)
-    logger.info(
+    logger.debug(
         "read_csv params used: source=%s params=%s",
         source,
         json.dumps(params_used, ensure_ascii=False, sort_keys=True),

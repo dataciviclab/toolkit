@@ -11,6 +11,7 @@ from toolkit.core.metadata import (
     write_metadata,
 )
 from toolkit.core.paths import RAW_PROFILE, layer_year_dir, to_root_relative
+from toolkit.core.logging import short_path
 from toolkit.core.registry import register_builtin_plugins
 from toolkit.profile.raw import (
     sniff_source_file,
@@ -141,7 +142,7 @@ def run_raw(
                 }
             )
 
-            logger.info(f"RAW -> {fpath}")
+            logger.info("RAW -> %s", short_path(fpath, root))
 
         manifest_sources.append(
             {
@@ -172,7 +173,7 @@ def run_raw(
             )
             profile_dir = out_dir / "_profile"
             write_raw_profile(profile_dir, raw_profile)
-            logger.info("RAW profile -> %s", profile_dir / RAW_PROFILE)
+            logger.debug("RAW profile -> %s", profile_dir / RAW_PROFILE)
 
             scaffold_clean_if_missing(
                 raw_profile.__dict__,

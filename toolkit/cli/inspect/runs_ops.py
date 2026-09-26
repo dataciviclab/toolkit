@@ -7,7 +7,6 @@ La logica di resume è in ``cmd_resume.resume()`` (condivisa).
 
 from __future__ import annotations
 
-import json
 
 import typer
 
@@ -66,7 +65,9 @@ def runs(
             raise typer.Exit(code=1) from exc
 
         if json_output:
-            typer.echo(json.dumps(record, indent=2, ensure_ascii=False, default=str))
+            from toolkit.cli.common import echo_json
+
+            echo_json(record)
         else:
             layers_info = record.get("layers", {})
             typer.echo(f"run_id:    {record.get('run_id')}")
@@ -101,7 +102,9 @@ def runs(
             continue
 
     if json_output:
-        typer.echo(json.dumps(records, indent=2, ensure_ascii=False, default=str))
+        from toolkit.cli.common import echo_json
+
+        echo_json(records)
         return
 
     if not records:

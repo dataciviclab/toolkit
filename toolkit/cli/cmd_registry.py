@@ -35,7 +35,9 @@ def registry_list(json_output: bool = typer.Option(False, "--json", help="Output
 
     data = list_registries()
     if json_output:
-        typer.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
+        from toolkit.cli.common import echo_json
+
+        echo_json(data)
         return
     _print_list(data)
 
@@ -56,15 +58,21 @@ def registry_show(
         raise typer.Exit(code=1)
 
     if json_output:
-        typer.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
+        from toolkit.cli.common import echo_json
+
+        echo_json(data)
         return
 
     entry = data.get("entry")
     if entry is not None:
-        typer.echo(json.dumps(entry, indent=2, ensure_ascii=False, default=str))
+        from toolkit.cli.common import echo_json
+
+        echo_json(entry)
         return
     payload = data["data"]
-    typer.echo(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+    from toolkit.cli.common import echo_json
+
+    echo_json(payload)
 
 
 def _git_source_repo(repo_root: Path) -> str:

@@ -1,11 +1,27 @@
 from __future__ import annotations
 
+import json
 from typing import Any, NamedTuple
+
+import typer
 
 from toolkit.core.config import ensure_dict, load_config
 from toolkit.core.logging import get_logger
 
-__all__ = ["ensure_dict", "load_cfg_and_logger", "resolve_run_context"]
+__all__ = [
+    "echo_json",
+    "ensure_dict",
+    "load_cfg_and_logger",
+    "resolve_run_context",
+]
+
+
+def echo_json(data: Any, *, compact: bool = False) -> None:
+    """Dump JSON to stdout via typer."""
+    if compact:
+        typer.echo(json.dumps(data, ensure_ascii=False, default=str))
+    else:
+        typer.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
 
 
 def load_cfg_and_logger(

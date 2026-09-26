@@ -6,7 +6,6 @@ Sostituisce i vecchi alias ``toolkit layer``, ``inspect schema``/profile/query.
 
 from __future__ import annotations
 
-import json
 
 import typer
 
@@ -61,11 +60,15 @@ def config(
         try:
             payload = schema_diff_payload(config_path)
         except (ValueError, FileNotFoundError) as exc:
-            typer.echo(json.dumps({"error": str(exc)}, indent=2))
+            from toolkit.cli.common import echo_json
+
+            echo_json({"error": str(exc)})
             raise typer.Exit(code=1)
 
         if json_output:
-            typer.echo(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+            from toolkit.cli.common import echo_json
+
+            echo_json(payload)
         else:
             typer.echo(f"dataset: {payload['dataset']}")
             typer.echo(f"config_path: {payload['config_path']}")
@@ -122,13 +125,17 @@ def config(
         )
     except (ValueError, FileNotFoundError) as exc:
         if json_output:
-            typer.echo(json.dumps({"error": str(exc)}, indent=2))
+            from toolkit.cli.common import echo_json
+
+            echo_json({"error": str(exc)})
         else:
-            typer.echo(f"Errore: {exc}", err=True)
+            typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(code=1)
 
     if json_output:
-        typer.echo(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        from toolkit.cli.common import echo_json
+
+        echo_json(result)
         return
 
     # Output human-readable

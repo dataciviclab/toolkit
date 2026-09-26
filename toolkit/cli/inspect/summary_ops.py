@@ -6,7 +6,6 @@ Sostituisce il vecchio alias ``toolkit status``.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -215,18 +214,16 @@ def summary(
             pass
 
     if as_json:
-        typer.echo(
-            json.dumps(
-                {
-                    "dataset": ds_name,
-                    "year": yr,
-                    "layers": layers,
-                    "record": record,
-                    "warnings": s.get("warnings", []),
-                },
-                indent=2,
-                ensure_ascii=False,
-            )
+        from toolkit.cli.common import echo_json
+
+        echo_json(
+            {
+                "dataset": ds_name,
+                "year": yr,
+                "layers": layers,
+                "record": record,
+                "warnings": s.get("warnings", []),
+            }
         )
         return
 

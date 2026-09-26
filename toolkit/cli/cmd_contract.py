@@ -6,7 +6,6 @@ Speculare al tool MCP toolkit_contract.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import typer
@@ -49,7 +48,9 @@ def contract(
         raise typer.Exit(code=1)
 
     if json_output:
-        typer.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
+        from toolkit.cli.common import echo_json
+
+        echo_json(data)
         return
 
     # ── Output leggibile per umani ───────────────────────────────────────

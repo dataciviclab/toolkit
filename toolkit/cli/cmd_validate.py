@@ -55,9 +55,9 @@ def validate(
         results["results"][str(y)] = year_results
 
     if json_output:
-        import json
+        from toolkit.cli.common import echo_json
 
-        typer.echo(json.dumps(results, indent=2, ensure_ascii=False, default=str))
+        echo_json(results)
     else:
         _print_report(results)
 

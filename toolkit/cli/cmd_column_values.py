@@ -9,7 +9,6 @@ Prova locale (branch feat/column-values-profile): output in
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import typer
@@ -106,7 +105,9 @@ def column_values(
     )
 
     if json_output:
-        typer.echo(json.dumps(profile, indent=2, ensure_ascii=False, default=str))
+        from toolkit.cli.common import echo_json
+
+        echo_json(profile)
         return
 
     n_rows = profile.get("n_rows")

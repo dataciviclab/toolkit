@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 
 import typer
 
@@ -25,9 +24,9 @@ def paths(
     payload = [_payload_for_year(cfg, selected_year) for selected_year in years]
 
     if as_json:
-        typer.echo(
-            json.dumps(payload if len(payload) > 1 else payload[0], indent=2, ensure_ascii=False)
-        )
+        from toolkit.cli.common import echo_json
+
+        echo_json(payload if len(payload) > 1 else payload[0])
         return
 
     for item in payload:

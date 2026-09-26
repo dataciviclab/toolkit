@@ -12,7 +12,6 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import tempfile
 import uuid
 from pathlib import Path
@@ -597,7 +596,9 @@ def scout(
     )
 
     if json_output and result is not None:
-        typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
+        from toolkit.cli.common import echo_json
+
+        echo_json(result)
 
 
 # ── preview subcommand ──────────────────────────────────────────────────────
@@ -632,7 +633,9 @@ def preview(
     )
 
     if json_output:
-        typer.echo(json.dumps(asdict(result), indent=2, ensure_ascii=False, default=str))
+        from toolkit.cli.common import echo_json
+
+        echo_json(asdict(result))
         return
 
     typer.echo(f"URL: {url}")

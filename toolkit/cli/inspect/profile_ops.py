@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import json
 from logging import Logger
 from pathlib import Path
 from typing import Any
@@ -70,7 +69,9 @@ def profile(
             raise typer.BadParameter(f"File non trovato: {csv_path}")
         result = csv_preview(csv_path)
         if json_output:
-            typer.echo(json.dumps(result, indent=2, default=str))
+            from toolkit.cli.common import echo_json
+
+            echo_json(result)
         else:
             typer.echo(f"File:    {result['path']}")
             typer.echo(f"Encoding: {result['encoding_suggested']}")

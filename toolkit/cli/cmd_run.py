@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import io
-import json
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -699,7 +698,9 @@ def _run_probe_cmd(
         skip_count = len(sources) - probe_count
         typer.echo(f"  sources: {probe_count} da probe, {skip_count} skip")
         if json_output:
-            typer.echo(json.dumps({"status": "DRY_RUN", "dataset": cfg.dataset}))
+            from toolkit.cli.common import echo_json
+
+            echo_json({"status": "DRY_RUN", "dataset": cfg.dataset}, compact=True)
         return
 
     for year in selected_years:
@@ -907,20 +908,18 @@ def _run_batch(
             )
 
     if json_output:
-        typer.echo(
-            json.dumps(
-                {
-                    "summary": {
-                        "total": len(rows),
-                        "passed": sum(1 for r in rows if r["status"] in ("SUCCESS", "DRY_RUN")),
-                        "failed": sum(1 for r in rows if r["status"] not in ("SUCCESS", "DRY_RUN")),
-                    },
-                    "rows": rows,
-                    "failures": failures,
+        from toolkit.cli.common import echo_json
+
+        echo_json(
+            {
+                "summary": {
+                    "total": len(rows),
+                    "passed": sum(1 for r in rows if r["status"] in ("SUCCESS", "DRY_RUN")),
+                    "failed": sum(1 for r in rows if r["status"] not in ("SUCCESS", "DRY_RUN")),
                 },
-                indent=2,
-                default=str,
-            )
+                "rows": rows,
+                "failures": failures,
+            }
         )
     else:
         headers = ["dataset", "years", "status", "duration", "config"]
@@ -1174,7 +1173,9 @@ def _execute_pipeline(
     )
 
     if json_output:
-        typer.echo(json.dumps(results, indent=2, default=str))
+        from toolkit.cli.common import echo_json
+
+        echo_json(results)
         if results["status"] != "passed":
             raise typer.Exit(code=1)
         return
@@ -1280,9 +1281,9 @@ def run_preflight_cmd(
     result = run_preflight(config, years_arg=years)
 
     if json_output:
-        import json as _json
+        from toolkit.cli.common import echo_json
 
-        typer.echo(_json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        echo_json(result)
     else:
         status_icon = "✅" if result["status"] == "passed" else "🔴"
         typer.echo(f"{status_icon} Pre-flight: {result['dataset']} ({result['config']})")

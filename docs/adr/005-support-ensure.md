@@ -64,6 +64,10 @@ support:
     type: file                 # materializza: exec command (se dichiarato)
     path: "mapping/colonnine-quartieri.csv"
     command: "python mapping/colonnine_quartieri.py"   # opzionale
+  - name: pnrr_progetti
+    type: external             # nessuna materializzazione, file già su GCS
+    uri: "gs://dataciviclab-clean/pnrr_progetti/{year}/pnrr_progetti_{year}_clean.parquet"
+    years: [2024, 2025, 2026]
 ```
 
 Validazione per tipo:
@@ -72,6 +76,9 @@ Validazione per tipo:
   quello già presente in `SdmxSource.fetch_codelist` (profilo ESTAT, #450)
 - `file` → richiede `path` (relativo al root del candidate, normalizzato);
   `command` opzionale per la rigenerazione
+- `external` → richiede `uri` (gs:// o https://) oppure `bucket`+`pattern`+`slug`
+  (usa `lab_connectors.gcs.paths.gs_url()`); `years` opzionale per risoluzione
+  per-anno con `{year}` nell'URI
 
 ### 2. Orchestrazione `ensure` (skip-if-exists + materializza-se-manca)
 
@@ -83,11 +90,13 @@ per ogni support entry:
         dataset  → clean parquet + tutte le tabelle mart (per anno)
         codelist → out/data/support/{name}/{name}.parquet
         file     → path dichiarato
+        external → URI GCS (nessuna materializzazione)
     se tutti gli output esistono  e  non --refresh-support  → SKIP (log reuse)
     se mancano:
         dataset  → run_year(support_cfg, year, step="all")   # invariato
         codelist → fetch_codelist + scrittura parquet canonico
         file     → exec command (se presente), altrimenti errore esplicito
+        external → no-op (file già su GCS)
     (smoke: materializza su {root}/smoke — pattern già esistente)
 ```
 
@@ -113,7 +122,7 @@ clean verrebbe considerato mancante). `flatten_support_template_ctx` espone:
 | `{support.NAME.mart}` | prima tabella mart (backward compat) |
 | `{support.NAME.mart.TABLE}` | tabella mart specifica (il caso `mart_codici_catastali`) |
 | `{support.NAME.outputs}` | lista completa (invariato) |
-| `{support.NAME.path}` | file materializzato (codelist/file) |
+| `{support.NAME.path}` | file materializzato (codelist/file) o URI GCS (external) |
 
 `check_support_path_drift` esteso ai nuovi placeholder
 (`clean`, `mart.TABLE`, `path`).

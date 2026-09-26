@@ -11,8 +11,8 @@ from toolkit.core.config import ensure_dict, load_config
 from toolkit.core.exceptions import DownloadError
 from toolkit.core.paths import layer_year_dir
 
-# Tipi di support (ADR-005): dataset (default), codelist, file.
-SUPPORT_TYPES = ("dataset", "codelist", "file")
+# Tipi di support (ADR-005): dataset, codelist, file, external.
+SUPPORT_TYPES = ("dataset", "codelist", "file", "external")
 
 # Convenzione layer materializzazione codelist: out/data/support/{name}/{name}.parquet
 SUPPORT_LAYER = "support"
@@ -59,6 +59,7 @@ def resolve_support_payloads(
     - ``type: codelist``: parquet canonico in ``{root}/data/support/{name}/``
       (richiede ``root`` = root del candidate).
     - ``type: file``: path dichiarato (relativo normalizzato sul root).
+    - ``type: external``: URI GCS (via ``uri`` o ``bucket``+``pattern``+``slug``).
 
     Con ``require_exists=True`` gli output mancanti sollevano errore esplicito
     (mart/clean del support non ancora eseguito, o codelist/file non
@@ -73,6 +74,8 @@ def resolve_support_payloads(
             resolved.append(_resolve_dataset_entry(entry, name, require_exists, smoke))
         elif stype == "codelist":
             resolved.append(_resolve_codelist_entry(entry, name, require_exists, root))
+        elif stype == "external":
+            resolved.append(_resolve_external_entry(entry, name, require_exists))
         else:  # file
             resolved.append(_resolve_file_entry(entry, name, require_exists, root))
     return resolved
@@ -227,6 +230,127 @@ def _resolve_file_entry(
     }
 
 
+def _resolve_external_entry(
+    entry: dict[str, Any], name: str, require_exists: bool
+) -> dict[str, Any]:
+    """Resolve a GCS-hosted parquet file via lab_connectors path patterns.
+
+    Supported config fields:
+    - ``uri``: full gs:// URL (overrides bucket/pattern/slug).
+      May contain ``{year}`` for per-year resolution.
+    - ``bucket``: "clean" or "mart" + ``pattern``: pattern key + ``slug``
+    - ``table``: optional, for mart patterns
+    - ``years``: optional list of years. When provided with a ``{year}``
+      URI, resolves one path per year and builds a clean glob.
+
+    Resolution logic:
+    - ``uri`` with ``{year}`` + ``years`` → resolved per year, ``path``
+      is the URI template for the first year, ``clean`` is a glob.
+    - ``uri`` without ``{year}`` → single file, ``years`` is ignored.
+    - ``bucket``+``pattern``+``slug`` → uses ``gs_url()``, year from
+      ``years[0]`` or omitted.
+    """
+    uri = entry.get("uri")
+    years = [int(y) for y in entry.get("years") or []]
+    # backward compat: accept single 'year' field
+    if not years and entry.get("year") is not None:
+        years = [int(entry["year"])]
+
+    if not uri:
+        bucket = entry.get("bucket")
+        pattern = entry.get("pattern")
+        slug = entry.get("slug")
+        if not bucket or not pattern or not slug:
+            raise ValueError(
+                f"support external '{name}' requires 'uri' or 'bucket' + 'pattern' + 'slug'"
+            )
+        try:
+            from lab_connectors.gcs.paths import gs_url
+
+            kwargs: dict[str, Any] = {"slug": slug}
+            if entry.get("table"):
+                kwargs["table"] = entry["table"]
+            if years:
+                kwargs["year"] = years[0]
+            uri = gs_url(bucket, pattern, **kwargs)
+        except ImportError:
+            raise ValueError(
+                f"support external '{name}' requires lab-connectors with gcs support. "
+                "Install: pip install 'lab-connectors[gcs]'"
+            )
+
+    has_year_placeholder = "{year}" in uri
+
+    # Multi-year: resolve per year when uri contains {year}
+    if has_year_placeholder and years:
+        resolved_uris = [uri.replace("{year}", str(y)) for y in years]
+        all_outputs_exist = True
+        if require_exists:
+            try:
+                from lab_connectors.gcs.paths import object_exists
+
+                for r_uri in resolved_uris:
+                    if not object_exists(r_uri):
+                        all_outputs_exist = False
+                        break
+            except Exception:
+                all_outputs_exist = False
+            if not all_outputs_exist:
+                raise FileNotFoundError(
+                    f"Support external '{name}' missing one or more year files: {resolved_uris[0]}..."
+                )
+        # clean = glob pattern covering all years
+        first = Path(resolved_uris[0])
+        clean_glob = str(
+            first.parent.parent / "*" / f"{first.stem.rsplit('_', 2)[0]}_*_clean.parquet"
+        )
+        return {
+            "name": name,
+            "type": "external",
+            "config_path": None,
+            "dataset": None,
+            "years": years,
+            "years_resolved": [{"year": y, "path": u} for y, u in zip(years, resolved_uris)],
+            "outputs": resolved_uris,
+            "existing_outputs": resolved_uris if all_outputs_exist else [],
+            "all_outputs_exist": all_outputs_exist,
+            "mart": None,
+            "mart_by_table": {},
+            "clean": clean_glob,
+            "path": uri,  # template URI for {support.X.path} in SQL
+        }
+
+    # Single file (no {year} in uri, or no years configured)
+    all_outputs_exist = True
+    if require_exists and not has_year_placeholder:
+        try:
+            from lab_connectors.gcs.paths import object_exists
+
+            all_outputs_exist = object_exists(uri)
+        except Exception:
+            all_outputs_exist = False
+        if not all_outputs_exist:
+            raise FileNotFoundError(
+                f"Support external '{name}' non trovato: {uri}. Verifica che il file esista su GCS."
+            )
+
+    return {
+        "name": name,
+        "type": "external",
+        "config_path": None,
+        "dataset": None,
+        "years": years,
+        "years_resolved": [],
+        "outputs": [uri],
+        "existing_outputs": [uri] if all_outputs_exist else [],
+        "all_outputs_exist": all_outputs_exist,
+        "mart": None,
+        "mart_by_table": {},
+        "clean": None,
+        "path": uri,
+    }
+
+
 def materialize_support(
     entry: dict[str, Any], *, root: Path | None = None, smoke: bool = False
 ) -> Path | None:
@@ -242,6 +366,8 @@ def materialize_support(
     stype = _entry_type(entry)
     if stype == "dataset":
         raise ValueError(f"support dataset '{name}' si materializza via run, non qui")
+    if stype == "external":
+        raise ValueError(f"support external '{name}' esiste già su GCS, nessuna materializzazione")
     if stype == "codelist":
         if root is None:
             raise ValueError(f"support codelist '{name}' requires root (candidate)")
@@ -431,6 +557,9 @@ def resolve_and_run_support(
                 if not all_support_passed:
                     logger.error("Support validation failed: %s year=%s", entry.name, sy)
                     return "failed"
+        elif stype == "external":
+            # external: file already exists on GCS, no materialization needed
+            logger.info("Support: external %s (GCS, no-op)", entry.name)
         else:
             # codelist / file: materializza (fetch / command) — output verificato mancante
             logger.info("Support: materializing %s (%s)", entry.name, stype)

@@ -284,7 +284,7 @@ def _resolve_external_entry(
         all_outputs_exist = True
         if require_exists:
             try:
-                from lab_connectors.gcs.paths import object_exists
+                from lab_connectors.gcs import object_exists
 
                 for r_uri in resolved_uris:
                     if not object_exists(r_uri):
@@ -321,7 +321,7 @@ def _resolve_external_entry(
     all_outputs_exist = True
     if require_exists and not has_year_placeholder:
         try:
-            from lab_connectors.gcs.paths import object_exists
+            from lab_connectors.gcs import object_exists
 
             all_outputs_exist = object_exists(uri)
         except Exception:

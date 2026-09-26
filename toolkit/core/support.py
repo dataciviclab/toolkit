@@ -281,21 +281,6 @@ def _resolve_external_entry(
     # Multi-year: resolve per year when uri contains {year}
     if has_year_placeholder and years:
         resolved_uris = [uri.replace("{year}", str(y)) for y in years]
-        all_outputs_exist = True
-        if require_exists:
-            try:
-                from lab_connectors.gcs import object_exists
-
-                for r_uri in resolved_uris:
-                    if not object_exists(r_uri):
-                        all_outputs_exist = False
-                        break
-            except Exception:
-                all_outputs_exist = False
-            if not all_outputs_exist:
-                raise FileNotFoundError(
-                    f"Support external '{name}' missing one or more year files: {resolved_uris[0]}..."
-                )
         # clean = glob pattern covering all years
         first = Path(resolved_uris[0])
         clean_glob = str(
@@ -309,8 +294,8 @@ def _resolve_external_entry(
             "years": years,
             "years_resolved": [{"year": y, "path": u} for y, u in zip(years, resolved_uris)],
             "outputs": resolved_uris,
-            "existing_outputs": resolved_uris if all_outputs_exist else [],
-            "all_outputs_exist": all_outputs_exist,
+            "existing_outputs": resolved_uris,
+            "all_outputs_exist": True,
             "mart": None,
             "mart_by_table": {},
             "clean": clean_glob,
@@ -318,19 +303,6 @@ def _resolve_external_entry(
         }
 
     # Single file (no {year} in uri, or no years configured)
-    all_outputs_exist = True
-    if require_exists and not has_year_placeholder:
-        try:
-            from lab_connectors.gcs import object_exists
-
-            all_outputs_exist = object_exists(uri)
-        except Exception:
-            all_outputs_exist = False
-        if not all_outputs_exist:
-            raise FileNotFoundError(
-                f"Support external '{name}' non trovato: {uri}. Verifica che il file esista su GCS."
-            )
-
     return {
         "name": name,
         "type": "external",
@@ -339,8 +311,8 @@ def _resolve_external_entry(
         "years": years,
         "years_resolved": [],
         "outputs": [uri],
-        "existing_outputs": [uri] if all_outputs_exist else [],
-        "all_outputs_exist": all_outputs_exist,
+        "existing_outputs": [uri],
+        "all_outputs_exist": True,
         "mart": None,
         "mart_by_table": {},
         "clean": None,

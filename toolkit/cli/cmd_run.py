@@ -255,6 +255,12 @@ def _apply_validation_gate(
     if summary.get("passed", False):
         return True
 
+    # Log actual errors and warnings before gate decision
+    for err in summary.get("errors", []):
+        logger.error("VALIDATION %s: %s", layer_name.upper(), err)
+    for warn in summary.get("warnings", []):
+        logger.warning("VALIDATION %s: %s", layer_name.upper(), warn)
+
     message = f"{layer_name.upper()} validation failed"
     if validation_mode == "strict" and fail_on_error:
         raise ValidationGateError(message)

@@ -376,21 +376,26 @@ Note:
 
 ## support
 
-Dataset / codelist / file di riferimento per i join nei SQL di clean e mart.
+Dataset / codelist / file / external di riferimento per i join nei SQL di clean e mart.
 Vengono eseguiti (o riusati) **prima** del candidate; il risultato è esposto
 al template SQL come placeholder `{support.NAME.*}` (vedi ADR-005).
 
 | Campo | Tipo | Default |
 |---|---|---|
 | `support[].name` | `str` | — (obbligatorio, univoco) |
-| `support[].type` | `dataset` \| `codelist` \| `file` | `dataset` |
+| `support[].type` | `dataset` \| `codelist` \| `file` \| `external` | `dataset` |
 | `support[].config` | path dataset.yml | — (solo `dataset`) |
-| `support[].years` | `list[int]` | — (solo `dataset`) |
+| `support[].years` | `list[int]` | — (solo `dataset`, `external`) |
 | `support[].id` | `str` | — (solo `codelist`) |
 | `support[].agency` | `str` | `ESTAT` (solo `codelist`) |
 | `support[].provider` | `str` | `sdmx` (solo `codelist`) |
 | `support[].path` | `str` | — (solo `file`, relativo al root candidate) |
 | `support[].command` | `str` | — (solo `file`, opzionale: rigenera il file) |
+| `support[].uri` | `str` | — (solo `external`, gs:// o https:// URL) |
+| `support[].bucket` | `str` | — (solo `external`: `clean` o `mart`) |
+| `support[].pattern` | `str` | — (solo `external`: pattern key da lab-connectors) |
+| `support[].slug` | `str` | — (solo `external`: dataset slug) |
+| `support[].table` | `str` | — (solo `external`: tabella mart, opzionale) |
 
 ```yaml
 support:
@@ -406,11 +411,22 @@ support:
     type: file                    # materializza: exec command se il file manca
     path: "mapping/colonnine-quartieri.csv"
     command: "python mapping/colonnine_quartieri.py"
+  - name: pnrr_progetti
+    type: external                # nessuna materializzazione, file già su GCS
+    uri: "gs://dataciviclab-clean/pnrr_progetti/{year}/pnrr_progetti_{year}_clean.parquet"
+    years: [2024, 2025, 2026]
+  - name: anac_cross
+    type: external
+    bucket: clean                 # usa lab_connectors.gcs.paths.gs_url()
+    pattern: clean_parquet
+    slug: anac_cross
+    years: [2026]
 ```
 
 **Orchestrazione (ensure):** gli output attesi per tipo sono — `dataset`:
 parquet clean + tutte le tabelle mart (per anno); `codelist`:
-`out/data/support/{name}/{name}.parquet`; `file`: il path dichiarato.
+`out/data/support/{name}/{name}.parquet`; `file`: il path dichiarato;
+`external`: URI GCS (nessuna materializzazione, il file esiste già).
 Se gli output sono già presenti il run li **riusa** (skip-if-exists, per-anno);
 la rigenerazione forzata è `toolkit run --refresh-support`. Un support fallito
 blocca il candidate. L'esecuzione di un `command` file richiede
@@ -423,7 +439,7 @@ blocca il candidate. L'esecuzione di un `command` file richiede
 | `{support.NAME.mart}` | prima tabella mart del support (compat) |
 | `{support.NAME.mart.TABLE}` | tabella mart specifica |
 | `{support.NAME.clean}` | parquet clean del support |
-| `{support.NAME.path}` | file materializzato (codelist/file) |
+| `{support.NAME.path}` | file materializzato (codelist/file) o URI GCS (external) |
 | `{support.NAME.outputs}` | lista completa degli output |
 
 I SQL devono usare i placeholder e non path hardcoded: `check_support_path_drift`

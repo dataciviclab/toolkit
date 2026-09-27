@@ -531,3 +531,136 @@ class TestMaterializeFile:
         entry = {"name": "q", "type": "file", "path": "mapping/q.csv", "command": "true"}
         with pytest.raises(DownloadError, match="TOOLKIT_ALLOW_SCRIPT_SOURCE"):
             materialize_support(entry, root=tmp_path)
+
+
+# --- External support type ---
+
+
+class TestExternalSupport:
+    def test_resolve_with_uri(self):
+        entry = {
+            "name": "pnrr",
+            "type": "external",
+            "uri": "gs://dataciviclab-clean/pnrr/2026/pnrr_2026_clean.parquet",
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        assert len(payloads) == 1
+        p = payloads[0]
+        assert p["type"] == "external"
+        assert p["path"] == "gs://dataciviclab-clean/pnrr/2026/pnrr_2026_clean.parquet"
+        assert p["outputs"] == [p["path"]]
+        assert p["mart"] is None
+        assert p["clean"] is None
+
+    def test_resolve_with_bucket_pattern_slug(self):
+        entry = {
+            "name": "pnrr",
+            "type": "external",
+            "bucket": "clean",
+            "pattern": "clean_parquet",
+            "slug": "pnrr_progetti",
+            "years": [2026],
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        p = payloads[0]
+        assert p["type"] == "external"
+        assert "pnrr_progetti" in p["path"]
+        assert "2026" in p["path"]
+        assert p["path"].startswith("gs://")
+
+    def test_resolve_with_uri_template_year(self):
+        entry = {
+            "name": "mio_file",
+            "type": "external",
+            "uri": "gs://bucket/path/{year}/output.parquet",
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        p = payloads[0]
+        assert "{year}" in p["path"]
+        assert p["all_outputs_exist"] is True  # can't check GCS, assume ok
+
+    def test_resolve_missing_config_raises(self):
+        entry = {"name": "bad", "type": "external"}
+        with pytest.raises(ValueError, match="requires 'uri' or 'bucket'"):
+            resolve_support_payloads([entry], require_exists=False)
+
+    def test_resolve_missing_pattern_raises(self):
+        entry = {"name": "bad", "type": "external", "bucket": "clean"}
+        with pytest.raises(ValueError, match="requires 'uri' or 'bucket'"):
+            resolve_support_payloads([entry], require_exists=False)
+
+    def test_materialize_raises(self):
+        entry = {"name": "ext", "type": "external", "uri": "gs://bucket/f.parquet"}
+        with pytest.raises(ValueError, match="nessuna materializzazione"):
+            materialize_support(entry)
+
+    def test_flatten_template_ctx_has_path(self):
+        entry = {
+            "name": "pnrr",
+            "type": "external",
+            "uri": "gs://dataciviclab-clean/pnrr/2026/pnrr_2026_clean.parquet",
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        ctx = flatten_support_template_ctx(payloads)
+        assert ctx["support.pnrr.path"] == entry["uri"]
+        assert ctx["support.pnrr.mart"] is None
+
+    def test_mart_pattern(self):
+        entry = {
+            "name": "lookup",
+            "type": "external",
+            "bucket": "mart",
+            "pattern": "mart_parquet",
+            "slug": "demo",
+            "table": "mart_regione",
+            "years": [2024],
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        p = payloads[0]
+        assert "demo" in p["path"]
+        assert "mart_regione.parquet" in p["path"]
+
+    def test_multi_year_uri(self):
+        entry = {
+            "name": "pnrr",
+            "type": "external",
+            "uri": "gs://dataciviclab-clean/pnrr/{year}/pnrr_{year}_clean.parquet",
+            "years": [2024, 2025, 2026],
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        p = payloads[0]
+        assert p["years"] == [2024, 2025, 2026]
+        assert len(p["outputs"]) == 3
+        assert "2024" in p["outputs"][0]
+        assert "2026" in p["outputs"][2]
+        # path remains the template URI
+        assert "{year}" in p["path"]
+        # clean is a glob
+        assert "*" in p["clean"]
+
+    def test_multi_year_bucket_pattern(self):
+        entry = {
+            "name": "pnrr",
+            "type": "external",
+            "bucket": "clean",
+            "pattern": "clean_parquet",
+            "slug": "pnrr_progetti",
+            "years": [2025, 2026],
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        p = payloads[0]
+        assert p["years"] == [2025, 2026]
+        # first year used for path construction
+        assert "2025" in p["path"]
+
+    def test_single_file_no_years(self):
+        entry = {
+            "name": "static",
+            "type": "external",
+            "uri": "gs://bucket/static/file.parquet",
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        p = payloads[0]
+        assert p["years"] == []
+        assert p["clean"] is None
+        assert p["outputs"] == ["gs://bucket/static/file.parquet"]

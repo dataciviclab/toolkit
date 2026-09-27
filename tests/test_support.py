@@ -566,7 +566,7 @@ class TestExternalSupport:
         assert p["type"] == "external"
         assert "pnrr_progetti" in p["path"]
         assert "2026" in p["path"]
-        assert p["path"].startswith("gs://")
+        assert p["path"].startswith("https://")
 
     def test_resolve_with_uri_template_year(self):
         entry = {

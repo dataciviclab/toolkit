@@ -395,6 +395,7 @@ al template SQL come placeholder `{support.NAME.*}` (vedi ADR-005).
 | `support[].bucket` | `str` | — (solo `external`: `clean` o `mart`) |
 | `support[].pattern` | `str` | — (solo `external`: pattern key da lab-connectors) |
 | `support[].slug` | `str` | — (solo `external`: dataset slug) |
+| `support[].prefix` | `str` | `""` (solo `external`: prefisso repo, es. `"eurostat/"`) |
 | `support[].table` | `str` | — (solo `external`: tabella mart, opzionale) |
 
 ```yaml

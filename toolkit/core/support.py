@@ -262,14 +262,16 @@ def _resolve_external_entry(
                 f"support external '{name}' requires 'uri' or 'bucket' + 'pattern' + 'slug'"
             )
         try:
-            from lab_connectors.gcs.paths import gs_url
+            from lab_connectors.gcs.paths import https_url
 
             kwargs: dict[str, Any] = {"slug": slug}
             if entry.get("table"):
                 kwargs["table"] = entry["table"]
             if years:
                 kwargs["year"] = years[0]
-            uri = gs_url(bucket, pattern, **kwargs)
+            if entry.get("prefix"):
+                kwargs["prefix"] = entry["prefix"]
+            uri = https_url(bucket, pattern, **kwargs)
         except ImportError:
             raise ValueError(
                 f"support external '{name}' requires lab-connectors with gcs support. "

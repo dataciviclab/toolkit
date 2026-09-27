@@ -284,10 +284,14 @@ def _resolve_external_entry(
     if has_year_placeholder and years:
         resolved_uris = [uri.replace("{year}", str(y)) for y in years]
         # clean = glob pattern covering all years
-        first = Path(resolved_uris[0])
-        clean_glob = str(
-            first.parent.parent / "*" / f"{first.stem.rsplit('_', 2)[0]}_*_clean.parquet"
-        )
+        # Use string ops (not Path) to preserve https:// double slash
+        first = resolved_uris[0]
+        last_slash = first.rfind("/")
+        second_last_slash = first.rfind("/", 0, last_slash)
+        base = first[:second_last_slash] if second_last_slash > 0 else first
+        filename = first[last_slash + 1 :]
+        slug = filename.rsplit("_", 2)[0]
+        clean_glob = f"{base}/*/{slug}_*_clean.parquet"
         return {
             "name": name,
             "type": "external",

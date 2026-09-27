@@ -45,6 +45,17 @@ TSV_MISSING = ":"
 TSV_FLAG_RE = re.compile(r"\s+([a-z])$")
 TSV_MONTHLY_RE = re.compile(r"^\d{4}-\d{2}$")
 
+# ── OECD — profilo agenzia dedicato ───────────────────────────────────────────
+# L'API OECD (sdmx.oecd.org) usa SDMX-JSON 1.0 (schema diverso da ISTAT 2.1
+# e Eurostat 2.0), ma la struttura dati è simile a ISTAT (series ad indici,
+# observation dimensions). Supporta sia JSON che CSV diretto.
+# - Flow ref: AGENCY,FLOW,VERSION (virgola, come ISTAT)
+# - Agency IDs gerarchici: OECD.CTP.TPS, OECD.EDU.ECS, ecc.
+# - Flow IDs con @: DSD_ANBERD@DF_ANBERDi4
+# - Endpoint: https://sdmx.oecd.org/public/rest
+OECD_BASE = "https://sdmx.oecd.org/public/rest"
+OECD_AGENCY_PREFIX = "OECD"
+
 
 def _safe_text(value: str | None) -> str:
     return (value or "").strip()
@@ -192,11 +203,15 @@ class SdmxSource:
     def _metadata_base_urls(self, agency: str) -> list[str]:
         if self._is_estat(agency) and not self._metadata_base_url_given:
             return [_normalize_base_url(EUROSTAT_BASE)]
+        if self._is_oecd(agency) and not self._metadata_base_url_given:
+            return [_normalize_base_url(OECD_BASE)]
         return self._candidate_base_urls(agency, self.metadata_base_url, ISTAT_ESPLORADATI_BASE)
 
     def _data_base_urls(self, agency: str) -> list[str]:
         if self._is_estat(agency) and not self._data_base_url_given:
             return [_normalize_base_url(EUROSTAT_BASE)]
+        if self._is_oecd(agency) and not self._data_base_url_given:
+            return [_normalize_base_url(OECD_BASE)]
         return self._candidate_base_urls(agency, self.data_base_url, ISTAT_SDMX_BASE)
 
     def _is_retryable_fallback_error(self, exc: DownloadError) -> bool:
@@ -215,6 +230,16 @@ class SdmxSource:
         comportamento esistente (convenzione ISTAT).
         """
         return _safe_text(agency).upper() == EUROSTAT_AGENCY
+
+    @staticmethod
+    def _is_oecd(agency: str) -> bool:
+        """True se la fonte è un'agenzia OECD (convenzioni API dedicate).
+
+        L'API OECD (sdmx.oecd.org) usa SDMX-JSON 1.0 (struttura simile a
+        ISTAT ma schema diverso). Supporta sia JSON che CSV diretto.
+        Gli agency ID OECD sono gerarchici: OECD.CTP.TPS, OECD.EDU.ECS, ecc.
+        """
+        return _safe_text(agency).upper().startswith(OECD_AGENCY_PREFIX)
 
     def _estat_constraints(self, flow: str) -> dict[str, list[str]]:
         """Valid codes per dimension da SDMX-JSON 2.0 di Eurostat.
@@ -415,6 +440,14 @@ class SdmxSource:
         """
         if self._is_estat(agency):
             return self._estat_constraints(flow)
+        # OECD JSON 1.0 doesn't expose dimensions in preview; return empty
+        # constraints to skip filter validation. The server will reject invalid filters.
+        if self._is_oecd(agency):
+            cache_key = f"{agency}/{flow}/{version}"
+            if cache_key in self._constraints_cache:
+                return self._constraints_cache[cache_key]
+            self._constraints_cache[cache_key] = {}
+            return {}
         cache_key = f"{agency}/{flow}/{version}"
         if cache_key in self._constraints_cache:
             return self._constraints_cache[cache_key]
@@ -444,17 +477,22 @@ class SdmxSource:
         self._constraints_cache[cache_key] = result
         return result
 
-    def _build_key(self, dimensions: list[str], filters: dict | None) -> str:
+    def _build_key(self, dimensions: list[str], filters: dict | None, agency: str = "") -> str:
         filters = filters or {}
-        unknown = sorted(set(filters.keys()) - set(dimensions))
-        if unknown:
-            raise DownloadError("Unknown SDMX filter dimensions: " + ", ".join(unknown))
 
-        if not dimensions:
+        # When constraints are empty (e.g. OECD JSON 1.0 doesn't expose them),
+        # skip dimension validation — the server will reject invalid filters.
+        if dimensions:
+            unknown = sorted(set(filters.keys()) - set(dimensions))
+            if unknown:
+                raise DownloadError("Unknown SDMX filter dimensions: " + ", ".join(unknown))
+
+        if not dimensions and not filters:
             return "all"
 
+        # Build key from filters in dimension order; empty dims get empty string.
         parts: list[str] = []
-        for dim in dimensions:
+        for dim in dimensions or list(filters.keys()):
             value = filters.get(dim)
             if value is None:
                 parts.append("")
@@ -465,7 +503,14 @@ class SdmxSource:
                 token = str(value)
             parts.append(token)
 
-        key = ".".join(parts).rstrip(".")
+        key = ".".join(parts)
+
+        # OECD requires all dimension separators (dots) even for empty trailing dims.
+        # ISTAT/Eurostat strip trailing dots — but OECD returns 403 if key is short.
+        is_oecd = _safe_text(agency).upper().startswith(OECD_AGENCY_PREFIX)
+        if not is_oecd:
+            key = key.rstrip(".")
+
         return key or "all"
 
     def _dimension_value(self, dimension: dict, index_token: str) -> tuple[str, str]:
@@ -557,6 +602,10 @@ class SdmxSource:
         if self._is_estat(agency):
             return self._fetch_estat(flow, version, filters)
 
+        # Profilo OECD: usa format=csvfilewithlabels (best practice OECD)
+        if self._is_oecd(agency):
+            return self._fetch_oecd(agency, flow, version, filters)
+
         if not version:
             raise DownloadError("SDMX source requires version")
 
@@ -571,7 +620,7 @@ class SdmxSource:
 
         flow_ref = _flow_ref(agency, flow, version)
         constraints = self.preview_constraints(agency, flow, version)
-        key = self._build_key(list(constraints.keys()), filters)
+        key = self._build_key(list(constraints.keys()), filters, agency)
         for dim, allowed in constraints.items():
             if not allowed:
                 continue
@@ -628,7 +677,7 @@ class SdmxSource:
         label di dimensione vanno risolte a valle con le codelist).
         """
         constraints = self._estat_constraints(flow)
-        key = self._build_key(list(constraints.keys()), filters)
+        key = self._build_key(list(constraints.keys()), filters, EUROSTAT_AGENCY)
         for dim, allowed in constraints.items():
             if not allowed:
                 continue
@@ -647,9 +696,63 @@ class SdmxSource:
                 )
         return self._estat_fetch_tsv(flow, key)
 
+    # ---------------------------------------------------------------------------
+    # SDMX URL detection (shared with toolkit.scout.http)
+    def _oecd_dim_ids(self, agency: str, flow: str, version: str) -> list[str]:
+        """Fetch dimension IDs from OECD datastructure XML.
 
-# ---------------------------------------------------------------------------
-# SDMX URL detection (shared with toolkit.scout.http)
+        OECD JSON 1.0 doesn't expose dimensions in data preview, so we
+        parse the datastructure XML to get the ordered list of dimension IDs.
+        This is needed to build the correct key with the right number of dots.
+        """
+        cache_key = f"{agency}/{flow}/{version}/dim_ids"
+        if cache_key in self._constraints_cache:
+            return self._constraints_cache[cache_key]
+        # Fetch datastructure XML via metadata endpoint
+        ds_id = flow.split("@")[0] if "@" in flow else flow
+        xml_text, _origin = self._get_text_from_candidates(
+            self._metadata_base_urls(agency),
+            f"datastructure/{agency}/{ds_id}",
+        )
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError as exc:
+            raise DownloadError(f"Invalid OECD datastructure XML for {agency}/{flow}") from exc
+        dims = root.findall(".//str:Dimension", SDMX_NS)
+        dim_ids = [d.attrib["id"] for d in dims if d.attrib.get("id")]
+        self._constraints_cache[cache_key] = dim_ids
+        return dim_ids
+
+    def _fetch_oecd(
+        self,
+        agency: str,
+        flow: str,
+        version: str,
+        filters: dict | None = None,
+    ) -> tuple[bytes, str]:
+        """Fetch OECD data via CSV with labels (official OECD format).
+
+        OECD best practices recommend using `format=csvfilewithlabels` query
+        parameter instead of Accept header. This produces CSV with both codes
+        and labels, matching the official OECD Data Explorer output.
+
+        Output: CSV ``[DIM1, DIM1_LABEL, DIM2, DIM2_LABEL, ..., value]``
+        """
+        # OECD JSON 1.0 doesn't expose dimensions in data preview.
+        # Fetch dimension IDs from datastructure XML to build correct key.
+        dim_ids = self._oecd_dim_ids(agency, flow, version)
+        key = self._build_key(dim_ids, filters, agency)
+        flow_ref = _flow_ref(agency, flow, version)
+        # OECD best practice: use format=csvfilewithlabels query parameter
+        # instead of Accept header for CSV with codes + labels.
+        csv_text, origin = self._get_text_from_candidates(
+            self._data_base_urls(agency),
+            f"data/{flow_ref}/{key}",
+            params={"format": "csvfilewithlabels"},
+        )
+        return csv_text.encode("utf-8"), origin
+
+
 # ---------------------------------------------------------------------------
 
 

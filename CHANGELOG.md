@@ -1,3 +1,9 @@
+## [1.53.0] - 2026-09-27
+
+### Added
+
+- **OECD SDMX plugin**: supporto completo per l'API OECD (sdmx.oecd.org). Nuovi metodi `_is_oecd()`, `_oecd_dim_ids()`, `_fetch_oecd()`. Usa `format=csvfilewithlabels` (best practice OECD) per CSV con codici + label. Recupera il conteggio delle dimensioni dalla datastructure XML per costruire la key corretta. Gestione rate limiting (60 req/ora) via lab_connectors. Aggiornati `_fetch_utils.py` e `scaffold/sources.py` per riconoscere le agenzie OECD.
+
 ## [1.52.0] - 2026-09-17
 
 ### Added

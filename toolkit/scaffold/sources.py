@@ -128,6 +128,8 @@ def block_sdmx(sdmx_info: dict[str, Any] | None, url: str) -> list[str]:
     - ESTAT (Eurostat): ``flow`` + ``agency: ESTAT`` — il profilo dedicato del
       plugin risolve automaticamente l'endpoint Eurostat e ignora la versione
       (numero mobile). Nessun ``endpoint`` nel config.
+    - OECD: ``flow`` + ``agency: OECD.*`` — il profilo OECD risolve automaticamente
+      l'endpoint OECD e richiede la versione. Nessun ``endpoint`` nel config.
     - Altre agenzie: ``flow`` + ``endpoint`` (URL scoperta dallo scout): il
       fetch ``sdmx`` la usa come base (root SDMX derivato) per data e metadata.
     """
@@ -139,8 +141,11 @@ def block_sdmx(sdmx_info: dict[str, Any] | None, url: str) -> list[str]:
             f'        flow: "{sdmx_info["flow_id"]}"',
         ]
         agency = sdmx_info.get("agency")
-        if agency and str(agency).upper() == "ESTAT":
+        agency_upper = str(agency).upper() if agency else ""
+        if agency_upper == "ESTAT":
             lines.append('        agency: "ESTAT"')
+        elif agency_upper.startswith("OECD"):
+            lines.append(f'        agency: "{agency}"')
         else:
             lines.append(f'        endpoint: "{url}"')
         lines.append("      primary: true")

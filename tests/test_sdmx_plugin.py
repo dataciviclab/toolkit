@@ -772,3 +772,183 @@ def test_sdmx_estat_large_flow_constraints_413_fallback(monkeypatch):
     # Fetch: la key diventa 'all' e il TSV viene scaricato
     data, _origin = src._estat_fetch_tsv("DEMO_R_D2JAN", "all")
     assert data  # TSV scaricato
+
+
+# ── OECD tests ────────────────────────────────────────────────────────────────
+
+OECD_DATAFLOW_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<mes:Structure xmlns:mes="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/message"
+               xmlns:str="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/structure">
+  <mes:Structures>
+    <str:Dataflows>
+      <str:Dataflow id="DSD_ANBERD@DF_ANBERDi4" agencyID="OECD.STI.STP" version="1.0">
+        <str:Structure>
+          <Ref id="DSD_ANBERD" version="1.0" agencyID="OECD.STI.STP" package="datastructure" class="DataStructure" />
+        </str:Structure>
+      </str:Dataflow>
+    </str:Dataflows>
+  </mes:Structures>
+</mes:Structure>
+"""
+
+OECD_DATA_JSON = """
+{
+  "dataSets": [
+    {
+      "series": {
+        "0:0:0:0:0:0:0": {
+          "observations": {
+            "0": [1234],
+            "1": [2345]
+          }
+        }
+      }
+    }
+  ],
+  "structure": {
+    "dimensions": {
+      "series": [
+        {"id": "REF_AREA", "values": [{"id": "ITA", "name": "Italy"}]},
+        {"id": "FREQ", "values": [{"id": "A", "name": "Annual"}]},
+        {"id": "CRITERIA", "values": [{"id": "MA", "name": "Main activity"}]},
+        {"id": "ACTIVITY", "values": [{"id": "C30", "name": "Manufacturing"}]},
+        {"id": "UNIT_MEASURE", "values": [{"id": "USD_PPP", "name": "USD PPP"}]},
+        {"id": "PRICE_BASE", "values": [{"id": "V", "name": "Current prices"}]},
+        {"id": "MEASURE", "values": [{"id": "B", "name": "BERD"}]}
+      ],
+      "observation": [
+        {
+          "id": "TIME_PERIOD",
+          "values": [
+            {"id": "2020", "name": "2020"},
+            {"id": "2021", "name": "2021"}
+          ]
+        }
+      ]
+    }
+  }
+}
+"""
+
+OECD_PREVIEW_JSON = """
+{
+  "dataSets": [{"series": {}}],
+  "structure": {
+    "dimensions": {
+      "series": [
+        {"id": "REF_AREA", "values": [{"id": "ITA", "name": "Italy"}]},
+        {"id": "FREQ", "values": [{"id": "A", "name": "Annual"}]},
+        {"id": "CRITERIA", "values": [{"id": "MA", "name": "Main activity"}]},
+        {"id": "ACTIVITY", "values": [{"id": "C30", "name": "Manufacturing"}]},
+        {"id": "UNIT_MEASURE", "values": [{"id": "USD_PPP", "name": "USD PPP"}]},
+        {"id": "PRICE_BASE", "values": [{"id": "V", "name": "Current prices"}]},
+        {"id": "MEASURE", "values": [{"id": "B", "name": "BERD"}]}
+      ],
+      "observation": [
+        {"id": "TIME_PERIOD", "values": [{"id": "2020", "name": "2020"}]}
+      ]
+    }
+  }
+}
+"""
+
+OECD_CSV = """DATAFLOW,REF_AREA,FREQ,CRITERIA,ACTIVITY,UNIT_MEASURE,PRICE_BASE,MEASURE,TIME_PERIOD,OBS_VALUE,OBS_STATUS,UNIT_MULT,DECIMALS,BASE_PER
+OECD.STI.STP:DSD_ANBERD@DF_ANBERDi4(1.0),ITA,A,MA,C30,USD_PPP,V,B,2020,1234,,0,0,
+OECD.STI.STP:DSD_ANBERD@DF_ANBERDi4(1.0),ITA,A,MA,C30,USD_PPP,V,B,2021,2345,,0,0,
+"""
+
+
+def test_sdmx_oecd_is_oecd():
+    """_is_oecd: riconosce agenzie OECD."""
+    assert SdmxSource._is_oecd("OECD")
+    assert SdmxSource._is_oecd("OECD.STI.STP")
+    assert SdmxSource._is_oecd("oecd.els.hd")
+    assert not SdmxSource._is_oecd("IT1")
+    assert not SdmxSource._is_oecd("ESTAT")
+    assert not SdmxSource._is_oecd("")
+
+
+def test_sdmx_oecd_constraints(monkeypatch):
+    """OECD: preview_constraints ritorna vuoto (JSON 1.0 non espone le dimensioni)."""
+    constraints = SdmxSource(retries=1).preview_constraints(
+        "OECD.STI.STP", "DSD_ANBERD@DF_ANBERDi4", "1.0"
+    )
+    # OECD JSON 1.0 non espone le dimensioni nel preview → constraints vuoti
+    assert constraints == {}
+
+
+def test_sdmx_oecd_fetch_csv(monkeypatch):
+    """OECD: fetch usa format=csvfilewithlabels (best practice OECD)."""
+    calls = []
+
+    OECD_DSD_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<mes:Structure xmlns:mes="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/message"
+               xmlns:str="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/structure">
+  <mes:Structures>
+    <str:DataStructures>
+      <str:DataStructure id="DSD_ANBERD" agencyID="OECD.STI.STP" version="1.0">
+        <str:DataStructureComponents>
+          <str:DimensionList id="DimensionDescriptor">
+            <str:Dimension id="REF_AREA" position="1"/>
+            <str:Dimension id="FREQ" position="2"/>
+            <str:Dimension id="CRITERIA" position="3"/>
+            <str:Dimension id="ACTIVITY" position="4"/>
+            <str:Dimension id="UNIT_MEASURE" position="5"/>
+            <str:Dimension id="PRICE_BASE" position="6"/>
+            <str:Dimension id="MEASURE" position="7"/>
+          </str:DimensionList>
+        </str:DataStructureComponents>
+      </str:DataStructure>
+    </str:DataStructures>
+  </mes:Structures>
+</mes:Structure>"""
+
+    def _fake_get(self, url, **kwargs):
+        calls.append((url, kwargs.get("headers", {}).get("Accept", ""), kwargs.get("params") or {}))
+        params = kwargs.get("params") or {}
+        if url.endswith("/datastructure/OECD.STI.STP/DSD_ANBERD"):
+            return _ok(_FakeResponse(200, OECD_DSD_XML, url))
+        if "DSD_ANBERD@DF_ANBERDi4,1.0/" in url and params.get("format") == "csvfilewithlabels":
+            return _ok(_FakeResponse(200, OECD_CSV, url))
+        raise AssertionError(f"Unexpected URL {url} params={params}")
+
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
+
+    payload, origin = SdmxSource(retries=1).fetch(
+        "OECD.STI.STP",
+        "DSD_ANBERD@DF_ANBERDi4",
+        "1.0",
+        {"REF_AREA": "ITA", "FREQ": "A"},
+    )
+
+    text = payload.decode("utf-8")
+    assert "DATAFLOW,REF_AREA" in text
+    assert "ITA" in text
+    # Verify format=csvfilewithlabels was used
+    csv_calls = [c for c in calls if c[2].get("format") == "csvfilewithlabels"]
+    assert len(csv_calls) >= 1
+    # Verify key has all 7 dimension dots (ITA + A + 5 empty = ITA.A.....)
+    assert csv_calls[0][0].endswith("/ITA.A.....")
+
+    payload, origin = SdmxSource(retries=1).fetch(
+        "OECD.STI.STP",
+        "DSD_ANBERD@DF_ANBERDi4",
+        "1.0",
+        {"REF_AREA": "ITA", "FREQ": "A"},
+    )
+
+    text = payload.decode("utf-8")
+    assert "DATAFLOW,REF_AREA" in text
+    assert "ITA" in text
+    # Verify format=csvfilewithlabels was used
+    csv_calls = [c for c in calls if c[2].get("format") == "csvfilewithlabels"]
+    assert len(csv_calls) >= 1
+
+
+def test_sdmx_oecd_base_urls(monkeypatch):
+    """OECD: _data_base_urls e _metadata_base_urls usano OECD_BASE."""
+    src = SdmxSource(retries=1)
+    assert src._data_base_urls("OECD.STI.STP") == ["https://sdmx.oecd.org/public/rest"]
+    assert src._metadata_base_urls("OECD.STI.STP") == ["https://sdmx.oecd.org/public/rest"]
+    # ISTAT resta sui default
+    assert src._data_base_urls("IT1") != ["https://sdmx.oecd.org/public/rest"]

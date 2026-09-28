@@ -134,9 +134,12 @@ class SparqlSource:
                 # Assume CSV — se non è CSV, fallirà in CLEAN con errore chiaro
                 return r.content
 
-        # XML SPARQL Results — non supportato
+        # XML SPARQL Results — parse via lab-connectors
         if "sparql-results+xml" in content_type:
-            raise DownloadError("SPARQL endpoint returned XML results. Request JSON or CSV format.")
+            from lab_connectors.http.sparql import _parse_sparql_xml
+
+            bindings = _parse_sparql_xml(r.text)
+            return _bindings_to_csv(bindings)
 
         raise DownloadError(
             f"Unsupported Content-Type '{content_type}' for SPARQL fetch. "
@@ -505,8 +508,22 @@ def _sparql_json_to_csv(json_text: str) -> bytes:
         raise DownloadError("SPARQL query returned no results")
 
     var_names: list[str] = (payload.get("head") or {}).get("vars") or list(bindings[0].keys())
-    rows: list[dict[str, str]] = []
+    return _bindings_to_csv(bindings, var_names)
 
+
+def _bindings_to_csv(bindings: list[dict[str, Any]], var_names: list[str] | None = None) -> bytes:
+    """Convert SPARQL bindings (JSON or XML format) to CSV bytes.
+
+    Each binding is ``{var: {"type": str, "value": str}}``.
+    If *var_names* is not provided, columns are derived from the first binding.
+    """
+    if not bindings:
+        raise DownloadError("SPARQL query returned no results")
+
+    if var_names is None:
+        var_names = list(bindings[0].keys())
+
+    rows: list[dict[str, str]] = []
     for binding in bindings:
         row: dict[str, str] = {}
         for var in var_names:

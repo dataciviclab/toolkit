@@ -118,6 +118,13 @@ class SparqlSource:
         if "text/csv" in content_type:
             return r.content
 
+        # XML SPARQL Results — parse via lab-connectors (content-type prima di prefer_json)
+        if "sparql-results+xml" in content_type:
+            from lab_connectors.http.sparql import _parse_sparql_xml
+
+            bindings = _parse_sparql_xml(r.text)
+            return _bindings_to_csv(bindings)
+
         # SPARQL Results JSON (standard o fallback)
         if prefer_json or "sparql-results+json" in content_type or "json" in content_type:
             return _sparql_json_to_csv(r.text)
@@ -133,13 +140,6 @@ class SparqlSource:
             else:
                 # Assume CSV — se non è CSV, fallirà in CLEAN con errore chiaro
                 return r.content
-
-        # XML SPARQL Results — parse via lab-connectors
-        if "sparql-results+xml" in content_type:
-            from lab_connectors.http.sparql import _parse_sparql_xml
-
-            bindings = _parse_sparql_xml(r.text)
-            return _bindings_to_csv(bindings)
 
         raise DownloadError(
             f"Unsupported Content-Type '{content_type}' for SPARQL fetch. "

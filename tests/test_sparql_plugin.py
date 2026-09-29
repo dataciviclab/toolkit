@@ -74,7 +74,66 @@ def test_sparql_fetch_json_success():
     assert "Bob,7" in payload.decode("utf-8")
 
 
-def test_sparql_fetch_http_error():
+def test_sparql_fetch_xml_success():
+    """SPARQL XML response is parsed and converted to CSV."""
+    xml_response = """<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+ <head><variable name="name"/><variable name="value"/></head>
+ <results>
+  <result>
+   <binding name="name"><literal>Alice</literal></binding>
+   <binding name="value"><literal>42</literal></binding>
+  </result>
+  <result>
+   <binding name="name"><literal>Bob</literal></binding>
+   <binding name="value"><literal>7</literal></binding>
+  </result>
+ </results>
+</sparql>"""
+    with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+        mock_cls.return_value.post.return_value = _http_ok(
+            status=200,
+            text=xml_response,
+            headers={"Content-Type": "application/sparql-results+xml"},
+        )
+        source = SparqlSource()
+        payload, origin = source.fetch(
+            "https://example.test/sparql",
+            "SELECT ?name ?value WHERE { }",
+            accept_format="sparql-results+json",
+        )
+
+    assert origin == "https://example.test/sparql"
+    lines = payload.decode("utf-8").splitlines()
+    assert lines[0] == "name,value"
+    assert "Alice,42" in payload.decode("utf-8")
+    assert "Bob,7" in payload.decode("utf-8")
+
+
+def test_sparql_fetch_xml_get_fallback():
+    """XML response via GET fallback is parsed correctly."""
+    xml_response = """<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+ <head><variable name="x"/></head>
+ <results>
+  <result><binding name="x"><literal>1</literal></binding></result>
+ </results>
+</sparql>"""
+    with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+        mock_cls.return_value.post.return_value = _http_ok(status=403)
+        mock_cls.return_value.get.return_value = _http_ok(
+            status=200,
+            text=xml_response,
+            headers={"Content-Type": "application/sparql-results+xml"},
+        )
+        source = SparqlSource()
+        payload, _ = source.fetch(
+            "https://example.test/sparql",
+            "SELECT ?x WHERE { }",
+        )
+
+    assert "x" in payload.decode("utf-8")
+    assert "1" in payload.decode("utf-8")
     """Non-200 response raises DownloadError."""
     with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
         mock_cls.return_value.post.return_value = _http_ok(

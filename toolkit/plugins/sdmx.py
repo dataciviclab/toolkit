@@ -707,7 +707,8 @@ class SdmxSource:
         """
         cache_key = f"{agency}/{flow}/{version}/dim_ids"
         if cache_key in self._constraints_cache:
-            return self._constraints_cache[cache_key]
+            cached = self._constraints_cache[cache_key]
+            return cached if isinstance(cached, list) else []
         # Fetch datastructure XML via metadata endpoint
         ds_id = flow.split("@")[0] if "@" in flow else flow
         xml_text, _origin = self._get_text_from_candidates(
@@ -720,7 +721,7 @@ class SdmxSource:
             raise DownloadError(f"Invalid OECD datastructure XML for {agency}/{flow}") from exc
         dims = root.findall(".//str:Dimension", SDMX_NS)
         dim_ids = [d.attrib["id"] for d in dims if d.attrib.get("id")]
-        self._constraints_cache[cache_key] = dim_ids
+        self._constraints_cache[cache_key] = dim_ids  # type: ignore[assignment]
         return dim_ids
 
     def _fetch_oecd(

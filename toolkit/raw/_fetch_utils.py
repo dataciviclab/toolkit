@@ -161,12 +161,14 @@ def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, 
 def _fetch_sdmx(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
     agency = str(formatted_args.get("agency") or "IT1")
     src_client = dict(client or {})
-    # Endpoint esplicito per agenzie non-ISTAT/ESTAT: lo scout scopre l'URL
+    # Endpoint esplicito per agenzie non-ISTAT/ESTAT/OECD: lo scout scopre l'URL
     # (spesso col path dataflow/data) → deriviamo il root SDMX e lo usiamo
-    # come base per data e metadata. ISTAT resta sui default (esploradati +
-    # sdmx.istat.it), ESTAT è auto-risolto dal profilo.
+    # come base per data e metadata. ISTAT e OECD resta sui default (esploradati +
+    # sdmx.istat.it / sdmx.oecd.org), ESTAT è auto-risolto dal profilo.
     endpoint = formatted_args.get("endpoint")
-    if endpoint and agency != "IT1" and agency.upper() != "ESTAT":
+    agency_upper = agency.upper()
+    is_known_agency = agency == "IT1" or agency_upper == "ESTAT" or agency_upper.startswith("OECD")
+    if endpoint and not is_known_agency:
         root = _sdmx_root_from_url(str(endpoint))
         src_client.setdefault("data_base_url", root)
         src_client.setdefault("metadata_base_url", root)
@@ -175,7 +177,7 @@ def _fetch_sdmx(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, 
         agency,
         str(formatted_args["flow"]),
         # La versione è opzionale: il profilo Eurostat (ESTAT) la ignora
-        # (numero mobile, mai nel path dati); ISTAT la richiede (errore a valle).
+        # (numero mobile, mai nel path dati); ISTAT e OECD la richiedono (errore a valle).
         str(formatted_args.get("version") or ""),
         formatted_args.get("filters"),
     )

@@ -118,11 +118,11 @@ clean verrebbe considerato mancante). `flatten_support_template_ctx` espone:
 
 | Placeholder | Risolve a |
 |---|---|
-| `{support.NAME.clean}` | parquet clean del support (per anno) |
+| `{support.NAME.clean}` | **dataset**: parquet clean (glob locale). **external multi-anno**: lista URL risolti (array SQL DuckDB). **external single-anno**: URL singolo. |
 | `{support.NAME.mart}` | prima tabella mart (backward compat) |
 | `{support.NAME.mart.TABLE}` | tabella mart specifica (il caso `mart_codici_catastali`) |
 | `{support.NAME.outputs}` | lista completa (invariato) |
-| `{support.NAME.path}` | file materializzato (codelist/file) o URI GCS (external) |
+| `{support.NAME.path}` | file materializzato (codelist/file) o URI GCS (external, template `{year}`) |
 
 `check_support_path_drift` esteso ai nuovi placeholder
 (`clean`, `mart.TABLE`, `path`).

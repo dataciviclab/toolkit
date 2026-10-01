@@ -170,6 +170,8 @@ class TestResolveSupportPayloadsHappy:
         assert yr0["year"] == 2023
         yr1 = payload["years_resolved"][1]
         assert yr1["year"] == 2024
+        # type: dataset multi-anno → clean resta stringa (glob locale), non lista
+        assert isinstance(payload["clean"], str)
 
     def test_multiple_support_datasets(self, tmp_path: Path):
         config_a = _make_support_dataset(tmp_path, name="support_a", create_mart_outputs=True)

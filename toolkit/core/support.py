@@ -241,11 +241,12 @@ def _resolve_external_entry(
     - ``bucket``: "clean" or "mart" + ``pattern``: pattern key + ``slug``
     - ``table``: optional, for mart patterns
     - ``years``: optional list of years. When provided with a ``{year}``
-      URI, resolves one path per year and builds a clean glob.
+      URI, resolves one path per year.
 
     Resolution logic:
     - ``uri`` with ``{year}`` + ``years`` → resolved per year, ``path``
-      is the URI template for the first year, ``clean`` is a glob.
+      is the URI template, ``clean`` is a list of resolved URLs
+      (DuckDB read_parquet accepts lists; globs don't work over HTTP).
     - ``uri`` without ``{year}`` → single file, ``years`` is ignored.
     - ``bucket``+``pattern``+``slug`` → uses ``gs_url()``, year from
       ``years[0]`` or omitted.

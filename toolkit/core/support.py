@@ -283,15 +283,8 @@ def _resolve_external_entry(
     # Multi-year: resolve per year when uri contains {year}
     if has_year_placeholder and years:
         resolved_uris = [uri.replace("{year}", str(y)) for y in years]
-        # clean = glob pattern covering all years
-        # Use string ops (not Path) to preserve https:// double slash
-        first = resolved_uris[0]
-        last_slash = first.rfind("/")
-        second_last_slash = first.rfind("/", 0, last_slash)
-        base = first[:second_last_slash] if second_last_slash > 0 else first
-        filename = first[last_slash + 1 :]
-        slug = filename.rsplit("_", 2)[0]
-        clean_glob = f"{base}/*/{slug}_*_clean.parquet"
+        # clean = lista URL risolti (DuckDB read_parquet accetta liste; i glob
+        # non funzionano su HTTP → lista è l'unico formato sicuro per external)
         return {
             "name": name,
             "type": "external",
@@ -304,8 +297,8 @@ def _resolve_external_entry(
             "all_outputs_exist": True,
             "mart": None,
             "mart_by_table": {},
-            "clean": clean_glob,
-            "path": uri,  # template URI for {support.X.path} in SQL
+            "clean": resolved_uris,  # lista URL per anno (read_parquet accetta liste)
+            "path": uri,  # template URI per {support.X.path} (single-anno)
         }
 
     # Single file (no {year} in uri, or no years configured)

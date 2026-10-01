@@ -635,8 +635,10 @@ class TestExternalSupport:
         assert "2026" in p["outputs"][2]
         # path remains the template URI
         assert "{year}" in p["path"]
-        # clean is a glob
-        assert "*" in p["clean"]
+        # clean = lista URL risolti (DuckDB read_parquet accetta liste, non glob su HTTP)
+        assert isinstance(p["clean"], list)
+        assert len(p["clean"]) == 3
+        assert "2024" in p["clean"][0]
 
     def test_multi_year_bucket_pattern(self):
         entry = {

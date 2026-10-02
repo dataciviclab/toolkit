@@ -31,7 +31,13 @@ def render_template(text: str, ctx: dict[str, Any]) -> str:
     """
     out = text
     for k, v in sorted(ctx.items(), key=lambda item: len(item[0]), reverse=True):
-        out = out.replace("{" + k + "}", str(v))
+        if isinstance(v, list):
+            # Lista support multi-anno external → array SQL DuckDB
+            # es. ['url1', 'url2'] → read_parquet(['url1', 'url2'])
+            formatted = "[" + ", ".join(f"'{str(item)}'" for item in v) + "]"
+            out = out.replace("{" + k + "}", formatted)
+        else:
+            out = out.replace("{" + k + "}", str(v))
     # Strip comments before checking for unresolved placeholders, so
     # that {n} or other patterns in DuckDB error messages don't break.
     code_only = _strip_sql_comments(out)

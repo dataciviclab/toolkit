@@ -439,7 +439,7 @@ blocca il candidate. L'esecuzione di un `command` file richiede
 |---|---|
 | `{support.NAME.mart}` | prima tabella mart del support (compat) |
 | `{support.NAME.mart.TABLE}` | tabella mart specifica |
-| `{support.NAME.clean}` | parquet clean del support |
+| `{support.NAME.clean}` | **dataset**: parquet clean (glob locale). **external multi-anno**: lista URL (array SQL DuckDB). **external single-anno**: URL singolo. |
 | `{support.NAME.path}` | file materializzato (codelist/file) o URI GCS (external) |
 | `{support.NAME.outputs}` | lista completa degli output |
 

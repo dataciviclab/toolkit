@@ -170,6 +170,8 @@ class TestResolveSupportPayloadsHappy:
         assert yr0["year"] == 2023
         yr1 = payload["years_resolved"][1]
         assert yr1["year"] == 2024
+        # type: dataset multi-anno → clean resta stringa (glob locale), non lista
+        assert isinstance(payload["clean"], str)
 
     def test_multiple_support_datasets(self, tmp_path: Path):
         config_a = _make_support_dataset(tmp_path, name="support_a", create_mart_outputs=True)
@@ -635,8 +637,10 @@ class TestExternalSupport:
         assert "2026" in p["outputs"][2]
         # path remains the template URI
         assert "{year}" in p["path"]
-        # clean is a glob
-        assert "*" in p["clean"]
+        # clean = lista URL risolti (DuckDB read_parquet accetta liste, non glob su HTTP)
+        assert isinstance(p["clean"], list)
+        assert len(p["clean"]) == 3
+        assert "2024" in p["clean"][0]
 
     def test_multi_year_bucket_pattern(self):
         entry = {

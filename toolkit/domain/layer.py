@@ -308,11 +308,11 @@ def raw_preview(config_path: str, year: int | None = None, limit: int = 20) -> d
         from toolkit.domain.profile import csv_preview as _csv_preview
 
         return _csv_preview(str(raw_file), limit=limit)
-    elif suffix in (".xlsx", ".xls"):
+    elif suffix in (".xlsx", ".xls", ".ods"):
         return {
             "path": str(raw_file),
-            "format": "xlsx",
-            "note": "File binario XLSX. Usa mode='schema' per lo schema colonne.",
+            "format": suffix.lstrip("."),
+            "note": f"File binario {suffix.lstrip('.').upper()}. Usa mode='schema' per lo schema colonne.",
             "dataset": paths.get("dataset"),
             "year": paths.get("year"),
         }

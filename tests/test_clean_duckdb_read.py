@@ -277,6 +277,40 @@ def test_read_raw_to_relation_reads_xlsx_first_sheet(tmp_path: Path):
 
 
 @pytest.mark.policy
+def test_read_raw_to_relation_reads_ods_with_odf_engine(tmp_path: Path):
+    """ODS (OpenDocument) read via pandas engine odf — ACI Auto-Trend e simili."""
+    import pandas as pd
+
+    input_file = tmp_path / "ok.ods"
+    pd.DataFrame(
+        [
+            {"ANNO": 2022, "MESE": "GENNAIO", "UFFICIO": "ROMA", "QUANTITA": "1.600"},
+            {"ANNO": 2022, "MESE": "FEBBRAIO", "UFFICIO": "TORINO", "QUANTITA": "987"},
+        ]
+    ).to_excel(input_file, index=False, engine="odf")
+
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.ods")
+
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {"header": True},
+            "fallback",
+            logger,
+        )
+
+        rows = con.execute(
+            'SELECT "ANNO", "MESE", "UFFICIO", "QUANTITA" FROM raw_input ORDER BY "MESE"'
+        ).fetchall()
+        assert info.source == "ods"
+        assert rows == [
+            (2022, "FEBBRAIO", "TORINO", "987"),
+            (2022, "GENNAIO", "ROMA", "1.600"),
+        ]
+
+
+@pytest.mark.policy
 def test_read_raw_to_relation_reads_xlsx_with_explicit_sheet_and_columns(tmp_path: Path):
     input_file = tmp_path / "sheeted.xlsx"
     with pd.ExcelWriter(input_file, engine="openpyxl") as writer:

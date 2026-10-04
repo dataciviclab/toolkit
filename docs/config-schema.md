@@ -196,6 +196,7 @@ Note pratiche:
   `remove_dot_thousands`). Possono essere usate in qualsiasi `clean.sql`
   senza importazioni né configurazioni. Dettaglio: [standard-macros.md](standard-macros.md).
 - i file `.xlsx` sono supportati nel layer CLEAN via `engine="openpyxl"`
+- i file `.ods` (OpenDocument) sono supportati nel layer CLEAN via `engine="odf"` (odfpy)
 - i file `.xls` (Excel 97-2003) sono supportati via `engine="xlrd"`
 - RAW conserva il workbook originale senza convertirlo
 - per Excel le opzioni principali sono `header`, `skip`, `columns`, `trim_whitespace`, `sheet_name`

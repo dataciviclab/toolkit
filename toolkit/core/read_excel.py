@@ -49,7 +49,12 @@ def _load_excel_frame(
 
     ext = input_file.suffix.lower()
     # Literal richiesto dagli overload pandas (engine non è str generico)
-    engine: Literal["xlrd", "openpyxl"] = "xlrd" if ext == ".xls" else "openpyxl"
+    if ext == ".xls":
+        engine: Literal["xlrd", "openpyxl", "odf"] = "xlrd"
+    elif ext == ".ods":
+        engine = "odf"
+    else:
+        engine = "openpyxl"
     df = pd.read_excel(
         input_file,
         sheet_name=sheet_name,
@@ -60,13 +65,19 @@ def _load_excel_frame(
     )
 
     if columns:
-        expected_columns = list(columns.keys())
-        if len(expected_columns) != len(df.columns):
+        from toolkit.core.sql_utils import parse_column_value
+
+        # Supporta formato compatto "clean_name:DUCKDB_TYPE" come nel path CSV
+        resolved_names: list[str] = []
+        for raw_name, value in columns.items():
+            clean_name, _ = parse_column_value(raw_name, value)
+            resolved_names.append(clean_name)
+        if len(resolved_names) != len(df.columns):
             raise ValueError(
                 "Excel input columns mismatch. "
-                f"Configured={len(expected_columns)} detected={len(df.columns)} file={input_file}"
+                f"Configured={len(resolved_names)} detected={len(df.columns)} file={input_file}"
             )
-        df.columns = expected_columns
+        df.columns = resolved_names
     elif not header:
         df.columns = [f"col{i}" for i in range(len(df.columns))]
 
@@ -108,8 +119,12 @@ def _execute_excel_read(
     used = dict(params_used or {})
     if used.get("columns") is None:
         used.pop("columns", None)
+    source_label = "excel"
+    if input_files and input_files[0].suffix.lower() == ".ods":
+        source_label = "ods"
     logger.info(
-        "read_excel params used: source=excel params=%s",
+        "read_excel params used: source=%s params=%s",
+        source_label,
         json.dumps(used, ensure_ascii=False, sort_keys=True),
     )
-    return {"source": "excel", "params_used": used}
+    return {"source": source_label, "params_used": used}

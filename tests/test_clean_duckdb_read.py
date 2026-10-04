@@ -311,6 +311,106 @@ def test_read_raw_to_relation_reads_ods_with_odf_engine(tmp_path: Path):
 
 
 @pytest.mark.policy
+def test_read_excel_compact_columns_rename_xlsx(tmp_path: Path):
+    """policy: colonne compatto clean_name:TYPE rinominano nel path Excel/ODS.
+
+    open-aci Auto-Trend usa columns in formato compatto su CSV e ODS:
+    senza rename, raw_input terrebbe i nomi grezzi e clean.sql fallirebbe.
+    """
+    input_file = tmp_path / "compact.xlsx"
+    pd.DataFrame(
+        [
+            {"ANNO": 2022, "UFFICIO PRA DI COMPETENZA": "ROMA", "QUANTITA'": "1.600"},
+            {"ANNO": 2022, "UFFICIO PRA DI COMPETENZA": "TORINO", "QUANTITA'": "987"},
+        ]
+    ).to_excel(input_file, index=False)
+
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.xlsx_compact_cols")
+
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {
+                "header": True,
+                "columns": {
+                    "ANNO": "anno:INTEGER",
+                    "UFFICIO PRA DI COMPETENZA": "ufficio_pra:VARCHAR",
+                    "QUANTITA'": "quantita:VARCHAR",
+                },
+            },
+            "fallback",
+            logger,
+        )
+
+        cols = [r[0] for r in con.execute("DESCRIBE raw_input").fetchall()]
+        assert cols == ["anno", "ufficio_pra", "quantita"]
+        rows = con.execute(
+            "SELECT anno, ufficio_pra, quantita FROM raw_input ORDER BY ufficio_pra"
+        ).fetchall()
+        assert info.source == "excel"
+        assert rows == [(2022, "ROMA", "1.600"), (2022, "TORINO", "987")]
+
+
+@pytest.mark.policy
+def test_read_excel_compact_columns_rename_ods(tmp_path: Path):
+    """policy: stesso rename compatto su .ods (consumer open-aci Auto-Trend ODS)."""
+    input_file = tmp_path / "compact.ods"
+    pd.DataFrame(
+        [
+            {"ANNO": 2022, "UFFICIO PRA DI COMPETENZA": "ROMA", "QUANTITA'": "1.600"},
+            {"ANNO": 2022, "UFFICIO PRA DI COMPETENZA": "TORINO", "QUANTITA'": "987"},
+        ]
+    ).to_excel(input_file, index=False, engine="odf")
+
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.ods_compact_cols")
+
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {
+                "header": True,
+                "columns": {
+                    "ANNO": "anno:INTEGER",
+                    "UFFICIO PRA DI COMPETENZA": "ufficio_pra:VARCHAR",
+                    "QUANTITA'": "quantita:VARCHAR",
+                },
+            },
+            "fallback",
+            logger,
+        )
+
+        cols = [r[0] for r in con.execute("DESCRIBE raw_input").fetchall()]
+        assert cols == ["anno", "ufficio_pra", "quantita"]
+        rows = con.execute(
+            "SELECT anno, ufficio_pra, quantita FROM raw_input ORDER BY ufficio_pra"
+        ).fetchall()
+        assert info.source == "ods"
+        assert rows == [(2022, "ROMA", "1.600"), (2022, "TORINO", "987")]
+
+
+@pytest.mark.policy
+def test_read_excel_source_label_uses_all_batch_suffixes(tmp_path: Path):
+    """policy: source_label considera tutti i suffix del batch, non solo il primo."""
+    xlsx = tmp_path / "a.xlsx"
+    ods = tmp_path / "b.ods"
+    pd.DataFrame([{"Anno": 2022, "Val": 1}]).to_excel(xlsx, index=False)
+    pd.DataFrame([{"Anno": 2022, "Val": 2}]).to_excel(ods, index=False, engine="odf")
+
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.batch_label")
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [xlsx, ods],
+            {"header": True},
+            "fallback",
+            logger,
+        )
+        assert info.source == "excel+ods"
+
+
+@pytest.mark.policy
 def test_read_raw_to_relation_reads_xlsx_with_explicit_sheet_and_columns(tmp_path: Path):
     input_file = tmp_path / "sheeted.xlsx"
     with pd.ExcelWriter(input_file, engine="openpyxl") as writer:

@@ -55,14 +55,23 @@ def _load_excel_frame(
         engine = "odf"
     else:
         engine = "openpyxl"
-    df = pd.read_excel(
-        input_file,
-        sheet_name=sheet_name,
-        header=0 if header else None,
-        skiprows=skip,
-        dtype=object,
-        engine=engine,
-    )
+    try:
+        df = pd.read_excel(
+            input_file,
+            sheet_name=sheet_name,
+            header=0 if header else None,
+            skiprows=skip,
+            dtype=object,
+            engine=engine,
+        )
+    except ImportError as e:
+        if engine == "odf":
+            raise ImportError(
+                "Lettura .ods richiede odfpy. Installa le dipendenze pandas: "
+                "pip install 'dataciviclab-toolkit[pandas]' "
+                "(include odfpy>=1.4)."
+            ) from e
+        raise
 
     if columns:
         from toolkit.core.sql_utils import parse_column_value
@@ -119,9 +128,13 @@ def _execute_excel_read(
     used = dict(params_used or {})
     if used.get("columns") is None:
         used.pop("columns", None)
-    source_label = "excel"
-    if input_files and input_files[0].suffix.lower() == ".ods":
+    suffixes = {f.suffix.lower() for f in input_files if f.suffix}
+    if suffixes <= {".ods"}:
         source_label = "ods"
+    elif suffixes & {".xlsx", ".xls"} and suffixes & {".ods"}:
+        source_label = "excel+ods"
+    else:
+        source_label = "excel"
     logger.info(
         "read_excel params used: source=%s params=%s",
         source_label,

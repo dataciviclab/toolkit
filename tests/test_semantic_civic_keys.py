@@ -77,6 +77,40 @@ class TestSuggestSemanticType:
         )
 
     @pytest.mark.pure_unit
+    def test_specific_patterns_before_generic_municipality(self) -> None:
+        # Review PR #496: il generico codice_istat non deve catturare ipa/regione
+        assert (
+            suggest_semantic_type("codice_istat_ipa", self.alias_map, self.valid_types)
+            == "ipa_code"
+        )
+        assert (
+            suggest_semantic_type("codice_istat_regione", self.alias_map, self.valid_types)
+            == "region_code"
+        )
+        assert (
+            suggest_semantic_type("codice_istat", self.alias_map, self.valid_types)
+            == "municipality_code"
+        )
+        assert (
+            suggest_semantic_type("comune_codice_istat", self.alias_map, self.valid_types)
+            == "municipality_code"
+        )
+        assert (
+            suggest_semantic_type("codice_comune_amministrazione", self.alias_map, self.valid_types)
+            == "municipality_code"
+        )
+        # ipa_codice_istat: se non in alias, non deve diventare municipality
+        sug = suggest_semantic_type("ipa_codice_istat", self.alias_map, self.valid_types)
+        assert sug != "municipality_code"
+
+    @pytest.mark.pure_unit
+    def test_no_sogei_pattern_for_generic_username(self) -> None:
+        # Review: ^username$ è troppo aggressivo — nessun pattern sogei_code
+        from toolkit.registry.schema_reader import _CIVIC_KEY_PATTERNS
+
+        assert not any(s == "sogei_code" for _, s in _CIVIC_KEY_PATTERNS)
+
+    @pytest.mark.pure_unit
     def test_provincia_cm_is_province_not_municipality(self) -> None:
         assert (
             suggest_semantic_type("provincia_cm_codice_istat", self.alias_map, self.valid_types)

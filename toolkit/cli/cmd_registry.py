@@ -136,7 +136,11 @@ def _setup_build(
 
 
 def _warn_untyped_civic_keys(catalog: dict[str, Any], limit: int = 20) -> list[dict[str, Any]]:
-    """Warning non-blocking: colonne civic senza semantic_type nel catalogo."""
+    """Warning non-blocking: colonne civic senza semantic_type nel catalogo.
+
+    Copertura centralizzata: il fix è un alias in ``semantic_types.yaml``,
+    non la dichiarazione sparsa nei ``dataset.yml`` dei repo.
+    """
     from toolkit.registry.schema_reader import find_untyped_civic_keys
 
     findings = find_untyped_civic_keys(catalog)
@@ -144,7 +148,7 @@ def _warn_untyped_civic_keys(catalog: dict[str, Any], limit: int = 20) -> list[d
         return []
     typer.echo(
         f"WARN: {len(findings)} colonne civic senza semantic_type "
-        "(aggiungi il tipo in dataset.yml o un alias in semantic_types.yaml)",
+        "(aggiungi un alias in toolkit semantic_types.yaml — copertura centralizzata)",
         err=True,
     )
     for item in findings[:limit]:

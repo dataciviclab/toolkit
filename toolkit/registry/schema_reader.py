@@ -189,23 +189,31 @@ def latest_clean_columns(
 
 
 # Pattern civic "forti" per colonne che spesso non hanno alias espliciti.
-# Solo match di chiavi (non label/status/date): evita falsi positivi.
+# Ordinati dal più specifico al più generico: regione/ipa/provincia prima
+# di municipality, che resta legato al contesto "comune" (mai un generico
+# "codice_istat" che catturerebbe ipa/regione/provincia).
 _CIVIC_KEY_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r"(^|_)codice_istat($|_)|comune_codice_istat|cod_comune", "municipality_code"),
+    # Specifici territoriali (PRIMA del generic comune)
+    (r"codice_istat_regione|regione_codice_istat|codice_regione_istat", "region_code"),
+    (r"codice_ipa|codice_ente_ipa|codice_istat_ipa", "ipa_code"),
+    (r"provincia_cm_codice|codice_provincia_cm", "province_code"),
     (r"codice_catastale|codi_catastale|cod_catastale", "cadastral_code"),
+    # Chiavi denaro/progetto
     (r"(^|_)cf$|_cf$|^cf_|codice_fiscale|partita_iva|^piva", "fiscal_code"),
     (r"^cup$|^codice_cup$|codice_cup_", "cup_code"),
     (r"^cig$|^codice_cig$|codice_cig_", "cig_code"),
-    (r"codice_ipa|codice_ente_ipa", "ipa_code"),
     (r"codice_ente_siope|codice_ente_bdap", "siope_code"),
     (r"codice_missione|pnrr_missione|^missione$", "programma_code"),
     (r"codice_indicatore|COD_INDICATORE", "indicatore_code"),
     (r"codice_miur|codice_ente_miur", "miur_code"),
-    (r"^username$", "sogei_code"),
     (r"^COD_ATECO|codice_ateco", "ateco_code"),
-    (r"codice_istat_regione|regione_codice_istat|codice_regione_istat", "region_code"),
     (r"nuts_parent_code", "nuts_code"),
-    (r"provincia_cm_codice_istat", "province_code"),
+    # Municipality: solo contesto comune — non "username" generico
+    (
+        r"^codice_istat$|^cod_comune$|^codice_comune$|^comune_istat$"
+        r"|comune_codice_istat|codice_comune_",
+        "municipality_code",
+    ),
 )
 
 # Colonne che sono label/descrizione di una chiave, non la chiave stessa.
@@ -224,7 +232,8 @@ def suggest_semantic_type(
     """Suggerisce un semantic_type per una colonna civic-like.
 
     1. Alias esatto (case-insensitive) dal vocabolario.
-    2. Pattern civic forti (solo se il tipo esiste nel vocabolario).
+    2. Pattern civic forti, ordinati specifico→generico (solo se il tipo
+       esiste nel vocabolario).
 
     Le colonne di descrizione/label (descr_*, descrizione_*, *_label) non
     vengono tipizzate come chiavi: sono testo legato alla chiave.
@@ -252,8 +261,8 @@ def find_untyped_civic_keys(
     """Trova colonne civic senza semantic_type in un clean_catalog/registry.
 
     Non blocca: è un warning di qualità per il registry build. Le colonne
-    senza tipo che matchano alias/pattern civic meritano un tipo nel
-    dataset.yml o un alias nel vocabolario.
+    senza tipo che matchano alias/pattern civic meritano un alias in
+    ``semantic_types.yaml`` (copertura centralizzata nel toolkit).
     """
     alias_map = load_semantic_types(semantic_types_path)
     valid_types = load_valid_types(semantic_types_path)

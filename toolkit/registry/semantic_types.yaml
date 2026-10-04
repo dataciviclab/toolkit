@@ -94,7 +94,7 @@ types:
     aliases: [regione, codice_regione, cod_regione, cod_reg, regione_codice,
               istat_regione, regione_istat_cod, regione_beneficiario,
               amministrazione_regione_sede, codice_istat_regione,
-              regione_codice_istat, codice_regione_istat, codice_regione_istat]
+              regione_codice_istat, codice_regione_istat]
     hub:
       hub_slug: comuni_master
       hub_column: regione

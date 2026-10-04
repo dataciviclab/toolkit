@@ -135,33 +135,6 @@ def _setup_build(
     return layout, contract, existing_path
 
 
-def _warn_untyped_civic_keys(catalog: dict[str, Any], limit: int = 20) -> list[dict[str, Any]]:
-    """Warning non-blocking: colonne civic senza semantic_type nel catalogo.
-
-    Copertura centralizzata: il fix è un alias in ``semantic_types.yaml``,
-    non la dichiarazione sparsa nei ``dataset.yml`` dei repo.
-    """
-    from toolkit.registry.schema_reader import find_untyped_civic_keys
-
-    findings = find_untyped_civic_keys(catalog)
-    if not findings:
-        return []
-    typer.echo(
-        f"WARN: {len(findings)} colonne civic senza semantic_type "
-        "(aggiungi un alias in toolkit semantic_types.yaml — copertura centralizzata)",
-        err=True,
-    )
-    for item in findings[:limit]:
-        typer.echo(
-            f"  WARN: {item['slug']}.{item['column']} → suggerito {item['suggested']} "
-            f"(via {item['via']})",
-            err=True,
-        )
-    if len(findings) > limit:
-        typer.echo(f"  WARN: ... e altre {len(findings) - limit} colonne", err=True)
-    return findings
-
-
 def registry_build(
     repo: str = typer.Option(None, "--repo", help="Root del repo (default: CWD)"),
     prefix: str = typer.Option("", "--prefix", help="Prefisso GCS (es. 'eurostat')"),
@@ -213,7 +186,6 @@ def registry_build(
             f"entities aggiornate: {len(existing['entities']['entities'])} entità, "
             f"{len(existing['entities']['bridges'])} bridge"
         )
-        _warn_untyped_civic_keys(catalog)
 
         if not write:
             typer.echo("Dry-run: usa --write per scrivere il file.")
@@ -266,8 +238,6 @@ def registry_build(
         f"marts {len(registry['marts'])}, "
         f"signals {len(registry['signals'])} (repo: {layout.source_repo})"
     )
-    _warn_untyped_civic_keys({"datasets": registry.get("datasets", [])})
-
     if not write:
         typer.echo("Dry-run: usa --write per scrivere il file.")
         return

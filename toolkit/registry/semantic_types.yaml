@@ -88,6 +88,7 @@ types:
           expr: "UPPER(TRIM({col}))"
     weight: 5
     note: "provincia_cm_codice_istat (SAI/CAS) e' codice provincia, non comune a 6 cifre."
+
   region_code:
     description: "Codice o nome della regione"
     entity: Regione

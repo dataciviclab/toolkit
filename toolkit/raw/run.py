@@ -161,6 +161,7 @@ def run_raw(
         ".txt",
         ".xlsx",
         ".xls",
+        ".ods",
     }:
         try:
             profile_hints = sniff_source_file(primary_output_path)

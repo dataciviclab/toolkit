@@ -16,6 +16,7 @@ NON_TRUNCABLE_EXTS: set[str] = {
     ".zip",
     ".xlsx",
     ".xls",
+    ".ods",
     ".gz",
     ".bz2",
     ".7z",

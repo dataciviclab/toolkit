@@ -363,6 +363,19 @@ _CONFIG_QUICKREF: dict[str, Any] = {
                 "materialize": "exec command se il file manca (richiede TOOLKIT_ALLOW_SCRIPT_SOURCE=1)",
                 "placeholder": "{support.NAME.path}",
             },
+            {
+                "type": "external",
+                "fields": (
+                    "name + (repo+slug+layer | repo+path | uri | bucket+pattern+slug); "
+                    "opzionali: years, table (mart), prefix, registry (path esplicito)"
+                ),
+                "materialize": (
+                    "nessuna — artifact già pubblicato. repo+slug+layer risolve il prefix "
+                    "dal registry del produttore (locale workspace → GitHub); "
+                    "repo+path → raw.githubusercontent.com"
+                ),
+                "placeholder": "{support.NAME.path}, {support.NAME.clean}, {support.NAME.outputs}",
+            },
         ],
         "ensure": "se gli output del support sono già presenti il run li riusa (skip-if-exists, per-anno); rigenerazione forzata con --refresh-support. Output attesi dataset = clean + tutte le tabelle mart.",
         "anti_drift": "i SQL devono usare i placeholder {support.NAME.*} e non path hardcoded (check_support_path_drift, warning in dry-run).",

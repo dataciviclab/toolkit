@@ -76,9 +76,12 @@ Validazione per tipo:
   quello già presente in `SdmxSource.fetch_codelist` (profilo ESTAT, #450)
 - `file` → richiede `path` (relativo al root del candidate, normalizzato);
   `command` opzionale per la rigenerazione
-- `external` → richiede `uri` (gs:// o https://) oppure `bucket`+`pattern`+`slug`
-  (usa `lab_connectors.gcs.paths.gs_url()`); `years` opzionale per risoluzione
-  per-anno con `{year}` nell'URI
+- `external` → una di: `repo`+`slug`+`layer` (risoluzione via registry del
+  produttore: prefix GCS da `prefix_for_slug`, errore se lo slug non è
+  dichiarato), `repo`+`path` (GitHub raw), `uri` (gs:// o https://), oppure
+  `bucket`+`pattern`+`slug` (usa `lab_connectors.gcs.paths.https_url()`).
+  `years` opzionale per risoluzione per-anno con `{year}` nell'URI;
+  `table` per layer mart (inferita se unica nel registry)
 
 ### 2. Orchestrazione `ensure` (skip-if-exists + materializza-se-manca)
 

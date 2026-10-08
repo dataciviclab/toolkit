@@ -313,6 +313,23 @@ def test_load_config_does_not_normalize_external_repo_path(tmp_path: Path):
     assert by_name["locale"].path == str((project_dir / "mapping/q.csv").resolve())
 
 
+@pytest.mark.pure_unit
+def test_normalize_paths_external_repo_path_stays_relative(tmp_path: Path):
+    """_normalize_paths: external path resta relativo (repo GitHub), file no."""
+    from toolkit.core.config import _normalize_paths
+
+    base = tmp_path / "proj"
+    data = {
+        "support": [
+            {"name": "gu", "type": "external", "repo": "gu-monitor", "path": "data/x.parquet"},
+            {"name": "f", "type": "file", "path": "mapping/q.csv"},
+        ]
+    }
+    _normalize_paths(data, base)
+    assert data["support"][0]["path"] == "data/x.parquet"
+    assert data["support"][1]["path"] == str((base / "mapping/q.csv").resolve())
+
+
 @pytest.mark.policy
 def test_load_config_does_not_transform_non_whitelisted_path_like_fields(tmp_path: Path):
     project_dir = tmp_path / "project"

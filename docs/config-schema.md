@@ -449,13 +449,13 @@ support:
     years: [2026]
 ```
 
-**Risoluzione `external` (ordine):**
-1. `repo`+`slug`+`layer` — carica `registry/registry.json` del produttore
+**Risoluzione `external` (prima vince — `uri` ha priorità backward-compat):**
+1. `uri` pieno (gs:// o https://, `{year}` opzionale).
+2. `repo`+`path` — `raw.githubusercontent.com/dataciviclab/{repo}/main/{path}`.
+3. `repo`+`slug`+`layer` — carica `registry/registry.json` del produttore
    (path esplicito via `registry:`, altrimenti scan workspace, altrimenti
    GitHub `dataciviclab/{repo}`) e costruisce l'URL con `https_url()` +
    `prefix_for_slug()`. Uno slug assente dal registry è un errore di config.
-2. `repo`+`path` — `raw.githubusercontent.com/dataciviclab/{repo}/main/{path}`.
-3. `uri` pieno (gs:// o https://, `{year}` opzionale).
 4. `bucket`+`pattern`+`slug` — path canonici lab-connectors.
 
 **Orchestrazione (ensure):** gli output attesi per tipo sono — `dataset`:

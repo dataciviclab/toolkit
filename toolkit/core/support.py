@@ -60,9 +60,10 @@ def resolve_support_payloads(
       (richiede ``root`` = root del candidate).
     - ``type: file``: path dichiarato (relativo normalizzato sul root).
     - ``type: external``: artifact remoto già pubblicato. Forme supportate:
-      ``repo``+``slug``+``layer`` (risoluzione via registry produttore),
-      ``repo``+``path`` (GitHub raw), ``uri`` pieno, o
-      ``bucket``+``pattern``+``slug`` (path canonici lab-connectors).
+      ``uri`` pieno, ``repo``+``path`` (GitHub raw), ``repo``+``slug``+``layer``
+      (risoluzione via registry produttore), o ``bucket``+``pattern``+``slug``
+      (path canonici lab-connectors). Se un config contiene più forme,
+      ``uri`` vince (backward-compat esplicita).
 
     Con ``require_exists=True`` gli output mancanti sollevano errore esplicito
     (mart/clean del support non ancora eseguito, o codelist/file non
@@ -238,17 +239,17 @@ def _resolve_external_entry(
 ) -> dict[str, Any]:
     """Resolve a GCS-hosted parquet file via lab_connectors path patterns.
 
-    Supported config forms (in order of resolution):
+    Ordine di risoluzione del template URI (vedi ``_external_uri_template``):
 
-    1. Declarative registry (consigliato per dipendenze cross-repo):
-       - ``repo`` + ``slug`` + ``layer`` (``clean``|``mart``):
-         risolve il prefix e il pattern dal ``registry/registry.json``
-         del repo produttore (locale workspace → fallback GitHub).
-         Opzionale: ``table`` (mart), ``years``, ``registry`` (path esplicito).
-       - ``repo`` + ``path``: file raw nel repo su GitHub
-         (``raw.githubusercontent.com/dataciviclab/{repo}/main/{path}``).
-    2. ``uri``: full gs:// or https URL. May contain ``{year}``.
-    3. ``bucket`` + ``pattern`` + ``slug`` (+ optional ``table``/``prefix``):
+    1. ``uri``: full gs:// or https URL (vince se presente — backward-compat).
+       May contain ``{year}``.
+    2. ``repo`` + ``path``: file raw nel repo su GitHub
+       (``raw.githubusercontent.com/dataciviclab/{repo}/main/{path}``).
+    3. ``repo`` + ``slug`` + ``layer`` (``clean``|``mart``): risolve il prefix
+       e il pattern dal ``registry/registry.json`` del repo produttore
+       (locale workspace → fallback GitHub). Opzionale: ``table`` (mart),
+       ``years``, ``registry`` (path esplicito al registry).
+    4. ``bucket`` + ``pattern`` + ``slug`` (+ optional ``table``/``prefix``):
        built via ``lab_connectors.gcs.paths.https_url()``.
 
     Resolution after a URI template is built:
@@ -302,8 +303,9 @@ def _resolve_external_entry(
 def _external_uri_template(entry: dict[str, Any], name: str) -> str:
     """Ritorna il template URI di un support external.
 
-    Ordine: ``uri`` esplicito → ``repo``+``path`` (GitHub raw) →
-    ``repo``+``slug`` (registry) → ``bucket``+``pattern``+``slug``.
+    Ordine di risoluzione (prima vince): ``uri`` esplicito (backward-compat)
+    → ``repo``+``path`` (GitHub raw) → ``repo``+``slug`` (registry produttore)
+    → ``bucket``+``pattern``+``slug``.
     """
     uri = entry.get("uri")
     if uri:

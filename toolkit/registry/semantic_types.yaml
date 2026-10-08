@@ -27,7 +27,10 @@ types:
     aliases: [codice_istat, codice_istat_comune, codice_istat_luogo, codice_comune,
               cod_comune, pro_com, codice_comune_istat, localizzazione_codice_istat,
               comune_istat, cod_istat_comune, comune_codice, cod_comune_istat,
-              ente_codice_comune_istat, codice_comune_comune]
+              ente_codice_comune_istat, codice_comune_comune,
+              codice_comune_amministrazione, codice_comune_bene,
+              codice_comune_sogg_titolare, COD_COMUNE_SEDE_SOGG,
+              comune_codice_istat]
     hub:
       hub_slug: comuni_master
       hub_column: codice_istat
@@ -44,7 +47,8 @@ types:
     description: "Codice catastale Belfiore (es. A010, C466)"
     entity: Comune
     aliases: [codice_catastale, cod_catastale, catastale, codice_belfiore,
-              codice_comune_scuola]
+              codice_comune_scuola, codice_catastale_comune, codi_catastale,
+              comune_codice_catastale]
     hub:
       hub_slug: comuni_master
       hub_column: codice_catastale
@@ -74,7 +78,8 @@ types:
     description: "Sigla o codice della provincia"
     entity: Provincia
     aliases: [provincia, sigla_provincia, sigla_provincia_pa, sigla_provincia_asl,
-              sigla_provincia_struttura, codice_provincia, sigla_prov, cod_prov]
+              sigla_provincia_struttura, codice_provincia, sigla_prov, cod_prov,
+              provincia_cm_codice_istat, provincia_cm_codice]
     hub:
       hub_slug: comuni_master
       hub_column: sigla_provincia
@@ -82,12 +87,15 @@ types:
         - name: UPPER TRIM
           expr: "UPPER(TRIM({col}))"
     weight: 5
+    note: "provincia_cm_codice_istat (SAI/CAS) e' codice provincia, non comune a 6 cifre."
 
   region_code:
     description: "Codice o nome della regione"
     entity: Regione
     aliases: [regione, codice_regione, cod_regione, cod_reg, regione_codice,
-              istat_regione, regione_istat_cod, regione_beneficiario, amministrazione_regione_sede]
+              istat_regione, regione_istat_cod, regione_beneficiario,
+              amministrazione_regione_sede, codice_istat_regione,
+              regione_codice_istat, codice_regione_istat]
     hub:
       hub_slug: comuni_master
       hub_column: regione
@@ -99,7 +107,7 @@ types:
   nuts_code:
     description: "Codice NUTS Eurostat (es. ITC45)"
     entity: Provincia (tramite NUTS3)
-    aliases: [geo, nuts, nuts2, nuts3, nuts_code, codice_nuts]
+    aliases: [geo, nuts, nuts2, nuts3, nuts_code, codice_nuts, nuts_parent_code]
     hub:
       hub_slug: comuni_master
       hub_column: nuts3_2021
@@ -118,7 +126,13 @@ types:
     entity: Ente (o Impresa)
     aliases: [codice_fiscale, codice_fiscale_ente, cf, cf_amministrazione_appaltante,
               cf_soggetto_attuatore, cf_subappaltante, amministrazione_codice_fiscale,
-              partita_iva, p_iva, piva, codi_fiscale, codice_fiscale_beneficiario]
+              partita_iva, p_iva, piva, codi_fiscale, codice_fiscale_beneficiario,
+              OC_CODICE_FISCALE_SOGG, CODICE_FISCALE_SOGGETTO, codice_fiscale_soggetto,
+              soggetto_ricevente_cf, soggetto_cedente_cf, amm_cf, societa_cf,
+              partecipata_codice_fiscale, piva_soggetto_titolare,
+              piva_codfiscale_sog_titolare, CF_SA_DELEGANTE, CF_SA_DELEGATA,
+              cf_sa_delegante, cf_sa_delegata, societa_codice_fiscale,
+              beneficiario_partita_iva, beneficiario_codice_fiscale]
     hub:
       hub_slug: comuni_master
       hub_column: codice_fiscale
@@ -128,12 +142,12 @@ types:
         - name: REPLACE brackets
           expr: "REPLACE(REPLACE({col}, '[', ''), ']', '')"
     weight: 15
-    note: "Match solo per enti pubblici. CF di imprese (ANAC, RNA) non matchano (0%)."
+    note: "Match solo per enti pubblici. CF di imprese (ANAC, RNA) non matchano (0%). PIVA e CF sono lo stesso tipo nel vocabolario (fiscal_code); il join a hub PA resta fragile per le imprese."
 
   ipa_code:
     description: "Codice IndicePA dell'ente (es. c_a010)"
     entity: Ente
-    aliases: [codice_ipa, ipa, cod_ipa]
+    aliases: [codice_ipa, ipa, cod_ipa, codice_ente_ipa, codice_istat_ipa]
     hub:
       hub_slug: comuni_master
       hub_column: codice_ipa
@@ -143,6 +157,7 @@ types:
         - name: LOWER
           expr: "LOWER({col})"
     weight: 15
+    note: "codice_istat_ipa in comuni_master e' il codice ISTAT associato all'ente IPA, non il codice comune primario: tipizzare come ipa_code evita ambiguita con municipality_code."
 
   # ═══════════════════════════════════════════════════════════════════════
   # DOMINIO APPALTI
@@ -206,7 +221,7 @@ types:
   siope_code:
     description: "Codice ente SIOPE (9 caratteri)"
     entity: Ente
-    aliases: [codice_ente]
+    aliases: [codice_ente, codice_ente_siope, codice_ente_bdap]
     bridge:
       via: bdap_anagrafe_enti
       on_column: codice_ente_siope
@@ -216,7 +231,7 @@ types:
   miur_code:
     description: "Codice ente MIUR"
     entity: Ente
-    aliases: [codice_ente_miur]
+    aliases: [codice_ente_miur, codice_miur]
     bridge:
       via: bdap_anagrafe_enti
       on_column: codice_ente_miur
@@ -250,7 +265,8 @@ types:
   ateco_code:
     description: "Codice ATECO attività economica"
     entity: Attività economica
-    aliases: [ateco, codice_ateco, sezione_ateco, ateco_code]
+    aliases: [ateco, codice_ateco, sezione_ateco, ateco_code,
+              COD_ATECO, COD_ATECO_SOGG, codice_ateco_sogg]
     weight: 8
 
   country_code:
@@ -319,13 +335,14 @@ types:
   programma_code:
     description: "Codice programma operativo (FESR/FSE/PNRR/BDAP)"
     entity: Programma
-    aliases: [codice_programma, OC_CODICE_PROGRAMMA, programma, cod_programma]
+    aliases: [codice_programma, OC_CODICE_PROGRAMMA, programma, cod_programma,
+              missione, codice_missione, pnrr_missione]
     bridge:
       via: opencoesione_progetti_esteso
       on_column: CUP
       to: cup_code
     weight: 15
-    note: "In PNRR la missione (M1-M5) funge da programma. In FESR/FSE il codice è OC_CODICE_PROGRAMMA (es. 2021IT16RFPR005). In BDAP è codice_missione+codice_programma."
+    note: "In PNRR la missione (M1-M7) funge da programma. In FESR/FSE il codice è OC_CODICE_PROGRAMMA (es. 2021IT16RFPR005). In BDAP è codice_missione+codice_programma. Alias missione/codice_missione coprono le colonne reali di pnrr_progetti e bdap_spese_stato."
 
   fondo_code:
     description: "Codice o nome fondo finanziario (FESR, FSE+, FSC, PNRR)"
@@ -363,6 +380,7 @@ types:
     description: "Obiettivo specifico di un programma (descrizione missione/misura)"
     entity: Obiettivo
     aliases: [descrizione_missione, descrizione_misura, descrizione_submisura,
-              OC_DESCRIZIONE_PROGRAMMA, descrizione_obiettivo]
+              OC_DESCRIZIONE_PROGRAMMA, descrizione_obiettivo,
+              descrizione_missione_pnrr, descrizione_misura_pnrr]
     weight: 10
-    note: "In PNRR: descrizione_missione/misura/submisura. In FESR/FSE: OC_DESCRIZIONE_PROGRAMMA."
+    note: "In PNRR: descrizione_missione/misura/submisura. In FESR/FSE: OC_DESCRIZIONE_PROGRAMMA. Le descrizioni sono label testuali del programma, non codici univoci: il join forte resta su missione/OC_CODICE_PROGRAMMA."

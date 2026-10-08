@@ -392,12 +392,16 @@ al template SQL come placeholder `{support.NAME.*}` (vedi ADR-005).
 | `support[].provider` | `str` | `sdmx` (solo `codelist`) |
 | `support[].path` | `str` | — (solo `file`, relativo al root candidate) |
 | `support[].command` | `str` | — (solo `file`, opzionale: rigenera il file) |
-| `support[].uri` | `str` | — (solo `external`, gs:// o https:// URL) |
+| `support[].uri` | `str` | — (solo `external`: gs:// o https:// URL) |
+| `support[].repo` | `str` | — (solo `external`: repo produttore, es. `"open-politica"`) |
+| `support[].slug` | `str` | — (solo `external`: dataset slug) |
+| `support[].layer` | `clean` \| `mart` | `clean` (solo `external` con `repo`+`slug`) |
+| `support[].path` | `str` | — (solo `external`+`repo`: path nel repo su GitHub raw; solo `file`: path locale) |
+| `support[].registry` | `str` | — (solo `external`+`repo`: path esplicito al registry.json) |
 | `support[].bucket` | `str` | — (solo `external`: `clean` o `mart`) |
 | `support[].pattern` | `str` | — (solo `external`: pattern key da lab-connectors) |
-| `support[].slug` | `str` | — (solo `external`: dataset slug) |
 | `support[].prefix` | `str` | `""` (solo `external`: prefisso repo, es. `"eurostat/"`) |
-| `support[].table` | `str` | — (solo `external`: tabella mart, opzionale) |
+| `support[].table` | `str` | — (solo `external` layer mart: tabella; inferita se unica nel registry) |
 
 ```yaml
 support:
@@ -413,8 +417,28 @@ support:
     type: file                    # materializza: exec command se il file manca
     path: "mapping/colonnine-quartieri.csv"
     command: "python mapping/colonnine_quartieri.py"
+  # Forma dichiarativa consigliata: il path lo risolve il registry del produttore
+  - name: ddl_senato
+    type: external
+    repo: open-politica
+    slug: senato_ddl
+    layer: clean
+    years: [13, 14, 15, 16, 17, 18, 19]
+  - name: emendamenti_per_atto
+    type: external
+    repo: senato-akn
+    slug: senato_emendamenti
+    layer: mart
+    table: mart_emendamenti_per_atto   # opzionale se unica nel registry
+    years: [2026]
+  # File GitHub raw non ancora nel registry del produttore
+  - name: gu_acts
+    type: external
+    repo: gu-monitor
+    path: data/gu_acts.parquet
+  # Forme legacy backward-compat
   - name: pnrr_progetti
-    type: external                # nessuna materializzazione, file già su GCS
+    type: external
     uri: "gs://dataciviclab-clean/pnrr_progetti/{year}/pnrr_progetti_{year}_clean.parquet"
     years: [2024, 2025, 2026]
   - name: anac_cross
@@ -424,6 +448,15 @@ support:
     slug: anac_cross
     years: [2026]
 ```
+
+**Risoluzione `external` (prima vince — `uri` ha priorità backward-compat):**
+1. `uri` pieno (gs:// o https://, `{year}` opzionale).
+2. `repo`+`path` — `raw.githubusercontent.com/dataciviclab/{repo}/main/{path}`.
+3. `repo`+`slug`+`layer` — carica `registry/registry.json` del produttore
+   (path esplicito via `registry:`, altrimenti scan workspace, altrimenti
+   GitHub `dataciviclab/{repo}`) e costruisce l'URL con `https_url()` +
+   `prefix_for_slug()`. Uno slug assente dal registry è un errore di config.
+4. `bucket`+`pattern`+`slug` — path canonici lab-connectors.
 
 **Orchestrazione (ensure):** gli output attesi per tipo sono — `dataset`:
 parquet clean + tutte le tabelle mart (per anno); `codelist`:

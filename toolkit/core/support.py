@@ -59,7 +59,11 @@ def resolve_support_payloads(
     - ``type: codelist``: parquet canonico in ``{root}/data/support/{name}/``
       (richiede ``root`` = root del candidate).
     - ``type: file``: path dichiarato (relativo normalizzato sul root).
-    - ``type: external``: URI GCS (via ``uri`` o ``bucket``+``pattern``+``slug``).
+    - ``type: external``: artifact remoto già pubblicato. Forme supportate:
+      ``uri`` pieno, ``repo``+``path`` (GitHub raw), ``repo``+``slug``+``layer``
+      (risoluzione via registry produttore), o ``bucket``+``pattern``+``slug``
+      (path canonici lab-connectors). Se un config contiene più forme,
+      ``uri`` vince (backward-compat esplicita).
 
     Con ``require_exists=True`` gli output mancanti sollevano errore esplicito
     (mart/clean del support non ancora eseguito, o codelist/file non
@@ -235,50 +239,26 @@ def _resolve_external_entry(
 ) -> dict[str, Any]:
     """Resolve a GCS-hosted parquet file via lab_connectors path patterns.
 
-    Supported config fields:
-    - ``uri``: full gs:// URL (overrides bucket/pattern/slug).
-      May contain ``{year}`` for per-year resolution.
-    - ``bucket``: "clean" or "mart" + ``pattern``: pattern key + ``slug``
-    - ``table``: optional, for mart patterns
-    - ``years``: optional list of years. When provided with a ``{year}``
-      URI, resolves one path per year.
+    Ordine di risoluzione del template URI (vedi ``_external_uri_template``):
 
-    Resolution logic:
-    - ``uri`` with ``{year}`` + ``years`` → resolved per year, ``path``
-      is the URI template, ``clean`` is a list of resolved URLs
-      (DuckDB read_parquet accepts lists; globs don't work over HTTP).
-    - ``uri`` without ``{year}`` → single file, ``years`` is ignored.
-    - ``bucket``+``pattern``+``slug`` → uses ``gs_url()``, year from
-      ``years[0]`` or omitted.
+    1. ``uri``: full gs:// or https URL (vince se presente — backward-compat).
+       May contain ``{year}``.
+    2. ``repo`` + ``path``: file raw nel repo su GitHub
+       (``raw.githubusercontent.com/dataciviclab/{repo}/main/{path}``).
+    3. ``repo`` + ``slug`` + ``layer`` (``clean``|``mart``): risolve il prefix
+       e il pattern dal ``registry/registry.json`` del repo produttore
+       (locale workspace → fallback GitHub). Opzionale: ``table`` (mart),
+       ``years``, ``registry`` (path esplicito al registry).
+    4. ``bucket`` + ``pattern`` + ``slug`` (+ optional ``table``/``prefix``):
+       built via ``lab_connectors.gcs.paths.https_url()``.
+
+    Resolution after a URI template is built:
+    - ``{year}`` placeholder + ``years`` → one URL per year; ``clean`` is a
+      list (DuckDB read_parquet accepts lists; globs don't work over HTTP).
+    - no ``{year}`` → single file, ``years`` ignored.
     """
-    uri = entry.get("uri")
+    uri = _external_uri_template(entry, name)
     years = [int(y) for y in entry.get("years") or []]
-
-    if not uri:
-        bucket = entry.get("bucket")
-        pattern = entry.get("pattern")
-        slug = entry.get("slug")
-        if not bucket or not pattern or not slug:
-            raise ValueError(
-                f"support external '{name}' requires 'uri' or 'bucket' + 'pattern' + 'slug'"
-            )
-        try:
-            from lab_connectors.gcs.paths import https_url
-
-            kwargs: dict[str, Any] = {"slug": slug}
-            if entry.get("table"):
-                kwargs["table"] = entry["table"]
-            if years:
-                kwargs["year"] = years[0]
-            if entry.get("prefix"):
-                kwargs["prefix"] = entry["prefix"]
-            uri = https_url(bucket, pattern, **kwargs)
-        except ImportError:
-            raise ValueError(
-                f"support external '{name}' requires lab-connectors with gcs support. "
-                "Install: pip install 'lab-connectors[gcs]'"
-            )
-
     has_year_placeholder = "{year}" in uri
 
     # Multi-year: resolve per year when uri contains {year}
@@ -318,6 +298,168 @@ def _resolve_external_entry(
         "clean": None,
         "path": uri,
     }
+
+
+def _external_uri_template(entry: dict[str, Any], name: str) -> str:
+    """Ritorna il template URI di un support external.
+
+    Ordine di risoluzione (prima vince): ``uri`` esplicito (backward-compat)
+    → ``repo``+``path`` (GitHub raw) → ``repo``+``slug`` (registry produttore)
+    → ``bucket``+``pattern``+``slug``.
+    """
+    uri = entry.get("uri")
+    if uri:
+        return str(uri)
+
+    repo = entry.get("repo")
+    if repo:
+        raw_path = entry.get("path")
+        if raw_path:
+            return _external_github_raw_uri(str(repo), str(raw_path))
+        slug = entry.get("slug")
+        if slug:
+            return _external_registry_uri_template(entry, name)
+
+    bucket = entry.get("bucket")
+    pattern = entry.get("pattern")
+    slug = entry.get("slug")
+    if bucket and pattern and slug:
+        try:
+            from lab_connectors.gcs.paths import https_url
+
+            kwargs: dict[str, Any] = {"slug": slug}
+            if entry.get("table"):
+                kwargs["table"] = entry["table"]
+            years = [int(y) for y in entry.get("years") or []]
+            if years:
+                kwargs["year"] = years[0]
+            if entry.get("prefix"):
+                kwargs["prefix"] = entry["prefix"]
+            return https_url(bucket, pattern, **kwargs)
+        except ImportError:
+            raise ValueError(
+                f"support external '{name}' requires lab-connectors with gcs support. "
+                "Install: pip install 'lab-connectors[gcs]'"
+            )
+
+    raise ValueError(
+        f"support external '{name}' requires one of: "
+        "'repo'+'slug'+'layer' (registry), 'repo'+'path' (GitHub raw), "
+        "'uri', or 'bucket'+'pattern'+'slug'"
+    )
+
+
+def _external_github_raw_uri(repo: str, path: str) -> str:
+    """URI GitHub raw per un file del repo produttore (branch main)."""
+    rel = path.lstrip("/")
+    return f"https://raw.githubusercontent.com/dataciviclab/{repo}/main/{rel}"
+
+
+def _find_local_registry_path(repo: str) -> Path | None:
+    """Cerca ``{repo}/registry/registry.json`` nei repo dati del workspace."""
+    from toolkit.core import paths as core_paths
+    from toolkit.registry.layout import workspace_repo_dirs
+
+    for repo_dir in workspace_repo_dirs(core_paths.WORKSPACE_ROOT):
+        if repo_dir.name == repo:
+            candidate = repo_dir / "registry" / "registry.json"
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def _load_producer_registry(repo: str, *, registry_path: str | None = None):
+    """Carica il registry del repo produttore: path esplicito → locale → GitHub."""
+    from lab_connectors.registry.client import load_registry_github, load_registry_local
+
+    if registry_path:
+        return load_registry_local(Path(registry_path))
+
+    local = _find_local_registry_path(repo)
+    if local is not None:
+        return load_registry_local(local)
+
+    try:
+        return load_registry_github(repo)
+    except Exception as exc:
+        local_hint = f"né un registry locale per '{repo}' nel workspace"
+        raise ValueError(
+            f"support external registry non disponibile per repo '{repo}': "
+            f"{local_hint} né su GitHub (dataciviclab/{repo}). "
+            "Committa {repo}/registry/registry.json, passa 'registry: <path>', "
+            "oppure usa la forma 'repo'+'path' per file GitHub raw."
+        ) from exc
+
+
+def _external_registry_uri_template(entry: dict[str, Any], name: str) -> str:
+    """Costruisce il template URI da repo+slug+layer usando il registry produttore.
+
+    Il registry è il contratto cross-repo: slug, prefix GCS e (per i mart)
+    le tabelle pubblicate. Un typo di slug fallisce qui con un errore leggibile
+    invece di un SQL runtime.
+    """
+    repo = str(entry["repo"])
+    slug = str(entry["slug"])
+    layer = str(entry.get("layer") or "clean")
+    if layer not in ("clean", "mart"):
+        raise ValueError(
+            f"support external '{name}': layer must be 'clean' or 'mart', got {layer!r}"
+        )
+
+    reg = _load_producer_registry(repo, registry_path=entry.get("registry"))
+
+    from lab_connectors.gcs.paths import https_url
+
+    if layer == "clean":
+        hit = next((ds for ds in reg.datasets if ds.slug == slug), None)
+        if hit is None:
+            available = ", ".join(ds.slug for ds in reg.datasets) or "(vuoto)"
+            raise ValueError(
+                f"support external '{name}': slug '{slug}' non presente "
+                f"nel registry di '{repo}'. Slug disponibili: {available}"
+            )
+        prefix = reg.prefix_for_slug(slug)
+        return https_url("clean", "clean_parquet", slug=slug, prefix=prefix, year="{year}")
+
+    # layer == mart
+    table = entry.get("table")
+    if not table:
+        hits = [m for m in reg.marts if m.dataset == slug]
+        if len(hits) == 1:
+            table = hits[0].table
+        elif not hits:
+            raise ValueError(
+                f"support external '{name}': nessuna tabella mart per dataset "
+                f"'{slug}' nel registry di '{repo}'. Dichiarare 'table:'."
+            )
+        else:
+            tables = ", ".join(m.table for m in hits)
+            raise ValueError(
+                f"support external '{name}': dataset '{slug}' ha più tabelle mart "
+                f"nel registry di '{repo}' ({tables}). Dichiarare 'table:'."
+            )
+    prefix = _mart_prefix_for_slug(reg, slug)
+    return https_url("mart", "mart_parquet", slug=slug, table=table, prefix=prefix, year="{year}")
+
+
+def _mart_prefix_for_slug(reg: Any, slug: str) -> str:
+    """Prefix GCS di un dataset mart: dal dataset registrato, altrimenti dalla mart location."""
+    prefix = reg.prefix_for_slug(slug)
+    if prefix:
+        return prefix
+    for m in reg.marts:
+        if m.dataset != slug:
+            continue
+        path = m.location.path
+        if not path.startswith("gs://"):
+            continue
+        marker = f"/{slug}/"
+        idx = path.find(marker)
+        if idx < 0:
+            continue
+        first_slash = path.index("/", 5)
+        return path[first_slash + 1 : idx + 1]
+    return ""
 
 
 def materialize_support(

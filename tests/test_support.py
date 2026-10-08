@@ -583,12 +583,12 @@ class TestExternalSupport:
 
     def test_resolve_missing_config_raises(self):
         entry = {"name": "bad", "type": "external"}
-        with pytest.raises(ValueError, match="requires 'uri' or 'bucket'"):
+        with pytest.raises(ValueError, match="requires one of"):
             resolve_support_payloads([entry], require_exists=False)
 
     def test_resolve_missing_pattern_raises(self):
         entry = {"name": "bad", "type": "external", "bucket": "clean"}
-        with pytest.raises(ValueError, match="requires 'uri' or 'bucket'"):
+        with pytest.raises(ValueError, match="requires one of"):
             resolve_support_payloads([entry], require_exists=False)
 
     def test_materialize_raises(self):
@@ -668,3 +668,258 @@ class TestExternalSupport:
         assert p["years"] == []
         assert p["clean"] is None
         assert p["outputs"] == ["gs://bucket/static/file.parquet"]
+
+
+# --- External support: forma dichiarativa repo+slug+layer (registry) ---
+
+
+def _write_registry(
+    tmp_path: Path,
+    repo: str,
+    *,
+    datasets: list[str] | None = None,
+    marts: list[tuple[str, str]] | None = None,
+    clean_prefix: str = "",
+) -> Path:
+    """Scrive un registry.json minimo per il repo produttore."""
+    import json
+
+    reg_dir = tmp_path / repo / "registry"
+    reg_dir.mkdir(parents=True, exist_ok=True)
+    datasets = datasets or []
+    marts = marts or []
+    prefix = f"{clean_prefix}/" if clean_prefix else ""
+    data = {
+        "schema_version": 1,
+        "repo": repo,
+        "datasets": [
+            {
+                "slug": slug,
+                "location": {
+                    "type": "gcs",
+                    "path": (f"gs://dataciviclab-clean/{prefix}{slug}/*/{slug}_*_clean.parquet"),
+                },
+            }
+            for slug in datasets
+        ],
+        "marts": [
+            {
+                "slug": f"{ds}__{table}",
+                "dataset": ds,
+                "table": table,
+                "location": {
+                    "type": "gcs",
+                    "path": (f"gs://dataciviclab-mart/{prefix}{ds}/*/{table}.parquet"),
+                },
+            }
+            for ds, table in marts
+        ],
+    }
+    path = reg_dir / "registry.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
+class TestExternalDeclarative:
+    """Forma repo+slug+layer: il path lo risolve il registry del produttore."""
+
+    def test_clean_layer_uses_registry_prefix(self, tmp_path: Path, monkeypatch):
+        reg = _write_registry(
+            tmp_path, "open-politica", datasets=["senato_ddl"], clean_prefix="open-politica"
+        )
+        monkeypatch.setattr(
+            "toolkit.core.support._load_producer_registry",
+            lambda repo, registry_path=None: _load_local(reg),
+        )
+        entry = {
+            "name": "ddl",
+            "type": "external",
+            "repo": "open-politica",
+            "slug": "senato_ddl",
+            "layer": "clean",
+            "years": [13, 14],
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        p = payloads[0]
+        assert p["path"].startswith(
+            "https://storage.googleapis.com/dataciviclab-clean/open-politica/senato_ddl/"
+        )
+        assert "{year}" in p["path"]
+        assert len(p["clean"]) == 2
+        assert "/13/" in p["clean"][0]
+        assert "/14/" in p["clean"][1]
+
+    def test_clean_slug_missing_from_registry_raises(self, tmp_path: Path, monkeypatch):
+        reg = _write_registry(tmp_path, "open-politica", datasets=["senato_ddl"])
+        monkeypatch.setattr(
+            "toolkit.core.support._load_producer_registry",
+            lambda repo, registry_path=None: _load_local(reg),
+        )
+        entry = {
+            "name": "ddl",
+            "type": "external",
+            "repo": "open-politica",
+            "slug": "senato_ddl_TYPO",
+            "layer": "clean",
+        }
+        with pytest.raises(ValueError, match="non presente"):
+            resolve_support_payloads([entry], require_exists=False)
+
+    def test_mart_layer_with_explicit_table(self, tmp_path: Path, monkeypatch):
+        reg = _write_registry(
+            tmp_path,
+            "senato-akn",
+            datasets=["senato_emendamenti"],
+            marts=[("senato_emendamenti", "mart_emendamenti_per_atto")],
+            clean_prefix="senato-akn",
+        )
+        monkeypatch.setattr(
+            "toolkit.core.support._load_producer_registry",
+            lambda repo, registry_path=None: _load_local(reg),
+        )
+        entry = {
+            "name": "emend",
+            "type": "external",
+            "repo": "senato-akn",
+            "slug": "senato_emendamenti",
+            "layer": "mart",
+            "table": "mart_emendamenti_per_atto",
+            "years": [2026],
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        p = payloads[0]
+        assert "dataciviclab-mart" in p["path"]
+        assert "senato_emendamenti" in p["path"]
+        assert "mart_emendamenti_per_atto.parquet" in p["path"]
+        assert "senato-akn" in p["path"]
+
+    def test_mart_layer_infers_single_table(self, tmp_path: Path, monkeypatch):
+        reg = _write_registry(
+            tmp_path,
+            "senato-akn",
+            datasets=["senato_emendamenti"],
+            marts=[("senato_emendamenti", "mart_unica")],
+        )
+        monkeypatch.setattr(
+            "toolkit.core.support._load_producer_registry",
+            lambda repo, registry_path=None: _load_local(reg),
+        )
+        entry = {
+            "name": "emend",
+            "type": "external",
+            "repo": "senato-akn",
+            "slug": "senato_emendamenti",
+            "layer": "mart",
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        assert "mart_unica.parquet" in payloads[0]["path"]
+
+    def test_mart_layer_multiple_tables_requires_table(self, tmp_path: Path, monkeypatch):
+        reg = _write_registry(
+            tmp_path,
+            "senato-akn",
+            datasets=["senato_corpus"],
+            marts=[("senato_corpus", "mart_a"), ("senato_corpus", "mart_b")],
+        )
+        monkeypatch.setattr(
+            "toolkit.core.support._load_producer_registry",
+            lambda repo, registry_path=None: _load_local(reg),
+        )
+        entry = {
+            "name": "corpus",
+            "type": "external",
+            "repo": "senato-akn",
+            "slug": "senato_corpus",
+            "layer": "mart",
+        }
+        with pytest.raises(ValueError, match="più tabelle mart"):
+            resolve_support_payloads([entry], require_exists=False)
+
+    def test_invalid_layer_raises(self, tmp_path: Path, monkeypatch):
+        reg = _write_registry(tmp_path, "demo", datasets=["x"])
+        monkeypatch.setattr(
+            "toolkit.core.support._load_producer_registry",
+            lambda repo, registry_path=None: _load_local(reg),
+        )
+        entry = {
+            "name": "x",
+            "type": "external",
+            "repo": "demo",
+            "slug": "x",
+            "layer": "raw",
+        }
+        with pytest.raises(ValueError, match="layer must be"):
+            resolve_support_payloads([entry], require_exists=False)
+
+    def test_registry_path_field_overrides_discovery(self, tmp_path: Path):
+        reg = _write_registry(tmp_path, "qualcosa", datasets=["foo_bar"])
+        entry = {
+            "name": "foo",
+            "type": "external",
+            "repo": "qualcosa",
+            "slug": "foo_bar",
+            "layer": "clean",
+            "registry": str(reg),
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        assert "foo_bar" in payloads[0]["path"]
+
+    def test_github_raw_path_form(self):
+        entry = {
+            "name": "gu",
+            "type": "external",
+            "repo": "gu-monitor",
+            "path": "data/gu_acts.parquet",
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        p = payloads[0]
+        assert (
+            p["path"]
+            == "https://raw.githubusercontent.com/dataciviclab/gu-monitor/main/data/gu_acts.parquet"
+        )
+
+    def test_local_registry_preferred_over_network(self, tmp_path: Path, monkeypatch):
+        """Il registry locale del workspace vince su GitHub."""
+        _write_registry(tmp_path, "mio-repo", datasets=["locale_ds"])
+        monkeypatch.setattr("toolkit.core.paths.WORKSPACE_ROOT", tmp_path)
+        monkeypatch.setattr(
+            "lab_connectors.registry.client.load_registry_github",
+            lambda repo, org="dataciviclab": (_ for _ in ()).throw(
+                RuntimeError("rete non dovrebbe essere usata")
+            ),
+        )
+        # carica per nome repo dallo scan workspace
+        from toolkit.core.support import _find_local_registry_path
+
+        found = _find_local_registry_path("mio-repo")
+        assert found is not None and found.name == "registry.json"
+        # bypass workspace scan: usa registry path diretto (stesso outcome)
+        entry = {
+            "name": "x",
+            "type": "external",
+            "repo": "mio-repo",
+            "slug": "locale_ds",
+            "layer": "clean",
+            "registry": str(found),
+        }
+        payloads = resolve_support_payloads([entry], require_exists=False)
+        assert "locale_ds" in payloads[0]["path"]
+
+    def test_registry_unavailable_raises_clear_error(self, monkeypatch):
+        monkeypatch.setattr("toolkit.core.support._find_local_registry_path", lambda repo: None)
+
+        def _boom(repo, org="dataciviclab"):
+            raise ConnectionError("no network")
+
+        monkeypatch.setattr("lab_connectors.registry.client.load_registry_github", _boom)
+        # entry with registry=None path → goes through _load_producer_registry
+        from toolkit.core.support import _load_producer_registry
+
+        with pytest.raises(ValueError, match="registry non disponibile"):
+            _load_producer_registry("repo-assente")
+
+
+def _load_local(reg_path: Path):
+    from lab_connectors.registry.client import load_registry_local
+
+    return load_registry_local(reg_path)

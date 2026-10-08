@@ -688,8 +688,10 @@ def _normalize_paths(data: dict, base_dir: Path) -> None:
                         p = Path(val)
                         if not p.is_absolute():
                             item["config"] = (base_dir / p).resolve()
-                # ADR-005: path del support file normalizzato sul root candidate
-                if "path" in item:
+                # ADR-005: path del support file normalizzato sul root candidate.
+                # Solo type:file — external usa 'path' come percorso relativo
+                # al repo GitHub (repo+path), non un path locale.
+                if "path" in item and str(item.get("type") or "file") == "file":
                     val = item["path"]
                     if isinstance(val, str):
                         p = Path(val)

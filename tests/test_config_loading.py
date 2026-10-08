@@ -281,6 +281,39 @@ def test_load_config_resolves_support_config_paths_from_dataset_dir(tmp_path: Pa
 
 
 @pytest.mark.policy
+def test_load_config_does_not_normalize_external_repo_path(tmp_path: Path):
+    """external repo+path è un path GitHub, non locale: non normalizzare."""
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    yml = project_dir / "dataset.yml"
+    _yml_str(
+        yml,
+        "root: './out'\n"
+        "dataset:\n"
+        "  name: demo\n"
+        "  years: [2022]\n"
+        "raw: {}\n"
+        "clean: {}\n"
+        "mart: {}\n"
+        "support:\n"
+        "  - name: gu\n"
+        "    type: external\n"
+        "    repo: gu-monitor\n"
+        "    path: data/gu_acts.parquet\n"
+        "  - name: locale\n"
+        "    type: file\n"
+        "    path: mapping/q.csv",
+    )
+
+    cfg = load_config(yml)
+    by_name = {s.name: s for s in cfg.support}
+    assert by_name["gu"].path == "data/gu_acts.parquet"
+    # type:file resta normalizzato sul root candidate
+    assert by_name["locale"].path == str((project_dir / "mapping/q.csv").resolve())
+
+
+@pytest.mark.policy
 def test_load_config_does_not_transform_non_whitelisted_path_like_fields(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()

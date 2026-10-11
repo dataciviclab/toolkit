@@ -250,7 +250,8 @@ def _resolve_external_entry(
        (locale workspace → fallback GitHub). Opzionale: ``table`` (mart),
        ``years``, ``registry`` (path esplicito al registry).
     4. ``bucket`` + ``pattern`` + ``slug`` (+ optional ``table``/``prefix``):
-       built via ``lab_connectors.gcs.paths.https_url()``.
+       built via ``lab_connectors.gcs.paths.https_url()``. Con ``years`` multi
+       il template conserva ``{year}`` (equivale al modo ``uri``+``{year}``).
 
     Resolution after a URI template is built:
     - ``{year}`` placeholder + ``years`` → one URL per year; ``clean`` is a
@@ -331,7 +332,11 @@ def _external_uri_template(entry: dict[str, Any], name: str) -> str:
             if entry.get("table"):
                 kwargs["table"] = entry["table"]
             years = [int(y) for y in entry.get("years") or []]
-            if years:
+            if len(years) > 1:
+                # Multi-year: il template conserva {year} (≡ uri+{year});
+                # _resolve_external_entry espande una URL per anno.
+                kwargs["year"] = "{year}"
+            elif years:
                 kwargs["year"] = years[0]
             if entry.get("prefix"):
                 kwargs["prefix"] = entry["prefix"]

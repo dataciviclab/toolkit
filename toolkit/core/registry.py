@@ -77,6 +77,13 @@ _BUILTIN_PLUGINS: tuple[dict[str, Any], ...] = (
         "optional": False,
         "factory": lambda cls: lambda **client: cls(timeout=client.get("timeout", 60)),
     },
+    {
+        "name": "dbnomics",
+        "module": "toolkit.plugins.dbnomics",
+        "class_name": "DbnomicsSource",
+        "optional": False,
+        "factory": lambda cls: lambda **client: cls(**client),
+    },
 )
 
 

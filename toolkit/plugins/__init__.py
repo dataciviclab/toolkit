@@ -10,9 +10,11 @@ Builtin stable sources exposed by the default runtime:
 - `ckan`
 - `sdmx`
 - `sparql`
+- `dbnomics` (mirror SDMX/ISTAT senza rate-limit ISTAT)
 """
 
 from toolkit.plugins.ckan import CkanSource
+from toolkit.plugins.dbnomics import DbnomicsSource
 from toolkit.plugins.http_file import HttpFileSource
 from toolkit.plugins.http_post_file import HttpPostFileSource
 from toolkit.plugins.local_file import LocalFileSource
@@ -26,4 +28,5 @@ __all__ = [
     "CkanSource",
     "SdmxSource",
     "SparqlSource",
+    "DbnomicsSource",
 ]

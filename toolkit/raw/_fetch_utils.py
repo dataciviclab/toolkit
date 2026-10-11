@@ -73,7 +73,7 @@ def _sdmx_root_from_url(url: str) -> str:
 
 
 def _infer_ext(stype: str, formatted_args: dict, origin: str | None = None) -> str:
-    if stype in {"sdmx", "sparql"}:
+    if stype in {"sdmx", "sparql", "dbnomics"}:
         return ".csv"
 
     if stype in {"http_file", "http_post_file", "ckan"}:
@@ -197,6 +197,26 @@ def _fetch_sparql(stype: str, client: dict, formatted_args: dict) -> tuple[bytes
         step=step,
         pagination=pagination,
     )
+
+
+@_register_fetch("dbnomics")
+def _fetch_dbnomics(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
+    src = registry.create(stype, **(client or {}))
+    dataset = str(formatted_args["dataset"])
+    provider = str(formatted_args.get("provider") or "ISTAT")
+    dimensions = formatted_args.get("dimensions") or {}
+    observations = bool(formatted_args.get("observations", True))
+    page_size = formatted_args.get("page_size")
+    max_pages = formatted_args.get("max_pages")
+    content = src.fetch(
+        dataset,
+        provider=provider,
+        dimensions=dimensions,
+        observations=observations,
+        page_size=page_size,
+        max_pages=max_pages,
+    )
+    return content, dataset
 
 
 @_register_fetch("http_file")

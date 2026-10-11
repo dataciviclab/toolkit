@@ -87,6 +87,20 @@ _SOURCE_TYPES: list[dict[str, Any]] = [
             "pagination": "Config paginazione: {'mode': 'offset'} (default) oppure {'mode': 'keyset', 'key': '?var'} — keyset inietta FILTER(?var > last) invece di OFFSET: deterministico, compatibile con Virtuoso che rifiuta ORDER BY+OFFSET (SR353). La query keyset DEVE avere gia' ORDER BY ?var.",
         },
     },
+    {
+        "type": "dbnomics",
+        "description": "Scarica serie da DBnomics API v22 (mirror pubblico ISTAT/Eurostat/… senza rate-limit ISTAT). Output CSV lungo: series_code, provider, dataset, dims…, TIME_PERIOD, OBS_VALUE. Sostituto operativo per ISTAT quando esploradati è rate-limitato o ban.",
+        "args": {
+            "dataset": "ID dataset DBnomics (es. 93_498) oppure PROVIDER/DATASET (es. ISTAT/93_498)",
+            "provider": "Provider (default ISTAT)",
+            "dimensions": "Filtri per dimensione SDMX: {REF_AREA: [IT], FREQ: [A], …}. Valori stringa o lista. Serializzati come JSON per l'API.",
+            "observations": "Se true (default) scarica le osservazioni; false = solo metadati serie (poco utile per raw)",
+            "page_size": "Righe per pagina API (default 1000, max 1000)",
+            "max_pages": "Pagine massime (default 200) — guardrail su cubi enormi",
+            "filename": "nome locale (opzionale)",
+        },
+        "note": "Nessun rate-limit ISTAT. Preferire filtri dimensions stretti; evitare dataset completi a grana comune senza LIMIT. Client: timeout/retries come http_file.",
+    },
 ]
 
 # ── Tipi extractor RAW ───────────────────────────────────────────────────

@@ -194,6 +194,37 @@ class TestExtractYearValues:
         result = extract_year_values_from_sample(sample, ["anno", "valore"])
         assert result == [2020]
 
+    @pytest.mark.regression
+    def test_inf_values_do_not_overflow(self):
+        """float('inf') da parsing numeri italiani non deve lanciare OverflowError.
+
+        Regressione: CSV con importi grandi (es. rendiconto gestionale INPS)
+        producevano inf nello sniff e int(inf) esplodeva in preflight/run.
+        """
+        sample = [
+            {"Anno": float("inf"), "Valore": 100},
+            {"Anno": float("-inf"), "Valore": 110},
+            {"Anno": float("nan"), "Valore": 120},
+            {"Anno": 2023.0, "Valore": 130},
+            {"Anno": 2024.0, "Valore": 140},
+        ]
+        columns = ["Anno", "Valore"]
+        result = extract_year_values_from_sample(sample, columns)
+        assert result == [2023, 2024]
+
+    @pytest.mark.regression
+    def test_huge_float_values_do_not_overflow(self):
+        """Float oltre il range int non devono rompere l'estrazione anni."""
+        sample = [
+            {"Anno": 1e300, "Valore": 100},
+            {"Anno": float(2**63), "Valore": 110},
+            {"Anno": 2020.0, "Valore": 120},
+            {"Anno": 2021.0, "Valore": 130},
+        ]
+        columns = ["Anno", "Valore"]
+        result = extract_year_values_from_sample(sample, columns)
+        assert result == [2020, 2021]
+
 
 class TestPreviewResultDataclass:
     @pytest.mark.contract

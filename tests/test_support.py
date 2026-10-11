@@ -654,8 +654,21 @@ class TestExternalSupport:
         payloads = resolve_support_payloads([entry], require_exists=False)
         p = payloads[0]
         assert p["years"] == [2025, 2026]
-        # first year used for path construction
-        assert "2025" in p["path"]
+        # template URI con {year} (≡ uri+{year}) — issue #494
+        assert "{year}" in p["path"]
+        assert "pnrr_progetti" in p["path"]
+        # outputs/clean = lista URL per ogni anno
+        assert isinstance(p["clean"], list)
+        assert len(p["clean"]) == 2
+        assert len(p["outputs"]) == 2
+        assert "2025" in p["clean"][0]
+        assert "2026" in p["clean"][1]
+        assert p["clean"] == p["outputs"]
+        # years_resolved dettagliato per anno
+        assert len(p["years_resolved"]) == 2
+        assert p["years_resolved"][0]["year"] == 2025
+        assert p["years_resolved"][1]["year"] == 2026
+        assert p["years_resolved"][1]["path"] == p["clean"][1]
 
     def test_single_file_no_years(self):
         entry = {

@@ -112,7 +112,15 @@ def extract_year_values_from_sample(sample: list[dict], columns: list[str]) -> l
         return []
 
     def _safe_ints(vals: list) -> list[int]:
-        return [int(v) for v in vals if not (isinstance(v, float) and math.isnan(v))]
+        out: list[int] = []
+        for v in vals:
+            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                continue
+            try:
+                out.append(int(v))
+            except (OverflowError, ValueError):
+                continue
+        return out
 
     # Strategy 1: colonne con 2+ valori nel range anni
     for col in columns:

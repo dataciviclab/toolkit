@@ -252,7 +252,7 @@ def test_sdmx_fetch_falls_back_on_metadata_timeout(monkeypatch):
 
     def _fake_get(self, url, **kwargs):
         calls.append(url)
-        if url == "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
+        if url == "https://dead.test/rest/dataflow/IT1/22_289":
             return HttpResult(response=None, err=requests.exceptions.Timeout("metadata timeout"))
         if url == "https://esploradati.istat.it/SDMXWS/rest/dataflow/IT1/22_289":
             return _ok(_FakeResponse(200, DATAFLOW_XML, url))
@@ -267,7 +267,10 @@ def test_sdmx_fetch_falls_back_on_metadata_timeout(monkeypatch):
 
     monkeypatch.setattr(HttpClient, "get", _fake_get)
 
-    payload, origin = SdmxSource(retries=1).fetch(
+    payload, origin = SdmxSource(
+        retries=1,
+        metadata_base_url="https://dead.test/rest",
+    ).fetch(
         "IT1",
         "22_289",
         "1.5",
@@ -283,8 +286,9 @@ def test_sdmx_fetch_falls_back_on_metadata_timeout(monkeypatch):
 
     assert origin.endswith("/data/IT1,22_289,1.5/A.001001.JAN.9.TOTAL.99")
     assert payload.decode("utf-8").startswith("FREQ,FREQ_label")
+    # primary morto (timeout) → fallback su esploradati (candidate ISTAT)
     assert calls[:2] == [
-        "https://sdmx.istat.it/SDMXWS/rest/dataflow/IT1/22_289",
+        "https://dead.test/rest/dataflow/IT1/22_289",
         "https://esploradati.istat.it/SDMXWS/rest/dataflow/IT1/22_289",
     ]
 
@@ -952,3 +956,202 @@ def test_sdmx_oecd_base_urls(monkeypatch):
     assert src._metadata_base_urls("OECD.STI.STP") == ["https://sdmx.oecd.org/public/rest"]
     # ISTAT resta sui default
     assert src._data_base_urls("IT1") != ["https://sdmx.oecd.org/public/rest"]
+
+
+# --- Issue #444: key incompleta (XML-only) + 302 loop fallback -----------------
+
+DATAFLOW_XML_150 = """<?xml version="1.0" encoding="UTF-8"?>
+<mes:Structure xmlns:mes="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/message"
+               xmlns:str="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/structure">
+  <mes:Structures>
+    <str:Dataflows>
+      <str:Dataflow id="150_915">
+        <str:Structure>
+          <Ref id="DCCV_TAXOCCU1" version="1.0" agencyID="IT1" package="datastructure" class="DataStructure" />
+        </str:Structure>
+      </str:Dataflow>
+    </str:Dataflows>
+  </mes:Structures>
+</mes:Structure>
+"""
+
+DSD_XML_150 = """<?xml version="1.0" encoding="UTF-8"?>
+<mes:Structure xmlns:mes="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/message"
+               xmlns:str="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/structure">
+  <mes:Structures>
+    <str:DataStructures>
+      <str:DataStructure id="DCCV_TAXOCCU1" agencyID="IT1" version="1.0">
+        <str:DataStructureComponents>
+          <str:DimensionList id="DimensionDescriptor">
+            <str:Dimension id="FREQ" position="1"/>
+            <str:Dimension id="REF_AREA" position="2"/>
+            <str:Dimension id="DATA_TYPE" position="3"/>
+            <str:Dimension id="SEX" position="4"/>
+            <str:Dimension id="AGE" position="5"/>
+            <str:Dimension id="EDU_LEV_HIGHEST" position="6"/>
+            <str:Dimension id="CITIZENSHIP" position="7"/>
+            <str:Dimension id="TIME_PERIOD" position="8"/>
+          </str:DimensionList>
+        </str:DataStructureComponents>
+      </str:DataStructure>
+    </str:DataStructures>
+  </mes:Structures>
+</mes:Structure>"""
+
+OCC_CSV = (
+    "FREQ,REF_AREA,DATA_TYPE,SEX,AGE,EDU_LEV_HIGHEST,CITIZENSHIP,TIME_PERIOD,OBS_VALUE\n"
+    "A,IT,EMP_R,1,Y15-24,99,TOTAL,2024,31.27\n"
+)
+
+
+def _istat_xml_only_fake_get(calls):
+    """Flow ISTAT XML-only: constraints JSON 404, DSD disponibile, dati CSV."""
+
+    def _fake_get(self, url, **kwargs):
+        headers = kwargs.get("headers") or {}
+        calls.append((url, headers.get("Accept"), kwargs.get("params") or {}))
+        if url.endswith("/dataflow/IT1/150_915"):
+            return _ok(_FakeResponse(200, DATAFLOW_XML_150, url))
+        if url.endswith("/datastructure/IT1/DCCV_TAXOCCU1"):
+            return _ok(_FakeResponse(200, DSD_XML_150, url))
+        if url.endswith("/data/IT1,150_915,1.0/all"):
+            return _ok(_FakeResponse(404, "JSON not available", url))
+        if "/data/IT1,150_915,1.0/" in url:
+            if (headers.get("Accept") or "") == "text/csv":
+                return _ok(_FakeResponse(200, OCC_CSV, url))
+            # JSON attempt: risposta XML (non JSON) → trigger CSV fallback
+            return _ok(_FakeResponse(200, "<GenericData/>", url))
+        raise AssertionError(f"Unexpected URL {url}")
+
+    return _fake_get
+
+
+def test_sdmx_istat_xml_only_completes_key_from_dsd(monkeypatch):
+    """XML-only flow: key completa da datastructure, dim vuote = all (#444).
+
+    Constraints JSON non disponibili → la key deve avere un segmento per
+    ogni dimensione DSD (TIME_PERIOD escluso), vuoto per le non filtrate.
+    """
+    calls = []
+    monkeypatch.setattr(HttpClient, "get", _istat_xml_only_fake_get(calls))
+
+    payload, origin = SdmxSource(retries=1).fetch(
+        "IT1",
+        "150_915",
+        "1.0",
+        {"FREQ": "A", "DATA_TYPE": "EMP_R", "EDU_LEV_HIGHEST": "99", "CITIZENSHIP": "TOTAL"},
+    )
+
+    data_calls = [
+        c for c in calls if "/data/IT1,150_915,1.0/" in c[0] and not c[0].endswith("/all")
+    ]
+    assert data_calls, f"no data calls in {calls}"
+    # 7 segmenti (FREQ.REF_AREA.DATA_TYPE.SEX.AGE.EDU.CITIZENSHIP), vuoti = all
+    assert data_calls[0][0].endswith("/data/IT1,150_915,1.0/A..EMP_R...99.TOTAL")
+    assert OCC_CSV.splitlines()[1] in payload.decode("utf-8")
+    assert origin.endswith("/data/IT1,150_915,1.0/A..EMP_R...99.TOTAL")
+
+
+def test_sdmx_istat_dsd_key_keeps_trailing_empty(monkeypatch):
+    """DSD key: segmento vuoto trailing obbligatorio — rstrip → 422 (#444)."""
+    calls = []
+    monkeypatch.setattr(HttpClient, "get", _istat_xml_only_fake_get(calls))
+
+    SdmxSource(retries=1).fetch(
+        "IT1",
+        "150_915",
+        "1.0",
+        # CITIZENSHIP non filtrata → segmento vuoto + punto finale
+        {"FREQ": "A", "DATA_TYPE": "EMP_R", "EDU_LEV_HIGHEST": "99"},
+    )
+
+    data_calls = [
+        c for c in calls if "/data/IT1,150_915,1.0/" in c[0] and not c[0].endswith("/all")
+    ]
+    assert data_calls[0][0].endswith("/data/IT1,150_915,1.0/A..EMP_R...99.")
+
+
+def test_sdmx_istat_dsd_key_rejects_unknown_filter(monkeypatch):
+    """DSD key: filtro su dimensione non presente nel DSD → errore esplicito."""
+    calls = []
+    monkeypatch.setattr(HttpClient, "get", _istat_xml_only_fake_get(calls))
+
+    with pytest.raises(DownloadError, match="Unknown SDMX filter dimensions"):
+        SdmxSource(retries=1).fetch("IT1", "150_915", "1.0", {"FREQ": "A", "NOT_A_DIM": "X"})
+
+
+def test_sdmx_istat_dsd_unavailable_keeps_legacy_key(monkeypatch):
+    """DSD non raggiungibile → key dai soli filtri (legacy, graceful)."""
+
+    def _fake_get(self, url, **kwargs):
+        if url.endswith("/dataflow/IT1/150_915"):
+            return _ok(_FakeResponse(200, DATAFLOW_XML_150, url))
+        if url.endswith("/datastructure/IT1/DCCV_TAXOCCU1"):
+            return HttpResult(response=None, err=requests.exceptions.ConnectionError("down"))
+        if url.endswith("/data/IT1,150_915,1.0/all"):
+            return _ok(_FakeResponse(404, "JSON not available", url))
+        if "/data/IT1,150_915,1.0/" in url:
+            if (kwargs.get("headers") or {}).get("Accept") == "text/csv":
+                return _ok(_FakeResponse(200, OCC_CSV, url))
+            return _ok(_FakeResponse(200, "<GenericData/>", url))
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
+
+    # Con filtri noti al server la key legacy (solo filtri) viene comunque
+    # accettata dal mock — qui verifichiamo solo che NON venga toccata la
+    # struttura e il fetch completi senza errori di binding.
+    payload, _origin = SdmxSource(retries=1).fetch("IT1", "150_915", "1.0", {"FREQ": "A"})
+    assert OCC_CSV.splitlines()[1] in payload.decode("utf-8")
+
+
+def test_sdmx_redirect_loop_falls_back_to_next_endpoint(monkeypatch):
+    """302 loop su un endpoint → fallback al candidate successivo (#444)."""
+    calls = []
+
+    def _fake_get(self, url, **kwargs):
+        calls.append(url)
+        if url.startswith("https://dead.test/"):
+            return HttpResult(
+                response=None,
+                err=requests.exceptions.TooManyRedirects("Exceeded 30 redirects"),
+            )
+        if url.startswith("https://esploradati.istat.it/") and "/dataflow/" in url:
+            return _ok(_FakeResponse(200, DATAFLOW_XML, url))
+        if url.startswith("https://esploradati.istat.it/") and url.endswith("/all"):
+            return _ok(_FakeResponse(200, PREVIEW_JSON_WITH_VALUES, url))
+        if url.startswith("https://esploradati.istat.it/") and "/data/" in url:
+            return _ok(_FakeResponse(200, DATA_JSON, url))
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr(HttpClient, "get", _fake_get)
+
+    # metadata primario morto (302 loop) → fallback su esploradati (candidate
+    # successivo di _metadata_base_urls per IT1)
+    payload, origin = SdmxSource(
+        retries=1,
+        metadata_base_url="https://dead.test/rest",
+    ).fetch(
+        "IT1",
+        "22_289",
+        "1.5",
+        {
+            "FREQ": "A",
+            "REF_AREA": "001001",
+            "DATA_TYPE": "JAN",
+            "SEX": "9",
+            "AGE": "TOTAL",
+            "MARITAL_STATUS": "99",
+        },
+    )
+
+    assert any(c.startswith("https://dead.test/") for c in calls)  # primario tentato
+    assert origin.startswith("https://esploradati.istat.it/")  # fallback usato
+    assert "2024,2024,2634" in payload.decode("utf-8")
+
+
+def test_sdmx_istat_metadata_default_is_esploradati():
+    """Default ISTAT: metadata su esploradati (sdmx.istat.it è morto, #444)."""
+    src = SdmxSource(retries=1)
+    assert src._metadata_base_urls("IT1") == ["https://esploradati.istat.it/SDMXWS/rest"]
+    assert src._data_base_urls("IT1")[0] == "https://esploradati.istat.it/SDMXWS/rest"

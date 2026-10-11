@@ -72,6 +72,9 @@ def _flow_ref(agency: str, flow: str, version: str) -> str:
 ISTAT_SDMX_BASE = "https://sdmx.istat.it/SDMXWS/rest"
 ISTAT_ESPLORADATI_BASE = "https://esploradati.istat.it/SDMXWS/rest"
 
+# Dimensione tempo standard SDMX 2.1: non fa parte della key dati
+SDMX_TIME_DIM = "TIME_PERIOD"
+
 
 def _parse_tsv_value(raw: str) -> tuple[float | None, str | None]:
     """Parse a Eurostat TSV value cell: number + optional quality flag."""
@@ -175,8 +178,11 @@ class SdmxSource:
         self.timeout = timeout
         self.retries = retries
         self.user_agent = user_agent or "dataciviclab-toolkit/0.1"
+        # Default ISTAT: esploradati serve sia metadata che dati. Il vecchio
+        # sdmx.istat.it risponde 302 → root → loop (endpoint morto, issue #444);
+        # con il default su esploradati esce dai metadata candidates per dedup.
         self.data_base_url = _normalize_base_url(data_base_url or ISTAT_ESPLORADATI_BASE)
-        self.metadata_base_url = _normalize_base_url(metadata_base_url or ISTAT_SDMX_BASE)
+        self.metadata_base_url = _normalize_base_url(metadata_base_url or ISTAT_ESPLORADATI_BASE)
         # Distinguiamo "default ISTAT" da "URL passato dall'utente": il profilo
         # ESTAT usa automaticamente l'endpoint Eurostat se non esplicitato.
         self._data_base_url_given = data_base_url is not None
@@ -216,7 +222,11 @@ class SdmxSource:
 
     def _is_retryable_fallback_error(self, exc: DownloadError) -> bool:
         text = str(exc).lower()
-        return "endpoint timeout" in text or "endpoint error (http 5" in text
+        return (
+            "endpoint timeout" in text
+            or "endpoint error (http 5" in text
+            or "redirect loop" in text
+        )
 
     # ── Profilo Eurostat (ESTAT) ───────────────────────────────────────────
 
@@ -382,6 +392,10 @@ class SdmxSource:
             raise DownloadError(f"SDMX endpoint timeout for {url}: {err}")
         if isinstance(err, requests.exceptions.ConnectionError):
             raise DownloadError(f"SDMX endpoint connection error for {url}: {err}")
+        # 302 loop (es. sdmx.istat.it morto → root → loop): errore esplicito
+        # che _is_retryable_fallback_error tratta come fallback-able (issue #444).
+        if isinstance(err, requests.exceptions.TooManyRedirects):
+            raise DownloadError(f"SDMX endpoint redirect loop for {url}")
         raise DownloadError(str(err))
 
     def _get_json(
@@ -428,6 +442,48 @@ class SdmxSource:
 
         version = _safe_text(structure_ref.attrib.get("version"))
         return version
+
+    def _dsd_key_dim_ids(self, agency: str, flow: str) -> list[str]:
+        """Ordered key dimension IDs dalla datastructure XML (senza TIME_PERIOD).
+
+        Used when JSON constraints are unavailable (ISTAT XML-only flows):
+        the SDMX key must contain one segment per dimension (empty = all),
+        so the full ordered dimension list is required to build a valid key
+        (issue #444). Returns [] on any metadata failure — fetch() then
+        falls back to the filters-only key (legacy behavior).
+        """
+        cache_key = f"{agency}/{flow}/dsd_dims"
+        if cache_key in self._constraints_cache:
+            cached = self._constraints_cache[cache_key]
+            return cached if isinstance(cached, list) else []
+        try:
+            dataflow_root = self._get_dataflow(agency, flow)
+            ds_ref = dataflow_root.find(".//str:Structure/Ref", SDMX_NS)
+            if ds_ref is None:
+                return []
+            ds_id = _safe_text(ds_ref.attrib.get("id"))
+            ds_agency = _safe_text(ds_ref.attrib.get("agencyID")) or agency
+            if not ds_id:
+                return []
+            xml_text, _origin = self._get_text_from_candidates(
+                self._metadata_base_urls(ds_agency),
+                f"datastructure/{ds_agency}/{ds_id}",
+            )
+            root = ET.fromstring(xml_text)
+        except (DownloadError, ET.ParseError):
+            return []
+        positioned: list[tuple[int, str]] = []
+        for dim in root.findall(".//str:Dimension", SDMX_NS):
+            dim_id = _safe_text(dim.attrib.get("id"))
+            if not dim_id or dim_id == SDMX_TIME_DIM:
+                continue
+            pos_raw = _safe_text(dim.attrib.get("position"))
+            pos = int(pos_raw) if pos_raw.isdigit() else len(positioned)
+            positioned.append((pos, dim_id))
+        positioned.sort(key=lambda item: item[0])
+        dim_ids = [dim_id for _pos, dim_id in positioned]
+        self._constraints_cache[cache_key] = dim_ids  # type: ignore[assignment]
+        return dim_ids
 
     def preview_constraints(self, agency: str, flow: str, version: str) -> dict[str, list[str]]:
         """Return valid codes per dimension for a dataflow.
@@ -477,7 +533,12 @@ class SdmxSource:
         self._constraints_cache[cache_key] = result
         return result
 
-    def _build_key(self, dimensions: list[str], filters: dict | None, agency: str = "") -> str:
+    def _build_key(
+        self,
+        dimensions: list[str],
+        filters: dict | None,
+        agency: str = "",
+    ) -> str:
         filters = filters or {}
 
         # When constraints are empty (e.g. OECD JSON 1.0 doesn't expose them),
@@ -505,10 +566,11 @@ class SdmxSource:
 
         key = ".".join(parts)
 
-        # OECD requires all dimension separators (dots) even for empty trailing dims.
-        # ISTAT/Eurostat strip trailing dots — but OECD returns 403 if key is short.
-        is_oecd = _safe_text(agency).upper().startswith(OECD_AGENCY_PREFIX)
-        if not is_oecd:
+        # Key stripping: solo Eurostat accetta key corte (i segmenti trailing
+        # possono essere omessi). ISTAT richiede un segmento per ogni
+        # dimensione — vuoto = all — verificato live: key corta → 422
+        # "not enough key values" (issue #444). OECD già non stripava (403).
+        if _safe_text(agency).upper() == EUROSTAT_AGENCY:
             key = key.rstrip(".")
 
         return key or "all"
@@ -620,7 +682,17 @@ class SdmxSource:
 
         flow_ref = _flow_ref(agency, flow, version)
         constraints = self.preview_constraints(agency, flow, version)
-        key = self._build_key(list(constraints.keys()), filters, agency)
+        # TIME_PERIOD non fa parte della key SDMX (si filtra via
+        # startPeriod/endPeriod) — escluso sia dal JSON constraints sia dal
+        # DSD; verificato live: key senza segmento time accettata (#444).
+        dim_ids = [d for d in constraints.keys() if d != SDMX_TIME_DIM]
+        if not dim_ids:
+            # ISTAT XML-only (constraints JSON non disponibili): completa la
+            # key dalla datastructure — un segmento per dimensione, vuoto =
+            # all (issue #444). Se anche il DSD non è raggiungibile, resta
+            # la key dai soli filtri (legacy).
+            dim_ids = self._dsd_key_dim_ids(agency, flow)
+        key = self._build_key(dim_ids, filters, agency)
         for dim, allowed in constraints.items():
             if not allowed:
                 continue

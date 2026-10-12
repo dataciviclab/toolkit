@@ -30,6 +30,30 @@ class TestExtractDataLinks:
         assert {lnk.format for lnk in links} == {"CSV", "XLSX", "JSON", "ZIP"}
 
     @pytest.mark.pure_unit
+    def test_liferay_urls_with_uuid_suffix(self):
+        """URL Liferay: estensione come segmento, UUID in coda.
+
+        Pattern: /portale/documents/20118/0/2023_Ind_AMMINISTR_01_IT.csv/45e7ec1b-d282-...
+        """
+        html = """
+            <a href="/portale/documents/20118/0/2023_Ind_AMMINISTR_01_IT.csv/45e7ec1b-d282-278d-de7b-73af">CSV</a>
+            <a href="/portale/documents/20118/0/2023_Metadati_Ind_FC90.xlsx/9e1fd560-98c5-4b2a-aa">XLSX</a>
+        """
+        links = extract_data_links("https://ex.it", html)
+        assert len(links) == 2
+        formats = {lnk.format for lnk in links}
+        assert "CSV" in formats
+        assert "XLSX" in formats
+
+    @pytest.mark.pure_unit
+    def test_liferay_does_not_false_positive_on_short_tail(self):
+        """Non confondere un path con '.csv/' seguito da segmento corto (non-UUID)."""
+        html = '<a href="/docs/report.csv/v1">storto</a>'
+        links = extract_data_links("https://ex.it", html)
+        # 'v1' ha len < 8 → non riconosciuto come Liferay UUID
+        assert len(links) == 0
+
+    @pytest.mark.pure_unit
     def test_skips_anchors_and_protocols(self):
         """Ignora ancore, mailto, tel, javascript."""
         html = """

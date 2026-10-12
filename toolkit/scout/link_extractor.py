@@ -131,15 +131,27 @@ def _extract_years(filename: str) -> list[int]:
 
 
 def _resolve_format(url: str) -> str | None:
-    """Determina il formato dall'estensione del file nell'URL."""
+    """Determina il formato dall'estensione del file nell'URL.
+
+    Gestisce anche URL Liferay-style (es. ``/documents/09/file.csv/uuid-xyz``)
+    dove l'estensione e' un segmento di path seguito da un UUID, non la coda.
+    """
     lower = url.lower()
+    path = url.split("?")[0].lower().rstrip("/")
     # Ordina per lunghezza decrescente: .xlsx prima di .xls, .geojson prima di .json
     for ext in sorted(DATA_EXTENSIONS, key=len, reverse=True):
-        # Cerca l'estensione nel path (non nella query string)
-        path = url.split("?")[0].lower()
+        # 1) Estensione in coda al path (caso standard)
         if path.endswith(ext):
             return ext.lstrip(".").upper()
-        # fallback: cerca estensione in tutto l'URL
+        # 2) Estensione come segmento intermedio seguito da un ulteriore
+        #    segmento lungo >= 8 (UUID/hash Liferay: .../file.csv/45e7ec1b-...)
+        marker = ext + "/"
+        idx = path.find(marker)
+        if idx != -1:
+            tail = path[idx + len(marker) :]
+            if "/" not in tail and len(tail) >= 8:
+                return ext.lstrip(".").upper()
+        # 3) fallback: estensione in coda a tutto l'URL (query esclusa)
         check = lower.rstrip("/")
         if check.endswith(ext):
             return ext.lstrip(".").upper()

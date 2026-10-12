@@ -16,18 +16,19 @@ class TestExtractDataLinks:
 
     @pytest.mark.pure_unit
     def test_basic_formats(self):
-        """Estrae CSV, XLSX, JSON, ZIP, ignora PDF e HTML."""
+        """Estrae CSV, XLSX, JSON, ZIP, RDF; ignora PDF e HTML."""
         html = """
             <a href="/data.csv">CSV</a>
             <a href="/data.xlsx">XLSX</a>
             <a href="/data.json">JSON</a>
             <a href="/data.zip">ZIP</a>
+            <a href="/data.rdf">RDF</a>
             <a href="/about">HTML</a>
             <a href="/report.pdf">PDF</a>
         """
         links = extract_data_links("https://ex.it", html)
-        assert len(links) == 4
-        assert {lnk.format for lnk in links} == {"CSV", "XLSX", "JSON", "ZIP"}
+        assert len(links) == 5
+        assert {lnk.format for lnk in links} == {"CSV", "XLSX", "JSON", "ZIP", "RDF"}
 
     @pytest.mark.pure_unit
     def test_liferay_urls_with_uuid_suffix(self):

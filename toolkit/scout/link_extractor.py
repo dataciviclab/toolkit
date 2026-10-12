@@ -35,6 +35,7 @@ DATA_EXTENSIONS = {
     ".xml",
     ".parquet",
     ".geojson",
+    ".rdf",
 }
 
 # Pattern per estrarre prefisso e anni dal filename

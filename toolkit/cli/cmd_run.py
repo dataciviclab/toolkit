@@ -10,12 +10,12 @@ import typer
 
 from toolkit.cli.common import load_cfg_and_logger, resolve_run_context
 from toolkit.core.config import ensure_dict
-from toolkit.core.sql_validation import validate_sql_dry_run
+from toolkit.domain.sql_validation import validate_sql_dry_run
 from toolkit.clean.run import run_clean
 from toolkit.clean.validate import run_clean_validation
 from toolkit.core.logging import bind_logger, get_logger
 from toolkit.core.paths import RAW_PROFILE, layer_dataset_dir, layer_year_dir
-from toolkit.core.probe import ProbePool, probe_fmt
+from toolkit.scout.pool import ProbePool, probe_fmt
 from toolkit.core.run_context import RunContext
 from toolkit.domain.common import iter_selected_years
 from toolkit.domain.source_utils import resolve_source as _resolve_source
@@ -98,6 +98,33 @@ def _validate_execution_plan(cfg, step: str) -> list[str]:
                 raise FileNotFoundError(f"MART SQL file not found: {sql_path}")
 
     return layers
+
+
+def _scaffold_clean_after_raw(cfg, year: int, logger) -> None:
+    """Scaffold clean.sql after a successful raw run, if missing.
+
+    Legge il profilo RAW scritto su disco e genera sql/clean.sql se assente.
+    Comportamento identico al precedente hook inside run_raw, ma decoupled
+    dal layer engine.
+    """
+    from toolkit.core.io import read_json_or_none
+    from toolkit.scaffold.clean import scaffold_clean_if_missing
+
+    profile_path = layer_year_dir(cfg.root, "raw", cfg.dataset, year) / "_profile" / RAW_PROFILE
+    profile = read_json_or_none(profile_path)
+    if not profile:
+        return
+    try:
+        scaffold_clean_if_missing(
+            profile,
+            cfg.dataset,
+            year,
+            cfg.base_dir,
+            ensure_dict(cfg.clean),
+            logger,
+        )
+    except Exception as exc:
+        logger.warning("scaffold clean.sql failed: %s: %s", type(exc).__name__, exc)
 
 
 def _run_probe(cfg, year: int, logger, pool=None) -> None:
@@ -366,7 +393,9 @@ def run_year(
             )
             validations.update(result["validations"])
             run_has_validation_warnings = run_has_validation_warnings or result["has_warnings"]
-            if not result["ok"]:
+            if result["ok"]:
+                _scaffold_clean_after_raw(cfg, year, base_logger)
+            else:
                 layers_to_run = []
 
         sampling_active = smoke or sample_rows is not None or sample_bytes is not None
@@ -1040,7 +1069,7 @@ def _run_pipeline(
             )
 
     # Process support datasets (ADR-005: ensure — skip se output presenti, materializza se manca)
-    from toolkit.core.support import resolve_and_run_support
+    from toolkit.domain.support import resolve_and_run_support
 
     support_status = resolve_and_run_support(
         cfg,

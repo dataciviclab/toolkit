@@ -1,4 +1,4 @@
-"""Tests per ProbePool in toolkit/core/probe.py."""
+"""Tests per ProbePool in toolkit/scout/pool.py."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from toolkit.core.probe import ProbePool, ProbeResult
+from toolkit.scout.pool import ProbePool, ProbeResult
 
 
 class TestProbePool:

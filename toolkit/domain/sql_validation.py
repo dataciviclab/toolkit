@@ -19,8 +19,9 @@ from toolkit.core.support import (
     resolve_support_payloads,
 )
 from toolkit.core.template import build_runtime_template_ctx, render_template
+from toolkit.domain.preflight import run_config_check
 
-_logger = logging.getLogger("toolkit.core.sql_validation")
+_logger = logging.getLogger("toolkit.domain.sql_validation")
 
 _QUOTED_IDENTIFIER_RE = re.compile(r'"([^"]+)"')
 _BINDER_MISSING_COLUMN_RE = re.compile(r'Referenced column "([^"]+)" not found in FROM clause')
@@ -217,8 +218,6 @@ def validate_sql_dry_run(cfg, *, year: int, layers: list[str], dry_run: bool = F
         return
 
     # ── Config check (zero network I/O, sempre) ─────────────────────────
-    from toolkit.domain.preflight import run_config_check
-
     config_check = run_config_check(cfg, None)
     if not config_check.get("ok", False):
         for err in config_check.get("errors", []):

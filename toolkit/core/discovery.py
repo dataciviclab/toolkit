@@ -91,15 +91,15 @@ def resolve_config_path(
                         return probe.resolve()
                 searched.append(str(section_dir / form))
 
-    # ── Stage 4: fallback alla mappa reale slug→config_path ──────────
+    # ── Stage 4: fallback scan completo slug → config_path ────────────
     # La dir può differire completamente dal slug (es. anag-enti vs
-    # ca_anag_enti_seed; monthly HDD senza dir locale). La mappa canonica
+    # ca_anag_enti_seed; monthly HDD senza dir locale). Lo slug canonico
     # (da dataset.name nello scan) è la fonte ultima.
-    from toolkit.domain.catalog import _scan_workspace_configs
+    from toolkit.registry.layout import iter_workspace_dataset_ymls
 
-    configs = _scan_workspace_configs(ws)
-    if hint_str in configs:
-        return Path(configs[hint_str]["config_path"]).resolve()
+    for slug, dataset_yml in iter_workspace_dataset_ymls(ws):
+        if slug == hint_str:
+            return dataset_yml.resolve()
 
     raise FileNotFoundError(
         f"Nessun dataset trovato per '{hint_str}'.\n"

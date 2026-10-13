@@ -17,8 +17,7 @@ classifiers = [
   "Intended Audience :: Developers",
   "Intended Audience :: Information Technology",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
   "Topic :: Database",
   "Topic :: Software Development :: Libraries :: Python Modules"
 ]
@@ -124,7 +123,7 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F"]

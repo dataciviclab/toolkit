@@ -23,12 +23,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from lab_connectors.discovery.classify import resolve_preview_kind
+from lab_connectors.discovery.infer import infer_granularity
 from lab_connectors.http import HttpClient
 
 from toolkit.profile.raw import profile_with_read_cfg, sniff_source_file
 from toolkit.quality.pa_csv_quality import assess_quality
-from toolkit.scout.http import fetch_content, probe_url_headers, resolve_preview_kind
-from toolkit.scout.infer import infer_granularity
+from toolkit.scout.http import fetch_content, probe_url_headers
 
 logger = logging.getLogger("toolkit.profile.preview")
 

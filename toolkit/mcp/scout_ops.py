@@ -11,13 +11,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from lab_connectors.discovery.links import extract_data_links, group_links
 from toolkit.scout.http import (
     fetch_ckan_package,
     fetch_html_body,
-)
-from toolkit.scout.link_extractor import (
-    extract_data_links,
-    group_links,
 )
 from toolkit.scout.probe import probe_url, probe_url_routed
 

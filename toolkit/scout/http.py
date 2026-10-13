@@ -1,9 +1,10 @@
-"""HTTP transport layer per URL scout — probe, fetch, retry, format detection.
+"""HTTP transport layer per URL scout — probe, fetch, CKAN, SDMX.
 
-Tutta logica HTTP/fetch pura. Nessuna logica di routing o orchestrazione.
+Le classificazioni pure (is_sdmx_url, resolve_preview_kind, etc.) sono
+ora in ``lab_connectors.discovery.classify``. Questo modulo mantiene le
+funzioni HTTP-specifiche che dipendono da toolkit.plugins.
+
 Condivisa tra CLI, MCP tools e SO.
-
-Le funzioni di routing/orchestrazione stanno in toolkit.scout.probe.
 """
 
 from __future__ import annotations
@@ -13,6 +14,17 @@ import re
 from typing import Any
 from urllib.parse import urlparse
 
+from lab_connectors.discovery.classify import (  # noqa: F401
+    CANDIDATE_EXTENSIONS,
+    EXTENDED_EXTENSIONS,
+    PREVIEW_KINDS as _PREVIEW_KINDS,
+    filename_from_content_disposition as _filename_from_content_disposition,
+    is_file_like,
+    is_html_content,
+    is_sdmx_url,
+    is_sparql_endpoint,
+    resolve_preview_kind,
+)
 from lab_connectors.http import HttpClient
 
 logger = logging.getLogger("toolkit.scout.http")
@@ -23,12 +35,8 @@ logger = logging.getLogger("toolkit.scout.http")
 
 DEFAULT_TIMEOUT = 15
 DEFAULT_USER_AGENT = "dataciviclab-toolkit/scout-url"
-# Estensioni candidate per file dati
-CANDIDATE_EXTENSIONS = (".csv", ".xlsx", ".xls", ".zip", ".json", ".parquet", ".geojson")
-EXTENDED_EXTENSIONS = CANDIDATE_EXTENSIONS + (".sdmx", ".tds", ".xml")
 
-# Tipi preview supportati dal profiler toolkit
-_PREVIEW_KINDS = frozenset({"csv", "json", "xlsx", "xls", "tsv"})
+_YEAR_RE = re.compile(r"(?<!\d)(19\d{2}|20[012]\d)(?!\d)")
 
 # ---------------------------------------------------------------------------
 # Re-imports from plugins (canonical source of truth)
@@ -41,9 +49,6 @@ from toolkit.plugins.ckan import (  # noqa: E402
     extract_ckan_dataset_id,  # noqa: F401
 )
 from toolkit.plugins.sdmx import SDMX_NS_FULL as _SDMX_NS  # noqa: E402
-from toolkit.plugins.sdmx import is_sdmx_url  # noqa: E402, F401
-
-_YEAR_RE = re.compile(r"(?<!\d)(19\d{2}|20[012]\d)(?!\d)")
 
 # ---------------------------------------------------------------------------
 # HTTP client factory
@@ -64,104 +69,6 @@ def _mk_client(
 
 
 # ---------------------------------------------------------------------------
-# Content-type classification (pure, no HTTP)
-# ---------------------------------------------------------------------------
-
-
-def is_html_content(content_type: str | None) -> bool:
-    """True se Content-Type indica HTML."""
-    return bool(content_type and "html" in content_type.lower())
-
-
-def is_file_like(url: str, content_type: str | None, content_disposition: str | None) -> bool:
-    """True se URL/responses sembra puntare a un file di dati."""
-    lowered = url.lower()
-    if any(ext in lowered for ext in CANDIDATE_EXTENSIONS):
-        return True
-    if content_disposition and "attachment" in content_disposition.lower():
-        return True
-    if content_type and not is_html_content(content_type):
-        ct_lower = content_type.lower()
-        return any(token in ct_lower for token in ("csv", "excel", "spreadsheetml", "zip", "json"))
-    return False
-
-
-def resolve_preview_kind(
-    url: str, content_type: str | None = None, content_disposition: str | None = None
-) -> str | None:
-    """Determina il formato preview (csv, json, xlsx, xls, tsv) da URL/headers.
-
-    Ordine: estensione URL → Content-Disposition filename → Content-Type.
-    """
-    # 1. Da estensione URL
-    parsed = urlparse(url)
-    path = parsed.path or ""
-    if "." in path:
-        ext = path.rsplit(".", 1)[-1].lower()
-        if ext in _PREVIEW_KINDS:
-            return ext.upper()
-
-    # 2. Da Content-Disposition (filename)
-    fn = _filename_from_content_disposition(content_disposition)
-    if fn and "." in fn:
-        ext = fn.rsplit(".", 1)[-1].lower()
-        if ext in _PREVIEW_KINDS:
-            return ext.upper()
-
-    # 3. Da Content-Type
-    if content_type:
-        ct_lower = content_type.lower()
-        if "tab-separated" in ct_lower or ct_lower in ("text/tsv", "application/tsv"):
-            return "TSV"
-        if "csv" in ct_lower:
-            return "CSV"
-        if "json" in ct_lower:
-            return "JSON"
-        if "spreadsheetml" in ct_lower:
-            return "XLSX"
-        if "excel" in ct_lower or "xls" in ct_lower:
-            return "XLS"
-
-    return None
-
-
-def is_sparql_endpoint(url: str, content_type: str | None = None) -> bool:
-    """Rileva se URL punta a un endpoint SPARQL.
-
-    Controlla:
-    - Path URL contenente ``/sparql`` (pattern piu' comune)
-    - Content-Type contenente ``sparql-results`` o ``sparql``
-    """
-    lowered = url.lower()
-    if "/sparql" in lowered:
-        return True
-    if content_type:
-        ct = content_type.lower()
-        if "sparql-results" in ct or "sparql" in ct:
-            return True
-    return False
-
-
-def _filename_from_content_disposition(value: str | None) -> str | None:
-    """Estrae filename da Content-Disposition (RFC 5987 / quoted / token)."""
-    if not value:
-        return None
-    m = re.search(r"filename\*=(?:UTF-8''|utf-8'')([^;\s]+)", value)
-    if m:
-        from urllib.parse import unquote
-
-        raw = m.group(1).strip().strip('"')
-        return unquote(raw) if raw else None
-    m = re.search(r'filename="([^"]+)"', value)
-    if m:
-        return m.group(1).strip() or None
-    m = re.search(r"filename=([^;\s]+)", value)
-    if m:
-        return m.group(1).strip().strip('"') or None
-    return None
-
-
-# ---------------------------------------------------------------------------
 # HTTP probe: HEAD preferito, GET+Range fallback
 # ---------------------------------------------------------------------------
 
@@ -177,7 +84,6 @@ def probe_url_headers(
     """HEAD con retry, GET+Range fallback. Ritorna header info + reachability.
 
     Implementato in ``lab_connectors.http.probe`` (evita doppio retry).
-    Questo wrapper mantiene compatibilità con i consumer esistenti.
     """
     from lab_connectors.http.probe import probe_url_headers as _probe
 
@@ -205,14 +111,6 @@ def fetch_content(
 
     Tutti i GET usano ``stream=True``: se il server ignora ``Range`` e risponde
     con ``200`` (full body), ``iter_content`` legge solo ``max_bytes`` e chiude.
-    Nessun rischio di caricare file interi in memoria.
-
-    Args:
-        url: URL da scaricare.
-        max_bytes: Dimensione massima in bytes.
-        timeout: Timeout HTTP (ignorato se client è fornito).
-        user_agent: User-Agent (ignorato se client è fornito).
-        client: HttpClient opzionale.
 
     Returns dict: content (bytes), content_type, status_code, final_url, method,
                   content_length (int | None su 206 da Content-Range).
@@ -236,7 +134,7 @@ def fetch_content(
         return b"".join(chunks)
 
     def _parse_content_range(resp: Any) -> int | None:
-        """Estrae la dimensione totale del file da Content-Range (es. ``bytes 0-0/123456``)."""
+        """Estrae la dimensione totale del file da Content-Range."""
         cr = resp.headers.get("Content-Range", "")
         if cr and "/" in cr:
             total_str = cr.split("/")[-1].strip()
@@ -244,8 +142,6 @@ def fetch_content(
                 return int(total_str)
         return None
 
-    # Tentativo con Range — stream=True: se il server ignora Range e risponde
-    # 200, leggiamo solo max_bytes e chiudiamo.
     range_result = client.get(url, headers={"Range": f"bytes=0-{max_bytes - 1}"}, stream=True)
     if range_result.is_ok and range_result.response is not None:
         resp = range_result.response
@@ -265,7 +161,6 @@ def fetch_content(
         finally:
             getattr(resp, "close", lambda: None)()
 
-    # Range fallito → GET streaming bounded
     full_result = client.get(url, stream=True)
     if full_result.is_ok and full_result.response is not None:
         resp = full_result.response
@@ -294,11 +189,7 @@ def fetch_html_body(
     user_agent: str = DEFAULT_USER_AGENT,
     client: HttpClient | None = None,
 ) -> dict[str, Any]:
-    """GET body HTML. Ritorna dict con html_text, status_code, final_url, content_type.
-
-    Args:
-        client: HttpClient opzionale. Se fornito, lo usa invece di crearne uno.
-    """
+    """GET body HTML. Ritorna dict con html_text, status_code, final_url, content_type."""
     client = client or _mk_client(timeout=timeout, user_agent=user_agent)
     result = client.get(url)
     if not result.is_ok or result.response is None:
@@ -313,7 +204,7 @@ def fetch_html_body(
 
 
 # ---------------------------------------------------------------------------
-# CKAN fetch (uses detection helpers imported from plugins.ckan)
+# CKAN fetch
 # ---------------------------------------------------------------------------
 
 
@@ -324,29 +215,15 @@ def fetch_ckan_package(
     timeout: int = DEFAULT_TIMEOUT,
     client: HttpClient | None = None,
 ) -> dict[str, Any] | None:
-    """Fetch CKAN package_show via API.
-
-    Normalizza automaticamente il base path del portale CKAN,
-    quindi funziona con qualsiasi URL: homepage, pagina dataset, endpoint API.
-
-    Args:
-        client: HttpClient opzionale. Se fornito, lo usa invece di crearne uno.
-    """
+    """Fetch CKAN package_show via API con fallback multipli."""
     parsed = urlparse(portal_url)
     root = f"{parsed.scheme}://{parsed.netloc}"
-
-    # Normalizza il base path del portale CKAN
     portal_base = _ckan_portal_base(portal_url)
 
-    api_bases: list[str] = [
-        f"{portal_base}/api/3/action/package_show",
-    ]
-
-    # Fallback: API alla radice (per portali che ignorano il path prefix)
+    api_bases: list[str] = [f"{portal_base}/api/3/action/package_show"]
     api_base_root = f"{root}/api/3/action/package_show"
     if api_base_root != api_bases[0]:
         api_bases.append(api_base_root)
-    # Ultimo fallback: package_show alla radice
     api_bases.append(f"{root}/package_show")
 
     client = client or _mk_client(timeout=timeout)
@@ -375,28 +252,12 @@ def fetch_ckan_datastore_schema(
     timeout: int = DEFAULT_TIMEOUT,
     client: HttpClient | None = None,
 ) -> list[dict[str, Any]] | None:
-    """Fetch CKAN DataStore schema per una risorsa (``datastore_search?limit=0``).
-
-    Restituisce la lista campi ``[{id, type, info: {label, notes}}, ...]``
-    che lo scaffold puo' usare per generare colonne mappate senza scaricare il CSV.
-
-    Args:
-        portal_url: URL del portale CKAN (qualsiasi forma).
-        resource_id: UUID della risorsa.
-        timeout: Timeout HTTP.
-        client: HttpClient opzionale.
-
-    Returns:
-        Lista di dict con ``id``, ``type``, ``info``, oppure ``None``
-        se la risorsa non ha DataStore o la chiamata fallisce.
-    """
+    """Fetch CKAN DataStore schema per una risorsa."""
     parsed = urlparse(portal_url)
     root = f"{parsed.scheme}://{parsed.netloc}"
     portal_base = _ckan_portal_base(portal_url)
 
-    api_bases: list[str] = [
-        f"{portal_base}/api/3/action/datastore_search",
-    ]
+    api_bases: list[str] = [f"{portal_base}/api/3/action/datastore_search"]
     api_base_root = f"{root}/api/3/action/datastore_search"
     if api_base_root != api_bases[0]:
         api_bases.append(api_base_root)
@@ -418,7 +279,6 @@ def fetch_ckan_datastore_schema(
             fields = data.get("result", {}).get("fields", [])
             if not fields:
                 continue
-            # Filtra il campo _id (PK autoincrement interno di CKAN)
             return [f for f in fields if f.get("id") != "_id"]
         except Exception:
             continue
@@ -426,12 +286,7 @@ def fetch_ckan_datastore_schema(
 
 
 def discover_ckan_resources(pkg: dict[str, Any]) -> list[dict[str, Any]]:
-    """Estrae risorse scaricabili da un package CKAN.
-
-    ``datastore_active`` indica se la risorsa ha DataStore abilitato:
-    lo scaffold puo' usare ``datastore_search?limit=0`` invece di scaricare
-    il CSV per ottenere schema colonne e tipi.
-    """
+    """Estrae risorse scaricabili da un package CKAN."""
     resources: list[dict[str, Any]] = pkg.get("resources") or []
     discovered: list[dict[str, Any]] = []
     for res in resources:
@@ -462,15 +317,7 @@ def fetch_sdmx_years(
     timeout: int = DEFAULT_TIMEOUT,
     client: HttpClient | None = None,
 ) -> tuple[int | None, int | None]:
-    """Chiama endpoint SDMX per ricavare year_min/year_max da TIME_PERIOD.
-
-    Supporta sia SDMX-ML (ISTAT, parse XML ``generic:ObsKey``) sia SDMX-JSON
-    2.0 (Eurostat, flat ``dimension.time.category.index``): se il parse XML
-    non trova TIME_PERIOD, ritenta con Accept JSON e legge la dimensione time.
-
-    Args:
-        client: HttpClient opzionale. Se fornito, lo usa invece di crearne uno.
-    """
+    """Chiama endpoint SDMX per ricavare year_min/year_max da TIME_PERIOD."""
     import json
     import xml.etree.ElementTree as ET
 
@@ -479,7 +326,6 @@ def fetch_sdmx_years(
         if "/dataflow/" in base:
             sdmx_root = base[: base.index("/dataflow/")]
         elif "/data/" in base:
-            # Root API da path dati: es. .../sdmx/2.1/data/NAMA_10R_3GDP
             sdmx_root = base[: base.index("/data/")]
         elif base.endswith("/dataflow"):
             sdmx_root = base[: -len("/dataflow")]
@@ -488,7 +334,6 @@ def fetch_sdmx_years(
         url = f"{sdmx_root}/data/{flow_id}?lastNObservations=1"
         client = client or _mk_client(timeout=timeout)
 
-        # Passo 1: XML (SDMX-ML, convention ISTAT)
         result = client.get(url, headers={"Accept": "application/xml"})
         years: list[int] = []
         if result.is_ok and result.response is not None and result.response.status_code == 200:
@@ -503,10 +348,6 @@ def fetch_sdmx_years(
                 found = _YEAR_RE.findall(tv)
                 years.extend(int(y) for y in found)
 
-        # Passo 2: fallback JSON 2.0 (Eurostat) — nessun TIME_PERIOD XML.
-        # Eurostat richiede ?format=json esplicito (il default è JSONSTAT,
-        # che richiede lang e risponde 400). Il JSON 2.0 ha la dimensione
-        # time flat in dimension.time.category.index.
         if not years:
             result = client.get(
                 url,

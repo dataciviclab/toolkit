@@ -338,12 +338,14 @@ def test_mart_validation_skips_min_rows_in_sample_mode(tmp_path: Path) -> None:
 
 
 @pytest.mark.regression
-def test_run_full_validates_via_context_not_direct_calls(tmp_path: Path, monkeypatch) -> None:
-    """run_full si fida del RunContext — le validazioni sono chiamate solo da run_year.
+def test_execute_pipeline_validates_via_context_not_direct_calls(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """_execute_pipeline si fida del RunContext — le validazioni sono chiamate solo da run_year.
 
     Questo test conta quante volte vengono chiamate le funzioni di validazione.
     Con la vecchia doppia validazione, ogni funzione veniva chiamata 2 volte
-    (una in run_year + una in run_full). Con il fix, ogni funzione è chiamata
+    (una in run_year + una nel layer sopra). Con il fix, ogni funzione è chiamata
     1 sola volta (solo dentro run_year).
     """
     config_path = tmp_path / "dataset.yml"
@@ -382,7 +384,7 @@ def test_run_full_validates_via_context_not_direct_calls(tmp_path: Path, monkeyp
         },
     )
 
-    # run_full chiama run_preflight all'inizio — mockiamo per evitare
+    # _execute_pipeline chiama run_preflight all'inizio — mockiamo per evitare
     # che validate_config fallisca su config minimale del test
     monkeypatch.setattr(
         "toolkit.domain.preflight.run_preflight",
@@ -405,7 +407,7 @@ def test_run_full_validates_via_context_not_direct_calls(tmp_path: Path, monkeyp
         },
     )
 
-    cmd_run.run_full(
+    cmd_run._execute_pipeline(
         config=str(config_path),
         smoke=False,
         sample_rows=1000,

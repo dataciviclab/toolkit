@@ -24,36 +24,18 @@ from toolkit.core.paths import WORKSPACE_ROOT
 SECTIONS = ("datasets", "marts", "signals", "codelists", "entities")
 
 
-def _section_count(section: str, data: Any) -> int | None:
-    """Conteggio entries di una sezione del registry.
-
-    Accetta sia un ``Registry`` tipizzato che un raw dict (backward compat).
-    """
-    # Registry tipizzato
-    if hasattr(data, "datasets"):
-        reg = data
-        if section == "datasets":
-            return len(reg.datasets)
-        if section == "marts":
-            return len(reg.marts)
-        if section == "signals":
-            return len(reg.signals)
-        if section == "codelists":
-            return len(reg.codelists)
-        if section == "entities":
-            return len(reg.entities.get("entities") or {})
-        return None
-    # Raw dict (backward compat per test)
+def _section_count(section: str, reg: Registry) -> int | None:
+    """Conteggio entries di una sezione del registry tipizzato."""
     if section == "datasets":
-        return len(data.get("datasets") or [])
+        return len(reg.datasets)
     if section == "marts":
-        return len(data.get("marts") or [])
+        return len(reg.marts)
     if section == "signals":
-        return len(data.get("signals") or [])
+        return len(reg.signals)
     if section == "codelists":
-        return len(data.get("codelists") or [])
+        return len(reg.codelists)
     if section == "entities":
-        return len((data.get("entities") or {}).get("entities") or {})
+        return len(reg.entities.get("entities") or {})
     return None
 
 

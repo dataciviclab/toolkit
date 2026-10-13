@@ -22,7 +22,7 @@ inline come `$defs` — nessun `$ref` esterno.
 
 ## Compatibilità
 
-Reader e resolver hanno fallback legacy: i repo con i vecchi file separati
-(`clean_catalog.json`, `mart_catalog.json`, `pipeline_signals.json`,
-`codelists.json`, `entity_graph.json`) continuano a funzionare finché non
-migrano a `registry.json`.
+Il reader accetta esclusivamente `registry.json` (fusion ADR). Il fallback
+legacy sui vecchi file separati (`clean_catalog.json`, `mart_catalog.json`,
+`pipeline_signals.json`, `codelists.json`, `entity_graph.json`) è stato
+rimosso (PR #468): tutti i repo del workspace sono migrati.

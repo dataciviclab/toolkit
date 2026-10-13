@@ -19,11 +19,7 @@ e le funzioni HTTP-specifiche che dipendono da toolkit.plugins.
 Scaffold non e' piu' in scout. Usa toolkit.scaffold.full e toolkit.scaffold.sources.
 """
 
-from toolkit.scout.sparql import (  # noqa: F401
-    discover_named_graphs,
-    fetch_sparql_count,
-    infer_graph_schema,
-)
+from toolkit.scout.sparql import fetch_sparql_count  # noqa: F401
 
 from toolkit.scout.http import (  # noqa: F401
     CANDIDATE_EXTENSIONS,

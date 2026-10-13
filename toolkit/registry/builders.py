@@ -1,10 +1,9 @@
 """Builder degli artifact registry condivisi.
 
-Tre proiezioni dello stesso stato (dataset.yml + run records + parquet locali):
-
-- ``build_clean_catalog`` — inventario queryabile dei clean parquet.
-- ``build_mart_catalog``  — inventario delle tabelle mart (slug {dataset}__{mart}).
-- ``build_signals``      — health check operativo (repo-signals standard ACB).
+Genera l'artifact registry UNICO per repo (fusion ADR): ``registry.json``
+con sezioni ``datasets``, ``marts``, ``signals``, ``codelists``, ``entities``.
+Le sezioni sono proiezioni dello stesso stato (dataset.yml + run records +
+parquet locali + GCS), validate contro ``registry.schema.json``.
 
 Tutta la lettura del runtime è delegata al toolkit (config model, path resolver,
 run_state, parquet_schema) — qui solo proiezione e arricchimento di catalogo.

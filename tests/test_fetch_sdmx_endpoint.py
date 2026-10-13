@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from toolkit.raw._fetch_utils import _fetch_sdmx, _sdmx_root_from_url
+from toolkit.core.source_types import _fetch_sdmx, _sdmx_root_from_url
 
 pytestmark = pytest.mark.contract
 
@@ -27,14 +27,14 @@ class _FakeSdmx:
 @pytest.fixture
 def fake_registry(monkeypatch):
     holder = {}
-    import toolkit.raw._fetch_utils as fu
+    import toolkit.core.registry as reg_mod
 
     def _create(name, **kwargs):
         src = _FakeSdmx(**kwargs)
         holder["source"] = src
         return src
 
-    monkeypatch.setattr(fu.registry, "create", _create)
+    monkeypatch.setattr(reg_mod.registry, "create", _create)
     return holder
 
 

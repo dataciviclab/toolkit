@@ -5,6 +5,10 @@ tramite ``toolkit.core.macro_reader.read_macros()``. Le annotazioni
 ``@contract`` nei commenti di macros.sql arricchiscono ogni macro con
 metadati machine-readable (returns, warning, example, see...).
 
+Il contratto dei **tipi fonte RAW** è AUTO-GENERATO dal catalogo unico
+``toolkit.core.source_types.SOURCE_TYPES`` — runtime e contratto non
+possono divergere.
+
 Sezioni curate manualmente: validation rules, read_params, pipeline layers.
 Queste descrivono comportamenti del runtime che non sono auto-estraibili.
 """
@@ -22,86 +26,11 @@ from toolkit.core.constants import (
     YEAR_PLACEHOLDER,
 )
 from toolkit.core.macro_reader import read_macros
+from toolkit.core.source_types import contract_source_types
 
 
-# ── Tipi fonte RAW disponibili ────────────────────────────────────────────
-# Corrispondono ai file in toolkit/plugins/.
-_SOURCE_TYPES: list[dict[str, Any]] = [
-    {
-        "type": "http_file",
-        "description": "Scarica un file da URL HTTP/HTTPS. Il tipo piu' comune.",
-        "args": {
-            "url": "URL del file (puo' contenere {year})",
-            "filename": "nome locale (puo' contenere {year})",
-        },
-    },
-    {
-        "type": "http_post_file",
-        "description": "Come http_file ma con POST (per API che richiedono body).",
-        "args": {
-            "url": "URL dell'endpoint",
-            "filename": "nome locale",
-            "data": "body della POST (opzionale)",
-        },
-    },
-    {
-        "type": "local_file",
-        "description": "File gia' presente su disco. Usato per test e smoke.",
-        "args": {
-            "path": "path al file o directory",
-            "filename": "pattern glob (opzionale)",
-        },
-    },
-    {
-        "type": "ckan",
-        "description": "Scarica risorse da un portale CKAN via API.",
-        "args": {
-            "portal_url": "URL del portale CKAN (es. https://dati.gov.it)",
-            "package_id": "ID del dataset CKAN",
-            "resource_id": "ID specifico della risorsa (opzionale)",
-            "filename": "nome locale (opzionale)",
-        },
-    },
-    {
-        "type": "sdmx",
-        "description": "Scarica dati da API SDMX 2.1. Profilo ISTAT (agency IT1, default) e profilo Eurostat (agency ESTAT, TSV wide + JSON 2.0).",
-        "args": {
-            "agency": "Agenzia SDMX: IT1 (ISTAT, default) o ESTAT (Eurostat)",
-            "flow": "ID del dataflow (es. NAMA_10R_3GDP, 22_289)",
-            "version": "Versione dataflow. Obbligatoria per ISTAT; opzionale/ignorata per ESTAT (numero mobile, mai nel path)",
-            "filters": "Filtri per dimensione (es. {freq: A, geo: [IT, ITC4]}). Valori validati contro i constraints dell'API",
-            "endpoint": "URL SDMX scoperta dallo scout. Funzionale per agenzie non-ISTAT/ESTAT (root derivato); ISTAT/ESTAT auto-risolvono",
-        },
-        "note": "Output: CSV normalizzato. ISTAT: colonne con _label (JSON 2.1). ESTAT: [dims..., year, (month), value, flag] — le label si risolvono a valle con le codelist.",
-    },
-    {
-        "type": "sparql",
-        "description": "Esegue query SPARQL SELECT su endpoint pubblico. POST-first con fallback GET; paginazione OFFSET o keyset robusta (retry su errore E pagina vuota da throttle WAF, stop su pagina corta).",
-        "args": {
-            "endpoint": "URL dello SPARQL endpoint",
-            "query": "Query SPARQL SELECT",
-            "filename": "nome locale (opzionale)",
-            "accept_format": "'csv' (default) o 'sparql-results+json' (obbligatorio se l'endpoint rifiuta GROUP BY in CSV, es. dati.camera.it)",
-            "pages": "Numero massimo di pagine OFFSET (default 1 = nessuna paginazione). Endpoint con limite righe/query (es. 10k) richiedono pages > 1.",
-            "step": "Righe per pagina (default 10000)",
-            "pagination": "Config paginazione: {'mode': 'offset'} (default) oppure {'mode': 'keyset', 'key': '?var'} — keyset inietta FILTER(?var > last) invece di OFFSET: deterministico, compatibile con Virtuoso che rifiuta ORDER BY+OFFSET (SR353). La query keyset DEVE avere gia' ORDER BY ?var.",
-        },
-    },
-    {
-        "type": "dbnomics",
-        "description": "Scarica serie da DBnomics API v22 (mirror pubblico ISTAT/Eurostat/… senza rate-limit ISTAT). Output CSV lungo: series_code, provider, dataset, dims…, TIME_PERIOD, OBS_VALUE. Sostituto operativo per ISTAT quando esploradati è rate-limitato o ban.",
-        "args": {
-            "dataset": "ID dataset DBnomics (es. 93_498) oppure PROVIDER/DATASET (es. ISTAT/93_498)",
-            "provider": "Provider (default ISTAT)",
-            "dimensions": "Filtri per dimensione SDMX: {REF_AREA: [IT], FREQ: [A], …}. Valori stringa o lista. Serializzati come JSON per l'API.",
-            "observations": "Se true (default) scarica le osservazioni; false = solo metadati serie (poco utile per raw)",
-            "page_size": "Righe per pagina API (default 1000, max 1000)",
-            "max_pages": "Pagine massime (default 200) — guardrail su cubi enormi",
-            "filename": "nome locale (opzionale)",
-        },
-        "note": "Nessun rate-limit ISTAT. Preferire filtri dimensions stretti; evitare dataset completi a grana comune senza LIMIT. Client: timeout/retries come http_file.",
-    },
-]
+# ── Tipi fonte RAW disponibili (generati dal catalogo) ────────────────────
+_SOURCE_TYPES: list[dict[str, Any]] = contract_source_types()
 
 # ── Tipi extractor RAW ───────────────────────────────────────────────────
 _EXTRACTOR_TYPES: list[dict[str, Any]] = [

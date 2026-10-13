@@ -34,74 +34,31 @@ class Registry:
 
 registry = Registry()
 
-_BUILTIN_PLUGINS: tuple[dict[str, Any], ...] = (
-    {
-        "name": "ckan",
-        "module": "toolkit.plugins.ckan",
-        "class_name": "CkanSource",
-        "optional": False,
-        "factory": lambda cls: lambda **client: cls(**client),
-    },
-    {
-        "name": "sdmx",
-        "module": "toolkit.plugins.sdmx",
-        "class_name": "SdmxSource",
-        "optional": False,
-        "factory": lambda cls: lambda **client: cls(**client),
-    },
-    {
-        "name": "http_file",
-        "module": "toolkit.plugins.http_file",
-        "class_name": "HttpFileSource",
-        "optional": False,
-        "factory": lambda cls: lambda **client: cls(**client),
-    },
-    {
-        "name": "http_post_file",
-        "module": "toolkit.plugins.http_post_file",
-        "class_name": "HttpPostFileSource",
-        "optional": False,
-        "factory": lambda cls: lambda **client: cls(**client),
-    },
-    {
-        "name": "local_file",
-        "module": "toolkit.plugins.local_file",
-        "class_name": "LocalFileSource",
-        "optional": False,
-        "factory": lambda cls: lambda **client: cls(),
-    },
-    {
-        "name": "sparql",
-        "module": "toolkit.plugins.sparql",
-        "class_name": "SparqlSource",
-        "optional": False,
-        "factory": lambda cls: lambda **client: cls(timeout=client.get("timeout", 60)),
-    },
-    {
-        "name": "dbnomics",
-        "module": "toolkit.plugins.dbnomics",
-        "class_name": "DbnomicsSource",
-        "optional": False,
-        "factory": lambda cls: lambda **client: cls(**client),
-    },
-)
-
 
 def register_builtin_plugins(
     *,
     registry_obj: Registry | None = None,
 ) -> None:
+    """Registra tutti i plugin del catalogo ``core.source_types``.
+
+    I built-in senza classe plugin (es. ``script``) sono skippati: il loro
+    fetch adapter gira senza istanza.
+    """
+    from toolkit.core.source_types import SOURCE_TYPES
+
     target = registry_obj or registry
 
-    for spec in _BUILTIN_PLUGINS:
-        if spec["name"] in target.list_plugins():
+    for spec in SOURCE_TYPES.values():
+        if spec.module is None or spec.class_name is None or spec.factory is None:
+            continue
+        if spec.name in target.list_plugins():
             continue
 
         try:
-            module = importlib.import_module(spec["module"])
-            plugin_class = getattr(module, spec["class_name"])
-            target.register(spec["name"], spec["factory"](plugin_class))
+            module = importlib.import_module(spec.module)
+            plugin_class = getattr(module, spec.class_name)
+            target.register(spec.name, spec.factory(plugin_class))
         except Exception as exc:
             raise PluginRegistrationError(
-                f"Required built-in plugin '{spec['name']}' failed to register: {exc}"
+                f"Required built-in plugin '{spec.name}' failed to register: {exc}"
             ) from exc

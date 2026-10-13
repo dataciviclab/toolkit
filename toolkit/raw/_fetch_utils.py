@@ -2,19 +2,21 @@
 
 Extracted from raw/run.py to reduce module size and clarify responsibilities.
 All functions are private (underscore-prefixed) — not part of the public API.
+
+Il dispatch fetch e' nel catalogo unico ``toolkit.core.source_types`` —
+questo modulo contiene solo helper di formattazione e naming.
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from toolkit.core.exceptions import DownloadError
-from toolkit.core.registry import registry
+# Re-export del dispatcher unico (contratto pubblico del runtime raw).
+from toolkit.core.source_types import fetch_payload as _fetch_payload  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -57,36 +59,21 @@ def _format_args(args: dict, year: int) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _sdmx_root_from_url(url: str) -> str:
-    """Deriva il root SDMX da una URL scoperta dallo scout.
-
-    Lo scout espone l'URL col path risorsa (es. ``.../sdmx/2.1/dataflow/IT1/22_289``
-    o ``.../data/NAMA_10R_3GDP``): il plugin SdmxSource costruisce i path
-    partendo dal root (``data/...``, ``dataflow/...``), quindi stripamo il
-    segmento di risorsa.
-    """
-    base = url.split("?")[0].rstrip("/")
-    for marker in ("/dataflow/", "/data/"):
-        if marker in base:
-            return base[: base.index(marker)]
-    return base
-
-
 def _infer_ext(stype: str, formatted_args: dict, origin: str | None = None) -> str:
-    if stype in {"sdmx", "sparql", "dbnomics"}:
-        return ".csv"
+    from toolkit.core.source_types import SOURCE_TYPES
 
-    if stype in {"http_file", "http_post_file", "ckan"}:
+    spec = SOURCE_TYPES.get(stype)
+    mode = spec.ext_mode if spec else "fixed"
+
+    if mode == "fixed":
+        return spec.fixed_ext if spec else ".bin"
+    if mode == "from_url":
         url = origin or formatted_args.get("url", "")
         return _infer_from_url(url)
-
-    if stype == "local_file":
-        path_str = str(formatted_args.get("path", ""))
-        return _infer_from_url(path_str)
-
-    if stype == "script" and origin:
-        return _infer_from_url(origin)
-
+    if mode == "from_path":
+        return _infer_from_url(str(formatted_args.get("path", "")))
+    if mode == "from_origin":
+        return _infer_from_url(origin) if origin else ".bin"
     return ".bin"
 
 
@@ -115,215 +102,6 @@ def _infer_from_url(url: str) -> str:
         return ".zip"
 
     return ".bin"
-
-
-# ---------------------------------------------------------------------------
-# Source fetching
-# ---------------------------------------------------------------------------
-
-_FETCH_DISPATCH: dict[str, Callable[..., tuple[bytes, str]]] = {}
-
-
-def _register_fetch(stype: str):
-    """Decorator to register a fetch handler for a source type."""
-
-    def _wrap(fn):
-        _FETCH_DISPATCH[stype] = fn
-        return fn
-
-    return _wrap
-
-
-@_register_fetch("ckan")
-def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
-    src = registry.create(stype, **(client or {}))
-    sample_bytes = formatted_args.get("sample_bytes")
-    if formatted_args.get("download_all", False):
-        return src.fetch_all(
-            formatted_args["portal_url"],
-            str(formatted_args["dataset_id"]),
-            sample_bytes=sample_bytes,
-        )
-    return src.fetch(
-        formatted_args["portal_url"],
-        str(formatted_args["resource_id"])
-        if formatted_args.get("resource_id") is not None
-        else None,
-        str(formatted_args["dataset_id"]) if formatted_args.get("dataset_id") is not None else None,
-        str(formatted_args["resource_name"])
-        if formatted_args.get("resource_name") is not None
-        else None,
-        sample_bytes=sample_bytes,
-    )
-
-
-@_register_fetch("sdmx")
-def _fetch_sdmx(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
-    agency = str(formatted_args.get("agency") or "IT1")
-    src_client = dict(client or {})
-    # Endpoint esplicito per agenzie non-ISTAT/ESTAT/OECD: lo scout scopre l'URL
-    # (spesso col path dataflow/data) → deriviamo il root SDMX e lo usiamo
-    # come base per data e metadata. ISTAT e OECD resta sui default (esploradati +
-    # sdmx.istat.it / sdmx.oecd.org), ESTAT è auto-risolto dal profilo.
-    endpoint = formatted_args.get("endpoint")
-    agency_upper = agency.upper()
-    is_known_agency = agency == "IT1" or agency_upper == "ESTAT" or agency_upper.startswith("OECD")
-    if endpoint and not is_known_agency:
-        root = _sdmx_root_from_url(str(endpoint))
-        src_client.setdefault("data_base_url", root)
-        src_client.setdefault("metadata_base_url", root)
-    src = registry.create(stype, **src_client)
-    return src.fetch(
-        agency,
-        str(formatted_args["flow"]),
-        # La versione è opzionale: il profilo Eurostat (ESTAT) la ignora
-        # (numero mobile, mai nel path dati); ISTAT e OECD la richiedono (errore a valle).
-        str(formatted_args.get("version") or ""),
-        formatted_args.get("filters"),
-    )
-
-
-@_register_fetch("sparql")
-def _fetch_sparql(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
-    src = registry.create(stype, **(client or {}))
-    pages = int(formatted_args.get("pages", 1))
-    step = int(formatted_args.get("step", 10000))
-    pagination = formatted_args.get("pagination")
-    return src.fetch(
-        str(formatted_args["endpoint"]),
-        str(formatted_args["query"]),
-        str(formatted_args.get("accept_format", "csv")),
-        pages=pages,
-        step=step,
-        pagination=pagination,
-    )
-
-
-@_register_fetch("dbnomics")
-def _fetch_dbnomics(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
-    src = registry.create(stype, **(client or {}))
-    dataset = str(formatted_args["dataset"])
-    provider = str(formatted_args.get("provider") or "ISTAT")
-    dimensions = formatted_args.get("dimensions") or {}
-    observations = bool(formatted_args.get("observations", True))
-    page_size = formatted_args.get("page_size")
-    max_pages = formatted_args.get("max_pages")
-    content = src.fetch(
-        dataset,
-        provider=provider,
-        dimensions=dimensions,
-        observations=observations,
-        page_size=page_size,
-        max_pages=max_pages,
-    )
-    return content, dataset
-
-
-@_register_fetch("http_file")
-def _fetch_http_file(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
-    src = registry.create(stype, **(client or {}))
-    sample_bytes = formatted_args.get("sample_bytes")
-    payload = src.fetch(formatted_args["url"], sample_bytes=sample_bytes)
-    return payload, formatted_args["url"]
-
-
-@_register_fetch("http_post_file")
-def _fetch_http_post_file(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
-    src = registry.create(stype, **(client or {}))
-    post_data = formatted_args.get("post_data")
-    sample_bytes = formatted_args.get("sample_bytes")
-    payload = src.fetch(formatted_args["url"], data=post_data, sample_bytes=sample_bytes)
-    return payload, formatted_args["url"]
-
-
-@_register_fetch("local_file")
-def _fetch_local_file(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
-    src = registry.create(stype, **(client or {}))
-    payload = src.fetch(formatted_args["path"])
-    return payload, formatted_args["path"]
-
-
-@_register_fetch("script")
-def _fetch_script(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
-    """Execute a script command and read its output as the raw data.
-
-    The script is run in a subprocess inside the candidate root directory.
-    ``{year}`` placeholders in ``command`` and ``output`` are resolved
-    before execution.
-
-    Expected config::
-
-        raw:
-          sources:
-            - type: script
-              args:
-                command: "python preprocess.py raw_{year}.csv"
-                output: "raw_{year}.csv"
-    """
-    import os
-    import subprocess
-
-    # Security guard: script source disabled by default
-    if os.environ.get("TOOLKIT_ALLOW_SCRIPT_SOURCE") != "1":
-        raise DownloadError(
-            "script source type is disabled by default. "
-            "Set TOOLKIT_ALLOW_SCRIPT_SOURCE=1 to enable."
-        )
-
-    command: str = formatted_args.get("command", "")
-    if not command:
-        raise DownloadError("script source requires a 'command' in args")
-
-    output_path = Path(formatted_args.get("output", "output.csv"))
-    base_dir_str = formatted_args.get("_base_dir")
-    candidate_root = Path(base_dir_str) if base_dir_str else Path.cwd()
-
-    # Resolve output path and confine it under base_dir
-    output_abs = (candidate_root / output_path).resolve()
-    try:
-        output_abs.relative_to(candidate_root.resolve())
-    except ValueError:
-        raise DownloadError(
-            f"Output path {output_abs} is outside candidate base directory {candidate_root}"
-        )
-
-    result = subprocess.run(
-        command,
-        shell=True,
-        capture_output=True,
-        text=True,
-        timeout=(client or {}).get("timeout", 600),
-        cwd=candidate_root,
-    )
-    if result.returncode != 0:
-        stderr_preview = result.stderr[:500] if result.stderr else "(no stderr)"
-        raise DownloadError(f"Script failed (exit {result.returncode}): {stderr_preview}")
-
-    if not output_abs.exists():
-        raise DownloadError(f"Script did not produce expected output file: {output_abs}")
-
-    payload = output_abs.read_bytes()
-    return payload, str(output_path)
-
-
-def _fetch_fallback(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
-    src = registry.create(stype, **(client or {}))
-    first_val = next(iter(formatted_args.values()))
-    payload = src.fetch(first_val)
-    return payload, str(first_val)
-
-
-def _fetch_payload(
-    stype: str,
-    client: dict,
-    formatted_args: dict,
-    base_dir: Path | None = None,
-) -> tuple[bytes, str]:
-    """Dispatch fetch to the appropriate source-type handler."""
-    if base_dir is not None:
-        formatted_args = {**formatted_args, "_base_dir": str(base_dir)}
-    handler = _FETCH_DISPATCH.get(stype, _fetch_fallback)
-    return handler(stype, client, formatted_args)
 
 
 # ---------------------------------------------------------------------------

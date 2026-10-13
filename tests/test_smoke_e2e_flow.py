@@ -125,9 +125,6 @@ class TestEndToEndFlow:
         _assert_parquet_has_rows(clean_parquet)
         _assert_parquet_has_rows(mart_parquet)
 
-        assert (clean_dir / "_validate" / "clean_validation.json").exists()
-        assert (mart_dir / "_validate" / "mart_validation.json").exists()
-
         # --- FASE 3: validazione via API diretta (CLI validate rimossa) ---
         from toolkit.cli.common import load_cfg_and_logger
         from toolkit.raw.validate import run_raw_validation

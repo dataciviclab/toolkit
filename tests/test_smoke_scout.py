@@ -30,6 +30,7 @@ def test_scout_infer_years_real() -> None:
     assert infer_years("REG_tipo_reddito_2025.csv") == (2025, 2025)
 
 
+@pytest.mark.smoke
 @needs_network
 def test_scout_direct_csv() -> None:
     """CSV diretto: probe → file, formato CSV."""
@@ -41,6 +42,7 @@ def test_scout_direct_csv() -> None:
     assert result["kind"] == "file"
 
 
+@pytest.mark.smoke
 @needs_network
 def test_scout_html_with_links() -> None:
     """Pagina HTML con link CSV: probe → html, link trovati."""
@@ -53,6 +55,7 @@ def test_scout_html_with_links() -> None:
     assert len(result.get("candidate_links", [])) > 50  # SO registry dice 147
 
 
+@pytest.mark.smoke
 @needs_network
 def test_scout_routed_ckan_dataset() -> None:
     """CKAN dataset: probe_routed → ckan, risorse trovate."""
@@ -64,6 +67,7 @@ def test_scout_routed_ckan_dataset() -> None:
     assert len(result.get("ckan_resources") or []) > 0
 
 
+@pytest.mark.smoke
 @needs_network
 def test_scout_routed_ckan_homepage() -> None:
     """CKAN homepage: probe_routed → ckan_portal."""

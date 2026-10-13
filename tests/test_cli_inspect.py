@@ -284,8 +284,15 @@ class TestAutoDetect:
             os.chdir(old)
 
     @pytest.mark.contract
-    def test_nonexistent_slug_fails(self):
-        """Slug inesistente deve fallire con errore chiaro."""
+    def test_nonexistent_slug_fails(self, tmp_path, monkeypatch):
+        """Slug inesistente deve fallire con errore chiaro.
+
+        Monkeypatch del WORKSPACE_ROOT importato in discovery: il resolver
+        non scansiona il workspace reale (~6s di filesystem walk).
+        """
+        import toolkit.core.discovery as disc
+
+        monkeypatch.setattr(disc, "WORKSPACE_ROOT", tmp_path)
         result = runner.invoke(app, ["inspect", "-c", "this-slug-definitely-does-not-exist"])
         assert result.exit_code != 0
         assert "Nessun dataset trovato" in result.output

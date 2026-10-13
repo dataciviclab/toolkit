@@ -28,6 +28,8 @@ jobs:
           cov_module: "toolkit"
           cov_report: "term-missing xml"
           cov_threshold: "81"
+      - name: Smoke pipeline tests
+        run: python -m pytest tests/ -m smoke -q -p no:cacheprovider --timeout=60
       - name: Upload Coverage Artifact
         if: always() && hashFiles('coverage.xml') != ''
         uses: actions/upload-artifact@v7

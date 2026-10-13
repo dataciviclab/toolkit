@@ -11,10 +11,12 @@ from toolkit.core.exceptions import DownloadError
 from toolkit.core.support import (
     check_support_path_drift,
     flatten_support_template_ctx,
-    materialize_codelist_to,
-    materialize_support,
     resolve_support_payloads,
     _support_expected_mart_outputs,
+)
+from toolkit.domain.support import (
+    materialize_codelist_to,
+    materialize_support,
 )
 
 pytestmark = pytest.mark.policy

@@ -244,7 +244,7 @@ def _scan_workspace_configs(
         Dict slug → {dataset_name, stage, years, has_clean, has_mart,
                      last_run_status, config_path, root}
     """
-    from toolkit.registry.layout import repo_dataset_dirs, workspace_repo_dirs
+    from toolkit.registry.layout import dataset_yml_slug, repo_dataset_dirs, workspace_repo_dirs
 
     # Nome dir DI → stage legacy (contratto pre-fusion).
     DI_STAGE = {"candidates": "candidates", "compose": "compose", "support_datasets": "support"}
@@ -270,12 +270,6 @@ def _scan_workspace_configs(
             if "templates" in dataset_yml.parts:
                 continue
 
-            parent_dir = dataset_yml.parent
-            rel_path = parent_dir.relative_to(scan_dir)
-            dir_slug = str(rel_path.as_posix())
-            if rel_path.parent == Path("."):
-                dir_slug = parent_dir.name
-
             # Lettura YAML leggera (senza validazione piena)
             try:
                 data = read_yaml(dataset_yml)
@@ -284,13 +278,13 @@ def _scan_workspace_configs(
             if not isinstance(data, dict):
                 continue
 
-            ds = data.get("dataset", {}) or {}
             # Chiave canonica: dataset.name (underscore). La dir è solo un
             # contenitore (può differire: anag-enti vs ca_anag_enti_seed).
-            # Fallback alla dir solo per config legacy senza dataset.name.
-            name_raw = ds.get("name") if isinstance(ds, dict) else None
-            slug = str(name_raw or dir_slug).replace("-", "_")
-            name = slug
+            slug = dataset_yml_slug(dataset_yml, scan_dir)
+            if slug is None:
+                continue
+
+            ds = data.get("dataset", {}) or {}
             years = ds.get("years", []) if isinstance(ds, dict) else []
             if isinstance(years, int):
                 years = [years]
@@ -313,7 +307,7 @@ def _scan_workspace_configs(
             )
 
             results[slug] = {
-                "dataset_name": str(name),
+                "dataset_name": str(slug),
                 "stage": stage_name,
                 "years": [int(y) for y in years] if isinstance(years, list) else [],
                 "has_clean": has_clean,

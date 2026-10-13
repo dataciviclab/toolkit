@@ -18,7 +18,6 @@ from toolkit.profile.raw import (
     profile_raw,
     write_raw_profile,
 )
-from toolkit.scaffold.clean import scaffold_clean_if_missing
 from toolkit.raw._fetch_utils import (
     _choose_primary_output,
     _fetch_payload,
@@ -175,19 +174,8 @@ def run_raw(
             profile_dir = out_dir / "_profile"
             write_raw_profile(profile_dir, raw_profile)
             logger.debug("RAW profile -> %s", profile_dir / RAW_PROFILE)
-
-            scaffold_clean_if_missing(
-                raw_profile.__dict__,
-                dataset,
-                year,
-                base_dir or Path("."),
-                clean_cfg,
-                logger,
-            )
         except Exception as exc:
-            logger.warning(
-                "RAW profile/scaffold generation failed: %s: %s", type(exc).__name__, exc
-            )
+            logger.warning("RAW profile generation failed: %s: %s", type(exc).__name__, exc)
 
     metadata_payload = {
         "layer": "raw",

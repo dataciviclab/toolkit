@@ -3,11 +3,11 @@
 Strati:
   lab_connectors/http/client.py  →  HttpClient (con circuit breaker opzionale)
   toolkit/scout/http.py          →  probe_url_headers (probe con format detection)
-  toolkit/core/probe.py          →  ProbePool (orchestrazione parallela)
+  toolkit/scout/pool.py          →  ProbePool (orchestrazione parallela)
 
 Uso::
 
-    from toolkit.core.probe import ProbePool
+    from toolkit.scout.pool import ProbePool
 
     pool = ProbePool(workers=8, circuit_threshold=3)
     futures = []
@@ -29,7 +29,9 @@ from typing import Any
 
 from lab_connectors.http import CircuitOpenError, HttpClient
 
-logger = logging.getLogger("toolkit.core.probe")
+from toolkit.scout import http as scout_http
+
+logger = logging.getLogger("toolkit.scout.pool")
 
 
 @dataclass
@@ -126,13 +128,14 @@ class ProbePool:
             un ``ProbeResult``.
 
         """
-        from toolkit.scout.http import probe_url_headers
 
         def _run() -> ProbeResult:
             start = time.perf_counter()
             try:
                 client = self._get_client()
-                probe = probe_url_headers(url, timeout=self._default_timeout, client=client)
+                probe = scout_http.probe_url_headers(
+                    url, timeout=self._default_timeout, client=client
+                )
                 elapsed = time.perf_counter() - start
                 sc = probe.get("status_code", 0)
                 reachable = 200 <= sc < 400

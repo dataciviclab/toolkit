@@ -5,7 +5,7 @@ from pathlib import Path
 from lab_connectors.duckdb import safe_connect
 import pytest
 
-from toolkit.core.sql_validation import (
+from toolkit.domain.sql_validation import (
     _build_clean_preview,
     _create_placeholder_raw_input_with_columns,
     _dedupe_preserve_order,

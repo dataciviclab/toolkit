@@ -18,6 +18,7 @@ from typing import Any, Iterator
 
 from toolkit.core.config import load_config
 from toolkit.core.dataset_loader import load_dataset_manifest
+from toolkit.core.io import read_yaml
 
 DEFAULT_DATASET_DIRS: tuple[str, ...] = ("datasets",)
 
@@ -132,6 +133,48 @@ def invalidate_workspace_cache(workspace: Path | None = None) -> None:
 def _is_data_repo(repo_dir: Path) -> bool:
     """True se la directory è un repo dati (ha sezioni dati o registry)."""
     return bool(repo_dataset_dirs(repo_dir)) or (repo_dir / "registry").is_dir()
+
+
+def dataset_yml_slug(dataset_yml: Path, section_dir: Path) -> str | None:
+    """Slug canonico di un dataset.yml (chiave ``dataset.name``, underscore).
+
+    Contratto unico per discovery e catalog: la dir che contiene il
+    dataset.yml è solo un contenitore e non è MAI identità. Ritorna None se
+    il file non è un dict YAML valido.
+    """
+    try:
+        data = read_yaml(dataset_yml)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    ds = data.get("dataset", {}) or {}
+    name_raw = ds.get("name") if isinstance(ds, dict) else None
+    parent_dir = dataset_yml.parent
+    rel_path = parent_dir.relative_to(section_dir)
+    dir_slug = str(rel_path.as_posix())
+    if rel_path.parent == Path("."):
+        dir_slug = parent_dir.name
+    return str(name_raw or dir_slug).replace("-", "_")
+
+
+def iter_workspace_dataset_ymls(workspace: Path) -> Iterator[tuple[str, Path]]:
+    """Itera ``(slug, dataset_yml)`` di tutti i repo dati del workspace.
+
+    Scan ricorsiva (include repo annidati). I file ``templates/`` sono
+    esclusi. Lo slug è derivato da ``dataset_yml_slug``.
+    """
+    for repo_dir in workspace_repo_dirs(workspace):
+        for section in repo_dataset_dirs(repo_dir):
+            section_dir = repo_dir / section
+            if not section_dir.is_dir():
+                continue
+            for dataset_yml in sorted(section_dir.rglob("dataset.yml")):
+                if "templates" in dataset_yml.parts:
+                    continue
+                slug = dataset_yml_slug(dataset_yml, section_dir)
+                if slug:
+                    yield slug, dataset_yml
 
 
 @dataclass(frozen=True)

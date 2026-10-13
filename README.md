@@ -144,7 +144,7 @@ ruff check .                      # lint
 ```
 
 **Test**: 85+ file, marker `core` (deve sempre passare), `advanced`, `compat`.
-**CI**: `.github/workflows/ci.yml` — Python 3.10–3.12, ruff, coverage ≥70%.
+**CI**: `.github/workflows/ci.yml` — Python 3.12, ruff, coverage ≥70%.
 
 ## Struttura del repo
 

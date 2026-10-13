@@ -16,7 +16,7 @@ class Registry:
 
     def register(self, name: str, factory: Callable[..., Any], *, overwrite: bool = False) -> None:
         if not overwrite and name in self._plugins:
-            raise ValueError(f"Plugin giÃ  registrato: '{name}'")
+            raise ValueError(f"Plugin già registrato: '{name}'")
         self._plugins[name] = factory
 
     def create(self, name: str, **kwargs):

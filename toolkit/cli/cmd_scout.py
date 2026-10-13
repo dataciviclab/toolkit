@@ -1,7 +1,6 @@
 """toolkit scout — esplora URL esterni con probe + routing + inferenze.
 
 Output leggibile o JSON. Con --scaffold genera anche i file candidate.
-Sostituisce inspect url (deprecato) come comando di URL scouting.
 
 Usage:
     toolkit scout <URL>                  # probe + info leggibile

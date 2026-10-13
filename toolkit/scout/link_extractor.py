@@ -18,9 +18,3 @@ from lab_connectors.discovery.links import (  # noqa: F401
     group_links,
     resolve_format,
 )
-
-# Alias backward-compat per i vecchi nomi privati
-_extract_prefix = extract_prefix
-_extract_years = extract_years
-_resolve_format = resolve_format
-_extract_filename = extract_filename

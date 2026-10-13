@@ -1214,31 +1214,6 @@ def _execute_pipeline(
         raise typer.Exit(code=1)
 
 
-def run_full(
-    config: str | None = None,
-    years: str | None = None,
-    smoke: bool = False,
-    sample_rows: int | None = None,
-    sample_bytes: int | None = None,
-    root: str | None = None,
-    json_output: bool = False,
-    dry_run: bool = False,
-) -> None:
-    """Backward compat: esegue pipeline completa.
-
-    Chiamata programmatica (non CLI) — il comando CLI ``toolkit run full``
-    non è più registrato. Usa ``toolkit run``.
-    """
-    import warnings
-
-    warnings.warn(
-        "run_full() è deprecato, usa toolkit.run o _execute_pipeline()",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    _execute_pipeline(config, years, smoke, sample_rows, sample_bytes, root, json_output, dry_run)
-
-
 def run_preflight_cmd(
     config: str | None = typer.Option(None, "--config", "-c", help="Path or slug to dataset.yml"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),

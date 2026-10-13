@@ -1,9 +1,8 @@
 """inspect profile — logica profiling RAW.
 
 ``csv_preview`` e' in ``toolkit.domain.profile``.
-``run_profile`` (logica) resta qui: e' il core del profiling usato da
-test e pipeline (il comando CLI Typer corrispondente e' deprecato a
-favore di ``toolkit inspect config -m profile``).
+``run_profile`` (logica) resta qui: e' il core del profiling RAW,
+usato da ``inspect config -m profile`` e dai test di integrazione.
 """
 
 from __future__ import annotations
@@ -18,10 +17,7 @@ from toolkit.profile.raw import profile_raw, write_raw_profile
 
 
 def run_profile(cfg: ToolkitConfig, years: list[int], logger: Logger) -> None:
-    """Core logic: profiling RAW per ogni anno e scrittura su _profile/.
-
-    Chiamabile da cmd_profile (deprecato) e dai test di integrazione.
-    """
+    """Core logic: profiling RAW per ogni anno e scrittura su _profile/."""
     clean_cfg: dict[str, Any] = ensure_dict(cfg.clean) or {}
 
     for y in years:

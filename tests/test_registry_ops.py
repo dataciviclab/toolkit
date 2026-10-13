@@ -85,10 +85,19 @@ def test_show_registry_slug_missing(mini_workspace: Path) -> None:
 @pytest.mark.pure_unit
 def test_section_count_pure() -> None:
     """Conteggio entries per sezione del registry unico (pure_unit)."""
+    from lab_connectors.registry.models import Registry
+
     from toolkit.registry.reader import _section_count
 
-    assert _section_count("datasets", {"datasets": [1, 2]}) == 2
-    assert _section_count("marts", {"marts": [1]}) == 1
-    assert _section_count("signals", {"signals": [1, 2, 3]}) == 3
-    assert _section_count("codelists", {"codelists": ["geo", "units"]}) == 2
-    assert _section_count("entities", {"entities": {"entities": {}}}) == 0
+    reg = Registry(
+        datasets=[object(), object()],
+        marts=[object()],
+        signals=[object(), object(), object()],
+        codelists=["geo", "units"],
+        entities={"entities": {}},
+    )
+    assert _section_count("datasets", reg) == 2
+    assert _section_count("marts", reg) == 1
+    assert _section_count("signals", reg) == 3
+    assert _section_count("codelists", reg) == 2
+    assert _section_count("entities", reg) == 0

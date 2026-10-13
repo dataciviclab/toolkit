@@ -90,7 +90,7 @@ mart:
 
 Il toolkit risolve i path relativi, esegue SQL su DuckDB e produce output in `root/data/`.
 
-**Plugin sorgente supportati**: `http_file`, `http_post_file`, `local_file`, `ckan`, `sdmx`, `sparql`.
+**Plugin sorgente supportati**: `http_file`, `http_post_file`, `local_file`, `ckan`, `sdmx`, `sparql`, `dbnomics` (+ `script`, gate ambientale `TOOLKIT_ALLOW_SCRIPT_SOURCE=1`).
 
 📖 **Documenti di riferimento**:
 
@@ -152,10 +152,12 @@ ruff check .                      # lint
 toolkit/
   toolkit/            # package Python
     cli/              # comandi CLI (typer, re-export)
-    core/             # engine condiviso (infrastruttura)
+    core/             # engine condiviso (infrastruttura: paths, config, catalogo source_types)
     domain/           # logica di dominio (orchestrazione)
     raw/ clean/ mart/ # layer pipeline
     plugins/          # plugin sorgente
+    scout/            # esplorazione fonti (probe, http, routing)
+    contracts/        # API pubblica stabile (path + contratti AI)
     mcp/              # server MCP
     profile/          # profiling RAW
   tests/              # pytest (85+ file)

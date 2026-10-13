@@ -26,11 +26,11 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 
 Lettura equivalente a livello package:
 
-- core runtime: `toolkit.raw`, `toolkit.clean`, `toolkit.mart`, `toolkit.scout`, `toolkit.cli` (`run`, `inspect`, `batch` deprecato)
+- core runtime: `toolkit.raw`, `toolkit.clean`, `toolkit.mart`, `toolkit.scout`, `toolkit.cli` (`run`, `inspect`)
 - advanced tooling: `inspect runs --resume`, run parziali, `inspect config --mode profile`, `inspect config --diff`
 - compatibility only: config legacy e alias storici
 
-Sorgenti builtin supportate dal runtime canonico: `local_file`, `http_file`, `http_post_file`, `ckan`, `sdmx`, `sparql`. Il runtime può conservare `.xlsx` e `.xls` in RAW e leggerli in CLEAN — il file originale resta l'artefatto sorgente.
+Sorgenti builtin supportate dal runtime canonico: `local_file`, `http_file`, `http_post_file`, `ckan`, `sdmx`, `sparql`, `dbnomics` (catalogo unico in `toolkit.core.source_types` — registry, dispatch e contratto AI sono generati da lì). Il tipo `script` esiste ma è disabilitato di default (`TOOLKIT_ALLOW_SCRIPT_SOURCE=1`). Il runtime può conservare `.xlsx` e `.xls` in RAW e leggerli in CLEAN — il file originale resta l'artefatto sorgente.
 
 Regola pratica:
 

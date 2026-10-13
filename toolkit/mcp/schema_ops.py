@@ -416,7 +416,7 @@ def dataset_info(config_path: str) -> dict[str, Any]:
 def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     """Read a CSV file using the same profiling pipeline as ``profile_raw``.
 
-    Thin wrapper: la logica è in ``toolkit.cli.inspect.profile_ops.csv_preview``.
+    Thin wrapper: la logica è in ``toolkit.profile.raw.profile_raw``.
     MCP aggiunge solo path safety (``_safe_path``) e wrapping errori in
     ``ToolkitClientError``.
 

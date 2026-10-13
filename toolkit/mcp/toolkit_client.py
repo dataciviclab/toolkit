@@ -44,7 +44,6 @@ from toolkit.mcp.scout_ops import (
     mcp_ckan_package_show,
     mcp_html_extract_links,
     mcp_preview_url,
-    mcp_probe_url,
     mcp_probe_url_routed,
     mcp_sparql_query,
 )

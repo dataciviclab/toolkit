@@ -3,8 +3,9 @@
 Implementazioni thin che chiamano le funzioni di ``toolkit.scout`` e
 ``toolkit.plugins`` e restituiscono dict serializzabili per MCP.
 
-Nota: mcp_infer_topic, mcp_list_ckan_datasets, mcp_list_sdmx_dataflows
-e mcp_probe_url_headers sono state rimosse (mai registrate come tool MCP).
+Nota: mcp_infer_topic, mcp_list_ckan_datasets, mcp_list_sdmx_dataflows,
+mcp_probe_url e mcp_probe_url_headers sono state rimosse (mai registrate
+come tool MCP; la versione registrata è mcp_probe_url_routed).
 """
 
 from __future__ import annotations
@@ -16,20 +17,12 @@ from toolkit.scout.http import (
     fetch_ckan_package,
     fetch_html_body,
 )
-from toolkit.scout.probe import probe_url, probe_url_routed
+from toolkit.scout.probe import probe_url_routed
 
 
 # ---------------------------------------------------------------------------
 # Probe URL
 # ---------------------------------------------------------------------------
-
-
-def mcp_probe_url(url: str, timeout: int = 15) -> dict[str, Any]:
-    """Probe HTTP: reachability, content-type, formato, link candidati.
-
-    Chiama ``toolkit.scout.probe.probe_url()``.
-    """
-    return probe_url(url, timeout=timeout)
 
 
 def mcp_probe_url_routed(

@@ -107,7 +107,7 @@ version = { attr = "toolkit.version.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--timeout=30 -m \"not smoke\""
+addopts = "--timeout=30 -n auto -m \"not smoke\""
 pythonpath = "."
 markers = [
     "contract: public API, artifact format, CLI stable output",

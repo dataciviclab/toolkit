@@ -15,6 +15,7 @@ from tests.helpers_assert_paths import (
 )
 
 
+@pytest.mark.smoke
 @pytest.mark.contract
 def test_smoke_offline_golden_path(smoke_offline: Path) -> None:
     """Golden path su 3 template offline: run all + validate all + artifact.

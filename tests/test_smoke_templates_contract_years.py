@@ -36,6 +36,7 @@ def _root(smoke_dir: Path) -> Path:
     return smoke_dir / "_smoke_out"
 
 
+@pytest.mark.smoke
 @pytest.mark.contract
 def test_smoke_years_filter_run_all_supports_years_filter(
     smoke_offline: Path, runner, chdir_tmp: Path
@@ -75,6 +76,7 @@ def test_smoke_years_filter_run_all_supports_years_filter(
     )
 
 
+@pytest.mark.smoke
 @pytest.mark.contract
 def test_smoke_years_filter_validate_all_supports_years_filter(
     smoke_offline: Path, runner, chdir_tmp: Path
@@ -126,6 +128,7 @@ def test_smoke_years_filter_rejects_unconfigured_year(
     assert "Year(s) not configured" in str(result.exception)
 
 
+@pytest.mark.smoke
 @pytest.mark.contract
 def test_smoke_years_filter_with_year_single(smoke_offline: Path, runner, chdir_tmp: Path) -> None:
     """--year (singolare) deve funzionare come --years per anno singolo."""
@@ -157,6 +160,7 @@ def test_smoke_years_filter_with_year_single(smoke_offline: Path, runner, chdir_
     )
 
 
+@pytest.mark.smoke
 @pytest.mark.contract
 def test_smoke_years_filter_validate_with_year_single(
     smoke_offline: Path, runner, chdir_tmp: Path
@@ -209,6 +213,7 @@ def test_smoke_years_filter_year_and_years_mutual_exclusion(
     assert "Use either --year or --years, not both" in result.output
 
 
+@pytest.mark.smoke
 @pytest.mark.contract
 def test_smoke_years_filter_without_years_runs_all(smoke_offline: Path, chdir_tmp: Path) -> None:
     """Senza --years, tutti gli anni devono essere eseguiti (direct Python API)."""

@@ -22,7 +22,6 @@ CORE_TESTS = {
     "test_config_loading.py",
     "test_metadata_hash.py",
     "test_paths.py",
-    "test_project_example_metadata.py",
     "test_run_context.py",
     "test_smoke_templates_golden_path.py",
     "test_smoke_templates_contract_years.py",

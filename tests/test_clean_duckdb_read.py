@@ -281,6 +281,7 @@ def test_read_raw_to_relation_reads_ods_with_odf_engine(tmp_path: Path):
     """ODS (OpenDocument) read via pandas engine odf — ACI Auto-Trend e simili."""
     import pandas as pd
 
+    pytest.importorskip("odf", reason="odfpy richiesto per scrittura/lettura ODS")
     input_file = tmp_path / "ok.ods"
     pd.DataFrame(
         [
@@ -355,6 +356,7 @@ def test_read_excel_compact_columns_rename_xlsx(tmp_path: Path):
 @pytest.mark.policy
 def test_read_excel_compact_columns_rename_ods(tmp_path: Path):
     """policy: stesso rename compatto su .ods (consumer open-aci Auto-Trend ODS)."""
+    pytest.importorskip("odf", reason="odfpy richiesto per scrittura/lettura ODS")
     input_file = tmp_path / "compact.ods"
     pd.DataFrame(
         [
@@ -393,6 +395,7 @@ def test_read_excel_compact_columns_rename_ods(tmp_path: Path):
 @pytest.mark.policy
 def test_read_excel_source_label_uses_all_batch_suffixes(tmp_path: Path):
     """policy: source_label considera tutti i suffix del batch, non solo il primo."""
+    pytest.importorskip("odf", reason="odfpy richiesto per scrittura/lettura ODS")
     xlsx = tmp_path / "a.xlsx"
     ods = tmp_path / "b.ods"
     pd.DataFrame([{"Anno": 2022, "Val": 1}]).to_excel(xlsx, index=False)

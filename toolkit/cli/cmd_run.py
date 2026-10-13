@@ -593,12 +593,6 @@ def run(
 
 
 _STEP_DOCSTRINGS: dict[str, str] = {
-    "probe": (
-        "Verifica la raggiungibilità delle fonti remote definite in raw.sources.\n\n"
-        "Supporta HTTP, CKAN. Salta fonti locali (local_file), SDMX e SPARQL "
-        "(non timeoutano). Non blocca mai la pipeline: l'errore reale sarà "
-        "rilevato da raw."
-    ),
     "raw": (
         "Scarica i file raw dalle fonti e produce il profiling.\n\n"
         "Esegue probe + download dei file raw secondo la configurazione "
@@ -617,13 +611,6 @@ _STEP_DOCSTRINGS: dict[str, str] = {
         "e produce tabelle denormalizzate in formato Parquet. "
         "Per tabelle multi-anno (con years esplicito), esegue anche "
         "l'aggregazione cross-year automaticamente."
-    ),
-    "all": (
-        "Esegue l'intera pipeline: raw → clean → mart.\n\n"
-        "Equivalente a eseguire i tre step in sequenza. "
-        "Se il dataset è mart-only (compose), usa solo lo step mart.\n\n"
-        "Per dataset semplici (senza support: [] dichiarati in dataset.yml). "
-        "Se hai dipendenze tra dataset (support), usa 'toolkit run full'."
     ),
 }
 
@@ -697,55 +684,9 @@ def _make_step_cmd(step: str):
     return cmd
 
 
-def _run_probe_cmd(
-    config: str | None = typer.Option(None, "--config", "-c", help="Path or slug to dataset.yml"),
-    years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
-    json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Print plan without executing"),
-):
-    """Verifica la raggiungibilita' delle fonti remote per un dataset.
-
-    Esegue probe HTTP per fonti http_file e CKAN.
-    Salta fonti locali, SDMX e SPARQL (non timeoutano).
-    Non blocca mai la pipeline: l'errore reale sara' rilevato da raw.
-
-    Per diagnostica piu' approfondita (quality score CSV, schema, encoding)
-    usa: toolkit run preflight
-    """
-    dry_flag = dry_run if isinstance(dry_run, bool) else False
-
-    cfg, logger = load_cfg_and_logger(config)
-    years_arg = years if isinstance(years, str) else None
-    selected_years = iter_selected_years(cfg, year_arg=None, years_arg=years_arg)
-
-    if dry_flag:
-        typer.echo(f"Probe plan — dataset: {cfg.dataset}")
-        typer.echo(f"  years: {', '.join(str(y) for y in selected_years)}")
-        sources = cfg.raw.sources or []
-        probe_count = sum(
-            1
-            for s in sources
-            for stype in (
-                [getattr(s, "type", None)] if hasattr(s, "type") else [s.get("type", "http_file")]
-            )
-            if stype in ("http_file", "http_post_file", "ckan")
-        )
-        skip_count = len(sources) - probe_count
-        typer.echo(f"  sources: {probe_count} da probe, {skip_count} skip")
-        if json_output:
-            from toolkit.cli.common import echo_json
-
-            echo_json({"status": "DRY_RUN", "dataset": cfg.dataset}, compact=True)
-        return
-
-    for year in selected_years:
-        _run_probe(cfg, year, logger)
-
-
 run_raw_cmd = _make_step_cmd("raw")
 run_clean_cmd = _make_step_cmd("clean")
 run_mart_cmd = _make_step_cmd("mart")
-run_all_cmd = _make_step_cmd("all")
 
 
 def run_init(
@@ -836,9 +777,6 @@ def run_init(
 # ---------------------------------------------------------------------------
 # Batch execution (toolkit run --batch)
 # ---------------------------------------------------------------------------
-
-
-_ALLOWED_BATCH_STEPS = {"probe", "raw", "clean", "mart", "all"}
 
 
 def _read_config_list(configs_file: Path) -> list[Path]:

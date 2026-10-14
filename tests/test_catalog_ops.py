@@ -734,6 +734,45 @@ class TestSemanticFind:
             {"name": "importo", "type": "DOUBLE", "role": "metric", "description": "Importo gara"}
         ]
 
+    def test_find_multi_token_cross_meta(self, resolver_semantic: CatalogResolver) -> None:
+        """Regression: i token di una query naturale possono spandersi tra
+        campi meta (AND cross-part) — prima serviva la frase intera continua."""
+        # 'appalti' solo in tags/category, 'gara' in name/description
+        res = resolver_semantic.list_datasets(query="appalti gara")
+        slugs = {d["slug"] for d in res["datasets"]}
+        assert "anac_bandi_gara" in slugs
+        assert "terna_electricity_by_source" not in slugs
+
+    def test_find_drops_stopwords(self, resolver_semantic: CatalogResolver) -> None:
+        """Le stopword italiane non sono token richiesti."""
+        res = resolver_semantic.list_datasets(query="bandi di gara")
+        slugs = {d["slug"] for d in res["datasets"]}
+        assert "anac_bandi_gara" in slugs
+        # solo stopword → nessun hit semantico
+        res2 = resolver_semantic.list_datasets(query="di dei delle")
+        assert res2["datasets"] == []
+
+    def test_find_morphology_plural(self, resolver_semantic: CatalogResolver) -> None:
+        """'gare' matcha 'gara' (final-vowel strip)."""
+        res = resolver_semantic.list_datasets(query="gare appalti")
+        slugs = {d["slug"] for d in res["datasets"]}
+        assert "anac_bandi_gara" in slugs
+
+    def test_find_column_prefix(self, resolver_semantic: CatalogResolver) -> None:
+        """Prefisso di nome colonna: 'import' → 'importo'."""
+        res = resolver_semantic.list_datasets(query="import")
+        entry = next(d for d in res["datasets"] if d["slug"] == "anac_bandi_gara")
+        assert entry["meta_match"] is not True
+        assert [c["name"] for c in entry["matched_columns"]] == ["importo"]
+
+    def test_token_in_text_no_substring_false_positive(self) -> None:
+        """'appalti' non matcha dentro 'subappalti' (split per parola)."""
+        from lab_connectors.textmatch import token_in_text
+
+        assert not token_in_text("appalti", "n_subappalti")
+        assert token_in_text("appalti", "appalti pubblici")
+        assert token_in_text("gara", "gare")  # morphologia
+
     def test_find_metric_only(self, resolver_semantic: CatalogResolver) -> None:
         """metric_only esclude i dataset senza colonne metric."""
         res = resolver_semantic.list_datasets(metric_only=True)

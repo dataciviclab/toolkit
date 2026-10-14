@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from lab_connectors.gcs.paths import CLEAN_BUCKET, MART_BUCKET
+from lab_connectors.textmatch import query_tokens, token_in_text
 
 from toolkit.core.duckdb_shape import parquet_preview
 from toolkit.core.io import read_json_or_none, read_yaml
@@ -439,24 +440,30 @@ def _semantic_query_hits(
 ) -> dict[str, list[dict[str, Any] | None]]:
     """Slug che matchano la query sulla semantica (meta o colonne).
 
+    Tokenizza la query (stopword italiane escluse, primitive condivise in
+    ``lab_connectors.textmatch``) e richiede che **tutti** i token matchino
+    sparsi tra slug + meta (AND cross-part), oppure tutti dentro una singola
+    colonna. Prima serviva la frase intera come substring continua:
+    "appalti pubblici anac" non matchava mai.
+
     Returns:
         ``{slug: [None | colonna_matchata, ...]}`` — ``None`` = meta match
         (name/description/source/tags/category), dict = colonna matchata.
     """
-    q = query.lower()
+    tokens = query_tokens(query)
+    if not tokens:
+        return {}
     hits: dict[str, list[dict[str, Any] | None]] = {}
     for slug, s in semantic.items():
         matched: list[dict[str, Any] | None] = []
         meta_parts = " ".join(
             str(s.get(k) or "") for k in ("name", "description", "source", "tags", "category")
         )
-        if q in slug.lower() or q in meta_parts.lower():
+        if all(token_in_text(token, slug) or token_in_text(token, meta_parts) for token in tokens):
             matched.append(None)
         for col in s.get("columns", []) or []:
-            if (
-                q in str(col.get("name", "")).lower()
-                or q in str(col.get("description", "")).lower()
-            ):
+            col_text = f"{col.get('name', '')} {col.get('description', '')}"
+            if all(token_in_text(token, col_text) for token in tokens):
                 matched.append(
                     {
                         "name": col.get("name"),

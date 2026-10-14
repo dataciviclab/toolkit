@@ -74,7 +74,10 @@ mcp = create_mcp_server(
     description=(
         "Ispezione dataset: find, overview, status, preflight, schema-diff, related.\n\n"
         "Actions:\n"
-        "- find: cerca dataset per slug/testo/source (params: query, layer, limit, source, stage, status_filter)\n"
+        "- find: cerca dataset per slug, colonne o meta (params: query, layer, limit, "
+        "source, stage, status_filter). Per discovery org-wide con query naturali "
+        "usa dataciviclab-context find; toolkit find è lo strumento live su "
+        "workspace+GCS e cerca anche per nome/descrizione colonna.\n"
         "- overview: schema colonne + conteggio + preview (params: slug, layer, year, source, profile)\n"
         "- status: stato completo dataset (params: config_path, year, since, until)\n"
         "- preflight: diagnostica pre-run (params: config_path, years)\n"

@@ -432,6 +432,26 @@ def test_read_excel_mixed_numeric_string_column_registers_as_varchar(tmp_path: P
 
 
 @pytest.mark.policy
+def test_normalize_mixed_excel_columns_is_pure(tmp_path: Path):
+    """policy: _normalize_mixed_excel_columns non muta il DataFrame di input."""
+    from toolkit.core.read_excel import _normalize_mixed_excel_columns
+
+    original = pd.DataFrame(
+        [
+            {"Anno": 2022, "Valore": 1.5},
+            {"Anno": "Applied filters", "Valore": None},
+        ]
+    )
+    snapshot = original.copy(deep=True)
+
+    result = _normalize_mixed_excel_columns(original)
+
+    pd.testing.assert_frame_equal(original, snapshot)
+    assert result is not original
+    assert list(result["Anno"]) == ["2022", "Applied filters"]
+
+
+@pytest.mark.policy
 def test_read_excel_source_label_uses_all_batch_suffixes(tmp_path: Path):
     """policy: source_label considera tutti i suffix del batch, non solo il primo."""
     pytest.importorskip("odf", reason="odfpy richiesto per scrittura/lettura ODS")

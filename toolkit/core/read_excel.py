@@ -35,18 +35,20 @@ def _trim_excel_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalize_mixed_excel_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Stringify object columns that mix numbers and strings.
+    """Return a copy of ``df`` with mixed number+string object columns stringified.
 
     DuckDB's pandas converter infers a numeric type from the dominant values
     of an object column and hard-fails on stray strings (e.g. the
     "Applied filters" footer row emitted by the Terna Download Center xlsx
     export). Stringifying mixed columns keeps registration total; SQL
     consumers cast with the toolkit macros (cast_int/cast_double).
+    Pure: the input frame is never mutated (copy-on-write).
     """
     import numbers
 
     import pandas as pd
 
+    result: pd.DataFrame | None = None
     for col in df.columns:
         series = df[col]
         if series.dtype != object:
@@ -61,14 +63,16 @@ def _normalize_mixed_excel_columns(df: pd.DataFrame) -> pd.DataFrame:
             elif isinstance(value, numbers.Number):
                 has_num = True
         if has_str and has_num:
-            df[col] = series.map(
+            if result is None:
+                result = df.copy()
+            result[col] = series.map(
                 lambda value: (
                     None
                     if value is None or (isinstance(value, float) and pd.isna(value))
                     else (value if isinstance(value, str) else str(value))
                 )
             )
-    return df
+    return df if result is None else result
 
 
 def _load_excel_frame(

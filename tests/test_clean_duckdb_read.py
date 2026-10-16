@@ -393,6 +393,65 @@ def test_read_excel_compact_columns_rename_ods(tmp_path: Path):
 
 
 @pytest.mark.policy
+def test_read_excel_mixed_numeric_string_column_registers_as_varchar(tmp_path: Path):
+    """policy: colonne object miste (numeri + stringhe) si registrano come VARCHAR.
+
+    Regression: l'export xlsx Terna Download Center termina con una riga footer
+    "Applied filters: ..." nella prima colonna numerica. DuckDB deduceva INT32
+    dai valori dominanti e falliva sul cast della stringa al register — anche
+    quando il clean.sql filtrava gia' la riga con TRY_CAST.
+    """
+    input_file = tmp_path / "footer.xlsx"
+    pd.DataFrame(
+        [
+            {"Anno": 2022, "Regione": "PIEMONTE", "Valore": 1.5},
+            {"Anno": 2022, "Regione": "LAZIO", "Valore": 2.5},
+            {"Anno": "Applied filters:  Year is 2022;", "Regione": None, "Valore": None},
+        ]
+    ).to_excel(input_file, index=False, engine="openpyxl")
+
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.xlsx_mixed_footer")
+
+        info = duckdb_read.read_raw_to_relation(
+            con, [input_file], {"header": True}, "fallback", logger
+        )
+
+        assert info.source == "excel"
+        rows = con.execute(
+            'SELECT "Anno", "Regione", "Valore" FROM raw_input ORDER BY "Valore" NULLS LAST'
+        ).fetchall()
+        assert rows == [
+            ("2022", "PIEMONTE", 1.5),
+            ("2022", "LAZIO", 2.5),
+            ("Applied filters:  Year is 2022;", None, None),
+        ]
+        types = {r[0]: r[1] for r in con.execute("DESCRIBE raw_input").fetchall()}
+        assert types["Anno"] == "VARCHAR"
+        assert types["Valore"] == "DOUBLE"
+
+
+@pytest.mark.policy
+def test_normalize_mixed_excel_columns_is_pure(tmp_path: Path):
+    """policy: _normalize_mixed_excel_columns non muta il DataFrame di input."""
+    from toolkit.core.read_excel import _normalize_mixed_excel_columns
+
+    original = pd.DataFrame(
+        [
+            {"Anno": 2022, "Valore": 1.5},
+            {"Anno": "Applied filters", "Valore": None},
+        ]
+    )
+    snapshot = original.copy(deep=True)
+
+    result = _normalize_mixed_excel_columns(original)
+
+    pd.testing.assert_frame_equal(original, snapshot)
+    assert result is not original
+    assert list(result["Anno"]) == ["2022", "Applied filters"]
+
+
+@pytest.mark.policy
 def test_read_excel_source_label_uses_all_batch_suffixes(tmp_path: Path):
     """policy: source_label considera tutti i suffix del batch, non solo il primo."""
     pytest.importorskip("odf", reason="odfpy richiesto per scrittura/lettura ODS")

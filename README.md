@@ -105,7 +105,12 @@ Il toolkit risolve i path relativi, esegue SQL su DuckDB e produce output in `ro
 
 ## Integrazione AI (MCP)
 
-Il toolkit espone **4 tool** MCP aggregati per agenti AI e IDE:
+Il toolkit espone **4 tool** MCP aggregati per agenti AI e IDE.
+
+**Routing**: discovery org-wide, dati published (clean/mart su GCS) e
+partecipazione (Discussions) → server `dataciviclab`
+([dcl-mcp](https://github.com/dataciviclab/dcl-mcp)). Qui: pipeline
+locale, layer raw, contratti, runs, stato live del workspace.
 
 | Tool | Azioni | Cosa fa |
 |---|---|---|

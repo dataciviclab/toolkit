@@ -184,9 +184,15 @@ def build_clean_catalog(
         # o un tipo invalido, viene risolto al tipo corretto dal vocabolario.
         old = editorial.get(manifest.slug)
         if old:
-            for field in ("name", "description", "source", "source_id", "stage", "period"):
+            for field in ("name", "description", "source", "source_id", "stage"):
                 if old.get(field):
                     entry[field] = old[field]
+            # period: il time_coverage dichiarato nel config ha priorita'
+            # sull'editoriale; l'editoriale copre solo l'assenza di time_coverage
+            # (senza questa eccezione un cambio di copertura nel config non
+            # propagherebbe mai al registry — regression energia-italia #6)
+            if not manifest.period and old.get("period"):
+                entry["period"] = old["period"]
             old_cols = {c.get("name"): c for c in old.get("columns", [])}
             for col in entry["columns"]:
                 oc = old_cols.get(col["name"])

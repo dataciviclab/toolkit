@@ -305,6 +305,63 @@ def test_clean_catalog_normalizes_semantic_type_from_editorial(tmp_path: Path) -
     assert "semantic_type" not in cols["value"]
 
 
+@pytest.mark.policy
+def test_period_time_coverage_beats_editorial(tmp_path: Path) -> None:
+    """policy: time_coverage del config vince sull'period editoriale stale.
+
+    Regression energia-italia #6: l'espansione della serie (2015→2000) non
+    propagava al registry perché il merge editoriale sovrascriveva sempre
+    il period con quello storico.
+    """
+    layout = _make_repo(tmp_path)
+    existing = {
+        "datasets": [
+            {
+                "slug": "my_dataset",
+                "name": "My Dataset",
+                "description": "",
+                "source_id": "src1",
+                "period": {"start": 2015, "end": 2024},  # stale
+                "columns": [],
+                "location": {"type": "gcs", "path": "gs://dataciviclab-clean/my_dataset/"},
+                "stage": "incubating",
+            }
+        ]
+    }
+
+    catalog, _ = build_clean_catalog(layout, existing=existing)
+    ds = catalog["datasets"][0]
+
+    # MART_YML dichiara time_coverage 2000-2024: deve vincere su 2015-2024
+    assert ds["period"] == {"start": 2000, "end": 2024}
+
+
+@pytest.mark.policy
+def test_period_editorial_fills_when_no_time_coverage(tmp_path: Path) -> None:
+    """policy: senza time_coverage nel config, l'period editoriale resta la fonte."""
+    # with_mart=False → SIMPLE_YML (nessun time_coverage), parquet già nel fixture
+    layout = _make_repo(tmp_path, with_mart=False)
+    existing = {
+        "datasets": [
+            {
+                "slug": "my_dataset",
+                "name": "Simple",
+                "description": "",
+                "source_id": "src1",
+                "period": {"start": 2020, "end": 2026},
+                "columns": [],
+                "location": {"type": "gcs", "path": "gs://dataciviclab-clean/my_dataset/"},
+                "stage": "incubating",
+            }
+        ]
+    }
+
+    catalog, _ = build_clean_catalog(layout, existing=existing)
+    ds = catalog["datasets"][0]
+
+    assert ds["period"] == {"start": 2020, "end": 2026}
+
+
 # ---------------------------------------------------------------------------
 # mart_catalog
 # ---------------------------------------------------------------------------

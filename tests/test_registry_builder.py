@@ -21,6 +21,7 @@ from toolkit.registry.builders import (
     build_clean_catalog,
     build_entity_graph,
     build_mart_catalog,
+    build_registry,
     build_signals,
 )
 from toolkit.registry.layout import RepoLayout
@@ -64,6 +65,8 @@ dataset:
   tags: [test]
   category: demo
   years: [2024]
+clean:
+  sql: "sql/clean.sql"
 """
 
 RUN_RECORD = {
@@ -184,14 +187,32 @@ def test_clean_catalog_dirname_not_identity(tmp_path: Path) -> None:
 
 @pytest.mark.pure_unit
 def test_clean_catalog_missing_parquet_reported(tmp_path: Path) -> None:
-    """Dataset dichiarato senza parquet locale → errore, non catalogo finto."""
-    layout = _make_repo(tmp_path)
+    """Dataset con clean.sql ma senza parquet locale → errore, non catalogo finto."""
+    layout = _make_repo(tmp_path, with_mart=False)
     import shutil
 
     shutil.rmtree(layout.repo_root / "out" / "data" / "clean")
     catalog, errors = build_clean_catalog(layout)
     assert any("nessun parquet clean locale" in e for e in errors["derive"])
     assert catalog["datasets"] == []
+
+
+@pytest.mark.contract
+def test_clean_catalog_registers_mart_only_dataset(tmp_path: Path) -> None:
+    """Mart-only (no clean.sql né parquet): dataset con mart_refs, senza columns/location."""
+    layout = _make_repo(tmp_path)  # MART_YML: nessun clean.sql
+    import shutil
+
+    shutil.rmtree(layout.repo_root / "out" / "data" / "clean")
+    built = build_registry(layout)
+
+    assert built["errors"]["registry"]["validation"] == []
+    ds = built["registry"]["datasets"][0]
+    assert ds["slug"] == "my_dataset"
+    assert ds["period"] == {"start": 2000, "end": 2024}
+    assert ds["mart_refs"] == ["my_dataset__mart_trend"]
+    assert "columns" not in ds
+    assert "location" not in ds
 
 
 @pytest.mark.contract
@@ -204,7 +225,7 @@ def test_clean_catalog_slims_editorial_entry_without_parquet(tmp_path: Path) -> 
     (_slim_dataset_entry) deve comunque applicarsi, così come il fix role
     (year → dimension).
     """
-    layout = _make_repo(tmp_path)
+    layout = _make_repo(tmp_path, with_mart=False)
     import shutil
 
     shutil.rmtree(layout.repo_root / "out" / "data" / "clean")

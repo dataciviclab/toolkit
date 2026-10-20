@@ -144,7 +144,7 @@ def build_clean_catalog(
             continue
 
         columns, latest_year = latest_clean_columns(manifest, alias_map)
-        if columns is None:
+        if columns is None and not manifest.is_mart_only:
             # Nessun parquet locale: possibile solo se l'entry è editoriale
             # (preservata) — altrimenti errore e skip.
             if manifest.slug in editorial:
@@ -155,12 +155,16 @@ def build_clean_catalog(
                 f"per anni {manifest.years} (runnare la pipeline per generarlo)"
             )
             continue
-        if latest_year is None:
+        if latest_year is None and not manifest.is_mart_only:
             derive_errors.append(f"{manifest.slug}: schema letto ma anno non risolvibile")
             continue
 
         years_present = sorted(y for y in manifest.years if clean_parquet_path(manifest.cfg, y))
-        years_eff = years_present or [latest_year]
+        # mart-only: nessun clean locale → period dagli years dichiarati
+        years_eff = years_present or ([latest_year] if latest_year else list(manifest.years))
+        if not years_eff:
+            derive_errors.append(f"{manifest.slug}: years non dichiarati — period non risolvibile")
+            continue
 
         entry: dict[str, Any] = {
             "slug": manifest.slug,
@@ -171,10 +175,13 @@ def build_clean_catalog(
             "period": manifest.period or {"start": years_eff[0], "end": years_eff[-1]},
             "tags": _dedup_tags(manifest.tags),
             "category": manifest.category,
-            "columns": columns,
-            "location": contract.clean_location(manifest.slug, years_eff),
             "stage": "incubating",
         }
+        # Un dataset mart-only non ha clean: niente columns/location. La card
+        # resta comunque visibile e i mart sono linkati da mart_refs.
+        if columns is not None:
+            entry["columns"] = columns
+            entry["location"] = contract.clean_location(manifest.slug, years_eff)
 
         # Merge editoriale: i campi umani sovrascrivono. role è SEMPRE
         # derivato (semantic_type/type), mai dall'editoriale: l'existing
@@ -194,7 +201,7 @@ def build_clean_catalog(
             if not manifest.period and old.get("period"):
                 entry["period"] = old["period"]
             old_cols = {c.get("name"): c for c in old.get("columns", [])}
-            for col in entry["columns"]:
+            for col in entry.get("columns", []):
                 oc = old_cols.get(col["name"])
                 if oc:
                     if oc.get("description"):

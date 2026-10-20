@@ -29,7 +29,7 @@
       "items": {
         "$ref": "#/$defs/dataset"
       },
-      "description": "Inventario queryabile dei clean parquet (ex clean_catalog)."
+      "description": "Dataset del repo (ex clean_catalog). I dataset mart-only non hanno clean: columns e location sono opzionali."
     },
     "marts": {
       "type": "array",
@@ -73,9 +73,7 @@
         "slug",
         "name",
         "description",
-        "period",
-        "columns",
-        "location"
+        "period"
       ],
       "properties": {
         "slug": {
@@ -141,10 +139,10 @@
         },
         "columns": {
           "type": "array",
-          "minItems": 1,
           "items": {
             "$ref": "#/$defs/column"
-          }
+          },
+          "description": "Colonne del clean. Assente/vuoto per i dataset mart-only."
         },
         "location": {
           "$ref": "#/$defs/location"

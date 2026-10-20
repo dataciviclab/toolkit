@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- **Registry: dataset mart-only**: i compose senza `clean:` non restano più fuori dal catalogo con i mart orfani. `build_clean_catalog` emette una entry dataset con metadati e `mart_refs`, senza `columns`/`location`; `registry.schema.json` rende i due campi opzionali. Così ACB/MCP vedono il dataset (`find`/`explore`) e risolvono i suoi mart (`gcs_query`).
+
 ### Changed
 
 - **Layering ripristinato** (PR #504): rimosse 6 inversioni di dipendenza `core → clean/domain/scout/scaffold`. `sql_validation` spostato in `domain/`, orchestration support in `domain/support.py`, `ProbePool` in `scout/pool.py`, scaffold clean.sql spostato da `raw/run.py` a `cmd_run` (comportamento invariato). Contratto condiviso `dataset_yml_slug`/`iter_workspace_dataset_ymls` in `registry/layout.py`.

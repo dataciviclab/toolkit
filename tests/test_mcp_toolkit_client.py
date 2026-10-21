@@ -752,3 +752,28 @@ def test_dataset_status_shape(tmp_path, monkeypatch):
     for section in ("paths_info", "summary", "readiness", "run_stats", "info"):
         assert section in result
     assert result["info"]["dataset"] == dataset
+
+
+def test_clean_preview_mart_name(
+    mcp_project_example: tuple[Path, str, int],
+) -> None:
+    """Issue #425: selezione della tabella mart per nome, non per indice."""
+    from toolkit.mcp.toolkit_client import clean_preview
+    from toolkit.mcp.errors import ToolkitClientError
+
+    config_path, dataset, year = mcp_project_example
+    root = Path(config_path).parent / "_smoke_out"
+    mart_dir = root / "data" / "mart" / dataset / str(year)
+    mart_dir.mkdir(parents=True, exist_ok=True)
+    _make_parquet(mart_dir / "rd_by_regione.parquet")
+    _make_parquet(mart_dir / "rd_by_provincia.parquet")
+
+    result = clean_preview(
+        str(config_path), layer="mart", mart_name="rd_by_provincia", year=year, limit=5
+    )
+    assert result["mart_name"] == "rd_by_provincia"
+
+    with pytest.raises(ToolkitClientError, match="non dichiarata"):
+        clean_preview(
+            str(config_path), layer="mart", mart_name="mart_inesistente", year=year, limit=5
+        )

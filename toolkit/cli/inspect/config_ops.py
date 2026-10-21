@@ -37,7 +37,10 @@ def config(
     year: int = typer.Option(0, "--year", "-y", help="Anno (default: ultimo configurato)"),
     sql: str | None = typer.Option(None, "--sql", help="SQL query (solo mode=sql)"),
     limit: int = typer.Option(20, "--limit", help="Max righe (solo mode=preview/sql)"),
-    mart_index: int = typer.Option(0, "--mart-index", help="Indice tabella mart (default 0)"),
+    mart_index: int = typer.Option(0, "--mart-index", help="Indice tabella mart (deprecato)"),
+    mart_name: str | None = typer.Option(
+        None, "--mart-name", help="Nome tabella mart (es. mart_comuni)"
+    ),
     diff: bool = typer.Option(False, "--diff", help="Schema-diff RAW tra anni"),
     json_output: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
@@ -122,6 +125,7 @@ def config(
             limit=limit,
             sql=sql,
             mart_index=mart_index,
+            mart_name=mart_name,
         )
     except (ValueError, FileNotFoundError) as exc:
         if json_output:

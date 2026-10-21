@@ -68,11 +68,22 @@ def _resolve_clean_path(cfg: Any, year: int) -> Path:
     return Path(parquet_str)
 
 
-def _resolve_mart_path(cfg: Any, year: int, mart_index: int = 0) -> Path:
+def _resolve_mart_path(
+    cfg: Any, year: int, mart_index: int = 0, mart_name: str | None = None
+) -> Path:
     paths = _payload_for_year(cfg, year)
     outputs = paths["paths"]["mart"].get("outputs") or []
     if not outputs:
         raise FileNotFoundError("Nessun output mart configurato")
+    if mart_name:
+        name = str(mart_name).strip()
+        for output in outputs:
+            if Path(output).stem == name:
+                return Path(output)
+        available = ", ".join(sorted(Path(p).stem for p in outputs))
+        raise ValueError(
+            f"Tabella mart '{name}' non dichiarata in dataset.yml: disponibili {available}"
+        )
     if mart_index < 0 or mart_index >= len(outputs):
         raise ValueError(f"Indice mart {mart_index} non valido: {len(outputs)} output disponibili")
     return Path(outputs[mart_index])
@@ -260,6 +271,7 @@ def clean_preview(
     mart_index: int = 0,
     year: int | None = None,
     limit: int = 10,
+    mart_name: str | None = None,
 ) -> dict[str, Any]:
     """Preview dati da un parquet clean o mart."""
     from toolkit.domain.path_resolver import payload_for_year as _payload_for_year
@@ -272,7 +284,7 @@ def clean_preview(
     if layer == "clean":
         parquet_path = _resolve_clean_path(cfg, year)
     elif layer == "mart":
-        parquet_path = _resolve_mart_path(cfg, year, mart_index)
+        parquet_path = _resolve_mart_path(cfg, year, mart_index, mart_name)
     else:
         raise ValueError(f"layer deve essere 'clean' o 'mart', non '{layer}'")
 
@@ -394,6 +406,7 @@ def layer_sql(
     limit: int = 20,
     sql: str | None = None,
     mart_index: int = 0,
+    mart_name: str | None = None,
     table: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
@@ -411,7 +424,9 @@ def layer_sql(
         limit: Max righe.
         sql: Query SQL. I dati sono disponibili come tabella ``data``
             (singolo dataset) o CTE col nome slug (multi dataset).
-        mart_index: Indice tabella mart (solo pipeline mode).
+        mart_index: Indice tabella mart (solo pipeline mode, deprecato:
+            usare ``mart_name``).
+        mart_name: Nome tabella mart (es ``"mart_comuni"``).
         dry_run: Se True, valida lo scope SQL e fa EXPLAIN senza eseguire
             (stesso contratto del dry_run di clean-query).
 
@@ -492,7 +507,7 @@ def layer_sql(
     if layer == "clean":
         parquet_path = _resolve_clean_path(cfg, year)
     elif layer == "mart":
-        parquet_path = _resolve_mart_path(cfg, year, mart_index)
+        parquet_path = _resolve_mart_path(cfg, year, mart_index, mart_name)
     else:
         raise ValueError(f"layer deve essere 'raw', 'clean' o 'mart', non '{layer}'")
 
@@ -571,6 +586,7 @@ def layer_query(
     limit: int = 20,
     sql: str | None = None,
     mart_index: int = 0,
+    mart_name: str | None = None,
     table: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
@@ -584,7 +600,9 @@ def layer_query(
         year: Anno filtro.
         limit: Max righe in preview/sql.
         sql: Query SQL per mode=sql.
-        mart_index: Indice tabella mart (solo pipeline mode).
+        mart_index: Indice tabella mart (solo pipeline mode, deprecato:
+            usare ``mart_name``).
+        mart_name: Nome tabella mart (es ``"mart_comuni"``).
         dry_run: Se True e mode=sql, valida lo scope + EXPLAIN senza eseguire.
 
     Raises:
@@ -644,7 +662,12 @@ def layer_query(
         if safe_layer == "raw":
             return raw_preview(config_path, year=year, limit=limit)
         return clean_preview(
-            config_path, layer=safe_layer, mart_index=mart_index, year=year, limit=limit
+            config_path,
+            layer=safe_layer,
+            mart_index=mart_index,
+            mart_name=mart_name,
+            year=year,
+            limit=limit,
         )
     if safe_mode == "sql":
         return layer_sql(
@@ -655,6 +678,7 @@ def layer_query(
             limit=limit,
             sql=sql,
             mart_index=mart_index,
+            mart_name=mart_name,
         )
 
     raise RuntimeError(f"mode non gestito: {safe_mode}")

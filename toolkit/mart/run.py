@@ -36,6 +36,26 @@ from toolkit.core.template import build_runtime_template_ctx, public_template_ct
 _CLEAN_INPUT_TOKEN_RE = re.compile(rf"\b{CLEAN_INPUT_VIEW}\b", re.IGNORECASE)
 
 
+def _cleanup_stale_mart_outputs(mart_dir: Path, declared: set[str], logger) -> list[Path]:
+    """Rimuove i parquet mart non piu' dichiarati in dataset.yml (issue #426).
+
+    Le tabelle rinominate lasciavano il vecchio parquet su disco: il layer
+    tool poteva leggere quello sbagliato (ordine alfabetico). La pulizia gira
+    dopo la scrittura dei nuovi output, cosi' un run fallito non cancella
+    nulla.
+    """
+    removed: list[Path] = []
+    if not declared or not mart_dir.is_dir():
+        return removed
+    for path in sorted(mart_dir.glob("*.parquet")):
+        if path.stem in declared:
+            continue
+        path.unlink()
+        removed.append(path)
+        logger.warning("MART: rimosso output non dichiarato %s", short_path(path))
+    return removed
+
+
 def _validate_multi_year_tables(
     mart_dir: Path,
     mart_cfg: dict[str, Any],
@@ -195,6 +215,11 @@ def run_mart_multi_year(
     # le table_rules/required_tables delle tabelle con years vengono
     # applicate qui, dopo la produzione. Prima questa validazione non
     # esisteva: le regole multi-year non venivano mai applicate.
+    _cleanup_stale_mart_outputs(
+        multi_year_dir,
+        {str(t.get("name")) for t in multi_year_tables if t.get("name")},
+        logger,
+    )
     validation_result = _validate_multi_year_tables(
         multi_year_dir,
         mart_cfg,
@@ -535,6 +560,10 @@ def run_mart(
             written.extend(hierarchy_written)
             executed.extend(hierarchy_executed)
             total_rows += hierarchy_rows
+
+    declared_names = {str(t.get("name")) for t in single_year_tables if t.get("name")}
+    declared_names.update(str(e["name"]) for e in executed if e.get("name"))
+    _cleanup_stale_mart_outputs(mart_dir, declared_names, logger)
 
     outputs = [file_record(p) for p in written]
     metadata_payload: dict[str, Any] = {

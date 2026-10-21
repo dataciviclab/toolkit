@@ -3,9 +3,12 @@
 ### Added
 
 - **Registry: dataset mart-only**: i compose senza `clean:` non restano più fuori dal catalogo con i mart orfani. `build_clean_catalog` emette una entry dataset con metadati e `mart_refs`, senza `columns`/`location`; `registry.schema.json` rende i due campi opzionali. Così ACB/MCP vedono il dataset (`find`/`explore`) e risolvono i suoi mart (`gcs_query`).
+- **`mart_name`** (#425): pipeline mode, CLI (`toolkit inspect config --mart-name`) e MCP (`toolkit_query`) selezionano la tabella mart per nome invece che per indice. `mart_index` resta per backward compat ma e' deprecato; un nome non dichiarato fallisce con l'elenco delle tabelle disponibili.
+- **Registry: codelists dai support id** (#471): `build_codelists` deriva i nomi dalle entry `support:` con `type: codelist` e `id` (fonte canonica SDMX), con fallback ai `codelists/*.csv` per i repo legacy.
 
 ### Changed
 
+- **Run MART** (#426): i parquet non piu' dichiarati in `dataset.yml` vengono rimossi dal run (per-anno e multi-year), cosi' una tabella rinominata non lascia il vecchio file a inquinare il layer tool.
 - **Layering ripristinato** (PR #504): rimosse 6 inversioni di dipendenza `core → clean/domain/scout/scaffold`. `sql_validation` spostato in `domain/`, orchestration support in `domain/support.py`, `ProbePool` in `scout/pool.py`, scaffold clean.sql spostato da `raw/run.py` a `cmd_run` (comportamento invariato). Contratto condiviso `dataset_yml_slug`/`iter_workspace_dataset_ymls` in `registry/layout.py`.
 - **Catalogo unico tipi fonte** (PR #505): nuovo `toolkit/core/source_types.py` come single source of truth per registry plugin, dispatch fetch e contratto AI (`contracts._SOURCE_TYPES` generato). Eliminato `_fetch_fallback` (tipo sconosciuto → `ValueError` esplicito). Tipo `script` documentato nel contratto con nota di sicurezza.
 

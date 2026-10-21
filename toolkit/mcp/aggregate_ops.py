@@ -51,6 +51,7 @@ def layer_query(
     limit: int = 20,
     sql: str | None = None,
     mart_index: int = 0,
+    mart_name: str | None = None,
     table: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
@@ -70,7 +71,9 @@ def layer_query(
         year: Anno filtro.
         limit: Max righe.
         sql: Query SQL per mode=sql.
-        mart_index: Indice tabella mart (solo pipeline mode).
+        mart_index: Indice tabella mart (solo pipeline mode, deprecato:
+            usare ``mart_name``).
+        mart_name: Nome tabella mart (es ``"mart_top_sa"``).
         table: Nome tabella mart (es ``"mart_top_sa"``).
         dry_run: Se True (mode=sql), valida lo scope SQL e fa EXPLAIN senza eseguire.
 
@@ -98,6 +101,7 @@ def layer_query(
             limit=limit,
             sql=sql,
             mart_index=mart_index,
+            mart_name=mart_name,
             table=table,
             dry_run=dry_run,
         )

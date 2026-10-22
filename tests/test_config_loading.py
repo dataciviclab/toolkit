@@ -813,3 +813,31 @@ def test_di_candidate_real_config_loads_with_latest_default():
         logger=None,
     )
     assert params[0] == "latest"
+
+
+@pytest.mark.contract
+def test_raw_source_unknown_key_rejected(tmp_path: Path):
+    """Chiavi sconosciute in raw.sources[] falliscono invece di essere ignorate (#514)."""
+    yml = tmp_path / "dataset.yml"
+    _yml(
+        yml,
+        years=[2024],
+        raw={"sources": [{"name": "src", "type": "http_file", "args": {"url": "x"}, "extractpr": {"type": "unzip_first_csv"}}]},
+    )
+
+    with pytest.raises(ValueError, match=r"raw\.sources\[0\]: unknown key\(s\) \['extractpr'\]"):
+        load_config(yml)
+
+
+@pytest.mark.contract
+def test_raw_source_client_unknown_key_rejected(tmp_path: Path):
+    """Anche le chiavi sconosciute dentro client: falliscono con il path completo."""
+    yml = tmp_path / "dataset.yml"
+    _yml(
+        yml,
+        years=[2024],
+        raw={"sources": [{"name": "src", "type": "http_file", "args": {"url": "x"}, "client": {"retry": 3}}]},
+    )
+
+    with pytest.raises(ValueError, match=r"raw\.sources\[0\]\.client: unknown key\(s\) \['retry'\]"):
+        load_config(yml)

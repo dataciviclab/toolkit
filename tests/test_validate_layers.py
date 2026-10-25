@@ -571,6 +571,78 @@ def test_validate_promotion_fallback_row_count_when_profile_has_null(tmp_path: P
     )
 
 
+@pytest.mark.pure_unit
+def test_read_cfg_from_clean_metadata_drops_audit_keys():
+    """Le chiavi di audit (inject_column) non sono opzioni di lettura."""
+    from toolkit.clean.validate import _read_cfg_from_clean_metadata
+
+    cfg = _read_cfg_from_clean_metadata(
+        {
+            "read_params_used": {
+                "delim": ",",
+                "header": False,
+                "columns": {"col0": "VARCHAR"},
+                "inject_column": {"tipo_carico": {"a.csv": "total"}},
+            }
+        }
+    )
+
+    assert "inject_column" not in cfg
+    assert cfg["delim"] == ","
+    assert cfg["header"] is False
+    assert cfg["columns"] == {"col0": "VARCHAR"}
+
+
+@pytest.mark.regression
+def test_validate_promotion_ignores_inject_column_in_read_params(tmp_path: Path):
+    """Regression: read_params_used con inject_column non deve far fallire la validazione.
+
+    La validazione di promozione ri-profila il raw riusando `read_params_used`,
+    che contiene anche `inject_column` (metadato di audit). Senza filtro,
+    `normalize_read_cfg` rifiuta la chiave e il clean fallisce a valle del run
+    (caso reale: dataset multi-source con inject_column, es. terna_load_oraria).
+    """
+    root = tmp_path / "root"
+    dataset = "test"
+    year = 2024
+
+    raw_dir = root / "data" / "raw" / dataset / str(year)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "total.csv").write_text("a,b,c\n1,2,3\n4,5,6\n", encoding="utf-8")
+
+    clean_dir = root / "data" / "clean" / dataset / str(year)
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    write_parquet(
+        clean_dir / f"{dataset}_{year}_clean.parquet",
+        "CREATE TABLE t AS SELECT * FROM (VALUES (1,2,3)) v(a,b,c)",
+    )
+
+    clean_meta = {
+        "input_files": ["total.csv"],
+        "read_params_used": {
+            "delim": ",",
+            "header": False,
+            "inject_column": {"tipo_carico": {"total.csv": "total"}},
+        },
+        "output_profile": {
+            "columns": [
+                {"name": "a", "type": "INTEGER"},
+                {"name": "b", "type": "INTEGER"},
+                {"name": "c", "type": "INTEGER"},
+            ],
+            "row_count": 1,
+        },
+        "outputs": [f"{dataset}_{year}_clean.parquet"],
+    }
+    (clean_dir / "metadata.json").write_text(json.dumps(clean_meta), encoding="utf-8")
+
+    # Senza il filtro questo solleva ValueError("Unsupported clean.read options ...")
+    result = validate_promotion(raw_dir, clean_dir, root=root)
+
+    assert result is not None
+    assert isinstance(result.ok, bool)
+
+
 # ---------------------------------------------------------------------------
 # Gap 5 — Transition errors when fail_on_row_drop_exceeded=True
 # ---------------------------------------------------------------------------

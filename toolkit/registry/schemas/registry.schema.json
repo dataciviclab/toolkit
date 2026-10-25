@@ -200,7 +200,8 @@
           "type": "string"
         },
         "multi_file": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "true = path con glob su più file (clean multi-anno, mart per-anno su dataset multi-anno); false = file singolo (clean mono-anno, mart flat o mono-anno)."
         }
       },
       "additionalProperties": false

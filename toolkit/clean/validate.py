@@ -9,6 +9,7 @@ from typing import Any
 from lab_connectors.duckdb import safe_connect
 from toolkit.core.io import read_json_or_none
 from toolkit.core.sql_utils import sql_path
+from toolkit.core.csv_read import ALLOWED_READ_CSV_KEYS
 
 from toolkit.core.column_rules import (
     check_column_types,
@@ -32,6 +33,21 @@ from toolkit.core.validation import (
     check_transitions,
     required_columns_check,
 )
+
+
+def _read_cfg_from_clean_metadata(clean_metadata: dict[str, Any]) -> dict[str, Any]:
+    """Opzioni di lettura registrate dal clean, filtrate alle sole chiavi ammesse.
+
+    ``read_params_used`` contiene anche metadati di audit (es. ``inject_column``,
+    usato per iniettare una colonna costante per sorgente): non sono opzioni del
+    reader CSV e farebbero fallire ``normalize_read_cfg`` quando la validazione
+    ri-profila il raw. Vanno quindi esclusi.
+    """
+    return {
+        key: value
+        for key, value in (clean_metadata.get("read_params_used") or {}).items()
+        if key in ALLOWED_READ_CSV_KEYS
+    }
 
 
 def _clean_validation_spec(
@@ -211,7 +227,7 @@ def validate_promotion(
             summary={"raw_dir": raw_value, "clean_dir": clean_value},
         )
 
-    read_cfg = clean_metadata.get("read_params_used") or {}
+    read_cfg = _read_cfg_from_clean_metadata(clean_metadata)
     read_mode = str(clean_metadata.get("read_source_used") or "fallback")
 
     profile_dir = raw_path / "_profile"

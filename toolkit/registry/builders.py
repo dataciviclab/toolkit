@@ -294,7 +294,9 @@ def build_mart_catalog(
                     "(layout 'year' senza years dichiarati)"
                 )
                 continue
-            entry["location"] = contract.mart_location(manifest.slug, name, year=year)
+            entry["location"] = contract.mart_location(
+                manifest.slug, name, year=year, years=sorted(manifest.years)
+            )
             marts.append(entry)
 
     catalog: dict[str, Any] = {

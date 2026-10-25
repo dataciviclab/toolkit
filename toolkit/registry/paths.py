@@ -61,8 +61,6 @@ class PathContract:
 
         multi = len(years) > 1
         if multi:
-            from lab_connectors.gcs.paths import get_bucket
-
             bucket = get_bucket("clean")
             path = f"gs://{bucket}/{prefix}{slug}/*/{slug}_*_clean.parquet"
         else:
@@ -88,8 +86,33 @@ class PathContract:
             kwargs = {"slug": dataset, "year": str(year), "table": table}
         return gs_url("mart", pattern, prefix=prefix, **kwargs)
 
-    def mart_location(self, dataset: str, table: str, year: int | None = None) -> dict[str, Any]:
-        """Location per il mart_catalog."""
+    def mart_location(
+        self,
+        dataset: str,
+        table: str,
+        year: int | None = None,
+        *,
+        years: list[int] | None = None,
+    ) -> dict[str, Any]:
+        """Location per il mart_catalog.
+
+        Speculare a ``clean_location``:
+
+        - mart multi-anno (``year=None``): un file flat, ``multi_file=False``
+        - mart per-anno su un solo anno: path puntuale, ``multi_file=False``
+        - mart per-anno su più anni: glob ``{dataset}/*/{table}.parquet`` con
+          ``multi_file=True``. I file per-anno hanno lo stesso nome in
+          directory diverse, quindi un path puntuale all'anno massimo
+          esporrebbe un solo anno ai consumer del registry.
+        """
+        prefix = f"{self.prefix}/" if self.prefix else ""
+        if self.mart_layout != "flat" and year is not None and years and len(years) > 1:
+            bucket = get_bucket("mart")
+            return {
+                "type": "gcs",
+                "path": f"gs://{bucket}/{prefix}{dataset}/*/{table}.parquet",
+                "multi_file": True,
+            }
         return {
             "type": "gcs",
             "path": self.mart_parquet_url(dataset, table, year=year),

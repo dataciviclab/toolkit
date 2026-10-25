@@ -487,6 +487,11 @@ def test_path_contract_year_layout() -> None:
     assert loc["multi_file"] is True
     assert "/*/" in loc["path"]
 
+    # mart per-anno su più anni: stesso trattamento del clean
+    mart_loc = contract.mart_location("multi_year", "mart_trend", year=2024, years=[2023, 2024])
+    assert mart_loc["multi_file"] is True
+    assert mart_loc["path"] == "gs://dataciviclab-mart/multi_year/*/mart_trend.parquet"
+
 
 @pytest.mark.contract
 def test_path_contract_flat_layout() -> None:
@@ -876,11 +881,14 @@ class TestRepoDatasetDirs:
 
 
 class TestMartMultiYearLocation:
-    """Mart con years esplicite → location flat; per-anno → year.
+    """Mart con years esplicite → flat; mart per-anno → glob multi-anno.
 
     Regressione issue #463: il runner scrive i mart multi-anno flat
     (data/mart/{dataset}/{table}.parquet), ma il builder li pubblicava con
     path anno inesistente (year=max). Ora tabella con years → flat.
+
+    Regressione mart per-anno: un path puntuale all'anno massimo esponeva un
+    solo anno ai consumer del registry (dcl-mcp). Ora glob su tutti gli anni.
     """
 
     @pytest.mark.contract
@@ -916,11 +924,45 @@ class TestMartMultiYearLocation:
 
         assert not errors["derive"], errors["derive"]
         by_table = {m["table"]: m for m in catalog["marts"]}
-        # multi-anno → flat
+        # multi-anno (years esplicite) → flat, un file
         assert by_table["mart_trend"]["location"]["path"] == (
             "gs://dataciviclab-mart/test/my_dataset/mart_trend.parquet"
         )
-        # per-anno → year
-        assert by_table["mart_sintesi"]["location"]["path"] == (
-            "gs://dataciviclab-mart/test/my_dataset/2025/mart_sintesi.parquet"
+        assert by_table["mart_trend"]["location"]["multi_file"] is False
+        # per-anno su dataset multi-anno → glob su tutti gli anni, multi_file
+        loc = by_table["mart_sintesi"]["location"]
+        assert loc["path"] == "gs://dataciviclab-mart/test/my_dataset/*/mart_sintesi.parquet"
+        assert loc["multi_file"] is True
+
+    @pytest.mark.contract
+    def test_per_year_mart_single_year_stays_exact(self, tmp_path: Path) -> None:
+        """Mart per-anno su dataset mono-anno → path puntuale, multi_file False."""
+        from toolkit.registry.builders import build_mart_catalog
+        from toolkit.registry.layout import RepoLayout
+        from toolkit.registry.paths import PathContract
+
+        ds_dir = tmp_path / "datasets" / "one-year"
+        ds_dir.mkdir(parents=True)
+        (ds_dir / "dataset.yml").write_text(
+            "root: '../../out'\n"
+            "dataset:\n"
+            "  name: 'one_year'\n"
+            "  source_id: 'src'\n"
+            "  years: [2024]\n"
+            "mart:\n"
+            "  tables:\n"
+            "    - name: 'mart_sintesi'\n"
+            "      sql: 'sql/mart_sintesi.sql'\n",
+            encoding="utf-8",
         )
+
+        layout = RepoLayout(
+            repo_root=tmp_path, dataset_dirs=("datasets",), source_repo="dataciviclab/test"
+        )
+        contract = PathContract(prefix="test", clean_layout="year", mart_layout="year")
+        catalog, errors = build_mart_catalog(layout, path_contract=contract)
+
+        assert not errors["derive"], errors["derive"]
+        loc = catalog["marts"][0]["location"]
+        assert loc["path"] == "gs://dataciviclab-mart/test/one_year/2024/mart_sintesi.parquet"
+        assert loc["multi_file"] is False

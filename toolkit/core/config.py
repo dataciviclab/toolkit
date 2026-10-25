@@ -81,6 +81,15 @@ def _ensure_int_list(value: Any, field_name: str) -> list[int]:
     raise ValueError(f"{field_name} must be an int or a list of ints")
 
 
+def reject_unknown_keys(value: dict, known: set[str], field_name: str) -> None:
+    """Fallisce su chiavi non riconosciute invece di scartarle in silenzio."""
+    unknown = sorted(set(value) - known)
+    if unknown:
+        raise ValueError(
+            f"{field_name}: unknown key(s) {unknown}; allowed keys: {sorted(known)}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Config dataclasses
 # ---------------------------------------------------------------------------
@@ -474,8 +483,19 @@ class RawSourceConfig:
     extractor: dict | None = None
 
     @staticmethod
-    def from_dict(d: dict) -> RawSourceConfig:
+    def from_dict(d: dict, field_name: str = "raw.sources[]") -> RawSourceConfig:
+        reject_unknown_keys(
+            d,
+            {"name", "type", "year", "args", "primary", "inject_column", "client", "extractor"},
+            field_name,
+        )
         client = d.get("client") or {}
+        if isinstance(client, dict):
+            reject_unknown_keys(
+                client, {"timeout", "retries", "user_agent", "headers"}, f"{field_name}.client"
+            )
+        else:
+            raise ValueError(f"{field_name}.client must be a mapping")
         return RawSourceConfig(
             name=d.get("name"),
             type=d.get("type", "http_file"),
@@ -552,7 +572,9 @@ class RawConfig:
         if not d:
             return RawConfig()
         sources = [
-            RawSourceConfig.from_dict(s) for s in (d.get("sources") or []) if isinstance(s, dict)
+            RawSourceConfig.from_dict(s, f"raw.sources[{i}]")
+            for i, s in enumerate(d.get("sources") or [])
+            if isinstance(s, dict)
         ]
         known = {"sources", "output_policy", "extractor"}
         extra = {k: v for k, v in d.items() if k not in known}

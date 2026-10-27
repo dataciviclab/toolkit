@@ -313,6 +313,7 @@ def clean_preview(
     mart_index: int = 0,
     year: int | None = None,
     limit: int = 10,
+    mart_name: str | None = None,
 ) -> dict[str, Any]:
     """Preview dati da un parquet clean o mart.
 
@@ -325,6 +326,7 @@ def clean_preview(
             str(_safe_path(config_path)),
             layer=layer,
             mart_index=mart_index,
+            mart_name=mart_name,
             year=year,
             limit=limit,
         )

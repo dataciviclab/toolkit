@@ -188,7 +188,7 @@ def toolkit_dataset(
         "Query dati: SQL su dataset (raw/clean/mart) o preview URL CSV/TSV.\n\n"
         "Actions:\n"
         "- run: esegui SQL su uno o piu' dataset\n"
-        "  Params: datasets (list[str]), sql, layer, mode, year, limit, dry_run, config_path, mart_index, table\n"
+        "  Params: datasets (list[str]), sql, layer, mode, year, limit, dry_run, config_path, mart_index, mart_name, table\n"
         "  Catalog mode: datasets=[slug1, slug2], sql usa gli slug come tabelle\n"
         "  Pipeline mode: config_path, sql usa 'data' come tabella\n"
         "- preview: preview remoto CSV/TSV (params: url, known_encoding, known_delim, known_decimal, known_skip)"
@@ -207,6 +207,7 @@ def toolkit_query(
     dry_run: bool = False,
     config_path: str | None = None,
     mart_index: int = 0,
+    mart_name: str | None = None,
     table: str | None = None,
     # preview params
     url: str | None = None,
@@ -234,6 +235,7 @@ def toolkit_query(
             limit=limit,
             sql=sql,
             mart_index=mart_index,
+            mart_name=mart_name,
             table=table,
             dry_run=dry_run,
         )

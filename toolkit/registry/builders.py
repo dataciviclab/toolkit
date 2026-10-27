@@ -405,38 +405,57 @@ def _years_label(years: Iterable[int]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _support_codelist_ids(layout: RepoLayout) -> list[str]:
+    """Id delle codelist dichiarate nei ``support:`` dei dataset.yml (issue #471).
+
+    Fonte canonica: ``support:`` con ``type: codelist`` e ``id`` (id SDMX,
+    es. ``FREQ``, ``UNIT``). Normalizzati a lowercase e deduplicati.
+    """
+    ids: set[str] = set()
+    for manifest in iter_manifests(layout):
+        for entry in getattr(manifest.cfg, "support", None) or []:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("type") not in (None, "codelist"):
+                continue
+            cid = entry.get("id")
+            if isinstance(cid, str) and cid.strip():
+                ids.add(cid.strip().lower())
+    return sorted(ids)
+
+
 def build_codelists(
     layout: RepoLayout,
     codelists_dir: Path | None = None,
 ) -> tuple[dict[str, Any], dict[str, list[str]]]:
     """Costruisce la sezione codelists del registry: i NOMI dei codelist.
 
-    Legge ``{repo_root}/codelists/*.csv`` (convenzione eurostat: geo.csv,
-    units.csv, freq.csv, ...) e pubblica solo i nomi come lista. Il contenuto
-    (le righe) NON è embeddato: è letto dal CSV del repo dal consumer on-demand
-    (pattern eurostat-mcp). Embeddare le righe rendeva il registry enorme
+    I nomi derivano dai ``support:`` con ``type: codelist`` e ``id`` dei
+    dataset.yml (fonte canonica, es. id SDMX) e, per compatibilita' con i
+    repo legacy, anche dai CSV in ``{repo_root}/codelists/*.csv`` (convenzione
+    eurostat: geo.csv, units.csv, freq.csv, ...). Il contenuto (le righe) NON
+    e' embeddato: e' letto dal CSV del repo dal consumer on-demand (pattern
+    eurostat-mcp). Embeddare le righe rendeva il registry enorme
     (es. eurostat: codelists = 60% del file) senza che alcun consumer leggesse
     i valori dal registry.
 
     Returns:
         Tuple (payload, errors) con errors = {"derive": [], "validation": [...]}.
-        Se la dir codelists non esiste, ritorna una lista vuota senza errori
-        (codelists è opzionale).
+
+        Se non ci sono ne' support id ne' dir codelists, ritorna una lista
+        vuota senza errori (codelists e' opzionale).
     """
     codelists_dir = codelists_dir or (layout.repo_root / "codelists")
 
-    if not codelists_dir.is_dir():
-        return (
-            {"schema_version": 1, "source_repo": layout.source_repo, "codelists": []},
-            {"derive": [], "validation": []},
-        )
+    names = set(_support_codelist_ids(layout))
+    if codelists_dir.is_dir():
+        names.update(p.stem for p in codelists_dir.glob("*.csv"))
 
-    names = sorted(p.stem for p in codelists_dir.glob("*.csv"))
     payload: dict[str, Any] = {
         "schema_version": 1,
         "source_repo": layout.source_repo,
         "updated_at": str(datetime.now(UTC).date()),
-        "codelists": names,
+        "codelists": sorted(names),
     }
     return payload, {"derive": [], "validation": []}
 

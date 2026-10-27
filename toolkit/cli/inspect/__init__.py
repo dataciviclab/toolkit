@@ -54,7 +54,10 @@ def register(app: typer.Typer) -> None:
         year: int = typer.Option(0, "--year", "-y", help="Anno"),
         sql: str | None = typer.Option(None, "--sql", help="SQL query (mode=sql)"),
         limit: int = typer.Option(20, "--limit", help="Max righe (mode=preview/sql)"),
-        mart_index: int = typer.Option(0, "--mart-index", help="Indice tabella mart"),
+        mart_index: int = typer.Option(0, "--mart-index", help="Indice tabella mart (deprecato)"),
+        mart_name: str | None = typer.Option(
+            None, "--mart-name", help="Nome tabella mart (es. mart_comuni)"
+        ),
         diff: bool = typer.Option(False, "--diff", help="Schema-diff RAW tra anni"),
         json_output: bool = typer.Option(False, "--json", help="Output JSON"),
     ):
@@ -67,6 +70,7 @@ def register(app: typer.Typer) -> None:
             sql=sql,
             limit=limit,
             mart_index=mart_index,
+            mart_name=mart_name,
             diff=diff,
             json_output=json_output,
         )

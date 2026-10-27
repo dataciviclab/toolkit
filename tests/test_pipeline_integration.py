@@ -342,3 +342,48 @@ def test_run_mart_supports_support_placeholder(tmp_path: Path) -> None:
         f"SELECT marker FROM read_parquet('{mart_output.as_posix()}')"
     ).fetchone() == ("ok",)
     assert result["output_rows"] == 1
+
+
+def test_run_mart_rimuove_output_non_dichiarati(project_example: Path, monkeypatch) -> None:
+    """Issue #426: il run mart elimina i parquet non piu' dichiarati."""
+    _simplify_sql_project(project_example)
+    config_path = project_example / "dataset.yml"
+
+    monkeypatch.chdir(project_example)
+    cfg = load_config(config_path)
+    year = cfg.years[0]
+    logger = NoopLogger()
+
+    run_raw(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.raw,
+        logger,
+        base_dir=cfg.base_dir,
+        output_cfg=cfg.output,
+        clean_cfg=cfg.clean,
+    )
+    run_profile_fn(cfg, [year], logger)
+    run_clean(
+        cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output
+    )
+
+    mart_dir = Path(cfg.root) / "data" / "mart" / cfg.dataset / str(year)
+    mart_dir.mkdir(parents=True, exist_ok=True)
+    stale = mart_dir / "mart_vecchia.parquet"
+    stale.write_bytes(b"stale")
+
+    run_mart(
+        cfg.dataset,
+        year,
+        cfg.root,
+        cfg.mart,
+        logger,
+        base_dir=cfg.base_dir,
+        clean_cfg=cfg.clean,
+        output_cfg=cfg.output,
+    )
+
+    assert not stale.exists(), "il parquet non dichiarato deve essere rimosso"
+    assert (mart_dir / "rd_by_regione.parquet").exists()

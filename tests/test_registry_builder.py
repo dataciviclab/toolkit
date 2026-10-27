@@ -551,6 +551,52 @@ def test_registry_builder_imports() -> None:
 
 
 @pytest.mark.contract
+def test_codelists_from_support_ids(tmp_path: Path) -> None:
+    """codelists derivate dai support id (SDMX), con fallback ai CSV repo."""
+    from toolkit.registry.builders import build_codelists
+
+    ds_dir = tmp_path / "datasets" / "demo"
+    ds_dir.mkdir(parents=True)
+    (ds_dir / "dataset.yml").write_text(
+        """
+root: "../../out"
+schema_version: 1
+dataset:
+  name: demo_sdmx
+  years: [2024]
+support:
+  - name: freq
+    type: codelist
+    provider: sdmx
+    agency: ESTAT
+    id: FREQ
+  - name: unit
+    type: codelist
+    provider: sdmx
+    agency: ESTAT
+    id: unit
+  - name: comuni
+    type: dataset
+    config: "../support_datasets/comuni/dataset.yml"
+    years: [2024]
+""",
+        encoding="utf-8",
+    )
+    cl_dir = tmp_path / "codelists"
+    cl_dir.mkdir()
+    (cl_dir / "geo.csv").write_text("code,label_en\nIT,Lombardia\n", encoding="utf-8")
+
+    layout = RepoLayout(
+        repo_root=tmp_path,
+        dataset_dirs=("datasets",),
+        source_repo="dataciviclab/demo",
+    )
+    payload, errors = build_codelists(layout)
+    assert errors == {"derive": [], "validation": []}, f"errori inattesi: {errors}"
+    assert payload["codelists"] == ["freq", "geo", "unit"]
+
+
+@pytest.mark.contract
 def test_codelists_contract(tmp_path: Path) -> None:
     """codelists espone i NOMI dei codelist del repo (contract)."""
     from toolkit.registry.builders import build_codelists

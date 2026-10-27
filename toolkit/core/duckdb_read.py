@@ -104,6 +104,7 @@ def _csv_read_options(
         "timestampformat",
         "nullstr",
         "auto_detect",
+        "all_varchar",
         "strict_mode",
         "ignore_errors",
         "null_padding",

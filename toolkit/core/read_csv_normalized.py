@@ -72,13 +72,14 @@ def _load_normalized_csv_frame(
                     "CSV row wider than configured columns while normalize_rows_to_columns=true. "
                     f"file={input_file} row={row_number} configured={expected_len} actual={len(row)}"
                 )
-            if len(row) < expected_len:
-                row = list(row) + [""] * (expected_len - len(row))
-            else:
-                row = list(row)
+            values: list[Any] = list(row)
+            if len(values) < expected_len:
+                # Celle mancanti → None (NULL), non stringa vuota: una cella
+                # assente è NULL, e un filtro `IS NOT NULL` deve escluderla.
+                values.extend([None] * (expected_len - len(values)))
             if trim_whitespace:
-                row = [value.strip() if isinstance(value, str) else value for value in row]
-            rows.append(row)
+                values = [value.strip() if isinstance(value, str) else value for value in values]
+            rows.append(values)
 
     return pd.DataFrame(rows, columns=expected_names)
 
@@ -94,7 +95,7 @@ def _load_aligned_by_header(
     """Read CSV aligning rows to expected columns by header name.
 
     For each expected column, looks up its position in the CSV header.
-    If the column is missing from the header, fills with empty string.
+    If the column is missing from the header, fills with NULL.
     Extra CSV columns not in expected_names are ignored.
     """
     import pandas as pd
@@ -134,7 +135,7 @@ def _load_aligned_by_header(
                 if col_pos is not None and col_pos < len(row):
                     val = row[col_pos]
                 else:
-                    val = ""
+                    val = None
                 if trim_whitespace and isinstance(val, str):
                     val = val.strip()
                 aligned.append(val)

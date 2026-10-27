@@ -243,6 +243,7 @@ class CleanReadConfig:
     timestampformat: str | None = None
     strict_mode: bool | None = None
     null_padding: bool | None = None
+    all_varchar: bool | None = None
     parallel: bool | None = None
     nullstr: str | list[str] | None = None
     columns: dict[str, str] | None = None

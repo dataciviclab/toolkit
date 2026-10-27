@@ -19,20 +19,48 @@
 -- Converte un numero in formato italiano (1.234,56 → 1234.56).
 -- Rimuove punti migliaia, converte virgola decimale in punto.
 -- TRY_CAST restituisce NULL se la conversione fallisce.
+-- L'input DEVE essere VARCHAR: se il reader ha gia' tipizzato la colonna
+-- (DOUBLE/FLOAT/DECIMAL con decimali) l'informazione di formato italiano e'
+-- persa, e la macro solleva un errore invece di corrompere il valore.
 -- @contract returns: DOUBLE
 -- @contract warning: NON usare se read.decimal=',' e' configurato in dataset.yml.
 --   DuckDB ha gia' parsato il numero con la virgola decimale: basta CAST(x AS DOUBLE).
+--   NON usare su colonne tipizzate dal reader: con clean.read.source=auto lo
+--   sniffing puo' tipizzare DOUBLE una colonna di numeri italiani (es. "121.330")
+--   e la macro corromperebbe il valore (×10 / ÷10). In quel caso usa
+--   clean.read.all_varchar=true oppure dichiara la colonna VARCHAR in clean.read.columns.
 -- @contract see: remove_dot_thousands per interi con punti migliaia (senza virgola decimale).
 CREATE OR REPLACE MACRO normalize_italian_number(val) AS
-   TRY_CAST(REPLACE(REPLACE(val::VARCHAR, '.', ''), ',', '.') AS DOUBLE);
+   CASE
+      WHEN typeof(val) IN ('DOUBLE', 'FLOAT', 'REAL')
+           OR (typeof(val) LIKE 'DECIMAL%' AND typeof(val) NOT LIKE '%,0)')
+         THEN error(
+            'normalize_italian_number() ha ricevuto ' || typeof(val) ||
+            ' invece di VARCHAR: il valore ha gia perso il formato italiano. ' ||
+            'Usa clean.read.all_varchar: true oppure dichiara la colonna VARCHAR.')
+      ELSE TRY_CAST(REPLACE(REPLACE(val::VARCHAR, '.', ''), ',', '.') AS DOUBLE)
+   END;
 
 -- ── normalize_italian_integer ──────────────────────────────────────────────
 -- Come normalize_italian_number ma restituisce INTEGER.
 -- DuckDB CAST(DOUBLE AS INTEGER) arrotonda (5432.90 → 5433).
 -- "1.234" → 1234, "5.432,10" → 5432, "5.432,90" → 5433.
+-- L'input DEVE essere VARCHAR (stessa guardia di normalize_italian_number).
 -- @contract returns: INTEGER
+-- @contract warning: NON usare su colonne tipizzate dal reader: con
+--   clean.read.source=auto lo sniffing puo' tipizzare DOUBLE una colonna di
+--   numeri italiani (es. "121.330") e la macro corromperebbe il valore (×10 / ÷10).
+--   In quel caso usa clean.read.all_varchar=true oppure dichiara la colonna VARCHAR.
 CREATE OR REPLACE MACRO normalize_italian_integer(val) AS
-   TRY_CAST(REPLACE(REPLACE(val::VARCHAR, '.', ''), ',', '.') AS INTEGER);
+   CASE
+      WHEN typeof(val) IN ('DOUBLE', 'FLOAT', 'REAL')
+           OR (typeof(val) LIKE 'DECIMAL%' AND typeof(val) NOT LIKE '%,0)')
+         THEN error(
+            'normalize_italian_integer() ha ricevuto ' || typeof(val) ||
+            ' invece di VARCHAR: il valore ha gia perso il formato italiano. ' ||
+            'Usa clean.read.all_varchar: true oppure dichiara la colonna VARCHAR.')
+      ELSE TRY_CAST(REPLACE(REPLACE(val::VARCHAR, '.', ''), ',', '.') AS INTEGER)
+   END;
 
 -- ── decode_flag ────────────────────────────────────────────────────────────
 -- Decodifica un flag testuale in BOOLEAN.

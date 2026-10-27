@@ -155,6 +155,68 @@ class TestNormalizeItalianInteger:
 
 
 # ===========================================================================
+# Guardia anti-sniff: le macro normalize_italian_* falliscono su input non VARCHAR
+# ===========================================================================
+
+
+class TestNormalizeItalianRejectsNonVarchar:
+    """Contratto: le macro accettano solo VARCHAR.
+
+    Con ``clean.read.source=auto`` lo sniffing di DuckDB puo' tipizzare DOUBLE
+    una colonna di numeri italiani (es. "121.330" e' un float valido) e la macro
+    corromperebbe il valore (×10 / ÷10). Il valore originale e' gia' perso al
+    momento della chiamata, quindi la macro deve fallire forte invece di
+    restituire un numero sbagliato.
+    """
+
+    @pytest.mark.parametrize("macro", ["normalize_italian_number", "normalize_italian_integer"])
+    def test_double_raises(self, macro: str) -> None:
+        with safe_connect() as con:
+            con.execute(_MACROS_SQL)
+            with pytest.raises(Exception, match="invece di VARCHAR"):
+                con.execute(f"SELECT {macro}(121.33::DOUBLE)").fetchone()
+
+    @pytest.mark.parametrize("macro", ["normalize_italian_number", "normalize_italian_integer"])
+    def test_decimal_with_scale_raises(self, macro: str) -> None:
+        with safe_connect() as con:
+            con.execute(_MACROS_SQL)
+            with pytest.raises(Exception, match="invece di VARCHAR"):
+                con.execute(f"SELECT {macro}(121.33::DECIMAL(10,2))").fetchone()
+
+    @pytest.mark.parametrize("macro", ["normalize_italian_number", "normalize_italian_integer"])
+    def test_varchar_still_works(self, macro: str) -> None:
+        """Il percorso normale (VARCHAR) resta invariato."""
+        with safe_connect() as con:
+            con.execute(_MACROS_SQL)
+            result = con.execute(f"SELECT {macro}('121.330')").fetchone()
+        assert result[0] == 121330
+
+    @pytest.mark.parametrize("macro", ["normalize_italian_number", "normalize_italian_integer"])
+    def test_integer_input_is_not_rejected(self, macro: str) -> None:
+        """INTEGER/BIGINT non perdono informazione → nessun falso positivo."""
+        with safe_connect() as con:
+            con.execute(_MACROS_SQL)
+            result = con.execute(f"SELECT {macro}(1234)").fetchone()
+        assert result[0] == 1234
+
+    def test_double_column_raises_end_to_end(self) -> None:
+        """Scenario reale: read_csv con source=auto tipizza DOUBLE → la macro fallisce."""
+        with safe_connect() as con:
+            con.execute(_MACROS_SQL)
+            con.execute("""
+                CREATE TABLE sniffed AS SELECT * FROM (VALUES
+                    ('Lazio', '121.330'), ('Molise', '3.220')
+                ) AS t(regione, frequenza)
+            """)
+            # Simula l'effetto dello sniffing: la colonna diventa DOUBLE.
+            con.execute(
+                "CREATE TABLE sniffed_d AS SELECT regione, frequenza::DOUBLE AS frequenza FROM sniffed"
+            )
+            with pytest.raises(Exception, match="invece di VARCHAR"):
+                con.execute("SELECT normalize_italian_integer(frequenza) FROM sniffed_d").fetchall()
+
+
+# ===========================================================================
 # decode_flag
 # ===========================================================================
 

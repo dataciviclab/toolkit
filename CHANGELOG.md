@@ -2,10 +2,13 @@
 
 ### Added
 
+- **`clean.read.all_varchar`**: pass-through di `all_varchar=true` a DuckDB (`read_csv`). Tutte le colonne restano `VARCHAR` e lo sniffing non assegna tipi numerici. Protegge dai numeri in **formato italiano** con `source: auto`: lo sniffing tipizza `DOUBLE` una colonna i cui valori hanno un solo punto (`"121.330"`) e le macro `normalize_italian_*` la corrompono (×10 / ÷10). Una riga di config al posto di dichiarare a mano 15–22 colonne `VARCHAR`. Consente anche la lettura per nome colonna quando l'ordine cambia tra anni (#520).
 - **Registry: dataset mart-only**: i compose senza `clean:` non restano più fuori dal catalogo con i mart orfani. `build_clean_catalog` emette una entry dataset con metadati e `mart_refs`, senza `columns`/`location`; `registry.schema.json` rende i due campi opzionali. Così ACB/MCP vedono il dataset (`find`/`explore`) e risolvono i suoi mart (`gcs_query`).
 
 ### Changed
 
+- **`normalize_rows_to_columns`: celle mancanti → NULL** (era stringa vuota). Il padding delle righe corte e delle colonne assenti in `align_by_header` ora usa `None` invece di `''`: una cella assente è NULL e un filtro `IS NOT NULL` la esclude correttamente. Prima serviva `normalize_string(x) IS NOT NULL` come workaround (#520).
+- **`normalize_italian_*`: guardia sull'input non-VARCHAR** (#520). Le macro falliscono con errore esplicito se ricevono una colonna già tipizzata `DOUBLE`/`FLOAT`/`DECIMAL` (con decimali): a quel punto il formato italiano è già perso e la macro corromperebbe il valore in silenzio. `INTEGER`/`BIGINT`/`DECIMAL(x,0)` restano accettati (nessuna perdita di informazione).
 - **Layering ripristinato** (PR #504): rimosse 6 inversioni di dipendenza `core → clean/domain/scout/scaffold`. `sql_validation` spostato in `domain/`, orchestration support in `domain/support.py`, `ProbePool` in `scout/pool.py`, scaffold clean.sql spostato da `raw/run.py` a `cmd_run` (comportamento invariato). Contratto condiviso `dataset_yml_slug`/`iter_workspace_dataset_ymls` in `registry/layout.py`.
 - **Catalogo unico tipi fonte** (PR #505): nuovo `toolkit/core/source_types.py` come single source of truth per registry plugin, dispatch fetch e contratto AI (`contracts._SOURCE_TYPES` generato). Eliminato `_fetch_fallback` (tipo sconosciuto → `ValueError` esplicito). Tipo `script` documentato nel contratto con nota di sicurezza.
 

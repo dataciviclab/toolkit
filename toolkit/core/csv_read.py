@@ -14,6 +14,7 @@ ALLOWED_READ_CSV_KEYS = {
     "thousands",
     "skip",
     "auto_detect",
+    "all_varchar",
     "quote",
     "escape",
     "comment",
@@ -201,9 +202,9 @@ def csv_read_option_strings(
     Supported keys:
     ``delim``, ``sep``, ``encoding``, ``decimal``, ``thousands``,
     ``dateformat``, ``timestampformat``, ``nullstr``,
-    ``auto_detect``, ``strict_mode``, ``ignore_errors``, ``null_padding``,
-    ``parallel``, ``quote``, ``escape``, ``comment``, ``max_line_size``,
-    ``columns``.
+    ``auto_detect``, ``all_varchar``, ``strict_mode``, ``ignore_errors``,
+    ``null_padding``, ``parallel``, ``quote``, ``escape``, ``comment``,
+    ``max_line_size``, ``columns``.
 
     ``header`` and ``skip`` are intentionally excluded by default because
     their effective values can be overridden at runtime by the clean layer
@@ -248,6 +249,10 @@ def csv_read_option_strings(
     auto_detect = read_cfg.get("auto_detect")
     if auto_detect is not None:
         opts.append(f"auto_detect={'true' if bool(auto_detect) else 'false'}")
+
+    all_varchar = read_cfg.get("all_varchar")
+    if all_varchar is not None:
+        opts.append(f"all_varchar={'true' if bool(all_varchar) else 'false'}")
 
     strict_mode = read_cfg.get("strict_mode")
     if strict_mode is not None:

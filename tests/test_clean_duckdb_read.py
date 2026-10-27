@@ -213,7 +213,7 @@ def test_read_raw_to_relation_normalizes_short_rows_to_fixed_schema(tmp_path: Pa
         rows = con.execute("SELECT col0, col1, col2 FROM raw_input ORDER BY col0").fetchall()
         assert info.source == "strict"
         assert info.params_used["normalize_rows_to_columns"] is True
-        assert rows == [("1", "2", ""), ("3", "4", "5"), ("A", "B", "C")]
+        assert rows == [("1", "2", None), ("3", "4", "5"), ("A", "B", "C")]
 
 
 @pytest.mark.policy
@@ -244,7 +244,7 @@ def test_read_raw_to_relation_normalize_rows_skips_header_when_configured(tmp_pa
 
         rows = con.execute("SELECT col0, col1, col2 FROM raw_input").fetchall()
         assert info.params_used["header"] is True
-        assert rows == [("1", "2", "")]
+        assert rows == [("1", "2", None)]
 
 
 @pytest.mark.policy

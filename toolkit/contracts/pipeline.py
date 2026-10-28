@@ -274,6 +274,7 @@ _CONFIG_QUICKREF: dict[str, Any] = {
         "clean.read.delim (delimitatore CSV, default auto-detect)",
         "clean.read.encoding (encoding CSV, default utf-8, PA spesso cp1252)",
         "clean.read.decimal (separatore decimale, default '.'; usa ',' per italiano)",
+        "clean.read.all_varchar (true = tutte le colonne VARCHAR; evita la corruzione dei numeri in formato italiano con source: auto)",
         "clean.required_columns (lista colonne OUTPUT attese nel clean)",
         "clean.validate.promotion.warn_removed_columns (attiva warning colonne rimosse raw→clean, default true)",
         "clean.validate.promotion.max_row_drop_pct (soglia % righe perse raw→clean, default none)",

@@ -213,7 +213,7 @@ def test_read_raw_to_relation_normalizes_short_rows_to_fixed_schema(tmp_path: Pa
         rows = con.execute("SELECT col0, col1, col2 FROM raw_input ORDER BY col0").fetchall()
         assert info.source == "strict"
         assert info.params_used["normalize_rows_to_columns"] is True
-        assert rows == [("1", "2", ""), ("3", "4", "5"), ("A", "B", "C")]
+        assert rows == [("1", "2", None), ("3", "4", "5"), ("A", "B", "C")]
 
 
 @pytest.mark.policy
@@ -244,7 +244,7 @@ def test_read_raw_to_relation_normalize_rows_skips_header_when_configured(tmp_pa
 
         rows = con.execute("SELECT col0, col1, col2 FROM raw_input").fetchall()
         assert info.params_used["header"] is True
-        assert rows == [("1", "2", "")]
+        assert rows == [("1", "2", None)]
 
 
 @pytest.mark.policy
@@ -1002,3 +1002,35 @@ def test_load_suggested_read_raw_profile_wins_over_suggested_yml(tmp_path: Path)
     )
     assert result.get("delim") == ";"
     assert result.get("encoding") == "utf-8"
+
+
+@pytest.mark.policy
+def test_read_raw_to_relation_warns_when_all_varchar_and_columns_together(
+    tmp_path: Path, caplog
+) -> None:
+    """all_varchar + columns: DuckDB usa solo `columns`, il toolkit avvisa.
+
+    Le due opzioni sono alternative: `columns` definisce lo schema e
+    `all_varchar` viene ignorato silenziosamente da DuckDB. Meglio dirlo.
+    """
+    input_file = tmp_path / "both.csv"
+    input_file.write_text("a;b\n1;2\n", encoding="utf-8")
+
+    logger = logging.getLogger("tests.clean.duckdb_read.all_varchar_columns")
+    with safe_connect() as con, caplog.at_level(logging.WARNING, logger=logger.name):
+        duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {
+                "delim": ";",
+                "encoding": "utf-8",
+                "header": True,
+                "all_varchar": True,
+                "columns": {"a": "VARCHAR", "b": "VARCHAR"},
+            },
+            "strict",
+            logger,
+        )
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("all_varchar" in m and "columns" in m for m in messages), messages

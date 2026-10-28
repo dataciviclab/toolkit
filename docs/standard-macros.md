@@ -66,6 +66,8 @@ cast_double("Importo") AS importo,
 
 Converte un numero in formato italiano (`1.234,56` → `1234.56`). Rimuove punti migliaia, converte virgola decimale in punto. `TRY_CAST` restituisce `NULL` se la conversione fallisce.
 
+**L'input deve essere `VARCHAR`.** Se la colonna è già stata tipizzata dal reader come `DOUBLE`/`FLOAT`/`DECIMAL` con decimali, l'informazione di formato italiano è già persa: la macro solleva un errore invece di restituire un valore corrotto. È il caso di `source: auto` con numeri italiani (es. `"121.330"` viene letto come `DOUBLE 121.33` → la macro darebbe `12133`). Rimedio: `clean.read.all_varchar: true` oppure dichiarare la colonna `VARCHAR` in `columns`.
+
 ```sql
 -- PRIMA (15 righe per 4 colonne)
 TRY_CAST(REPLACE(REPLACE("Importo"::VARCHAR, '.', ''), ',', '.') AS DOUBLE) AS importo,
@@ -78,7 +80,7 @@ normalize_italian_integer("Numero scelte") AS numero_scelte,
 
 ### `normalize_italian_integer(val)`
 
-Come `normalize_italian_number` ma restituisce `INTEGER`. DuckDB `CAST(DOUBLE AS INTEGER)` **arrotonda** (non tronca): `5.432,90` → `5433`.
+Come `normalize_italian_number` ma restituisce `INTEGER`. DuckDB `CAST(DOUBLE AS INTEGER)` **arrotonda** (non tronca): `5.432,90` → `5433`. Vale la stessa guardia sull'input (`VARCHAR`).
 
 ### `decode_flag(val, yes_value)`
 
@@ -94,7 +96,7 @@ decode_flag("ETS", 'X') AS flag_ets,
 
 ### `remove_dot_thousands(val)`
 
-Rimuove punti migliaia da **numeri interi**. Attenzione: rimuove **tutti** i punti, incluso un eventuale separatore decimale standard. Usa solo su interi con punti migliaia. Per numeri con decimali usa `normalize_italian_number` o `cast_double`.
+Rimuove punti migliaia da **numeri interi**. Attenzione: rimuove **tutti** i punti, incluso un eventuale separatore decimale standard. Usa solo su interi con punti migliaia. Per numeri con decimali usa `normalize_italian_number` o `cast_double`. Vale la stessa guardia sull'input (`VARCHAR`): su una colonna tipizzata `DOUBLE` il punto decimale verrebbe rimosso e il valore corrotto, quindi la macro fallisce con errore esplicito.
 
 ```sql
 -- SOLO PER INTERI

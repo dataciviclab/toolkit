@@ -104,6 +104,7 @@ def _csv_read_options(
         "timestampformat",
         "nullstr",
         "auto_detect",
+        "all_varchar",
         "strict_mode",
         "ignore_errors",
         "null_padding",
@@ -449,6 +450,11 @@ def read_raw_to_relation(
         return ReadInfo(source=result["source"], params_used=result["params_used"])
 
     normalized_mode = _validate_read_mode(mode)
+    if read_cfg.get("all_varchar") is not None and read_cfg.get("columns"):
+        logger.warning(
+            "clean.read: 'all_varchar' e' impostato insieme a 'columns'. DuckDB usa solo "
+            "'columns' (i tipi dichiarati) e ignora 'all_varchar': rimuovi uno dei due."
+        )
     return _read_csv_relation(
         con,
         normalized,

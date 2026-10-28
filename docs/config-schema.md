@@ -166,6 +166,7 @@ Note pratiche per `http_post_file`:
 | `decimal` | `string \| null` | `null` |
 | `skip` | `int \| null` | `null` |
 | `auto_detect` | `bool \| null` | `null` |
+| `all_varchar` | `bool \| null` | `null` |
 | `quote` | `string \| null` | `null` |
 | `escape` | `string \| null` | `null` |
 | `comment` | `string \| null` | `null` |
@@ -204,8 +205,10 @@ Note pratiche:
 - `mode: all` consente di leggere tutti i fogli di un workbook in una vista unica (`raw_input`)
 - con `header: false` + `columns` è possibile specificare i nomi-colonna manualmente per file Excel senza intestazione
 - `normalize_rows_to_columns: true` ha senso solo insieme a `columns`
-- con `normalize_rows_to_columns: true`, il toolkit normalizza le righe corte del CSV allo schema atteso prima di esporre `raw_input`
-- `align_by_header: true` (insieme a `normalize_rows_to_columns: true`) allinea le righe per nome colonna invece che per posizione: colonne attese ma non presenti nell'header vengono riempite con stringa vuota; colonne extra nel CSV vengono ignorate; colonne in ordine diverso vengono riallineate. Richiede `header: true`.
+- con `normalize_rows_to_columns: true`, il toolkit normalizza le righe corte del CSV allo schema atteso prima di esporre `raw_input`: le celle mancanti diventano **NULL** (non stringa vuota)
+- `align_by_header: true` (insieme a `normalize_rows_to_columns: true`) allinea le righe per nome colonna invece che per posizione: colonne attese ma non presenti nell'header vengono riempite con **NULL**; colonne extra nel CSV vengono ignorate; colonne in ordine diverso vengono riallineate. Richiede `header: true`.
+- `all_varchar: true` passa `all_varchar=true` a DuckDB: **tutte** le colonne restano `VARCHAR` e lo sniffing non assegna tipi numerici. È la protezione contro la corruzione dei numeri in **formato italiano** (`1.234`, `121.330`): con `source: auto` lo sniffing può tipizzare `DOUBLE` una colonna i cui valori hanno un solo punto, e le macro `normalize_italian_*` la corrompono (×10 / ÷10). Consente anche di leggere per **nome colonna** (l'ordine può cambiare tra anni). Alternativa più esplicita ma più lunga: dichiarare ogni colonna `VARCHAR` in `columns`.
+- ⚠️ `all_varchar` e `columns` insieme: **vince `columns`** (i tipi dichiarati definiscono lo schema) e `all_varchar` è ignorato. Il toolkit emette un warning: usa uno dei due, non entrambi.
 
 `CleanValidate`:
 

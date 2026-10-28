@@ -11,6 +11,11 @@ from toolkit.core.read_csv_normalized import (
 from toolkit.clean.run import run_clean
 
 
+def _cells(row) -> list:
+    """Confronto stabile celle pandas: normalizza NaN (float) a None."""
+    return [None if (isinstance(v, float) and v != v) else v for v in row]
+
+
 @pytest.mark.policy
 def test_run_clean_csv_columns_reads_trailing_delimiter_csv(tmp_path: Path):
     raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
@@ -59,7 +64,7 @@ def test_run_clean_csv_columns_reads_trailing_delimiter_csv(tmp_path: Path):
 
 @pytest.mark.policy
 def test_run_clean_positional_csv_short_rows_are_padded(tmp_path: Path):
-    """Righe piu' corte delle colonne attese vengono paddate con stringa vuota."""
+    """Righe piu' corte delle colonne attese vengono paddate con NULL."""
     csv_path = tmp_path / "short.csv"
     # 3 colonne configurate, ma alcune righe ne hanno solo 1 o 2
     csv_path.write_text("a;b;c\n\t1\n\t2;3\n\t4;5;6\n", encoding="utf-8")
@@ -75,9 +80,9 @@ def test_run_clean_positional_csv_short_rows_are_padded(tmp_path: Path):
 
     assert list(df.columns) == ["a", "b", "c"]
     assert len(df) == 3
-    assert df.iloc[0].tolist() == ["1", "", ""]
-    assert df.iloc[1].tolist() == ["2", "3", ""]
-    assert df.iloc[2].tolist() == ["4", "5", "6"]
+    assert _cells(df.iloc[0]) == ["1", None, None]
+    assert _cells(df.iloc[1]) == ["2", "3", None]
+    assert _cells(df.iloc[2]) == ["4", "5", "6"]
 
 
 @pytest.mark.policy
@@ -325,7 +330,7 @@ def test_run_clean_compact_columns_format_no_trim_whitespace(tmp_path: Path):
 
 @pytest.mark.policy
 def test_run_clean_align_by_header_missing_middle_column(tmp_path: Path):
-    """align_by_header: colonna attesa mancante in mezzo viene riempita con stringa vuota."""
+    """align_by_header: colonna attesa mancante in mezzo viene riempita con NULL."""
     csv_path = tmp_path / "missing_mid.csv"
     csv_path.write_text("a;b;d\n1;2;4\n5;6;7\n", encoding="utf-8")
 
@@ -341,8 +346,8 @@ def test_run_clean_align_by_header_missing_middle_column(tmp_path: Path):
 
     assert list(df.columns) == ["a", "b", "c", "d"]
     assert len(df) == 2
-    assert df.iloc[0].tolist() == ["1", "2", "", "4"]
-    assert df.iloc[1].tolist() == ["5", "6", "", "7"]
+    assert _cells(df.iloc[0]) == ["1", "2", None, "4"]
+    assert _cells(df.iloc[1]) == ["5", "6", None, "7"]
 
 
 @pytest.mark.policy
@@ -510,3 +515,61 @@ def test_run_clean_align_by_header_requires_normalize_runtime(tmp_path: Path):
     assert "align_by_header=true requires normalize_rows_to_columns=true" in str(
         exc_info.value.__cause__
     )
+
+
+@pytest.mark.policy
+def test_run_clean_all_varchar_keeps_italian_numbers_intact(tmp_path: Path):
+    """`all_varchar: true` evita la corruzione dei numeri in formato italiano.
+
+    Regressione: con ``source: auto`` lo sniffer tipizza DOUBLE una colonna i
+    cui valori hanno un solo punto ("121.330"), e ``normalize_italian_*`` la
+    corrompe (÷10). Con ``all_varchar: true`` la colonna resta VARCHAR e la
+    conversione è corretta.
+    """
+    raw_dir = tmp_path / "data" / "raw" / "demo" / "2024"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = raw_dir / "mef_like.csv"
+    csv_path.write_text(
+        "Regione;Frequenza;Ammontare\nLazio;121.330;287.788.942\nMolise;3.220;1.234\n",
+        encoding="utf-8",
+    )
+
+    sql_path = tmp_path / "clean.sql"
+    sql_path.write_text(
+        "SELECT "
+        'normalize_string("Regione") AS regione, '
+        'normalize_italian_integer("Frequenza") AS frequenza, '
+        'normalize_italian_number("Ammontare") AS ammontare '
+        "FROM raw_input",
+        encoding="utf-8",
+    )
+
+    run_clean(
+        "demo",
+        2024,
+        str(tmp_path),
+        {
+            "sql": str(sql_path),
+            "read": {
+                "source": "auto",
+                "mode": "latest",
+                "delim": ";",
+                "header": True,
+                "all_varchar": True,
+                "ignore_errors": True,
+                "null_padding": True,
+            },
+        },
+        NoopLogger(),
+    )
+
+    out = tmp_path / "data" / "clean" / "demo" / "2024" / "demo_2024_clean.parquet"
+    assert out.exists()
+
+    with safe_connect() as con:
+        rows = con.execute(
+            f"SELECT regione, frequenza, ammontare FROM read_parquet('{out.as_posix()}') "
+            "ORDER BY regione"
+        ).fetchall()
+
+    assert rows == [("Lazio", 121330, 287788942.0), ("Molise", 3220, 1234.0)]

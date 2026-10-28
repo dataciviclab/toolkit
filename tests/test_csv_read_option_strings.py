@@ -123,6 +123,18 @@ class TestCsvReadOptionStrings:
         result = csv_read_option_strings({"timestampformat": "%H:''':%M"})
         assert "''" in result[0]
 
+    def test_all_varchar_true(self):
+        """all_varchar=True forza tutte le colonne a VARCHAR (numeri italiani)."""
+        assert csv_read_option_strings({"all_varchar": True}) == ["all_varchar=true"]
+
+    def test_all_varchar_false(self):
+        """all_varchar=False e' esplicito (non silenzioso)."""
+        assert csv_read_option_strings({"all_varchar": False}) == ["all_varchar=false"]
+
+    def test_all_varchar_absent_is_not_emitted(self):
+        """Senza la chiave non viene emesso nulla (default DuckDB)."""
+        assert csv_read_option_strings({}) == []
+
     def test_full_cfg(self):
         """All supported keys together."""
         cfg = {
@@ -134,6 +146,7 @@ class TestCsvReadOptionStrings:
             "timestampformat": "%H:%M:%S",
             "nullstr": ["", "NA"],
             "auto_detect": False,
+            "all_varchar": True,
             "strict_mode": False,
             "ignore_errors": True,
             "null_padding": True,
@@ -146,9 +159,10 @@ class TestCsvReadOptionStrings:
         }
         result = csv_read_option_strings(cfg)
         # sep, encoding, decimal, thousands, dateformat, timestampformat,
-        # nullstr, auto_detect, strict_mode,
+        # nullstr, auto_detect, all_varchar, strict_mode,
         # ignore_errors, null_padding, parallel, quote, escape, comment,
-        # max_line_size, columns = 17
-        assert len(result) == 17
+        # max_line_size, columns = 18
+        assert len(result) == 18
+        assert "all_varchar=true" in result
         assert "dateformat='%d/%m/%Y'" in result
         assert "timestampformat='%H:%M:%S'" in result

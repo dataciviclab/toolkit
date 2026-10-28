@@ -169,21 +169,27 @@ class TestNormalizeItalianRejectsNonVarchar:
     restituire un numero sbagliato.
     """
 
-    @pytest.mark.parametrize("macro", ["normalize_italian_number", "normalize_italian_integer"])
+    @pytest.mark.parametrize(
+        "macro", ["normalize_italian_number", "normalize_italian_integer", "remove_dot_thousands"]
+    )
     def test_double_raises(self, macro: str) -> None:
         with safe_connect() as con:
             con.execute(_MACROS_SQL)
             with pytest.raises(Exception, match="invece di VARCHAR"):
                 con.execute(f"SELECT {macro}(121.33::DOUBLE)").fetchone()
 
-    @pytest.mark.parametrize("macro", ["normalize_italian_number", "normalize_italian_integer"])
+    @pytest.mark.parametrize(
+        "macro", ["normalize_italian_number", "normalize_italian_integer", "remove_dot_thousands"]
+    )
     def test_decimal_with_scale_raises(self, macro: str) -> None:
         with safe_connect() as con:
             con.execute(_MACROS_SQL)
             with pytest.raises(Exception, match="invece di VARCHAR"):
                 con.execute(f"SELECT {macro}(121.33::DECIMAL(10,2))").fetchone()
 
-    @pytest.mark.parametrize("macro", ["normalize_italian_number", "normalize_italian_integer"])
+    @pytest.mark.parametrize(
+        "macro", ["normalize_italian_number", "normalize_italian_integer", "remove_dot_thousands"]
+    )
     def test_varchar_still_works(self, macro: str) -> None:
         """Il percorso normale (VARCHAR) resta invariato."""
         with safe_connect() as con:
@@ -191,7 +197,9 @@ class TestNormalizeItalianRejectsNonVarchar:
             result = con.execute(f"SELECT {macro}('121.330')").fetchone()
         assert result[0] == 121330
 
-    @pytest.mark.parametrize("macro", ["normalize_italian_number", "normalize_italian_integer"])
+    @pytest.mark.parametrize(
+        "macro", ["normalize_italian_number", "normalize_italian_integer", "remove_dot_thousands"]
+    )
     def test_integer_input_is_not_rejected(self, macro: str) -> None:
         """INTEGER/BIGINT non perdono informazione → nessun falso positivo."""
         with safe_connect() as con:

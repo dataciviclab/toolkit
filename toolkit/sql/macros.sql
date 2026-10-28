@@ -108,7 +108,22 @@ CREATE OR REPLACE MACRO cast_double(val) AS
 --   normalize_italian_number()  — formato italiano (virgola)
 --   cast_double()               — formato internazionale (punto)
 -- "1.234" → 1234.0, "1.234.567" → 1234567.0
+-- L'input DEVE essere VARCHAR: come normalize_italian_*, se il reader ha gia'
+-- tipizzato la colonna (DOUBLE/FLOAT/DECIMAL con decimali) la macro solleva un
+-- errore invece di corrompere il valore.
 -- @contract returns: DOUBLE
+-- @contract warning: l'input deve essere VARCHAR. Su una colonna tipizzata
+--   DOUBLE dal reader (clean.read.source=auto) rimuove il punto decimale e
+--   corrompe il valore (es. 1234.56 → "1234.56" → "123456"): la macro fallisce
+--   con errore esplicito. Usa clean.read.all_varchar=true o dichiara VARCHAR.
 -- @contract example: remove_dot_thousands("POPOLAZIONE") AS popolazione
 CREATE OR REPLACE MACRO remove_dot_thousands(val) AS
-   TRY_CAST(REPLACE(val::VARCHAR, '.', '') AS DOUBLE);
+   CASE
+      WHEN typeof(val) IN ('DOUBLE', 'FLOAT', 'REAL')
+           OR (typeof(val) LIKE 'DECIMAL%' AND typeof(val) NOT LIKE '%,0)')
+         THEN error(
+            'remove_dot_thousands() ha ricevuto ' || typeof(val) ||
+            ' invece di VARCHAR: il punto decimale verrebbe rimosso e il valore corrotto. ' ||
+            'Usa clean.read.all_varchar: true oppure dichiara la colonna VARCHAR.')
+      ELSE TRY_CAST(REPLACE(val::VARCHAR, '.', '') AS DOUBLE)
+   END;

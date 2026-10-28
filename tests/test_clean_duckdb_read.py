@@ -1002,3 +1002,35 @@ def test_load_suggested_read_raw_profile_wins_over_suggested_yml(tmp_path: Path)
     )
     assert result.get("delim") == ";"
     assert result.get("encoding") == "utf-8"
+
+
+@pytest.mark.policy
+def test_read_raw_to_relation_warns_when_all_varchar_and_columns_together(
+    tmp_path: Path, caplog
+) -> None:
+    """all_varchar + columns: DuckDB usa solo `columns`, il toolkit avvisa.
+
+    Le due opzioni sono alternative: `columns` definisce lo schema e
+    `all_varchar` viene ignorato silenziosamente da DuckDB. Meglio dirlo.
+    """
+    input_file = tmp_path / "both.csv"
+    input_file.write_text("a;b\n1;2\n", encoding="utf-8")
+
+    logger = logging.getLogger("tests.clean.duckdb_read.all_varchar_columns")
+    with safe_connect() as con, caplog.at_level(logging.WARNING, logger=logger.name):
+        duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {
+                "delim": ";",
+                "encoding": "utf-8",
+                "header": True,
+                "all_varchar": True,
+                "columns": {"a": "VARCHAR", "b": "VARCHAR"},
+            },
+            "strict",
+            logger,
+        )
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("all_varchar" in m and "columns" in m for m in messages), messages

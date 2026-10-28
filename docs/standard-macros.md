@@ -96,7 +96,7 @@ decode_flag("ETS", 'X') AS flag_ets,
 
 ### `remove_dot_thousands(val)`
 
-Rimuove punti migliaia da **numeri interi**. Attenzione: rimuove **tutti** i punti, incluso un eventuale separatore decimale standard. Usa solo su interi con punti migliaia. Per numeri con decimali usa `normalize_italian_number` o `cast_double`.
+Rimuove punti migliaia da **numeri interi**. Attenzione: rimuove **tutti** i punti, incluso un eventuale separatore decimale standard. Usa solo su interi con punti migliaia. Per numeri con decimali usa `normalize_italian_number` o `cast_double`. Vale la stessa guardia sull'input (`VARCHAR`): su una colonna tipizzata `DOUBLE` il punto decimale verrebbe rimosso e il valore corrotto, quindi la macro fallisce con errore esplicito.
 
 ```sql
 -- SOLO PER INTERI

@@ -16,6 +16,7 @@
 ### Fixed
 
 - **Preflight `http_file`: client della fonte e HEAD fallito**: `run_preflight` ora passa `client.user_agent/timeout/retries` a `preview_url`; un HEAD 404/403 con Range GET riuscito non marca più la fonte come irraggiungibile. Sblocca fonti che richiedono UA browser o che rifiutano HEAD (es. PNRR Italia Domani).
+- **`http_file`: fallback `wget` su 403/407**: quando requests (anche via proxy) resta bloccato, il download riprova con wget diretto e UA configurato. Sblocca AEM/Akamai (es. open-pnrr) che accettano wget ma bloccano requests.
 
 ### Removed
 

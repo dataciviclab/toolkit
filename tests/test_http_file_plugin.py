@@ -18,9 +18,11 @@ from lab_connectors.testing import FakeHttpClient, fake_response
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.http_file import (
     HttpFileSource,
+    _fetch_via_curl,
     _get_proxy_from_env,
     _parse_curl_status,
     _strip_curl_status,
+    _try_wget,
 )
 
 
@@ -276,3 +278,122 @@ class TestCurlFallbackIntegration:
         """_get_proxy_from_env legge BLOCKED_SOURCE_PROXY."""
         with mock.patch.dict(os.environ, {"BLOCKED_SOURCE_PROXY": "http://proxy:8888"}, clear=True):
             assert _get_proxy_from_env() == "http://proxy:8888"
+
+    @pytest.mark.pure_unit
+    def test_curl_command_has_end_of_options(self):
+        """L'URL è separato dalle opzioni con ``--``."""
+        completed = mock.Mock(returncode=0, stdout=b"body\n200", stderr=b"")
+        url = "https://example.test/data.csv"
+        with mock.patch(
+            "toolkit.plugins.http_file.subprocess.run", return_value=completed
+        ) as mock_run:
+            assert _fetch_via_curl(url, "http://proxy:8888", 10, "ua") == b"body"
+
+        cmd = mock_run.call_args[0][0]
+        assert cmd[-2:] == ["--", url]
+
+
+class TestWgetFallback:
+    """Fallback wget per fonti che bloccano requests anche via proxy."""
+
+    @pytest.mark.contract
+    def test_http_403_uses_wget(self):
+        """HTTP 403 → wget diretto, senza passare dal proxy."""
+        fake = FakeHttpClient()
+        fake.responses["https://example.test/data.csv"] = HttpResult(
+            response=fake_response(403, "forbidden"),
+            err=None,
+        )
+        source = HttpFileSource(retries=1)
+        source._client = fake
+
+        with mock.patch(
+            "toolkit.plugins.http_file._try_wget",
+            return_value=b"wget-data",
+        ) as mock_wget:
+            payload = source.fetch("https://example.test/data.csv")
+
+        assert payload == b"wget-data"
+        mock_wget.assert_called_once()
+
+    @pytest.mark.contract
+    def test_http_403_wget_failure_falls_back_to_curl_proxy(self):
+        """wget fallisce + proxy → curl via proxy."""
+        fake = FakeHttpClient()
+        fake.responses["https://example.test/data.csv"] = HttpResult(
+            response=fake_response(403, "forbidden"),
+            err=None,
+        )
+        source = HttpFileSource(retries=1)
+        source._client = fake
+
+        with (
+            mock.patch("toolkit.plugins.http_file._try_wget", return_value=None),
+            mock.patch(
+                "toolkit.plugins.http_file._get_proxy_from_env",
+                return_value="http://proxy:8888",
+            ),
+            mock.patch(
+                "toolkit.plugins.http_file._fetch_via_curl",
+                return_value=b"curl-data",
+            ) as mock_curl,
+        ):
+            payload = source.fetch("https://example.test/data.csv")
+
+        assert payload == b"curl-data"
+        mock_curl.assert_called_once()
+
+    @pytest.mark.contract
+    def test_http_403_without_fallback_raises(self):
+        """wget assente e nessun proxy → DownloadError HTTP 403."""
+        fake = FakeHttpClient()
+        fake.responses["https://example.test/data.csv"] = HttpResult(
+            response=fake_response(403, "forbidden"),
+            err=None,
+        )
+        source = HttpFileSource(retries=1)
+        source._client = fake
+
+        with (
+            mock.patch("toolkit.plugins.http_file._try_wget", return_value=None),
+            mock.patch("toolkit.plugins.http_file._get_proxy_from_env", return_value=None),
+            pytest.raises(DownloadError, match="HTTP 403"),
+        ):
+            source.fetch("https://example.test/data.csv")
+
+
+class TestTryWget:
+    @pytest.mark.pure_unit
+    def test_skips_sample_bytes(self):
+        """sample_bytes non è supportato da wget: nessun download."""
+        assert _try_wget("https://example.test/data.csv", 10, "ua", sample_bytes=100) is None
+
+    @pytest.mark.pure_unit
+    def test_missing_wget_returns_none(self):
+        with mock.patch("toolkit.plugins.http_file.shutil.which", return_value=None):
+            assert _try_wget("https://example.test/data.csv", 10, "ua") is None
+
+    @pytest.mark.pure_unit
+    def test_success_returns_stdout(self):
+        completed = mock.Mock(returncode=0, stdout=b"payload", stderr=b"")
+        url = "https://example.test/data.csv"
+        with (
+            mock.patch("toolkit.plugins.http_file.shutil.which", return_value="/usr/bin/wget"),
+            mock.patch(
+                "toolkit.plugins.http_file.subprocess.run", return_value=completed
+            ) as mock_run,
+        ):
+            assert _try_wget(url, 10, "ua") == b"payload"
+
+        cmd = mock_run.call_args[0][0]
+        assert "-nv" in cmd
+        assert cmd[-2:] == ["--", url]
+
+    @pytest.mark.pure_unit
+    def test_failure_returns_none(self):
+        completed = mock.Mock(returncode=8, stdout=b"", stderr=b"403 Forbidden")
+        with (
+            mock.patch("toolkit.plugins.http_file.shutil.which", return_value="/usr/bin/wget"),
+            mock.patch("toolkit.plugins.http_file.subprocess.run", return_value=completed),
+        ):
+            assert _try_wget("https://example.test/data.csv", 10, "ua") is None

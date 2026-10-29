@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 
 from lab_connectors.http import HttpClient
@@ -43,8 +44,25 @@ class HttpFileSource:
             headers = {"Range": f"bytes=0-{sample_bytes - 1}"}
         result = self._client.get(url, headers=headers)
         if result.is_ok and result.response is not None:
-            if result.response.status_code not in (200, 206):
-                raise DownloadError(f"HTTP {result.response.status_code} for {url}")
+            status = result.response.status_code
+            if status not in (200, 206):
+                # AEM/Akamai e simili bloccano requests (anche via proxy) ma
+                # accettano wget: unico fallback verificato su open-pnrr.
+                if status in (403, 407):
+                    content = _try_wget(url, self.timeout, self.user_agent, sample_bytes)
+                    if content is not None:
+                        return content
+                    proxy = _get_proxy_from_env()
+                    if proxy:
+                        logger.warning(
+                            "HTTP %s for %s — wget fallito, riprovo con curl via proxy",
+                            status,
+                            url,
+                        )
+                        return _fetch_via_curl(
+                            url, proxy, self.timeout, self.user_agent, sample_bytes
+                        )
+                raise DownloadError(f"HTTP {status} for {url}")
             content = result.response.content
             if sample_bytes is not None:
                 content = truncate_at_line(content, sample_bytes)
@@ -77,6 +95,54 @@ def _get_proxy_from_env() -> str | None:
     )
 
 
+def _try_wget(
+    url: str,
+    timeout: int,
+    user_agent: str,
+    sample_bytes: int | None = None,
+) -> bytes | None:
+    """Scarica l'URL con wget diretto; ``None`` se non disponibile o fallisce.
+
+    Fallback per fonti che bloccano requests (anche via proxy) ma accettano
+    wget, es. AEM/Akamai su open-pnrr. Non supporta Range: con ``sample_bytes``
+    viene saltato per non scaricare il file intero.
+    """
+    if sample_bytes is not None:
+        return None
+    if shutil.which("wget") is None:
+        return None
+
+    cmd = [
+        "wget",
+        "-nv",
+        f"--user-agent={user_agent}",
+        f"--timeout={timeout}",
+        "--tries=1",
+        "-O",
+        "-",
+        "--",
+        url,
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=timeout + 5)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.warning("wget fallback fallito per %s: %s", url, exc)
+        return None
+
+    if result.returncode != 0 or not result.stdout:
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
+        logger.warning(
+            "wget fallback fallito per %s: exit=%s %s",
+            url,
+            result.returncode,
+            stderr or "empty output",
+        )
+        return None
+
+    logger.info("wget fallback OK — %d bytes da %s", len(result.stdout), url)
+    return result.stdout
+
+
 def _fetch_via_curl(
     url: str,
     proxy: str,
@@ -107,7 +173,7 @@ def _fetch_via_curl(
     ]
     if sample_bytes is not None:
         cmd += ["-r", f"0-{sample_bytes - 1}"]
-    cmd += [url]
+    cmd += ["--", url]
 
     try:
         r = subprocess.run(cmd, capture_output=True, timeout=timeout + 5)

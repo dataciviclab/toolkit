@@ -114,12 +114,13 @@ def _try_wget(
 
     cmd = [
         "wget",
-        "-q",
+        "-nv",
         f"--user-agent={user_agent}",
         f"--timeout={timeout}",
         "--tries=1",
         "-O",
         "-",
+        "--",
         url,
     ]
     try:
@@ -172,7 +173,7 @@ def _fetch_via_curl(
     ]
     if sample_bytes is not None:
         cmd += ["-r", f"0-{sample_bytes - 1}"]
-    cmd += [url]
+    cmd += ["--", url]
 
     try:
         r = subprocess.run(cmd, capture_output=True, timeout=timeout + 5)

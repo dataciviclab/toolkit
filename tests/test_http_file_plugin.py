@@ -18,6 +18,7 @@ from lab_connectors.testing import FakeHttpClient, fake_response
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins.http_file import (
     HttpFileSource,
+    _fetch_via_curl,
     _get_proxy_from_env,
     _parse_curl_status,
     _strip_curl_status,
@@ -278,6 +279,19 @@ class TestCurlFallbackIntegration:
         with mock.patch.dict(os.environ, {"BLOCKED_SOURCE_PROXY": "http://proxy:8888"}, clear=True):
             assert _get_proxy_from_env() == "http://proxy:8888"
 
+    @pytest.mark.pure_unit
+    def test_curl_command_has_end_of_options(self):
+        """L'URL è separato dalle opzioni con ``--``."""
+        completed = mock.Mock(returncode=0, stdout=b"body\n200", stderr=b"")
+        url = "https://example.test/data.csv"
+        with mock.patch(
+            "toolkit.plugins.http_file.subprocess.run", return_value=completed
+        ) as mock_run:
+            assert _fetch_via_curl(url, "http://proxy:8888", 10, "ua") == b"body"
+
+        cmd = mock_run.call_args[0][0]
+        assert cmd[-2:] == ["--", url]
+
 
 class TestWgetFallback:
     """Fallback wget per fonti che bloccano requests anche via proxy."""
@@ -362,11 +376,18 @@ class TestTryWget:
     @pytest.mark.pure_unit
     def test_success_returns_stdout(self):
         completed = mock.Mock(returncode=0, stdout=b"payload", stderr=b"")
+        url = "https://example.test/data.csv"
         with (
             mock.patch("toolkit.plugins.http_file.shutil.which", return_value="/usr/bin/wget"),
-            mock.patch("toolkit.plugins.http_file.subprocess.run", return_value=completed),
+            mock.patch(
+                "toolkit.plugins.http_file.subprocess.run", return_value=completed
+            ) as mock_run,
         ):
-            assert _try_wget("https://example.test/data.csv", 10, "ua") == b"payload"
+            assert _try_wget(url, 10, "ua") == b"payload"
+
+        cmd = mock_run.call_args[0][0]
+        assert "-nv" in cmd
+        assert cmd[-2:] == ["--", url]
 
     @pytest.mark.pure_unit
     def test_failure_returns_none(self):

@@ -40,7 +40,7 @@ def _mock_probe(monkeypatch, result: dict | None = None, error: bool = False):
         )
 
 
-def _mock_fetch(monkeypatch, content: bytes = b"", error: bool = False):
+def _mock_fetch(monkeypatch, content: bytes = b"", error: bool = False, status_code: int = 200):
     """Mock fetch_content per non fare HTTP reale."""
     import toolkit.profile.preview as mod
 
@@ -57,7 +57,7 @@ def _mock_fetch(monkeypatch, content: bytes = b"", error: bool = False):
             lambda url, **kw: {
                 "content": content,
                 "content_type": "text/csv",
-                "status_code": 200,
+                "status_code": status_code,
                 "final_url": url,
                 "method": "range",
             },
@@ -90,6 +90,19 @@ class TestPreviewUrl:
         result = preview_url("https://example.test/timeout.csv")
         assert result.status == "probe_failed"
         assert result.reachable is False
+
+    @pytest.mark.contract
+    @pytest.mark.parametrize("get_status", [200, 206])
+    def test_head_404_but_get_success_marks_reachable(self, monkeypatch, get_status):
+        """HEAD 404 ma Range GET 200/206 → fonte raggiungibile."""
+        _mock_probe(monkeypatch, {"status_code": 404, "content_type": "text/csv"})
+        _mock_fetch(monkeypatch, b"col1,col2\n1,2\n", status_code=get_status)
+
+        result = preview_url("https://example.test/data.csv")
+
+        assert result.status == "success"
+        assert result.reachable is True
+        assert result.http_status == get_status
 
     @pytest.mark.smoke
     def test_unsupported_format_returns_error(self, monkeypatch):

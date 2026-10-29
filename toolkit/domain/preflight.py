@@ -13,6 +13,26 @@ from toolkit.core.dataset_loader import validate_config
 from toolkit.domain.common import iter_selected_years
 
 
+def _preview_client(client_cfg: Any):
+    """Costruisce un HttpClient dal blocco ``client`` della fonte, se presente."""
+    if not client_cfg:
+        return None
+    if not isinstance(client_cfg, dict):
+        dump = getattr(client_cfg, "model_dump", None)
+        client_cfg = dump() if callable(dump) else dict(client_cfg)
+
+    from lab_connectors.http import HttpClient
+
+    retries = client_cfg.get("retries")
+    if retries is None:
+        retries = client_cfg.get("max_retries", 2)
+    return HttpClient(
+        timeout=client_cfg.get("timeout") or 60,
+        max_retries=retries,
+        user_agent=client_cfg.get("user_agent"),
+    )
+
+
 def run_config_check(cfg, config_path: str | Path | None) -> dict[str, Any]:
     """Config-only validation (zero network I/O).
 
@@ -156,7 +176,12 @@ def run_preflight(
                 # preview_url fa probe + sniff + quality in un colpo solo
                 from toolkit.profile.preview import preview_url
 
-                preview = preview_url(url)
+                preview_client = _preview_client(resolved.get("client"))
+                try:
+                    preview = preview_url(url, client=preview_client)
+                finally:
+                    if preview_client is not None:
+                        preview_client.close()
                 entry["reachable"] = preview.reachable
                 entry["http_status"] = preview.http_status
                 entry["status"] = preview.status

@@ -6,6 +6,7 @@ Nessuna chiamata HTTP reale — tutto mockato.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -82,6 +83,10 @@ def _write_test_config(path: Path) -> Path:
                 "    - name: csv_source",
                 "      type: http_file",
                 "      primary: true",
+                "      client:",
+                "        timeout: 30",
+                "        retries: 3",
+                '        user_agent: "test-ua"',
                 "      args:",
                 '        url: "https://example.org/data_{year}.csv"',
                 "    - name: ckan_portal",
@@ -182,6 +187,39 @@ class TestPreflightOps:
 
         # URL diversi → entrambi status success (non cached)
         assert all(s["status"] == "success" for s in csv_sources)
+
+    @pytest.mark.policy
+    def test_preflight_passes_source_client_to_preview(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _mock_http
+    ) -> None:
+        """Il client della fonte (UA/timeout) arriva a preview_url."""
+        captured: dict = {}
+        fake = SimpleNamespace(
+            status="success",
+            reachable=True,
+            http_status=200,
+            file_size=1024,
+            resource_format="CSV",
+            encoding_suggested="utf-8",
+            delim_suggested=",",
+            columns=["comune", "anno", "valore"],
+            quality_score=85,
+            quality_verdict="buona",
+        )
+
+        def fake_preview(url, **kwargs):
+            captured.update(kwargs)
+            return fake
+
+        monkeypatch.setattr("toolkit.profile.preview.preview_url", fake_preview)
+        config_path = _write_test_config(tmp_path)
+        result = run_preflight(str(config_path))
+
+        assert result["status"] == "passed"
+        client = captured["client"]
+        assert client is not None
+        assert client.user_agent == "test-ua"
+        client.close()
 
 
 # ── run_config_check ─────────────────────────────────────────────────────

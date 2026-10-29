@@ -218,6 +218,12 @@ def preview_url(
             )
 
         content: bytes = fetched["content"]
+        # HEAD può fallire (404/403) mentre il Range GET riesce: in quel caso
+        # la fonte è raggiungibile e lo status effettivo è quello del GET.
+        content_status = fetched.get("status_code")
+        if content_status and content_status < 400:
+            reachable = True
+            http_status = content_status
         # Content-Length da fetch_content: su 206 con Content-Range e' la
         # dimensione reale del file; altrimenti la lunghezza del chunk.
         content_file_size = fetched.get("content_length") or len(content)

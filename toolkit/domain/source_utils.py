@@ -24,10 +24,21 @@ def resolve_source(src, year: int) -> dict[str, Any]:
         args = getattr(src, "args", None) or {}
         name = str(getattr(src, "name", None) or stype)
 
+    client = src.get("client") if isinstance(src, dict) else getattr(src, "client", None)
+    if not client:
+        client_keys = ("timeout", "retries", "max_retries", "user_agent")
+        if isinstance(src, dict):
+            client = {key: src.get(key) for key in client_keys if src.get(key) is not None}
+        else:
+            client = {
+                key: getattr(src, key) for key in client_keys if getattr(src, key, None) is not None
+            }
+
     raw_url = (args.get("url") if isinstance(args, dict) else getattr(args, "url", "")) or ""
     return {
         "stype": stype,
         "args": args,
         "name": name,
+        "client": client,
         "url": str(raw_url).replace("{year}", str(year)),
     }

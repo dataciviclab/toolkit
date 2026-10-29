@@ -91,6 +91,18 @@ class TestPreviewUrl:
         assert result.status == "probe_failed"
         assert result.reachable is False
 
+    @pytest.mark.contract
+    def test_head_404_but_get_success_marks_reachable(self, monkeypatch):
+        """HEAD 404 ma Range GET 200 → fonte raggiungibile."""
+        _mock_probe(monkeypatch, {"status_code": 404, "content_type": "text/csv"})
+        _mock_fetch(monkeypatch, b"col1,col2\n1,2\n")
+
+        result = preview_url("https://example.test/data.csv")
+
+        assert result.status == "success"
+        assert result.reachable is True
+        assert result.http_status == 200
+
     @pytest.mark.smoke
     def test_unsupported_format_returns_error(self, monkeypatch):
         """Formato non supportato → status=unsupported_format."""

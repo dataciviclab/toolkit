@@ -13,6 +13,10 @@
 - **Layering ripristinato** (PR #504): rimosse 6 inversioni di dipendenza `core → clean/domain/scout/scaffold`. `sql_validation` spostato in `domain/`, orchestration support in `domain/support.py`, `ProbePool` in `scout/pool.py`, scaffold clean.sql spostato da `raw/run.py` a `cmd_run` (comportamento invariato). Contratto condiviso `dataset_yml_slug`/`iter_workspace_dataset_ymls` in `registry/layout.py`.
 - **Catalogo unico tipi fonte** (PR #505): nuovo `toolkit/core/source_types.py` come single source of truth per registry plugin, dispatch fetch e contratto AI (`contracts._SOURCE_TYPES` generato). Eliminato `_fetch_fallback` (tipo sconosciuto → `ValueError` esplicito). Tipo `script` documentato nel contratto con nota di sicurezza.
 
+### Fixed
+
+- **Preflight `http_file`: client della fonte e HEAD fallito**: `run_preflight` ora passa `client.user_agent/timeout/retries` a `preview_url`; un HEAD 404/403 con Range GET riuscito non marca più la fonte come irraggiungibile. Sblocca fonti che richiedono UA browser o che rifiutano HEAD (es. PNRR Italia Domani).
+
 ### Removed
 
 - **Codice morto** (PR #505): comandi CLI mai registrati (`_run_probe_cmd`, `run_all_cmd`, `inspect paths`, comando Typer `inspect profile` — `run_profile` logica conservata), `_ALLOWED_BATCH_STEPS`, `mcp_probe_url` (mai registrato come tool MCP; `mcp_probe_url_routed` resta), `_helpers.py` di `cli/inspect`.

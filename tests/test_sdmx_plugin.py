@@ -750,32 +750,117 @@ def test_sdmx_fetch_codelist_requires_estat():
         SdmxSource().fetch_codelist("GEO", agency="IT1")
 
 
-def test_sdmx_estat_large_flow_constraints_413_fallback(monkeypatch):
-    """Flow giganti: JSON constraints HTTP 413 → fallback wildcard, TSV ok.
+ESTAT_FLOW_DATAFLOW_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<mes:Structure xmlns:mes="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/message"
+               xmlns:str="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/structure">
+  <mes:Structures>
+    <str:Dataflows>
+      <str:Dataflow id="%s" agencyID="ESTAT" version="1.0">
+        <str:Structure>
+          <Ref id="DSD_%s" version="1.0" agencyID="ESTAT" package="datastructure" class="DataStructure" />
+        </str:Structure>
+      </str:Dataflow>
+    </str:Dataflows>
+  </mes:Structures>
+</mes:Structure>"""
 
-    DEMO_R_D2JAN (pop per sesso/età, 4M+ obs) fa fallire il JSON constraints
-    con 413 — il source deve ripiegare su key wildcard ('all') e scaricare il
-    TSV, non crashare. Regressione trovata durante la migrazione pop-nuts3.
-    """
+ESTAT_DSD_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<mes:Structure xmlns:mes="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/message"
+               xmlns:str="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/structure">
+  <mes:Structures>
+    <str:DataStructures>
+      <str:DataStructure id="DSD_%s" agencyID="ESTAT" version="1.0">
+        <str:DataStructureComponents>
+          <str:DimensionList id="DimensionDescriptor">
+            <str:Dimension id="freq" position="1"/>
+            <str:Dimension id="unit" position="2"/>
+            <str:Dimension id="geo" position="3"/>
+            <str:Dimension id="TIME_PERIOD" position="4"/>
+          </str:DimensionList>
+        </str:DataStructureComponents>
+      </str:DataStructure>
+    </str:DataStructures>
+  </mes:Structures>
+</mes:Structure>"""
 
-    def _fake_get_413_then_tsv(self, url, **kwargs):
+
+def _estat_fake_get_constraints_broken(flow: str, json_outcome: str, dsd: bool):
+    """Constraints JSON inutilizzabile; DSD opzionale; TSV sempre disponibile."""
+
+    def _fake_get(self, url, **kwargs):
         params = kwargs.get("params") or {}
-        if url.endswith("/data/DEMO_R_D2JAN/all") and params.get("format") == "JSON":
-            return _ok(_FakeResponse(413, "Payload Too Large", url))
-        if url.endswith("/data/DEMO_R_D2JAN/all") and params.get("format") == "TSV":
+        if url.endswith(f"/data/{flow}/all") and params.get("format") == "JSON":
+            if json_outcome == "413":
+                return _ok(_FakeResponse(413, "Payload Too Large", url))
+            # Payload troncato / pagina di manutenzione: 200 ma non JSON.
+            return _ok(_FakeResponse(200, "<html>maintenance</html>", url))
+        if url.endswith(f"/dataflow/ESTAT/{flow}"):
+            return _ok(_FakeResponse(200, ESTAT_FLOW_DATAFLOW_XML % (flow, flow), url))
+        if url.endswith(f"/datastructure/ESTAT/DSD_{flow}"):
+            if not dsd:
+                return _ok(_FakeResponse(404, "not found", url))
+            return _ok(_FakeResponse(200, ESTAT_DSD_XML % flow, url))
+        if url.endswith(f"/data/{flow}/all") and params.get("format") == "TSV":
             return _ok(_FakeResponse(200, ESTAT_TSV, url))
         raise AssertionError(f"Unexpected URL {url} params={params}")
 
-    monkeypatch.setattr(HttpClient, "get", _fake_get_413_then_tsv)
+    return _fake_get
+
+
+def test_sdmx_estat_large_flow_constraints_413_fallback(monkeypatch):
+    """Flow giganti: JSON constraints HTTP 413 → dimensioni dal DSD, key wildcard.
+
+    DEMO_R_D2JAN (pop per sesso/età, 4M+ obs) fa fallire il JSON constraints
+    con 413 — il source deve ripiegare sull'ordine delle dimensioni della
+    datastructure e scaricare il TSV, non crashare.
+    """
+    monkeypatch.setattr(
+        HttpClient, "get", _estat_fake_get_constraints_broken("DEMO_R_D2JAN", "413", dsd=True)
+    )
     src = SdmxSource(timeout=30, retries=0)
 
-    # Constraints: fallback a vuoti (no crash)
     constraints = src._estat_constraints("DEMO_R_D2JAN")
-    assert constraints == {}
+    assert constraints == {"freq": [], "unit": [], "geo": []}
+    assert src._build_key(list(constraints), None, "ESTAT") == "all"
 
-    # Fetch: la key diventa 'all' e il TSV viene scaricato
     data, _origin = src._estat_fetch_tsv("DEMO_R_D2JAN", "all")
     assert data  # TSV scaricato
+
+
+def test_sdmx_estat_constraints_non_json_non_fa_fallire_il_dataset(monkeypatch):
+    """Regressione: payload 200 non-JSON → degrada, non solleva.
+
+    Eurostat ha risposto con un body non-JSON alla chiamata dei constraints di
+    NAMA_10_GDP nell'1/11/2026 e nel 6/10/2026: il dataset falliva con
+    "Invalid SDMX JSON payload" mentre i dati erano disponibili. Il JSON dei
+    constraints è un'ottimizzazione, non un requisito.
+    """
+    monkeypatch.setattr(
+        HttpClient, "get", _estat_fake_get_constraints_broken("NAMA_10_GDP", "html", dsd=True)
+    )
+    src = SdmxSource(timeout=30, retries=0)
+
+    constraints = src._estat_constraints("NAMA_10_GDP")
+
+    assert constraints == {"freq": [], "unit": [], "geo": []}
+    assert src._build_key(list(constraints), {"geo": "IT"}, "ESTAT") == "..IT"
+    data, _origin = src._estat_fetch_tsv("NAMA_10_GDP", "all")
+    assert data
+
+
+def test_sdmx_estat_senza_dsd_resta_wildcard(monkeypatch):
+    """Degradazione estrema: constraints E datastructure giù → key wildcard."""
+    monkeypatch.setattr(
+        HttpClient, "get", _estat_fake_get_constraints_broken("NAMA_10_GDP", "html", dsd=False)
+    )
+    src = SdmxSource(timeout=30, retries=0)
+
+    constraints = src._estat_constraints("NAMA_10_GDP")
+
+    assert constraints == {}
+    assert src._build_key([], None, "ESTAT") == "all"
+    data, _origin = src._estat_fetch_tsv("NAMA_10_GDP", "all")
+    assert data
 
 
 # ── OECD tests ────────────────────────────────────────────────────────────────

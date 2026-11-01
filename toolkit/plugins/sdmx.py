@@ -251,6 +251,26 @@ class SdmxSource:
         """
         return _safe_text(agency).upper().startswith(OECD_AGENCY_PREFIX)
 
+    @staticmethod
+    def _estat_constraints_from_json(payload: object, flow: str) -> dict[str, list[str]]:
+        """Codici validi per dimensione dal payload SDMX-JSON 2.0 di Eurostat.
+
+        Solleva ``DownloadError`` per ogni payload inutilizzabile: il chiamante
+        ha un solo percorso di degradazione (DSD), non un caso per forma.
+        """
+        if not isinstance(payload, dict):
+            raise DownloadError(f"SDMX-Eurostat constraints payload non-object for flow={flow}")
+        dimension = payload.get("dimension") or {}
+        result: dict[str, list[str]] = {}
+        for dim_id in dimension:
+            if dim_id == EUROSTAT_TIME_DIM:
+                continue
+            category = (dimension.get(dim_id) or {}).get("category") or {}
+            result[dim_id] = [str(c) for c in (category.get("index") or {})]
+        if not result:
+            raise DownloadError(f"SDMX-Eurostat returned no dimensions for flow={flow}")
+        return result
+
     def _estat_constraints(self, flow: str) -> dict[str, list[str]]:
         """Valid codes per dimension da SDMX-JSON 2.0 di Eurostat.
 
@@ -267,23 +287,16 @@ class SdmxSource:
                 f"data/{flow}/all",
                 params={"format": "JSON", "lastNObservations": "0"},
             )
-        except DownloadError as exc:
-            # Flow troppo grandi (es. DEMO_R_D2JAN, DEMO_R_MAGEC3) non
-            # rispondono al JSON constraints (HTTP 413/404) — fallback a
-            # constraints vuoti = key wildcard (il TSV dati funziona).
-            if "413" in str(exc) or "404" in str(exc):
-                self._constraints_cache[cache_key] = {}
-                return {}
-            raise
-        dimension = payload.get("dimension") or {}
-        result: dict[str, list[str]] = {}
-        for dim_id in dimension:
-            if dim_id == EUROSTAT_TIME_DIM:
-                continue
-            category = (dimension.get(dim_id) or {}).get("category") or {}
-            result[dim_id] = [str(c) for c in (category.get("index") or {})]
-        if not result:
-            raise DownloadError(f"SDMX-Eurostat returned no dimensions for flow={flow}")
+            result = self._estat_constraints_from_json(payload, flow)
+        except DownloadError:
+            # Il JSON dei constraints non è affidabile: i flow più grandi
+            # rispondono 413/404 (es. DEMO_R_D2JAN, DEMO_R_MAGEC3) e sotto
+            # carico arriva un payload troncato o non-JSON. L'ordine delle
+            # dimensioni si ricava allora dalla datastructure — stesso
+            # contratto già usato per i flow ISTAT XML-only (#444). Con
+            # dimensioni vuote la key degrada a `all` e la validazione dei
+            # filtri la fa il server: il dataset procede invece di fallire.
+            result = {dim: [] for dim in self._dsd_key_dim_ids(EUROSTAT_AGENCY, flow)}
         self._constraints_cache[cache_key] = result
         return result
 

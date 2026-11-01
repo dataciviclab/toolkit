@@ -14,6 +14,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
+from lab_connectors.duckdb import safe_connect
+
 from toolkit.core.config import ensure_dict
 from toolkit.core.exceptions import DownloadError
 from toolkit.core.support import (
@@ -89,8 +91,6 @@ def materialize_codelist_to(entry: dict[str, Any], root: Path, *, smoke: bool = 
 
 def _write_codelist_parquet(result: dict[str, object], target: Path) -> None:
     """Serializza {codes, annotations} in parquet: code, label_en + annotation types."""
-    import duckdb
-
     codes = cast(dict[str, str], result.get("codes") or {})
     annotations = cast(dict[str, dict[str, str]], result.get("annotations") or {})
 
@@ -117,10 +117,15 @@ def _write_codelist_parquet(result: dict[str, object], target: Path) -> None:
         tmp_csv = fh.name
 
     try:
-        duckdb.sql(
-            f"COPY (SELECT * FROM read_csv('{tmp_csv}', auto_detect=true, all_varchar=true)) "
-            f"TO '{target}' (FORMAT PARQUET)"
-        )
+        # Connessione dedicata via safe_connect: `duckdb.sql()` userebbe la
+        # connessione globale condivisa lasciando in sospeso il risultato del
+        # COPY, e il chiamante successivo riceve `ResourceInUseException:
+        # connection has an unfinished result`. Il fetch consuma la relazione.
+        with safe_connect() as con:
+            con.execute(
+                f"COPY (SELECT * FROM read_csv('{tmp_csv}', auto_detect=true, all_varchar=true)) "
+                f"TO '{target}' (FORMAT PARQUET)"
+            ).fetchall()
     finally:
         Path(tmp_csv).unlink(missing_ok=True)
 

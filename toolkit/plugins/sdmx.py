@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 import re
 import xml.etree.ElementTree as ET
 from typing import Iterable
@@ -12,6 +13,8 @@ import requests
 from lab_connectors.http import HttpClient
 
 from toolkit.core.exceptions import DownloadError
+
+logger = logging.getLogger("toolkit.plugins.sdmx")
 
 SDMX_NS = {
     "mes": "http://www.sdmx.org/resources/sdmxml/schemas/v2_1/message",
@@ -296,6 +299,11 @@ class SdmxSource:
             # contratto già usato per i flow ISTAT XML-only (#444). Con
             # dimensioni vuote la key degrada a `all` e la validazione dei
             # filtri la fa il server: il dataset procede invece di fallire.
+            logger.warning(
+                "constraints ESTAT non disponibili per %s: key wildcard, "
+                "il dataset scarica l'intero cubo",
+                flow,
+            )
             result = {dim: [] for dim in self._dsd_key_dim_ids(EUROSTAT_AGENCY, flow)}
         self._constraints_cache[cache_key] = result
         return result

@@ -827,23 +827,46 @@ def test_sdmx_estat_large_flow_constraints_413_fallback(monkeypatch):
     assert data  # TSV scaricato
 
 
+class _WarningSpy:
+    """Sostituto di ``logger.warning`` che registra i messaggi formattati.
+
+    ``caplog`` non basta: il toolkit configura i propri handler e la
+    propagazione non arriva al root logger, quindi la cattura dipende
+    dall'ordine dei test e da xdist. Qui il logger del modulo è osservato
+    direttamente.
+    """
+
+    def __init__(self) -> None:
+        self.messaggi: list[str] = []
+
+    def __call__(self, msg: str, *args: object) -> None:
+        self.messaggi.append(msg % args if args else msg)
+
+
 def test_sdmx_estat_constraints_non_json_non_fa_fallire_il_dataset(monkeypatch):
-    """Regressione: payload 200 non-JSON → degrada, non solleva.
+    """Regressione: payload 200 non-JSON → degrada, non solleva, e lo dice.
 
     Eurostat ha risposto con un body non-JSON alla chiamata dei constraints di
     NAMA_10_GDP nell'1/11/2026 e nel 6/10/2026: il dataset falliva con
     "Invalid SDMX JSON payload" mentre i dati erano disponibili. Il JSON dei
     constraints è un'ottimizzazione, non un requisito.
     """
+    import toolkit.plugins.sdmx as sdmx_mod
+
     monkeypatch.setattr(
         HttpClient, "get", _estat_fake_get_constraints_broken("NAMA_10_GDP", "html", dsd=True)
     )
     src = SdmxSource(timeout=30, retries=0)
+    spia = _WarningSpy()
+    monkeypatch.setattr(sdmx_mod.logger, "warning", spia)
 
     constraints = src._estat_constraints("NAMA_10_GDP")
 
     assert constraints == {"freq": [], "unit": [], "geo": []}
     assert src._build_key(list(constraints), {"geo": "IT"}, "ESTAT") == "..IT"
+    # La degradazione non è muta: senza questo warning un run lento (cubo
+    # intero invece di una slice) non ha spiegazione nei log.
+    assert any("key wildcard" in m for m in spia.messaggi)
     data, _origin = src._estat_fetch_tsv("NAMA_10_GDP", "all")
     assert data
 

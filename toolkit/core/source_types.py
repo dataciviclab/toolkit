@@ -84,6 +84,9 @@ def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, 
 
     src = registry.create(stype, **(client or {}))
     sample_bytes = formatted_args.get("sample_bytes")
+    prefer_datastore = formatted_args.get("prefer_datastore", True)
+    if isinstance(prefer_datastore, str):
+        prefer_datastore = prefer_datastore.strip().lower() not in {"false", "0", "no", "off"}
     if formatted_args.get("download_all", False):
         return src.fetch_all(
             formatted_args["portal_url"],
@@ -99,6 +102,7 @@ def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, 
         str(formatted_args["resource_name"])
         if formatted_args.get("resource_name") is not None
         else None,
+        prefer_datastore=bool(prefer_datastore),
         sample_bytes=sample_bytes,
     )
 

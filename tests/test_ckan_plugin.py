@@ -851,3 +851,95 @@ def test_fetch_all_all_resources_fail_raises():
 
     with pytest.raises(DownloadError, match="Failed to download any resource"):
         source.fetch_all("https://portal.example.org/api/3", "test-pkg")
+
+
+def _capture_fetch(monkeypatch):
+    """Sostituisce registry.create + CkanSource.fetch e cattura i kwargs."""
+    from toolkit.core.registry import registry
+
+    captured: dict = {}
+
+    def fake_fetch(self, *args, **kwargs):
+        captured.update(kwargs)
+        return b"payload", "http://example.org/x.csv"
+
+    monkeypatch.setattr(registry, "create", lambda *a, **k: CkanSource())
+    monkeypatch.setattr(CkanSource, "fetch", fake_fetch)
+    return captured
+
+
+def test_fetch_ckan_forwards_prefer_datastore_false(monkeypatch):
+    """_fetch_ckan inoltra prefer_datastore=False a CkanSource.fetch."""
+    from toolkit.core.source_types import _fetch_ckan
+
+    captured = _capture_fetch(monkeypatch)
+    _fetch_ckan(
+        "ckan",
+        {},
+        {
+            "portal_url": "https://portal.example.org/api/3",
+            "resource_id": "res-1",
+            "prefer_datastore": False,
+        },
+    )
+    assert captured["prefer_datastore"] is False
+
+
+def test_fetch_ckan_prefer_datastore_default_true(monkeypatch):
+    """Senza il flag, _fetch_ckan mantiene il default True."""
+    from toolkit.core.source_types import _fetch_ckan
+
+    captured = _capture_fetch(monkeypatch)
+    _fetch_ckan(
+        "ckan",
+        {},
+        {
+            "portal_url": "https://portal.example.org/api/3",
+            "resource_id": "res-1",
+        },
+    )
+    assert captured["prefer_datastore"] is True
+
+
+def test_fetch_ckan_prefer_datastore_string_false(monkeypatch):
+    """Anche la stringa "false" (YAML quotato/interpolato) diventa False."""
+    from toolkit.core.source_types import _fetch_ckan
+
+    captured = _capture_fetch(monkeypatch)
+    _fetch_ckan(
+        "ckan",
+        {},
+        {
+            "portal_url": "https://portal.example.org/api/3",
+            "resource_id": "res-1",
+            "prefer_datastore": "false",
+        },
+    )
+    assert captured["prefer_datastore"] is False
+
+
+def test_fetch_ckan_forwards_prefer_datastore_to_fetch_all(monkeypatch):
+    """Anche il ramo download_all inoltra prefer_datastore."""
+    from toolkit.core.registry import registry
+    from toolkit.core.source_types import _fetch_ckan
+
+    captured: dict = {}
+
+    def fake_fetch_all(self, *args, **kwargs):
+        captured.update(kwargs)
+        return b"payload", "http://example.org/all.csv"
+
+    monkeypatch.setattr(registry, "create", lambda *a, **k: CkanSource())
+    monkeypatch.setattr(CkanSource, "fetch_all", fake_fetch_all)
+
+    _fetch_ckan(
+        "ckan",
+        {},
+        {
+            "portal_url": "https://portal.example.org/api/3",
+            "dataset_id": "pkg-1",
+            "download_all": True,
+            "prefer_datastore": False,
+        },
+    )
+    assert captured["prefer_datastore"] is False

@@ -1034,3 +1034,34 @@ def test_read_raw_to_relation_warns_when_all_varchar_and_columns_together(
 
     messages = [r.getMessage() for r in caplog.records]
     assert any("all_varchar" in m and "columns" in m for m in messages), messages
+
+
+@pytest.mark.regression
+def test_read_raw_to_relation_robust_handles_quoted_newlines(tmp_path: Path):
+    """Un CSV con testo multiriga deve leggersi in read_mode=robust.
+
+    DuckDB rifiuta il parallel scanner insieme a null_padding quando il file
+    ha quoted newlines: robust_preset deve disattivare il parallelismo.
+    Regressione pipeline open-politica (camera_sindisp leg 14).
+    """
+    input_file = tmp_path / "quoted.csv"
+    input_file.write_text(
+        'id,text\n1,"line one\nline two"\n2,short\n',
+        encoding="utf-8",
+    )
+
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.quoted_newlines")
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {"delim": ",", "encoding": "utf-8", "header": True},
+            "robust",
+            logger,
+        )
+        rows = con.execute("SELECT * FROM raw_input ORDER BY id").fetchall()
+
+    assert info.source == "robust"
+    assert info.params_used["parallel"] is False
+    assert rows[0] == (1, "line one\nline two")
+    assert rows[1] == (2, "short")

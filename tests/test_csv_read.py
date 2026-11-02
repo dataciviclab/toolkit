@@ -168,3 +168,22 @@ def test_normalize_read_cfg_rejects_bad_nullstr():
     msg = str(exc_info.value)
     assert "nullstr" in msg
     assert "1" in msg
+
+
+@pytest.mark.pure_unit
+def test_robust_preset_disables_parallel_when_null_padding():
+    """DuckDB: parallel scanner + null_padding non supporta quoted newlines."""
+    from toolkit.core.csv_read import robust_preset
+
+    cfg = robust_preset({})
+    assert cfg["null_padding"] is True
+    assert cfg["parallel"] is False
+
+
+@pytest.mark.pure_unit
+def test_robust_preset_keeps_parallel_when_null_padding_off():
+    from toolkit.core.csv_read import robust_preset
+
+    cfg = robust_preset({"null_padding": False, "parallel": True})
+    assert cfg["null_padding"] is False
+    assert cfg["parallel"] is True

@@ -381,7 +381,11 @@ SOURCE_TYPES: dict[str, SourceTypeSpec] = {
                     "{'mode': 'keyset', 'key': '?var'} — keyset inietta "
                     "FILTER(?var > last) invece di OFFSET: deterministico, compatibile "
                     "con Virtuoso che rifiuta ORDER BY+OFFSET (SR353). La query keyset "
-                    "DEVE avere gia' ORDER BY ?var."
+                    "DEVE avere gia' ORDER BY ?var. Opzioni: 'key_expr' (es. "
+                    "'STR(?var)'), 'key_column' (colonna CSV dell'ultimo valore), "
+                    "'key_literal' (auto|uri|string|number). Il FILTER va dentro la "
+                    "WHERE; per isolarlo in una sottoquery (FILTER+OPTIONAL su Virtuoso) "
+                    "usa il placeholder {keyset} nella query."
                 ),
             },
             module="toolkit.plugins.sparql",

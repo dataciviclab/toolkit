@@ -226,6 +226,7 @@ def test_sparql_fetch_network_error():
         mock_cls.return_value.get.return_value = err_result
         source = SparqlSource()
         source._page_retry_delay = 0
+        source._curl_fallback = False  # test ermetico: niente curl reale
         with pytest.raises(DownloadError, match="connection refused"):
             source.fetch("https://example.test/sparql", "SELECT * WHERE { }")
 
@@ -855,3 +856,203 @@ def test_keyset_literal_types():
     assert _keyset_literal("12345") == "12345"
     assert _keyset_literal("bar") == '"bar"'
     assert _keyset_literal('say "hi"') == '"say \\"hi\\""'
+
+
+def test_keyset_literal_modes():
+    """key_literal forza il tipo: uri, string, number."""
+    from toolkit.plugins.sparql import _keyset_literal
+
+    uri = "http://dati.camera.it/ocd/aic.rdf/a19_123"
+    assert _keyset_literal(uri, "uri") == f"<{uri}>"
+    # STR(?var) → il valore è una stringa, non un IRI
+    assert _keyset_literal(uri, "string") == f'"{uri}"'
+    assert _keyset_literal("42", "number") == "42"
+    with pytest.raises(DownloadError, match="non è numerico"):
+        _keyset_literal("bar", "number")
+
+
+def test_inject_filter_into_where_not_after_brace():
+    """Il FILTER keyset deve stare DENTRO la WHERE, non dopo la graffa.
+
+    Regressione: appenderlo prima di ORDER BY produceva
+    `... } FILTER(...) ORDER BY ...`, sintassi che Virtuoso rifiuta —
+    causa per cui camera-sindisp usava uno script manuale.
+    """
+    from toolkit.plugins.sparql import _inject_filter_into_where
+
+    q = "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 10"
+    out = _inject_filter_into_where(q, "FILTER(?s > 1)")
+    assert "} FILTER" not in out
+    assert out.index("FILTER") < out.rindex("}")
+    assert out.rindex("}") < out.index("ORDER BY")
+
+
+def test_inject_filter_ignores_braces_in_strings_and_iris():
+    """Graffe dentro stringhe/IRI non alterano l'individuazione della WHERE."""
+    from toolkit.plugins.sparql import _inject_filter_into_where
+
+    q = (
+        "PREFIX ocd: <http://dati.camera.it/ocd/>\n"
+        'SELECT ?s WHERE { ?s ocd:titolo "un {titolo} strano" . }\n'
+        "ORDER BY ?s"
+    )
+    out = _inject_filter_into_where(q, "FILTER(?s > 1)")
+    assert out.count("FILTER(?s > 1)") == 1
+    assert out.index("FILTER") > out.index("un {titolo} strano")
+    assert out.index("FILTER") < out.rindex("}")
+
+
+def test_inject_filter_supports_query_without_where_keyword():
+    """La keyword WHERE è opzionale in SPARQL: la graffa iniziale è la WHERE."""
+    from toolkit.plugins.sparql import _inject_filter_into_where
+
+    out = _inject_filter_into_where("SELECT ?s { ?s ?p ?o }", "FILTER(?s > 1)")
+    assert "} FILTER" not in out
+    assert out.index("FILTER") < out.rindex("}")
+
+
+class TestKeysetFilterPlacement:
+    """Keyset: il FILTER è valido per Virtuoso (dentro la WHERE / placeholder)."""
+
+    CSV = "s,value\nfoo,1\nbar,2\n"
+
+    def _run(self, query, pagination, csv=CSV, step=2):
+        queries: list[str] = []
+
+        def side_effect(*a, **kw):
+            q = a[1].get("query", "") if len(a) > 1 and isinstance(a[1], dict) else ""
+            queries.append(q)
+            if len(queries) == 1:
+                return _http_ok(text=csv, headers={"Content-Type": "text/csv"})
+            return _http_ok(text="s,value\n", headers={"Content-Type": "text/csv"})
+
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            mock_cls.return_value.post.side_effect = side_effect
+            source = SparqlSource()
+            with patch("toolkit.plugins.sparql.time.sleep"):
+                source.fetch(
+                    "https://example.test/sparql",
+                    query,
+                    pagination=pagination,
+                    step=step,
+                )
+        return queries
+
+    def test_filter_inside_where(self):
+        queries = self._run(
+            "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 10",
+            {"mode": "keyset", "key": "?s"},
+        )
+        assert 'FILTER(?s > "bar")' in queries[1]
+        assert "} FILTER" not in queries[1]
+        assert queries[1].index("FILTER") < queries[1].rindex("}")
+
+    def test_placeholder_isolates_filter_in_subquery(self):
+        """Con {keyset} il filtro va nella sottoquery: evita il bug
+        ottimizzatore Virtuoso su FILTER + OPTIONAL nella stessa WHERE."""
+        query = (
+            "SELECT ?s ?label WHERE {\n"
+            "  { SELECT ?s WHERE { ?s ?p ?o {keyset} } ORDER BY ?s LIMIT 10 }\n"
+            "  OPTIONAL { ?s <http://www.w3.org/2000/01/rdf-schema#label> ?label }\n"
+            "}"
+        )
+        queries = self._run(query, {"mode": "keyset", "key": "?s"})
+        # pagina 1: placeholder rimosso
+        assert "{keyset}" not in queries[0]
+        # pagina 2: FILTER nella sottoquery, prima della sua graffa di chiusura
+        assert 'FILTER(?s > "bar")' in queries[1]
+        inner_close = queries[1].index("} ORDER BY")
+        assert queries[1].index("FILTER") < inner_close
+
+    def test_key_expr_and_string_literal(self):
+        """STR(?atto) → confronto con stringa quotata, non con IRI."""
+        csv = "atto,titolo\nhttp://dati.camera.it/ocd/aic.rdf/a19_1,uno\nhttp://dati.camera.it/ocd/aic.rdf/a19_2,due\n"
+        queries = self._run(
+            "SELECT ?atto WHERE { ?atto ?p ?o {keyset} } ORDER BY STR(?atto) LIMIT 10",
+            {
+                "mode": "keyset",
+                "key": "?atto",
+                "key_expr": "STR(?atto)",
+                "key_column": "atto",
+                "key_literal": "string",
+            },
+            csv=csv,
+        )
+        assert 'FILTER(STR(?atto) > "http://dati.camera.it/ocd/aic.rdf/a19_2")' in queries[1]
+        assert "FILTER(STR(?atto) > <" not in queries[1]
+
+
+class TestCurlFallback:
+    """Ultima spiaggia per WAF con TLS fingerprinting (es. dati.senato.it).
+
+    Le librerie Python vengono bloccate prima della risposta HTTP; curl passa.
+    Il fallback scatta solo dopo POST e GET falliti.
+    """
+
+    JSON_BODY = '{"head":{"vars":["x"]},"results":{"bindings":[{"x":{"value":"1"}}]}}'
+
+    def test_post_and_get_403_then_curl_succeeds(self):
+        with (
+            patch("toolkit.plugins.sparql.HttpClient") as mock_cls,
+            patch(
+                "toolkit.plugins.sparql._curl_sparql",
+                return_value=(200, self.JSON_BODY.encode(), "application/sparql-results+json"),
+            ) as mock_curl,
+        ):
+            mock_cls.return_value.post.return_value = _http_ok(status=403, text="Forbidden")
+            mock_cls.return_value.get.return_value = _http_ok(status=403, text="Forbidden")
+            source = SparqlSource()
+            payload, _ = source.fetch(
+                "https://dati.senato.it/sparql",
+                "SELECT ?x WHERE { }",
+                accept_format="sparql-results+json",
+            )
+        assert b"x" in payload and b"1" in payload
+        assert mock_curl.called
+
+    def test_html_200_then_curl_succeeds(self):
+        """WAF che risponde 200 con HTML: non va scambiato per un risultato."""
+        with (
+            patch("toolkit.plugins.sparql.HttpClient") as mock_cls,
+            patch(
+                "toolkit.plugins.sparql._curl_sparql",
+                return_value=(200, b"name,value\nfoo,1\n", "text/csv"),
+            ) as mock_curl,
+        ):
+            html = _http_ok(
+                status=200,
+                text="<!DOCTYPE html><html><body>blocked</body></html>",
+                headers={"Content-Type": "text/html"},
+            )
+            mock_cls.return_value.post.return_value = html
+            mock_cls.return_value.get.return_value = html
+            source = SparqlSource()
+            payload, _ = source.fetch("https://dati.senato.it/sparql", "SELECT ?s WHERE { }")
+        assert b"foo" in payload
+        assert mock_curl.called
+
+    def test_curl_unavailable_propagates_original_error(self):
+        with (
+            patch("toolkit.plugins.sparql.HttpClient") as mock_cls,
+            patch("toolkit.plugins.sparql._curl_sparql", return_value=None),
+        ):
+            mock_cls.return_value.post.return_value = _http_ok(status=403, text="Forbidden")
+            mock_cls.return_value.get.return_value = _http_ok(status=403, text="Forbidden")
+            source = SparqlSource()
+            source._page_retry_delay = 0
+            with pytest.raises(DownloadError, match="SPARQL request failed"):
+                source.fetch("https://dati.senato.it/sparql", "SELECT ?s WHERE { }")
+
+    def test_curl_disabled_skips_fallback(self):
+        with (
+            patch("toolkit.plugins.sparql.HttpClient") as mock_cls,
+            patch("toolkit.plugins.sparql._curl_sparql") as mock_curl,
+        ):
+            mock_cls.return_value.post.return_value = _http_ok(status=403, text="Forbidden")
+            mock_cls.return_value.get.return_value = _http_ok(status=403, text="Forbidden")
+            source = SparqlSource()
+            source._curl_fallback = False
+            source._page_retry_delay = 0
+            with pytest.raises(DownloadError, match="SPARQL request failed"):
+                source.fetch("https://dati.senato.it/sparql", "SELECT ?s WHERE { }")
+        assert not mock_curl.called

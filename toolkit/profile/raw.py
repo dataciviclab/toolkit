@@ -235,20 +235,20 @@ def build_suggested_read_cfg(
         "sample_size",
         "dateformat",
     ):
-        if key in source_cfg:
+        if source_cfg.get(key) is not None:
             cfg[key] = source_cfg[key]
 
-    if "delim" not in cfg and data.get("delim_suggested") is not None:
+    if cfg.get("delim") is None and data.get("delim_suggested") is not None:
         cfg["delim"] = data["delim_suggested"]
-    if "decimal" not in cfg and data.get("decimal_suggested") is not None:
+    if cfg.get("decimal") is None and data.get("decimal_suggested") is not None:
         cfg["decimal"] = data["decimal_suggested"]
-    if "encoding" not in cfg and data.get("encoding_suggested") is not None:
+    if cfg.get("encoding") is None and data.get("encoding_suggested") is not None:
         cfg["encoding"] = data["encoding_suggested"]
-    if "skip" not in cfg and int(data.get("skip_suggested") or 0) > 0:
+    if cfg.get("skip") is None and int(data.get("skip_suggested") or 0) > 0:
         cfg["skip"] = int(data["skip_suggested"])
 
     # Propaga dateformat se non gia' in source_cfg
-    if "dateformat" not in cfg and data.get("date_raw_values"):
+    if cfg.get("dateformat") is None and data.get("date_raw_values"):
         fmt = suggest_dateformat(data)
         if fmt:
             cfg["dateformat"] = fmt
@@ -284,13 +284,17 @@ def _effective_profile_read_cfg(
 ) -> dict[str, Any]:
     effective_read_cfg = dict(read_cfg) if isinstance(read_cfg, dict) else {}
     effective_read_cfg.pop("source", None)
-    if "delim" not in effective_read_cfg and "sep" not in effective_read_cfg and delim:
+    # `None` significa "non impostato": la config tipizzata emette tutte le
+    # chiavi, quindi il controllo deve essere sul valore, non sulla presenza.
+    if effective_read_cfg.get("delim") is None and effective_read_cfg.get("sep") is None and delim:
         effective_read_cfg["delim"] = delim
-    if "encoding" not in effective_read_cfg and encoding:
+    elif effective_read_cfg.get("delim") is None and effective_read_cfg.get("sep"):
+        effective_read_cfg["delim"] = effective_read_cfg["sep"]
+    if effective_read_cfg.get("encoding") is None and encoding:
         effective_read_cfg["encoding"] = encoding
-    if "decimal" not in effective_read_cfg and decimal:
+    if effective_read_cfg.get("decimal") is None and decimal:
         effective_read_cfg["decimal"] = decimal
-    if "skip" not in effective_read_cfg and skip:
+    if effective_read_cfg.get("skip") is None and skip:
         effective_read_cfg["skip"] = skip
     effective_read_cfg.setdefault("header", True)
     return effective_read_cfg
@@ -500,9 +504,12 @@ def profile_with_read_cfg(
             # rows than in the header row (IRPEF comunale pattern:
             # header=50 cols, data rows=52 cols).
             if true_header_line is not None:
-                true_header_tokens = (
-                    true_header_line.count(effective_read_cfg.get("delim") or ";") + 1
+                # Usa lo stesso separatore effettivo di csv_read_option_strings:
+                # `sep` vince su `delim`, e un delim None non deve cadere su ";" .
+                sep_effective = (
+                    effective_read_cfg.get("sep") or effective_read_cfg.get("delim") or ";"
                 )
+                true_header_tokens = true_header_line.count(sep_effective) + 1
                 if len(columns_raw) > true_header_tokens:
                     warnings.append(
                         f"header_data_cols_mismatch: header has {true_header_tokens} tokens, "

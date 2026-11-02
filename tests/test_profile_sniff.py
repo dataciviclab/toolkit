@@ -219,6 +219,34 @@ def test_profile_raw_mismatch_header_data_cols_triggers_null_padding(tmp_path: P
 
 
 @pytest.mark.policy
+def test_profile_raw_none_delim_does_not_trigger_false_mismatch(tmp_path: Path):
+    """`delim: None` (config tipizzata) non deve essere letto come ';'.
+
+    Regressione camera_sindisp: `clean.read` arriva con `delim=None` perché la
+    dataclass emette tutte le chiavi. Il check header/data contava i token con
+    ';' → falso mismatch → retry con null_padding → colonne esplose (887).
+    """
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "test.csv").write_text(
+        "atto,titolo,descrizione\n"
+        'a1,"Titolo, con virgola","testo lungo, con virgola\ne newline"\n'
+        'a2,"Altro","secondo"\n',
+        encoding="utf-8",
+    )
+
+    profile = profile_raw(
+        raw_dir,
+        "demo",
+        2024,
+        read_cfg={"delim": None, "encoding": "utf-8", "header": True},
+    )
+
+    assert [w for w in profile.warnings if "mismatch" in w] == []
+    assert profile.columns_raw == ["atto", "titolo", "descrizione"]
+
+
+@pytest.mark.policy
 def test_sniff_source_file_returns_all_keys(tmp_path: Path):
     """sniff_source_file must return the full set of keys used by consumers."""
     csv_path = tmp_path / "data.csv"

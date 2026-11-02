@@ -16,10 +16,23 @@ import urllib.parse
 from typing import Any
 
 from lab_connectors.http import HttpClient
+from lab_connectors.http.sparql import curl_sparql as _curl_sparql
 
 from toolkit.core.exceptions import DownloadError
 
 log = logging.getLogger(__name__)
+
+# Placeholder sostituito dal FILTER di keyset. Serve per le query in cui il
+# filtro deve stare in una sottoquery dedicata: su Virtuoso un FILTER nella
+# stessa WHERE di un OPTIONAL può essere ignorato dall'ottimizzatore.
+_KEYSET_PLACEHOLDER = "{keyset}"
+
+# IRI SPARQL (`<http://...>`): evita di confondere le graffe dentro un IRI
+# con quelle di un group graph pattern.
+_RE_IRI = re.compile(r"<[A-Za-z][A-Za-z0-9+.\-]*:[^<>{}()\s]*>")
+
+# Keyword WHERE isolata (non `?whereVar`).
+_RE_WORD_WHERE = re.compile(r"\bWHERE\b", re.IGNORECASE)
 
 
 class SparqlSource:
@@ -38,11 +51,14 @@ class SparqlSource:
         # 200 vuoti, che non vanno confusi con la fine reale della paginazione.
         self._page_retries = 3
         self._page_retry_delay = 5.0
+        # Ultima spiaggia per WAF che bloccano il TLS fingerprint delle
+        # librerie Python (es. dati.senato.it): curl passa.
+        self._curl_fallback = True
 
     def _do_fetch(self, endpoint: str, q: str, accept_format: str) -> bytes:
         """Esegue una singola query SPARQL, restituisce CSV bytes.
 
-        Tenta POST → GET fallback.
+        Tenta POST → GET fallback → curl (WAF con TLS fingerprinting).
         Supporta CSV diretto e SPARQL Results JSON (convertito a CSV).
         """
         is_json = accept_format == "sparql-results+json"
@@ -51,6 +67,10 @@ class SparqlSource:
                 "application/sparql-results+json" if is_json else "text/csv,text/plain;q=0.5"
             ),
         }
+        broad_accept = (
+            "application/sparql-results+xml,"
+            "application/sparql-results+json,application/json,text/csv"
+        )
         post_data = {"query": q}
 
         # --- Tentativo 1: POST ---
@@ -70,17 +90,18 @@ class SparqlSource:
             result.response.status_code if result.is_ok and result.response is not None else None
         )
         if post_status is not None and post_status < 400:
-            return self._parse_response(result.response, is_json)
+            try:
+                return self._parse_response(result.response, is_json)
+            except DownloadError:
+                # 200 con corpo HTML = pagina WAF, non un risultato SPARQL
+                if not _is_html_response(result.response):
+                    raise
+                log.warning("SPARQL POST 200 ma corpo HTML su %s — probabile WAF", endpoint)
 
         # --- Tentativo 2: GET fallback (4xx o errore di rete/timeout) ---
         if post_status is None or 400 <= post_status < 500:
             url = f"{endpoint}?query={urllib.parse.quote(q)}"
-            get_headers = {
-                "Accept": (
-                    "application/sparql-results+xml,"
-                    "application/sparql-results+json,application/json,text/csv"
-                ),
-            }
+            get_headers = {"Accept": broad_accept}
             result = self._client.get(url, headers=get_headers)
             get_status = (
                 result.response.status_code
@@ -88,7 +109,12 @@ class SparqlSource:
                 else None
             )
             if get_status is not None and get_status < 400:
-                return self._parse_response(result.response, is_json)
+                try:
+                    return self._parse_response(result.response, is_json)
+                except DownloadError:
+                    if not _is_html_response(result.response):
+                        raise
+                    log.warning("SPARQL GET 200 ma corpo HTML su %s — probabile WAF", endpoint)
             if get_status is not None and get_status >= 500:
                 body = (result.response.text or "")[:200] if result.response is not None else ""
                 raise DownloadError(
@@ -101,48 +127,65 @@ class SparqlSource:
                 f"SPARQL endpoint returned HTTP {post_status} for {endpoint}: {body}"
             )
 
+        # --- Tentativo 3: curl (WAF con TLS fingerprinting: es. dati.senato.it) ---
+        # Le librerie Python vengono bloccate prima della risposta HTTP; curl
+        # passa. Usato solo come ultima spiaggia dopo POST e GET.
+        if self._curl_fallback:
+            timeout = _timeout_seconds(self._client)
+            for method in ("POST", "GET"):
+                out = _curl_sparql(endpoint, q, broad_accept, timeout, method=method)
+                if out is None:
+                    continue
+                status, payload, content_type = out
+                if status == 200:
+                    log.info("SPARQL curl fallback (%s) OK su %s", method, endpoint)
+                    return self._parse_body(payload, content_type, is_json)
+                log.debug("SPARQL curl %s → HTTP %s su %s", method, status, endpoint)
+
         raise DownloadError(
             f"SPARQL request failed for {endpoint}: POST → {result.err or 'unknown'}"
         )
 
     def _parse_response(self, r: Any, prefer_json: bool) -> bytes:
         """Parsa la risposta HTTP in CSV bytes."""
-        content_type = (r.headers.get("Content-Type") or "").lower()
-
         if r.status_code != 200:
             raise DownloadError(
                 f"SPARQL endpoint returned HTTP {r.status_code} for {r.url}: {r.text[:200]}"
             )
+        return self._parse_body(r.content, r.headers.get("Content-Type") or "", prefer_json)
+
+    def _parse_body(self, body: bytes, content_type: str, prefer_json: bool) -> bytes:
+        """Parsa un corpo SPARQL (bytes + content-type) in CSV bytes."""
+        ctype = (content_type or "").lower()
+        text = body.decode("utf-8", errors="replace")
 
         # CSV diretto
-        if "text/csv" in content_type:
-            return r.content
+        if "text/csv" in ctype:
+            return body
 
         # XML SPARQL Results — parse via lab-connectors (content-type prima di prefer_json)
-        if "sparql-results+xml" in content_type:
+        if "sparql-results+xml" in ctype:
             from lab_connectors.http.sparql import _parse_sparql_xml
 
-            bindings = _parse_sparql_xml(r.text)
-            return _bindings_to_csv(bindings)
+            return _bindings_to_csv(_parse_sparql_xml(text))
 
         # SPARQL Results JSON (standard o fallback)
-        if prefer_json or "sparql-results+json" in content_type or "json" in content_type:
-            return _sparql_json_to_csv(r.text)
+        if prefer_json or "sparql-results+json" in ctype or "json" in ctype:
+            return _sparql_json_to_csv(text)
 
         # text/plain: potrebbe essere CSV o JSON con Content-Type sbagliato
-        if "text/plain" in content_type:
-            stripped = r.text.strip()
-            if stripped.startswith("{"):
+        if "text/plain" in ctype:
+            if text.strip().startswith("{"):
                 try:
-                    return _sparql_json_to_csv(r.text)
+                    return _sparql_json_to_csv(text)
                 except (DownloadError, json.JSONDecodeError):
                     pass
             else:
                 # Assume CSV — se non è CSV, fallirà in CLEAN con errore chiaro
-                return r.content
+                return body
 
         raise DownloadError(
-            f"Unsupported Content-Type '{content_type}' for SPARQL fetch. "
+            f"Unsupported Content-Type '{ctype}' for SPARQL fetch. "
             "Expected 'text/csv' or 'application/sparql-results+json'."
         )
 
@@ -168,10 +211,30 @@ class SparqlSource:
           errore SR353 quando ORDER BY + OFFSET supera 10k righe).
         - ``{"mode": "keyset", "key": "?var"}``: paginazione keyset. La query
           DEVE avere gia' ``ORDER BY ?var``. Le pagine successive iniettano
-          ``FILTER(?var > <ultimo_valore>)`` al posto di OFFSET — deterministico
+          ``FILTER(?var > <ultimo_valore>)`` dentro la WHERE — deterministico
           e compatibile con i limiti Virtuoso. ``pages`` funge da tetto di
           sicurezza (se > 1); la chiave funziona al meglio se URI, ma il
           FILTER genera il letterale corretto anche per numeri e stringhe.
+
+          Opzioni aggiuntive del blocco keyset:
+          - ``key_expr``: espressione usata nel FILTER/ORDER BY quando il
+            binding non è la variabile diretta (es. ``"STR(?atto)"``).
+            Default: ``key``.
+          - ``key_column``: colonna CSV da cui leggere l'ultimo valore.
+            Default: ``key`` senza ``?``.
+          - ``key_literal``: ``auto`` (default), ``uri``, ``string`` o
+            ``number``. Serve quando ``key_expr`` è ``STR(?var)``: il valore
+            va citato come stringa, non come IRI.
+
+          Se la query contiene il placeholder ``{keyset}``, il FILTER viene
+          sostituito lì (pagina 1: stringa vuota). È il modo per isolare il
+          filtro in una sottoquery: su Virtuoso un FILTER nella stessa WHERE
+          di un OPTIONAL può essere ignorato dall'ottimizzatore. Senza
+          placeholder il FILTER viene inserito nella WHERE principale.
+
+          ``step`` deve coincidere con il ``LIMIT`` effettivo della query (o
+          essere più grande): altrimenti la fine dati viene rilevata solo da
+          pagina vuota e il tetto ``pages`` può troncare il risultato.
 
         Args:
             endpoint: SPARQL endpoint URL.
@@ -199,14 +262,28 @@ class SparqlSource:
 
         pagination_mode = (pagination or {}).get("mode", "offset")
         keyset_key = (pagination or {}).get("key")
+        keyset_expr = (pagination or {}).get("key_expr") or keyset_key
+        keyset_column = (pagination or {}).get("key_column")
+        keyset_literal = (pagination or {}).get("key_literal", "auto")
         if pagination_mode == "keyset" and not keyset_key:
             raise DownloadError(
                 'pagination mode=keyset requires \'key\' (es. {"mode": "keyset", "key": "?deputato"})'
             )
         assert keyset_key is None or isinstance(keyset_key, str)
+        if keyset_literal not in {"auto", "uri", "string", "number"}:
+            raise DownloadError(
+                f"Unsupported key_literal '{keyset_literal}'. "
+                "Supported values: auto, uri, string, number."
+            )
+
+        # La prima pagina usa la query senza placeholder; le successive
+        # ripartono dal template per sostituire {keyset} con il FILTER.
+        keyset_template = query
 
         # Se e' richiesta paginazione, assicura che la query abbia LIMIT
         if pages > 1 or pagination_mode == "keyset":
+            if _KEYSET_PLACEHOLDER in query:
+                query = query.replace(_KEYSET_PLACEHOLDER, "")
             if "limit" not in query.lower():
                 query = f"{query.rstrip().rstrip(';')} LIMIT {step}"
 
@@ -236,12 +313,15 @@ class SparqlSource:
             assert keyset_key is not None and isinstance(keyset_key, str)
             all_bytes = self._fetch_keyset_pages(
                 endpoint,
-                query,
+                keyset_template,
                 accept_format,
                 keyset_key,
                 step,
                 all_bytes,
                 max_pages=pages,
+                key_expr=keyset_expr,
+                key_column=keyset_column,
+                key_literal=keyset_literal,
             )
             return all_bytes, endpoint
 
@@ -335,6 +415,9 @@ class SparqlSource:
         step: int,
         all_bytes: bytes,
         max_pages: int = 1,
+        key_expr: str | None = None,
+        key_column: str | None = None,
+        key_literal: str = "auto",
     ) -> bytes:
         """Paginazione keyset: inietta FILTER(?key > <last>) nelle pagine successive.
 
@@ -345,13 +428,16 @@ class SparqlSource:
         (default, nessun limite esplicito) si usa un cap alto per evitare loop
         infiniti se la chiave non è monotona o l'endpoint degrada il FILTER.
 
-        La chiave funziona al meglio con URI; per altri tipi il FILTER genera
-        il letterale corretto (numero, stringa, URI).
+        Il FILTER va dentro la WHERE (o al posto di ``{keyset}``): appenderlo
+        dopo la graffa di chiusura produce una query che Virtuoso rifiuta.
         """
         if not key.startswith("?"):
             key = f"?{key}"
+        expr = key_expr or key
+        column = key_column or key.lstrip("?")
         # normalizza: niente ';' finale per poter concatenare la clausola
         base_query = query.rstrip().rstrip(";")
+        has_placeholder = _KEYSET_PLACEHOLDER in base_query
         page_n = 0
         safety_max = max_pages if max_pages > 1 else 1000
 
@@ -362,19 +448,14 @@ class SparqlSource:
                     "SPARQL keyset pagination exceeded max pages "
                     f"({safety_max}) — key non monotona o FILTER degradato?"
                 )
-            last_value = _csv_last_value(all_bytes, key.lstrip("?"))
+            last_value = _csv_last_value(all_bytes, column)
             if last_value is None:
                 break
-            # Inietta il FILTER prima del ORDER BY / LIMIT (se presenti)
-            q = base_query
-            filter_clause = f"FILTER({key} > {_keyset_literal(last_value)})"
-            for kw in ("ORDER BY", "LIMIT", "OFFSET"):
-                idx = q.upper().rfind(kw)
-                if idx != -1:
-                    q = q[:idx] + filter_clause + " " + q[idx:]
-                    break
+            filter_clause = f"FILTER({expr} > {_keyset_literal(last_value, key_literal)})"
+            if has_placeholder:
+                q = base_query.replace(_KEYSET_PLACEHOLDER, filter_clause)
             else:
-                q = q + " " + filter_clause
+                q = _inject_filter_into_where(base_query, filter_clause)
 
             page_bytes = self._fetch_page_resilient(endpoint, q, accept_format)
 
@@ -489,6 +570,149 @@ class SparqlSource:
         }
 
 
+def _timeout_seconds(client: Any) -> int:
+    """Timeout numerico dall'HttpClient (che può usare una tupla)."""
+    t = getattr(client, "timeout", 60)
+    return int(t[0] if isinstance(t, tuple) else t)
+
+
+def _is_html_response(resp: Any) -> bool:
+    """True se la risposta è una pagina HTML (tipica dei WAF), non SPARQL."""
+    ctype = (resp.headers.get("Content-Type") or "").lower()
+    if "html" in ctype:
+        return True
+    body = (resp.text or "").lstrip()[:200].lower()
+    return body.startswith("<!doctype html") or body.startswith("<html")
+
+
+def _skip_quoted(query: str, i: int) -> int:
+    """Salta una stringa SPARQL (singola, doppia, o triple-quoted).
+
+    ``i`` punta al primo carattere di quote; ritorna l'indice dopo la chiusura.
+    Gestisce gli escape con backslash. Se la stringa non è chiusa, ritorna la
+    fine della query.
+    """
+    quote = query[i]
+    delim = quote * 3 if query.startswith(quote * 3, i) else quote
+    i += len(delim)
+    n = len(query)
+    while i < n:
+        if query[i] == "\\":
+            i += 2
+            continue
+        if query.startswith(delim, i):
+            return i + len(delim)
+        i += 1
+    return n
+
+
+def _find_main_where_open(query: str) -> int | None:
+    """Indice della ``{`` che apre la WHERE principale, o None.
+
+    Scansiona ignorando stringhe, IRI e commenti. Le WHERE annidate
+    (sottoquery) sono escluse: interessa solo il group graph pattern esterno.
+    Se la query omette la keyword ``WHERE`` (forma abbreviata SPARQL valida),
+    usa la prima graffa di primo livello.
+    """
+    i = 0
+    n = len(query)
+    depth = 0
+    first_open: int | None = None
+    while i < n:
+        ch = query[i]
+        if ch in "\"'":
+            i = _skip_quoted(query, i)
+            continue
+        if ch == "<":
+            m = _RE_IRI.match(query, i)
+            if m:
+                i = m.end()
+                continue
+        if ch == "#":
+            nl = query.find("\n", i)
+            i = n if nl < 0 else nl + 1
+            continue
+        if ch == "{":
+            if depth == 0 and first_open is None:
+                first_open = i
+            depth += 1
+            i += 1
+            continue
+        if ch == "}":
+            depth -= 1
+            i += 1
+            continue
+        if depth == 0:
+            m = _RE_WORD_WHERE.match(query, i)
+            if m:
+                j = m.end()
+                while j < n:
+                    c = query[j]
+                    if c in " \t\r\n":
+                        j += 1
+                        continue
+                    if c == "#":
+                        nl = query.find("\n", j)
+                        j = n if nl < 0 else nl + 1
+                        continue
+                    break
+                if j < n and query[j] == "{":
+                    return j
+                i = m.end()
+                continue
+        i += 1
+    return first_open
+
+
+def _match_brace(query: str, open_idx: int) -> int | None:
+    """Indice della ``}`` che chiude la graffa aperta in ``open_idx``."""
+    depth = 0
+    i = open_idx
+    n = len(query)
+    while i < n:
+        ch = query[i]
+        if ch in "\"'":
+            i = _skip_quoted(query, i)
+            continue
+        if ch == "<":
+            m = _RE_IRI.match(query, i)
+            if m:
+                i = m.end()
+                continue
+        if ch == "#":
+            nl = query.find("\n", i)
+            i = n if nl < 0 else nl + 1
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
+
+
+def _inject_filter_into_where(query: str, filter_clause: str) -> str:
+    """Inserisce ``filter_clause`` dentro la WHERE principale.
+
+    ``FILTER`` deve stare dentro un group graph pattern: appenderlo dopo la
+    ``}`` di chiusura (es. prima di ``ORDER BY``) produce una query non valida
+    che Virtuoso rifiuta. È la causa per cui i dataset keyset finivano in
+    script dedicati.
+    """
+    open_idx = _find_main_where_open(query)
+    if open_idx is None:
+        raise DownloadError(
+            "keyset pagination: query senza WHERE. Usa una SELECT con WHERE "
+            f"oppure il placeholder {_KEYSET_PLACEHOLDER}."
+        )
+    close_idx = _match_brace(query, open_idx)
+    if close_idx is None:
+        raise DownloadError("keyset pagination: parentesi graffe non bilanciate nella query")
+    return f"{query[:close_idx]}\n  {filter_clause}\n{query[close_idx:]}"
+
+
 def _sparql_json_to_csv(json_text: str) -> bytes:
     """Convert SPARQL Results JSON to CSV bytes.
 
@@ -581,17 +805,35 @@ def _csv_last_value(csv_bytes: bytes, key_col: str) -> str | None:
     return last
 
 
-def _keyset_literal(value: str) -> str:
+def _keyset_literal(value: str, mode: str = "auto") -> str:
     """Rappresenta un valore come letterale SPARQL per il FILTER keyset.
 
-    - URI (http/https) → <uri>
-    - numero (intero o decimale) → valore nudo
-    - altrimenti (stringa) → "stringa" con escape delle virgolette
+    ``mode``:
+    - ``auto`` (default): URI (http/https) → ``<uri>``, numero → nudo,
+      altrimenti stringa quotata.
+    - ``uri``: sempre ``<uri>``.
+    - ``number``: sempre nudo (errore se non numerico).
+    - ``string``: sempre quotato — necessario quando il FILTER usa
+      ``STR(?var)``: il valore è una stringa, non un IRI.
     """
     v = value.strip()
+    if mode == "uri":
+        return f"<{v}>"
+    if mode == "number":
+        if not re.fullmatch(r"-?\d+(\.\d+)?", v):
+            raise DownloadError(
+                f"keyset key_literal='number' ma l'ultimo valore non è numerico: {v!r}"
+            )
+        return v
+    if mode == "string":
+        return _quote_literal(v)
     if v.startswith(("http://", "https://")):
         return f"<{v}>"
     if re.fullmatch(r"-?\d+(\.\d+)?", v):
         return v
-    escaped = v.replace("\\", "\\\\").replace('"', '\\"')
+    return _quote_literal(v)
+
+
+def _quote_literal(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'

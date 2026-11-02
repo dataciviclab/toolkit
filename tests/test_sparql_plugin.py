@@ -1056,3 +1056,51 @@ class TestCurlFallback:
             with pytest.raises(DownloadError, match="SPARQL request failed"):
                 source.fetch("https://dati.senato.it/sparql", "SELECT ?s WHERE { }")
         assert not mock_curl.called
+
+
+class TestWafResponseHandling:
+    """Risposte 200 non valide (HTML/WAF o vuote): diagnosi e trasporto alternativo."""
+
+    def test_user_agent_browser_like(self):
+        """HttpClient usa lo UA con cui gli script funzionavano (i WAF bloccano gli UA libreria)."""
+        with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+            SparqlSource(timeout=30)
+        mock_cls.assert_called_once_with(timeout=30, user_agent="Mozilla/5.0 DataCivicLab/1.0")
+
+    def test_html_body_not_forced_into_json_parser(self):
+        """HTML + prefer_json non deve produrre 'Invalid SPARQL JSON'."""
+        source = SparqlSource()
+        with pytest.raises(DownloadError, match="returned HTML"):
+            source._parse_body(b"<html><body>blocked</body></html>", "text/html", True)
+
+    def test_empty_body_is_explicit(self):
+        source = SparqlSource()
+        with pytest.raises(DownloadError, match="empty body"):
+            source._parse_body(b"   \n", "application/sparql-results+json", True)
+
+    def test_curl_post_invalid_then_get_succeeds(self):
+        """Se il curl POST torna 200 con HTML, prova il GET prima di fallire."""
+        json_body = b'{"head":{"vars":["x"]},"results":{"bindings":[{"x":{"value":"1"}}]}}'
+        calls: list[str] = []
+
+        def fake_curl(endpoint, query, accept, timeout, method="POST"):
+            calls.append(method)
+            if method == "POST":
+                return (200, b"<html>blocked</html>", "text/html")
+            return (200, json_body, "application/sparql-results+json")
+
+        with (
+            patch("toolkit.plugins.sparql.HttpClient") as mock_cls,
+            patch("toolkit.plugins.sparql._curl_sparql", side_effect=fake_curl),
+        ):
+            mock_cls.return_value.post.return_value = _http_ok(status=403, text="Forbidden")
+            mock_cls.return_value.get.return_value = _http_ok(status=403, text="Forbidden")
+            source = SparqlSource()
+            source._page_retry_delay = 0
+            payload, _ = source.fetch(
+                "https://dati.camera.it/sparql",
+                "SELECT ?x WHERE { }",
+                accept_format="sparql-results+json",
+            )
+        assert b"x,1" in payload or (b"x" in payload and b"1" in payload)
+        assert calls == ["POST", "GET"]

@@ -22,6 +22,11 @@ from toolkit.core.exceptions import DownloadError
 
 log = logging.getLogger(__name__)
 
+# User-Agent usato dal plugin: gli endpoint con WAF (es. dati.camera.it)
+# bloccano gli UA "da libreria" (`DataCivicLab-HttpClient/0.1`). È lo stesso
+# UA con cui gli script di estrazione funzionavano da anni.
+_SPARQL_USER_AGENT = "Mozilla/5.0 DataCivicLab/1.0"
+
 # Placeholder sostituito dal FILTER di keyset. Serve per le query in cui il
 # filtro deve stare in una sottoquery dedicata: su Virtuoso un FILTER nella
 # stessa WHERE di un OPTIONAL può essere ignorato dall'ottimizzatore.
@@ -43,7 +48,7 @@ class SparqlSource:
     """
 
     def __init__(self, timeout: int = 60):
-        self._client = HttpClient(timeout=timeout)
+        self._client = HttpClient(timeout=timeout, user_agent=_SPARQL_USER_AGENT)
         # Retry dedicati per le pagine successive (la prima ha retries in _do_fetch).
         # Un errore su una pagina NON è "fine dati": va ritentato e, se persiste,
         # propagato per far fallire il run invece di troncare silenziosamente.
@@ -132,15 +137,30 @@ class SparqlSource:
         # passa. Usato solo come ultima spiaggia dopo POST e GET.
         if self._curl_fallback:
             timeout = _timeout_seconds(self._client)
+            last_body_error: DownloadError | None = None
             for method in ("POST", "GET"):
                 out = _curl_sparql(endpoint, q, broad_accept, timeout, method=method)
                 if out is None:
                     continue
                 status, payload, content_type = out
-                if status == 200:
-                    log.info("SPARQL curl fallback (%s) OK su %s", method, endpoint)
-                    return self._parse_body(payload, content_type, is_json)
-                log.debug("SPARQL curl %s → HTTP %s su %s", method, status, endpoint)
+                if status != 200:
+                    log.debug("SPARQL curl %s → HTTP %s su %s", method, status, endpoint)
+                    continue
+                try:
+                    result_bytes = self._parse_body(payload, content_type, is_json)
+                except DownloadError as exc:
+                    # 200 con corpo non valido (HTML/WAF o vuoto): prova l'altro
+                    # trasporto invece di arrendersi al primo tentativo.
+                    last_body_error = exc
+                    log.warning(
+                        "SPARQL curl %s: corpo non valido su %s — %s", method, endpoint, exc
+                    )
+                    continue
+                log.info("SPARQL curl fallback (%s) OK su %s", method, endpoint)
+                return result_bytes
+
+            if last_body_error is not None:
+                raise last_body_error
 
         raise DownloadError(
             f"SPARQL request failed for {endpoint}: POST → {result.err or 'unknown'}"
@@ -155,9 +175,19 @@ class SparqlSource:
         return self._parse_body(r.content, r.headers.get("Content-Type") or "", prefer_json)
 
     def _parse_body(self, body: bytes, content_type: str, prefer_json: bool) -> bytes:
-        """Parsa un corpo SPARQL (bytes + content-type) in CSV bytes."""
+        """Parsa un corpo SPARQL (bytes + content-type) in CSV bytes.
+
+        Un body vuoto o HTML non è un risultato SPARQL: viene segnalato con un
+        errore esplicito (con preview) invece di essere interpretato come JSON.
+        """
         ctype = (content_type or "").lower()
         text = body.decode("utf-8", errors="replace")
+
+        if not text.strip():
+            raise DownloadError(
+                "SPARQL endpoint returned an empty body (HTTP 200) — "
+                "probabile throttle/WAF, non un risultato valido"
+            )
 
         # CSV diretto
         if "text/csv" in ctype:
@@ -169,20 +199,23 @@ class SparqlSource:
 
             return _bindings_to_csv(_parse_sparql_xml(text))
 
-        # SPARQL Results JSON (standard o fallback)
-        if prefer_json or "sparql-results+json" in ctype or "json" in ctype:
+        # Pagina HTML (WAF/challenge o errore Virtuoso): non è JSON, non va
+        # forzata nel parser solo perché la query chiedeva JSON.
+        if "html" in ctype:
+            raise DownloadError(
+                f"SPARQL endpoint returned HTML instead of results (probabile WAF): {text[:200]!r}"
+            )
+
+        # SPARQL Results JSON (content-type esplicito)
+        if "sparql-results+json" in ctype or "json" in ctype:
             return _sparql_json_to_csv(text)
 
-        # text/plain: potrebbe essere CSV o JSON con Content-Type sbagliato
-        if "text/plain" in ctype:
-            if text.strip().startswith("{"):
-                try:
-                    return _sparql_json_to_csv(text)
-                except (DownloadError, json.JSONDecodeError):
-                    pass
-            else:
-                # Assume CSV — se non è CSV, fallirà in CLEAN con errore chiaro
-                return body
+        # Content-Type ambiguo (assente o text/plain): qui `prefer_json` decide.
+        if not ctype or "text/plain" in ctype:
+            if prefer_json or text.lstrip().startswith("{"):
+                return _sparql_json_to_csv(text)
+            # Assume CSV — se non è CSV, fallirà in CLEAN con errore chiaro
+            return body
 
         raise DownloadError(
             f"Unsupported Content-Type '{ctype}' for SPARQL fetch. "
@@ -370,7 +403,9 @@ class SparqlSource:
             except DownloadError as exc:
                 last_error = exc
                 if attempt < self._page_retries - 1:
-                    time.sleep(self._page_retry_delay)
+                    # Backoff esponenziale: un WAF che serve HTML/vuoto dopo un
+                    # burst ha bisogno di respiro, non di un retry immediato.
+                    time.sleep(self._page_retry_delay * (2**attempt))
         raise last_error  # type: ignore[misc]
 
     def _fetch_page_resilient(

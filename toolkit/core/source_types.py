@@ -91,6 +91,7 @@ def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, 
         return src.fetch_all(
             formatted_args["portal_url"],
             str(formatted_args["dataset_id"]),
+            prefer_datastore=bool(prefer_datastore),
             sample_bytes=sample_bytes,
         )
     return src.fetch(
@@ -313,6 +314,7 @@ SOURCE_TYPES: dict[str, SourceTypeSpec] = {
                 "package_id": "ID del dataset CKAN",
                 "resource_id": "ID specifico della risorsa (opzionale)",
                 "filename": "nome locale (opzionale)",
+                "prefer_datastore": "Usa il DataStore CKAN se attivo (default true). Imposta false per forzare il CSV diretto.",
             },
             module="toolkit.plugins.ckan",
             class_name="CkanSource",

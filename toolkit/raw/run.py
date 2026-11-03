@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from toolkit.core.config import ensure_dict, parse_bool
+from toolkit.core.exceptions import EmptyResultError
 from toolkit.core.metadata import (
     config_hash_for_year,
     merge_layer_manifest,
@@ -129,7 +130,16 @@ def run_raw(
         formatted_args = _format_args(args, year, extra={"since": since_clause})
         if sample_bytes is not None:
             formatted_args["sample_bytes"] = sample_bytes
-        payload, origin = _fetch_payload(stype, client, formatted_args, base_dir=base_dir)
+        try:
+            payload, origin = _fetch_payload(stype, client, formatted_args, base_dir=base_dir)
+        except EmptyResultError:
+            # "Niente di nuovo" è uno stato legittimo per un delta, non un
+            # errore: con una baseline esistente il run è un no-op.
+            if baseline_path is None or not since_clause:
+                raise
+            payload = b""
+            origin = str(formatted_args.get("endpoint") or "")
+            logger.info("RAW incrementale -> nessun dato nuovo (delta vuoto)")
 
         if baseline_path is not None and since_clause:
             payload = append_delta(baseline_path, payload)

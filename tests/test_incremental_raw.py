@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from toolkit.core.config import RawSourceConfig
-from toolkit.core.exceptions import DownloadError
+from toolkit.core.exceptions import DownloadError, EmptyResultError
 from toolkit.core.literals import render_sparql_literal
 from toolkit.raw._fetch_utils import _format_args
 from toolkit.raw.incremental import (
@@ -182,3 +182,79 @@ def test_render_sparql_literal_modes():
     assert render_sparql_literal("2026-01-01", "string") == '"2026-01-01"'
     assert render_sparql_literal("42", "number") == "42"
     assert render_sparql_literal("2026-01-01") == '"2026-01-01"'
+
+
+# ── run_raw: integrazione incrementale ──────────────────────────────────
+# "Niente di nuovo" (delta vuoto) deve essere un no-op, non un errore: è lo
+# stato più comune di un run incrementale.
+
+
+def _raw_cfg(*, incremental: bool = True) -> dict:
+    src: dict = {
+        "name": "votazioni",
+        "type": "sparql",
+        "primary": True,
+        "args": {"endpoint": "https://x", "query": "SELECT ?v ?data WHERE { {since} }"},
+    }
+    if incremental:
+        src["incremental"] = {
+            "key_expr": "STR(?data)",
+            "key_column": "data",
+            "key_literal": "string",
+        }
+    return {"output_policy": "overwrite", "sources": [src]}
+
+
+def _baseline(tmp_path: Path) -> Path:
+    d = tmp_path / "data" / "raw" / "ds" / "2026"
+    d.mkdir(parents=True)
+    p = d / "votazioni.csv"
+    p.write_text("votazione,data\nA,20260101\nB,20260102\n", encoding="utf-8")
+    return p
+
+
+def test_run_raw_incremental_empty_delta_is_noop(tmp_path: Path, monkeypatch):
+    import logging
+
+    from toolkit.raw import run as raw_run
+
+    baseline = _baseline(tmp_path)
+
+    def _boom(*a, **k):
+        raise EmptyResultError("SPARQL query returned no results")
+
+    monkeypatch.setattr(raw_run, "_fetch_payload", _boom)
+    raw_run.run_raw("ds", 2026, str(tmp_path), _raw_cfg(), logging.getLogger("t"))
+    assert baseline.read_text(encoding="utf-8") == "votazione,data\nA,20260101\nB,20260102\n"
+
+
+def test_run_raw_incremental_empty_delta_without_baseline_raises(tmp_path: Path, monkeypatch):
+    """Senza baseline il delta vuoto NON è un no-op: full vuoto = errore reale."""
+    import logging
+
+    from toolkit.raw import run as raw_run
+
+    def _boom(*a, **k):
+        raise EmptyResultError("SPARQL query returned no results")
+
+    monkeypatch.setattr(raw_run, "_fetch_payload", _boom)
+    with pytest.raises(EmptyResultError):
+        raw_run.run_raw("ds", 2026, str(tmp_path), _raw_cfg(), logging.getLogger("t"))
+
+
+def test_run_raw_incremental_appends_delta(tmp_path: Path, monkeypatch):
+    import logging
+
+    from toolkit.raw import run as raw_run
+
+    baseline = _baseline(tmp_path)
+
+    def _fake(*a, **k):
+        return b"votazione,data\nC,20260103\n", "https://x"
+
+    monkeypatch.setattr(raw_run, "_fetch_payload", _fake)
+    raw_run.run_raw("ds", 2026, str(tmp_path), _raw_cfg(), logging.getLogger("t"))
+    assert (
+        baseline.read_text(encoding="utf-8")
+        == "votazione,data\nA,20260101\nB,20260102\nC,20260103\n"
+    )

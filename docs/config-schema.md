@@ -90,6 +90,9 @@ La baseline deve esistere nel checkout: su runner effimero va ripristinata prima
 del run (stato nel data plane — ADR-006). Senza baseline il run è corretto ma
 full.
 
+Delta vuoto (nessuna riga nuova) = **no-op**: il run riesce e il raw resta
+invariato. Solo un full vuoto (senza baseline) resta un errore.
+
 Scope: **append-only**. La query deve filtrare in modo esclusivo (`>`). Dedup e
 upsert (rettifiche, annullamenti) sono fuori scope (follow-up #534).
 

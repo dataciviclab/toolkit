@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from lab_connectors.http import HttpResult
 
-from toolkit.core.exceptions import DownloadError
+from toolkit.core.exceptions import DownloadError, EmptyResultError
 from toolkit.plugins.sparql import SparqlSource, _sparql_json_to_csv
 
 pytestmark = pytest.mark.contract
@@ -232,7 +232,11 @@ def test_sparql_fetch_network_error():
 
 
 def test_sparql_fetch_empty_results():
-    """Empty SPARQL results raise DownloadError."""
+    """Empty SPARQL results raise EmptyResultError (sottoclasse di DownloadError).
+
+    EmptyResultError distingue "0 righe" da un fetch fallito: il fetch
+    incrementale tratta 0 righe come delta vuoto (no-op), non come errore.
+    """
     with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
         mock_cls.return_value.post.return_value = _http_ok(
             status=200,
@@ -241,7 +245,7 @@ def test_sparql_fetch_empty_results():
         )
         source = SparqlSource()
         source._page_retry_delay = 0
-        with pytest.raises(DownloadError, match="no results"):
+        with pytest.raises(EmptyResultError, match="no results"):
             source.fetch(
                 "https://example.test/sparql",
                 "SELECT ?name WHERE { }",

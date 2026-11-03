@@ -18,7 +18,7 @@ from typing import Any
 from lab_connectors.http import HttpClient
 from lab_connectors.http.sparql import curl_sparql as _curl_sparql
 
-from toolkit.core.exceptions import DownloadError
+from toolkit.core.exceptions import DownloadError, EmptyResultError
 
 # Il rendering dei letterali SPARQL è condiviso con il fetch incrementale
 # ({since}): un'unica implementazione in toolkit.core.literals.
@@ -768,7 +768,7 @@ def _sparql_json_to_csv(json_text: str) -> bytes:
         raise DownloadError("SPARQL JSON payload has unexpected structure")
 
     if not bindings:
-        raise DownloadError("SPARQL query returned no results")
+        raise EmptyResultError("SPARQL query returned no results")
 
     var_names: list[str] = (payload.get("head") or {}).get("vars") or list(bindings[0].keys())
     return _bindings_to_csv(bindings, var_names)
@@ -781,7 +781,7 @@ def _bindings_to_csv(bindings: list[dict[str, Any]], var_names: list[str] | None
     If *var_names* is not provided, columns are derived from the first binding.
     """
     if not bindings:
-        raise DownloadError("SPARQL query returned no results")
+        raise EmptyResultError("SPARQL query returned no results")
 
     if var_names is None:
         var_names = list(bindings[0].keys())

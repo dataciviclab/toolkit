@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from toolkit.core.io import normalize_duckdb_encoding
 from toolkit.core.sql_utils import sql_str
+
+log = logging.getLogger(__name__)
 
 
 ALLOWED_READ_CSV_KEYS = {
@@ -194,6 +197,12 @@ def robust_preset(read_cfg: dict[str, Any] | None) -> dict[str, Any]:
         # osservato su camera_sindisp leg 16 (44.304 righe corrette ->
         # 44.655 frammenti). ignore_errors resta la valvola per le righe
         # malformate, quindi strict_mode puo' restare attivo.
+        if robust.get("strict_mode") is False:
+            log.warning(
+                "robust read: strict_mode=false esplicito sovrascritto a true "
+                "(null_padding=true corrompe i campi quotati con virgolette "
+                "interne e newline)"
+            )
         robust["strict_mode"] = True
     else:
         robust.setdefault("strict_mode", False)

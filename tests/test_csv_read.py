@@ -203,3 +203,26 @@ def test_robust_preset_keeps_parallel_when_null_padding_off():
     cfg = robust_preset({"null_padding": False, "parallel": True})
     assert cfg["null_padding"] is False
     assert cfg["parallel"] is True
+
+
+@pytest.mark.policy
+def test_robust_preset_warns_when_overriding_explicit_strict_mode(caplog):
+    """La sovrascrittura non deve essere silenziosa per i dataset che la dichiarano."""
+    import logging
+
+    from toolkit.core.csv_read import robust_preset
+
+    with caplog.at_level(logging.WARNING, logger="toolkit.core.csv_read"):
+        robust_preset({"strict_mode": False})
+    assert any("strict_mode=false" in r.message for r in caplog.records)
+
+
+@pytest.mark.policy
+def test_robust_preset_no_warning_without_explicit_strict_mode(caplog):
+    import logging
+
+    from toolkit.core.csv_read import robust_preset
+
+    with caplog.at_level(logging.WARNING, logger="toolkit.core.csv_read"):
+        robust_preset({})
+    assert not caplog.records

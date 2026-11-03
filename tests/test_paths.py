@@ -146,3 +146,38 @@ def test_resolve_config_path_dir_totally_different(tmp_path):
         resolve_config_path("ca_anag_enti_seed", workspace=tmp_path)
         == (repo / "datasets" / "anag-enti" / "dataset.yml").resolve()
     )
+
+
+@pytest.mark.contract
+def test_resolve_config_path_standalone_checkout(tmp_path, monkeypatch):
+    """In CI (checkout del repo, senza workspace) lo slug si risolve nel cwd.
+
+    Regressione: `--config <slug>` cercava solo nel workspace del Lab
+    (inesistente su GitHub Actions) e finiva nella directory del package.
+    """
+    from toolkit.core.discovery import resolve_config_path
+
+    repo = tmp_path / "repo"
+    ds = repo / "datasets" / "camera-sindisp"
+    ds.mkdir(parents=True)
+    (ds / "dataset.yml").write_text("dataset:\n  name: 'camera_sindisp'\n", encoding="utf-8")
+
+    sup = repo / "support" / "anagrafica-atenei"
+    sup.mkdir(parents=True)
+    (sup / "dataset.yml").write_text("dataset:\n  name: 'anagrafica_atenei'\n", encoding="utf-8")
+
+    empty_ws = tmp_path / "ws"
+    empty_ws.mkdir()
+    monkeypatch.chdir(repo)
+
+    assert (
+        resolve_config_path("camera-sindisp", workspace=empty_ws) == (ds / "dataset.yml").resolve()
+    )
+    # slug canonico underscore -> dir hyphen
+    assert (
+        resolve_config_path("camera_sindisp", workspace=empty_ws) == (ds / "dataset.yml").resolve()
+    )
+    assert (
+        resolve_config_path("anagrafica-atenei", workspace=empty_ws)
+        == (sup / "dataset.yml").resolve()
+    )

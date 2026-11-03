@@ -185,6 +185,13 @@ def robust_preset(read_cfg: dict[str, Any] | None) -> dict[str, Any]:
     robust.setdefault("null_padding", True)
     robust.setdefault("strict_mode", False)
     robust.setdefault("sample_size", -1)
+    # DuckDB: il parallel scanner non supporta null_padding insieme ai quoted
+    # newlines ("The parallel scanner does not support null_padding in
+    # conjunction with quoted new lines"). Con null_padding attivo il
+    # parallelismo va disattivato, altrimenti i CSV con testo multiriga
+    # (descrizioni, biografie) falliscono in lettura.
+    if robust.get("null_padding"):
+        robust["parallel"] = False
     return robust
 
 

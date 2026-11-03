@@ -9,3 +9,4 @@ Decisioni architetturali del toolkit, in ordine cronologico.
 | [003](003-pydantic-config.md) | Config Pydantic con migrazione graduale | 2026-04 |
 | [004](004-parquet-output.md) | Parquet come formato di output | 2026-02 |
 | [005](005-support-ensure.md) | Support dataset unificati — tipo, materializzazione, orchestrazione ensure | 2026-08 |
+| [006](006-incremental-stream-sources.md) | Ingestione incrementale delle fonti stream — stato nel data plane | 2026-11 (proposed) |

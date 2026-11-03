@@ -76,7 +76,7 @@ allo stesso path).
 
 | Campo | Tipo | Obbligatorio | Descrizione |
 |---|---|---|---|
-| `key_expr` | `string` | sì | espressione SPARQL del filtro (es. `?data`) |
+| `key_expr` | `string` | sì | espressione SPARQL del filtro (es. `STR(?data)`) |
 | `key_column` | `string` | sì | colonna del raw esistente da cui leggere il watermark |
 | `key_literal` | `auto \| uri \| string \| number` | no (`auto`) | come rendere il watermark nel filtro |
 
@@ -86,15 +86,22 @@ con `FILTER(key_expr > <watermark>)` — o con la stringa vuota se la baseline n
 esiste (→ full). Il delta viene **accodato** al raw esistente, preservando
 byte-per-byte le righe storiche.
 
-La baseline deve esistere nel checkout: su runner effimero va ripristinata prima
-del run (stato nel data plane — ADR-006). Senza baseline il run è corretto ma
-full.
+`{since}` è **obbligatorio** nella query: senza, il full verrebbe accodato al
+baseline (validato al load, non solo al run). Usa `key_expr: "STR(?data)"` se la
+proprietà è un `xsd:date` (confronto con stringa).
+
+La baseline è il file raw scritto dallo stesso source (con `filename` esplicito
+i `{year}` sono già sostituiti): deve esistere nel checkout. Su runner effimero
+va ripristinata prima del run (stato nel data plane — ADR-006, PR #535). Senza
+baseline il run è corretto ma full.
 
 Delta vuoto (nessuna riga nuova) = **no-op**: il run riesce e il raw resta
 invariato. Solo un full vuoto (senza baseline) resta un errore.
 
 Scope: **append-only**. La query deve filtrare in modo esclusivo (`>`). Dedup e
-upsert (rettifiche, annullamenti) sono fuori scope (follow-up #534).
+upsert (rettifiche, annullamenti) sono fuori scope (follow-up #534). Limite noto:
+le righe con `key == max` pubblicate *dopo* il run sono perse (batch con la
+stessa data).
 
 ```yaml
 raw:
@@ -111,7 +118,7 @@ raw:
             {since}
           }
       incremental:
-        key_expr: "?data"
+        key_expr: "STR(?data)"
         key_column: "data"
         key_literal: string
 ```

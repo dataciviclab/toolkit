@@ -19,7 +19,6 @@ from toolkit.raw.incremental import (
     append_delta,
     build_since_clause,
     read_watermark,
-    validate_incremental,
 )
 
 pytestmark = pytest.mark.pure_unit
@@ -30,30 +29,51 @@ def _write(path: Path, text: str) -> Path:
     return path
 
 
-# ── validate_incremental ────────────────────────────────────────────────
+# ── validazione al load (core.config) ───────────────────────────────────
 
 
-def test_validate_incremental_ok():
-    validate_incremental({"key_expr": "?data", "key_column": "data"}, "raw.sources[0]")
+def _src(incremental, args=None):
+    return {
+        "name": "voti",
+        "type": "sparql",
+        "args": args if args is not None else {"endpoint": "https://x", "query": "SELECT {since}"},
+        "incremental": incremental,
+    }
 
 
-def test_validate_incremental_unknown_key():
+def test_incremental_valid_at_load():
+    src = RawSourceConfig.from_dict(_src({"key_expr": "?data", "key_column": "data"}))
+    assert src.incremental == {"key_expr": "?data", "key_column": "data"}
+
+
+def test_incremental_unknown_key_fails_at_load():
     with pytest.raises(ValueError, match="unknown key"):
-        validate_incremental({"key_expr": "?d", "key_column": "d", "boh": 1}, "raw.sources[0]")
+        RawSourceConfig.from_dict(_src({"key_expr": "?d", "key_column": "d", "boh": 1}))
 
 
-def test_validate_incremental_requires_key_expr_and_column():
+def test_incremental_requires_key_expr_and_column():
     with pytest.raises(ValueError, match="key_expr"):
-        validate_incremental({"key_column": "data"}, "raw.sources[0]")
+        RawSourceConfig.from_dict(_src({"key_column": "data"}))
     with pytest.raises(ValueError, match="key_column"):
-        validate_incremental({"key_expr": "?data"}, "raw.sources[0]")
+        RawSourceConfig.from_dict(_src({"key_expr": "?data"}))
 
 
-def test_validate_incremental_bad_literal_mode():
+def test_incremental_bad_literal_mode():
     with pytest.raises(ValueError, match="key_literal"):
-        validate_incremental(
-            {"key_expr": "?d", "key_column": "d", "key_literal": "wat"}, "raw.sources[0]"
+        RawSourceConfig.from_dict(_src({"key_expr": "?d", "key_column": "d", "key_literal": "wat"}))
+
+
+def test_incremental_requires_since_placeholder():
+    """Senza {since} il full verrebbe accodato al baseline: fail-fast al load."""
+    with pytest.raises(ValueError, match="since"):
+        RawSourceConfig.from_dict(
+            _src({"key_expr": "?data", "key_column": "data"}, args={"query": "SELECT ?x"})
         )
+
+
+def test_incremental_not_a_mapping_fails():
+    with pytest.raises(ValueError, match="must be a mapping"):
+        RawSourceConfig.from_dict(_src("nope"))
 
 
 # ── read_watermark ──────────────────────────────────────────────────────
@@ -128,6 +148,13 @@ def test_append_delta_handles_missing_trailing_newline(tmp_path: Path):
     baseline = _write(tmp_path / "b.csv", "data,voto\n2026-01-02,si")
     out = append_delta(baseline, b"data,voto\n2026-01-03,no\n")
     assert out == b"data,voto\n2026-01-02,si\n2026-01-03,no\n"
+
+
+def test_append_delta_header_mismatch_raises(tmp_path: Path):
+    """Schema drift (header diverso) non deve corrompere il CSV in silenzio."""
+    baseline = _write(tmp_path / "b.csv", "a,b\n1,2\n")
+    with pytest.raises(DownloadError, match="schema drift"):
+        append_delta(baseline, b"a,c\n3,4\n")
 
 
 # ── _format_args {since} ────────────────────────────────────────────────
@@ -258,3 +285,51 @@ def test_run_raw_incremental_appends_delta(tmp_path: Path, monkeypatch):
         baseline.read_text(encoding="utf-8")
         == "votazione,data\nA,20260101\nB,20260102\nC,20260103\n"
     )
+
+
+def test_run_raw_incremental_resolves_baseline_with_year_filename(tmp_path: Path, monkeypatch):
+    """Regressione (review #536): il filename con {year} va formattato per
+    trovare la baseline, altrimenti il delta sovrascrive la storia."""
+    import logging
+
+    from toolkit.raw import run as raw_run
+
+    d = tmp_path / "data" / "raw" / "ds" / "2026"
+    d.mkdir(parents=True)
+    baseline = d / "voti_2026.csv"
+    baseline.write_text("votazione,data\nA,20260101\nB,20260102\n", encoding="utf-8")
+
+    def _fake(*a, **k):
+        return b"votazione,data\nC,20260103\n", "https://x"
+
+    monkeypatch.setattr(raw_run, "_fetch_payload", _fake)
+    cfg = _raw_cfg()
+    cfg["sources"][0]["args"]["filename"] = "voti_{year}.csv"
+    raw_run.run_raw("ds", 2026, str(tmp_path), cfg, logging.getLogger("t"))
+    assert (
+        baseline.read_text(encoding="utf-8")
+        == "votazione,data\nA,20260101\nB,20260102\nC,20260103\n"
+    )
+
+
+def test_run_raw_incremental_rejects_nondeterministic_ext(tmp_path: Path):
+    """Un source con ext non deterministica (from_origin/script) non può avere
+    una baseline individuale: fail-fast."""
+    import logging
+
+    from toolkit.raw import run as raw_run
+
+    cfg = {
+        "output_policy": "overwrite",
+        "sources": [
+            {
+                "name": "s",
+                "type": "script",
+                "primary": True,
+                "args": {"command": "echo", "output": "out.bin"},
+                "incremental": {"key_expr": "?d", "key_column": "d"},
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match="from_origin"):
+        raw_run.run_raw("ds", 2026, str(tmp_path), cfg, logging.getLogger("t"))

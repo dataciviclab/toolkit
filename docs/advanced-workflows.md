@@ -130,7 +130,7 @@ Il campo è accettato per backward compatibilità ma ignorato.
 Il modello RAW è `fetch-all → overwrite`: ogni fonte è uno snapshot. Per le
 fonti **append-only** (stream) il toolkit supporta `raw.sources[].incremental`
 con placeholder `{since}` e append del delta — vedi `docs/config-schema.md` e
-**ADR-006** (`docs/adr/006-incremental-stream-sources.md`).
+**ADR-006** (PR #535).
 
 Lo stato (baseline) vive nel **data plane**: su runner effimero va ripristinato
 prima del run. Senza baseline il fetch è full.

@@ -88,6 +88,48 @@ def reject_unknown_keys(value: dict, known: set[str], field_name: str) -> None:
         raise ValueError(f"{field_name}: unknown key(s) {unknown}; allowed keys: {sorted(known)}")
 
 
+# ── Fetch incrementale (raw.sources[].incremental) ──────────────────────
+# Contratto validato al load: validate/inspect lo vedono, non solo il run.
+_INCREMENTAL_KEYS = {"key_expr", "key_column", "key_literal"}
+
+
+def _args_contain(args: Any, needle: str) -> bool:
+    """True se ``needle`` compare in un valore stringa di ``args`` (ricorsivo)."""
+    if isinstance(args, str):
+        return needle in args
+    if isinstance(args, dict):
+        return any(_args_contain(v, needle) for v in args.values())
+    if isinstance(args, (list, tuple)):
+        return any(_args_contain(v, needle) for v in args)
+    return False
+
+
+def _validate_incremental(incremental: dict, args: Any, field_name: str) -> None:
+    unknown = sorted(set(incremental) - _INCREMENTAL_KEYS)
+    if unknown:
+        raise ValueError(
+            f"{field_name}.incremental: unknown key(s) {unknown}; "
+            f"allowed keys: {sorted(_INCREMENTAL_KEYS)}"
+        )
+    key_expr = incremental.get("key_expr")
+    if not isinstance(key_expr, str) or not key_expr:
+        raise ValueError(f"{field_name}.incremental.key_expr is required (es. 'STR(?data)')")
+    key_column = incremental.get("key_column")
+    if not isinstance(key_column, str) or not key_column:
+        raise ValueError(f"{field_name}.incremental.key_column is required (es. 'data')")
+    key_literal = incremental.get("key_literal", "auto")
+    if key_literal not in {"auto", "uri", "string", "number"}:
+        raise ValueError(
+            f"{field_name}.incremental.key_literal must be one of: auto, uri, string, number"
+        )
+    # Senza {since} il fetch è full e verrebbe accodato al baseline: fail-fast.
+    if not _args_contain(args, "{since}"):
+        raise ValueError(
+            f"{field_name}.incremental: la query deve contenere il placeholder "
+            "{since} (altrimenti il full verrebbe accodato al baseline)"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Config dataclasses
 # ---------------------------------------------------------------------------
@@ -507,11 +549,19 @@ class RawSourceConfig:
             )
         else:
             raise ValueError(f"{field_name}.client must be a mapping")
+        args = d.get("args", {})
+        raw_incremental = d.get("incremental")
+        incremental: dict | None = None
+        if raw_incremental is not None:
+            if not isinstance(raw_incremental, dict):
+                raise ValueError(f"{field_name}.incremental must be a mapping")
+            _validate_incremental(raw_incremental, args, field_name)
+            incremental = raw_incremental
         return RawSourceConfig(
             name=d.get("name"),
             type=d.get("type", "http_file"),
             year=d.get("year"),
-            args=d.get("args", {}),
+            args=args,
             primary=parse_bool(d.get("primary", False), "raw.sources[].primary"),
             inject_column=d.get("inject_column"),
             timeout=client.get("timeout") if isinstance(client, dict) else None,
@@ -519,7 +569,7 @@ class RawSourceConfig:
             user_agent=client.get("user_agent") if isinstance(client, dict) else None,
             headers=client.get("headers") if isinstance(client, dict) else None,
             extractor=d.get("extractor") if isinstance(d.get("extractor"), dict) else None,
-            incremental=d.get("incremental") if isinstance(d.get("incremental"), dict) else None,
+            incremental=incremental,
         )
 
     def to_dict(self) -> dict[str, Any]:

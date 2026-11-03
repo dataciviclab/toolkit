@@ -31,21 +31,32 @@ from toolkit.raw.extractors import get_extractor
 from toolkit.raw.incremental import (
     append_delta,
     build_since_clause,
-    validate_incremental,
 )
 
 
-def _baseline_filename(stype: str, name: str, args: dict) -> str:
+def _baseline_filename(stype: str, name: str, formatted_args: dict, field_name: str) -> str:
     """Nome del file raw che fa da baseline per il fetch incrementale.
 
-    Deve essere deterministico: ``filename`` esplicito, altrimenti
-    ``{name}{ext}``. Con ``output_policy: overwrite`` è la stessa path che il
-    run riscrive, quindi la baseline è stabile tra un run e l'altro.
+    Deve essere deterministico e **identico** al path di scrittura (che usa
+    ``formatted_args``): ``filename`` esplicito (con ``{year}`` già sostituito),
+    altrimenti ``{name}{ext}``. Con ``output_policy: overwrite`` è la stessa
+    path che il run riscrive.
+
+    Le sorgenti con estensione non deterministica (``from_origin``, es.
+    ``script``) sono rifiutate: la baseline non sarebbe individuale.
     """
-    explicit = args.get("filename")
+    explicit = formatted_args.get("filename")
     if explicit:
         return str(explicit)
-    return f"{name}{_infer_ext(stype, args)}"
+    from toolkit.core.source_types import SOURCE_TYPES
+
+    spec = SOURCE_TYPES.get(stype)
+    if spec is not None and spec.ext_mode == "from_origin":
+        raise ValueError(
+            f"{field_name}.incremental: il source type '{stype}' ha estensione "
+            "non deterministica (from_origin); serve args.filename esplicito"
+        )
+    return f"{name}{_infer_ext(stype, formatted_args)}"
 
 
 def run_raw(
@@ -123,8 +134,14 @@ def run_raw(
                     f"raw.sources[{i}].incremental richiede raw.output_policy: overwrite "
                     f"(baseline stabile allo stesso path); trovato '{output_policy}'"
                 )
-            validate_incremental(incremental, f"raw.sources[{i}]")
-            baseline_path = out_dir / _baseline_filename(stype, name, args)
+            # La baseline va risolta sullo STESSO path di scrittura: gli args
+            # vanno formattati ({year}) prima di cercarla, altrimenti un
+            # filename tipo "voti_{year}.csv" non verrebbe mai trovato e il
+            # run sovrascriverebbe la storia col delta.
+            baseline_name = _baseline_filename(
+                stype, name, _format_args(args, year), f"raw.sources[{i}]"
+            )
+            baseline_path = out_dir / baseline_name
             since_clause = build_since_clause(baseline_path, incremental)
 
         formatted_args = _format_args(args, year, extra={"since": since_clause})

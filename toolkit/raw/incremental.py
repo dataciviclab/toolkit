@@ -13,9 +13,9 @@ Contratto ``raw.sources[].incremental`` (opzionale; assente = full):
                 {since}
               }
           incremental:
-            key_expr: "?data"      # espressione SPARQL del filtro delta
-            key_column: "data"     # colonna del raw esistente da cui leggere il watermark
-            key_literal: string    # auto | uri | string | number
+            key_expr: "STR(?data)"  # espressione SPARQL del filtro delta
+            key_column: "data"      # colonna del raw esistente da cui leggere il watermark
+            key_literal: string     # auto | uri | string | number
 
 Semantica: il watermark è il valore massimo di ``key_column`` nel raw esistente
 (la baseline). ``{since}`` viene sostituito con ``FILTER(key_expr > <watermark>)``
@@ -29,6 +29,14 @@ Dedup/upsert (rettifiche, annullamenti) è fuori scope — vedi ADR-006 e #534.
 La baseline deve esistere nel checkout: su runner effimero va ripristinata
 prima del run (stato nel data plane). Senza baseline il run è full, corretto
 ma lento.
+
+Confine del watermark: le righe con ``key == max`` pubblicate *dopo* il run sono
+perse per sempre (batch con la stessa data). È coerente col contratto ``>``:
+per dati con revisioni serve dedup/upsert (fuori scope).
+
+La validazione del blocco (chiavi, ``{since}`` obbligatorio) sta in
+``core.config`` ed è applicata al load del ``dataset.yml``: ``validate``/
+``inspect`` la vedono, non solo il run.
 """
 
 from __future__ import annotations
@@ -41,32 +49,6 @@ from toolkit.core.exceptions import DownloadError
 from toolkit.core.literals import render_sparql_literal
 
 _NUMBER_RE = re.compile(r"-?\d+(\.\d+)?")
-
-# Chiavi ammesse nel blocco ``incremental``. Fail-fast su typo.
-INCREMENTAL_KEYS = {"key_expr", "key_column", "key_literal"}
-
-
-def validate_incremental(cfg: dict, field_name: str) -> None:
-    """Valida il blocco ``incremental``. Fail-fast su chiavi/valori errati."""
-    if not isinstance(cfg, dict):
-        raise ValueError(f"{field_name}.incremental must be a mapping")
-    unknown = sorted(set(cfg) - INCREMENTAL_KEYS)
-    if unknown:
-        raise ValueError(
-            f"{field_name}.incremental: unknown key(s) {unknown}; "
-            f"allowed keys: {sorted(INCREMENTAL_KEYS)}"
-        )
-    key_expr = cfg.get("key_expr")
-    key_column = cfg.get("key_column")
-    if not key_expr or not isinstance(key_expr, str):
-        raise ValueError(f"{field_name}.incremental.key_expr is required (es. '?data')")
-    if not key_column or not isinstance(key_column, str):
-        raise ValueError(f"{field_name}.incremental.key_column is required (es. 'data')")
-    key_literal = cfg.get("key_literal", "auto")
-    if key_literal not in {"auto", "uri", "string", "number"}:
-        raise ValueError(
-            f"{field_name}.incremental.key_literal must be one of: auto, uri, string, number"
-        )
 
 
 def build_since_clause(baseline_path: Path, incremental: dict) -> str:
@@ -89,9 +71,15 @@ def read_watermark(path: Path, key_column: str) -> str | None:
     None se il file non esiste o la colonna è tutta vuota. Numerico se tutti i
     valori sono numeri (il max stringa mentirebbe: "9" > "10"), altrimenti
     confronto lessicografico (corretto per date ISO).
+
+    Un solo passaggio, memoria O(1): il raw può avere milioni di righe.
     """
     if not path.exists():
         return None
+    max_str: str | None = None
+    max_num: float | None = None
+    max_num_raw: str | None = None
+    all_numeric = True
     try:
         with path.open("r", encoding="utf-8", newline="") as fh:
             reader = csv.reader(fh)
@@ -105,22 +93,35 @@ def read_watermark(path: Path, key_column: str) -> str | None:
                     f"incremental: colonna '{key_column}' assente nel raw "
                     f"{path.name} (colonne: {header})"
                 ) from exc
-            values = [row[idx] for row in reader if len(row) > idx and row[idx]]
+            for row in reader:
+                if len(row) <= idx or not row[idx]:
+                    continue
+                value = row[idx]
+                if max_str is None or value > max_str:
+                    max_str = value
+                if all_numeric:
+                    if _NUMBER_RE.fullmatch(value):
+                        num = float(value)
+                        if max_num is None or num > max_num:
+                            max_num = num
+                            max_num_raw = value
+                    else:
+                        all_numeric = False
     except OSError as exc:
         raise DownloadError(f"incremental: impossibile leggere {path}: {exc}") from exc
 
-    if not values:
+    if max_str is None:
         return None
-    if all(_NUMBER_RE.fullmatch(v) for v in values):
-        return str(max(values, key=float))
-    return max(values)
+    return max_num_raw if all_numeric else max_str
 
 
 def append_delta(baseline_path: Path, delta: bytes) -> bytes:
     """Accoda il delta al raw esistente, saltando l'header del delta.
 
     Il baseline è preservato byte-per-byte: il raw resta fedele alla fonte.
-    Delta vuoto (nessun dato) → baseline invariato.
+    Delta vuoto (nessun dato) → baseline invariato. Header del delta diverso
+    dal baseline (schema drift) → errore: un append produrrebbe un CSV corrotto
+    in silenzio.
     """
     if not baseline_path.exists():
         return delta
@@ -128,9 +129,18 @@ def append_delta(baseline_path: Path, delta: bytes) -> bytes:
     newline = delta.find(b"\n")
     if newline < 0:
         return baseline
+    delta_header = delta[:newline]
     body = delta[newline + 1 :]
     if not body:
         return baseline
+    base_newline = baseline.find(b"\n")
+    if base_newline >= 0:
+        base_header = baseline[:base_newline]
+        if base_header.strip() != delta_header.strip():
+            raise DownloadError(
+                "incremental: header del delta diverso dal baseline — schema "
+                f"drift, append rifiutato (baseline {base_header!r}, delta {delta_header!r})"
+            )
     if not baseline.endswith(b"\n"):
         baseline += b"\n"
     return baseline + body

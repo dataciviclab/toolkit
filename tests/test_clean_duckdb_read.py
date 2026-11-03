@@ -1068,3 +1068,37 @@ def test_read_raw_to_relation_robust_handles_quoted_newlines(tmp_path: Path):
     assert info.params_used["strict_mode"] is True
     assert rows[0] == (1, "line one\nline two")
     assert rows[1] == (2, "short")
+
+
+@pytest.mark.policy
+def test_csv_read_options_union_only_for_multiple_files(tmp_path: Path):
+    """`union_by_name` solo con piu' file.
+
+    Regressione: applicato anche a un file singolo, union_by_name forza un
+    percorso di lettura che materializza i dati e manda in OOM il clean sui
+    cubi grandi (decine di milioni di righe). L'inferenza dei tipi di un file
+    singolo non cambia (un solo schema da allineare).
+    """
+    single = tmp_path / "single.csv"
+    single.write_text("a,b\n1,2\n", encoding="utf-8")
+    other = tmp_path / "other.csv"
+    other.write_text("a,b\n3,4\n", encoding="utf-8")
+
+    opts_single, _, _ = duckdb_read._csv_read_options({"delim": ","}, input_files=[single])
+    assert not any("union_by_name" in o for o in opts_single)
+
+    # File singolo + auto_detect=false: union_by_name fornisce lo schema.
+    opts_single_nodetect, _, _ = duckdb_read._csv_read_options(
+        {"delim": ",", "auto_detect": False}, input_files=[single]
+    )
+    assert any("union_by_name=true" in o for o in opts_single_nodetect)
+
+    opts_multi, _, _ = duckdb_read._csv_read_options({"delim": ","}, input_files=[single, other])
+    assert any("union_by_name=true" in o for o in opts_multi)
+
+    # Con schema esplicito (columns) niente union nemmeno con piu' file.
+    opts_cols, _, _ = duckdb_read._csv_read_options(
+        {"delim": ",", "columns": {"a": "VARCHAR", "b": "VARCHAR"}},
+        input_files=[single, other],
+    )
+    assert not any("union_by_name" in o for o in opts_cols)

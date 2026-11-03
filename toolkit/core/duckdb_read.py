@@ -81,12 +81,22 @@ def _csv_read_options(
 
     # Build the shared option strings, then prepend union_by_name and
     # append header/skip (which are layer-specific).
-    # Skip union_by_name when explicit columns are provided (they define the
-    # schema, so sniffing is unnecessary and can conflict) or when
-    # auto_detect=false with multiple files (different column counts).
+    # union_by_name ha due usi distinti:
+    #   - piu' file: allinea gli schemi tra file (con auto_detect=false i
+    #     conteggi di colonne possono differire e union_by_name entra in
+    #     conflitto, quindi va saltato);
+    #   - file singolo con auto_detect=false: fornisce lo schema (senza columns
+    #     DuckDB non saprebbe dedurlo).
+    # Su un file singolo con auto_detect attivo, union_by_name non allinea nulla
+    # ma forza un percorso di lettura che bufferizza i dati: su cubi grandi
+    # (decine di milioni di righe) manda in OOM il clean. Per questo si applica
+    # solo nei due casi sopra.
     auto_detect = read_cfg.get("auto_detect")
     multi_file = len(input_files) > 1 if input_files else False
-    use_union = not source_columns and not (auto_detect is False and multi_file)
+    if multi_file:
+        use_union = not source_columns and auto_detect is not False
+    else:
+        use_union = not source_columns and auto_detect is False
     opts = (["union_by_name=true"] if use_union else []) + csv_read_option_strings(read_cfg)
     opts.append(f"header={'true' if parser_header else 'false'}")
     if parser_skip is not None:

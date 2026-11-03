@@ -1,5 +1,8 @@
 """Tests for toolkit/core/csv_read.py — normalize_columns_spec, normalize_encoding, validate_nullstr."""
 
+import contextlib
+import logging
+
 import pytest
 
 from toolkit.core.csv_read import (
@@ -205,24 +208,46 @@ def test_robust_preset_keeps_parallel_when_null_padding_off():
     assert cfg["parallel"] is True
 
 
+@contextlib.contextmanager
+def _capture_logger(name: str, level: int = logging.WARNING):
+    """Cattura in modo deterministico i record di un logger specifico.
+
+    Non usa il fixture `caplog`: con xdist (`-n auto`) la cattura via root
+    handler non e' affidabile — il test passava in isolamento ma falliva in
+    suite (CI come sorteggio). Un handler dedicato sul logger e' deterministico.
+    """
+    records: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    logger = logging.getLogger(name)
+    handler = _Capture()
+    prev_level = logger.level
+    logger.addHandler(handler)
+    logger.setLevel(level)
+    try:
+        yield records
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(prev_level)
+
+
 @pytest.mark.policy
-def test_robust_preset_warns_when_overriding_explicit_strict_mode(caplog):
+def test_robust_preset_warns_when_overriding_explicit_strict_mode():
     """La sovrascrittura non deve essere silenziosa per i dataset che la dichiarano."""
-    import logging
-
     from toolkit.core.csv_read import robust_preset
 
-    with caplog.at_level(logging.WARNING, logger="toolkit.core.csv_read"):
+    with _capture_logger("toolkit.core.csv_read") as records:
         robust_preset({"strict_mode": False})
-    assert any("strict_mode=false" in r.message for r in caplog.records)
+    assert any("strict_mode=false" in r.getMessage() for r in records)
 
 
 @pytest.mark.policy
-def test_robust_preset_no_warning_without_explicit_strict_mode(caplog):
-    import logging
-
+def test_robust_preset_no_warning_without_explicit_strict_mode():
     from toolkit.core.csv_read import robust_preset
 
-    with caplog.at_level(logging.WARNING, logger="toolkit.core.csv_read"):
+    with _capture_logger("toolkit.core.csv_read") as records:
         robust_preset({})
-    assert not caplog.records
+    assert not records

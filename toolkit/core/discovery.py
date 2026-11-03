@@ -27,10 +27,15 @@ def resolve_config_path(
     Args:
         hint: ``None`` → cerca ``dataset.yml`` nel CWD.
               Path o stringa con ``/`` o ``.yml`` → path diretto.
-              Stringa senza ``/`` né ``.yml`` → slug risolto nei repo del
+              Stringa senza ``/`` né ``.yml`` → slug risolto prima nel repo
+              corrente (``<cwd>/<section>/<slug>``) e poi nei repo del
               workspace (dataset-incubator candidates/compose/support_datasets,
               altri repo datasets/).
         workspace: Workspace root (default: ``WORKSPACE_ROOT``).
+
+    Nota sull'ordine: il repo corrente precede il workspace. Se lo stesso slug
+    esiste in due repo, vince quello da cui è partito il comando (è il
+    comportamento necessario in CI, dove il workspace non esiste).
 
     Returns:
         Path assoluto a ``dataset.yml``.

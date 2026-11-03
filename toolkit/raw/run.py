@@ -27,6 +27,24 @@ from toolkit.raw._fetch_utils import (
     _resolve_output_path,
 )
 from toolkit.raw.extractors import get_extractor
+from toolkit.raw.incremental import (
+    append_delta,
+    build_since_clause,
+    validate_incremental,
+)
+
+
+def _baseline_filename(stype: str, name: str, args: dict) -> str:
+    """Nome del file raw che fa da baseline per il fetch incrementale.
+
+    Deve essere deterministico: ``filename`` esplicito, altrimenti
+    ``{name}{ext}``. Con ``output_policy: overwrite`` è la stessa path che il
+    run riscrive, quindi la baseline è stabile tra un run e l'altro.
+    """
+    explicit = args.get("filename")
+    if explicit:
+        return str(explicit)
+    return f"{name}{_infer_ext(stype, args)}"
 
 
 def run_raw(
@@ -91,10 +109,34 @@ def run_raw(
             logger.info(f"SKIP source '{name}' (year={source_year} != requested year={year})")
             continue
 
-        formatted_args = _format_args(args, year)
+        # ── Fetch incrementale (append-only) ────────────────────────────
+        # La baseline è il raw del run precedente allo stesso path; il
+        # watermark ne ricava il filtro {since}. Su checkout fresco (nessuna
+        # baseline) il run resta full: corretto, solo più lento.
+        incremental = source.get("incremental")
+        baseline_path: Path | None = None
+        since_clause = ""
+        if incremental:
+            if output_policy != "overwrite":
+                raise ValueError(
+                    f"raw.sources[{i}].incremental richiede raw.output_policy: overwrite "
+                    f"(baseline stabile allo stesso path); trovato '{output_policy}'"
+                )
+            validate_incremental(incremental, f"raw.sources[{i}]")
+            baseline_path = out_dir / _baseline_filename(stype, name, args)
+            since_clause = build_since_clause(baseline_path, incremental)
+
+        formatted_args = _format_args(args, year, extra={"since": since_clause})
         if sample_bytes is not None:
             formatted_args["sample_bytes"] = sample_bytes
         payload, origin = _fetch_payload(stype, client, formatted_args, base_dir=base_dir)
+
+        if baseline_path is not None and since_clause:
+            payload = append_delta(baseline_path, payload)
+            logger.info(
+                "RAW incrementale -> %s (delta accodato al baseline)",
+                short_path(baseline_path, root),
+            )
         inputs.append(
             {
                 "file": formatted_args.get("filename") or name,

@@ -54,6 +54,7 @@ catalogazione; usato dai candidate per serie storiche (es. `ga-sentenze`:
 | `args` | `object` | `{}` |
 | `extractor` | `object \| null` | `null` |
 | `primary` | `bool` | `false` |
+| `incremental` | `object \| null` | `null` |
 
 `ClientConfig` shape minima:
 
@@ -65,6 +66,52 @@ catalogazione; usato dai candidate per serie storiche (es. `ga-sentenze`:
 | `headers` | `dict[string,string] \| null` | `null` |
 
 `raw.sources[].args` e `raw.extractor.args` devono essere sempre oggetti YAML, non liste o stringhe.
+
+### Fetch incrementale (`raw.sources[].incremental`)
+
+Per le fonti **append-only** (stream: voti, atti, interventi) il toolkit può
+estrarre solo il delta invece di rifare il full. Assente = `full` (default,
+backward compatible). Richiede `raw.output_policy: overwrite` (baseline stabile
+allo stesso path).
+
+| Campo | Tipo | Obbligatorio | Descrizione |
+|---|---|---|---|
+| `key_expr` | `string` | sì | espressione SPARQL del filtro (es. `?data`) |
+| `key_column` | `string` | sì | colonna del raw esistente da cui leggere il watermark |
+| `key_literal` | `auto \| uri \| string \| number` | no (`auto`) | come rendere il watermark nel filtro |
+
+Semantica: il watermark è il **valore massimo** di `key_column` nel raw
+esistente (la baseline). Il placeholder `{since}` nella query viene sostituito
+con `FILTER(key_expr > <watermark>)` — o con la stringa vuota se la baseline non
+esiste (→ full). Il delta viene **accodato** al raw esistente, preservando
+byte-per-byte le righe storiche.
+
+La baseline deve esistere nel checkout: su runner effimero va ripristinata prima
+del run (stato nel data plane — ADR-006). Senza baseline il run è corretto ma
+full.
+
+Scope: **append-only**. La query deve filtrare in modo esclusivo (`>`). Dedup e
+upsert (rettifiche, annullamenti) sono fuori scope (follow-up #534).
+
+```yaml
+raw:
+  output_policy: overwrite
+  sources:
+    - name: voti_raw
+      type: sparql
+      args:
+        endpoint: https://dati.camera.it/sparql
+        accept_format: sparql-results+json
+        query: |
+          SELECT ?data ?voto WHERE {
+            ?voto ocd:data ?data .
+            {since}
+          }
+      incremental:
+        key_expr: "?data"
+        key_column: "data"
+        key_literal: string
+```
 
 Esempio `ckan`:
 

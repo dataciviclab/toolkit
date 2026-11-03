@@ -20,6 +20,10 @@ from lab_connectors.http.sparql import curl_sparql as _curl_sparql
 
 from toolkit.core.exceptions import DownloadError
 
+# Il rendering dei letterali SPARQL è condiviso con il fetch incrementale
+# ({since}): un'unica implementazione in toolkit.core.literals.
+from toolkit.core.literals import render_sparql_literal as _keyset_literal
+
 log = logging.getLogger(__name__)
 
 # User-Agent usato dal plugin: gli endpoint con WAF (es. dati.camera.it)
@@ -838,37 +842,3 @@ def _csv_last_value(csv_bytes: bytes, key_col: str) -> str | None:
         if len(row) > idx and row[idx]:
             last = row[idx]
     return last
-
-
-def _keyset_literal(value: str, mode: str = "auto") -> str:
-    """Rappresenta un valore come letterale SPARQL per il FILTER keyset.
-
-    ``mode``:
-    - ``auto`` (default): URI (http/https) → ``<uri>``, numero → nudo,
-      altrimenti stringa quotata.
-    - ``uri``: sempre ``<uri>``.
-    - ``number``: sempre nudo (errore se non numerico).
-    - ``string``: sempre quotato — necessario quando il FILTER usa
-      ``STR(?var)``: il valore è una stringa, non un IRI.
-    """
-    v = value.strip()
-    if mode == "uri":
-        return f"<{v}>"
-    if mode == "number":
-        if not re.fullmatch(r"-?\d+(\.\d+)?", v):
-            raise DownloadError(
-                f"keyset key_literal='number' ma l'ultimo valore non è numerico: {v!r}"
-            )
-        return v
-    if mode == "string":
-        return _quote_literal(v)
-    if v.startswith(("http://", "https://")):
-        return f"<{v}>"
-    if re.fullmatch(r"-?\d+(\.\d+)?", v):
-        return v
-    return _quote_literal(v)
-
-
-def _quote_literal(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'

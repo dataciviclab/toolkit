@@ -85,9 +85,7 @@ def reject_unknown_keys(value: dict, known: set[str], field_name: str) -> None:
     """Fallisce su chiavi non riconosciute invece di scartarle in silenzio."""
     unknown = sorted(set(value) - known)
     if unknown:
-        raise ValueError(
-            f"{field_name}: unknown key(s) {unknown}; allowed keys: {sorted(known)}"
-        )
+        raise ValueError(f"{field_name}: unknown key(s) {unknown}; allowed keys: {sorted(known)}")
 
 
 # ---------------------------------------------------------------------------
@@ -482,12 +480,24 @@ class RawSourceConfig:
     headers: dict[str, str] | None = None
     # Per-source extractor override (es. unzip_first_csv per ZIP raw)
     extractor: dict | None = None
+    # Fetch incrementale append-only (stream): {key_expr, key_column, key_literal}
+    incremental: dict | None = None
 
     @staticmethod
     def from_dict(d: dict, field_name: str = "raw.sources[]") -> RawSourceConfig:
         reject_unknown_keys(
             d,
-            {"name", "type", "year", "args", "primary", "inject_column", "client", "extractor"},
+            {
+                "name",
+                "type",
+                "year",
+                "args",
+                "primary",
+                "inject_column",
+                "client",
+                "extractor",
+                "incremental",
+            },
             field_name,
         )
         client = d.get("client") or {}
@@ -509,6 +519,7 @@ class RawSourceConfig:
             user_agent=client.get("user_agent") if isinstance(client, dict) else None,
             headers=client.get("headers") if isinstance(client, dict) else None,
             extractor=d.get("extractor") if isinstance(d.get("extractor"), dict) else None,
+            incremental=d.get("incremental") if isinstance(d.get("incremental"), dict) else None,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -543,6 +554,8 @@ class RawSourceConfig:
             result["client"] = client
         if self.extractor is not None:
             result["extractor"] = self.extractor
+        if self.incremental is not None:
+            result["incremental"] = self.incremental
         return result
 
 

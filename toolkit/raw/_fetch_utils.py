@@ -24,7 +24,20 @@ from toolkit.core.source_types import fetch_payload as _fetch_payload  # noqa: F
 # ---------------------------------------------------------------------------
 
 
-def _format_args(args: dict, year: int) -> dict:
+def _format_args(args: dict, year: int, extra: dict[str, str] | None = None) -> dict:
+    """Sostituisce i placeholder negli args del source.
+
+    ``{year}`` è sempre sostituito. ``extra`` aggiunge placeholder runtime
+    (es. ``{"since": "FILTER(...)"}`` per il fetch incrementale) sostituiti
+    solo se presenti nel valore.
+    """
+
+    def _apply_placeholders(text: str) -> str:
+        out = text.replace("{year}", str(year))
+        for key, value in (extra or {}).items():
+            out = out.replace("{" + key + "}", str(value))
+        return out
+
     formatted: dict[str, Any] = {}
     for k, v in (args or {}).items():
         if isinstance(v, Path):
@@ -32,12 +45,14 @@ def _format_args(args: dict, year: int) -> dict:
             # placeholder {year} va sostituito anche su valori Path (es.
             # raw.sources[].args.path per local_file).
             if "{year}" in str(v):
-                formatted[k] = Path(str(v).replace("{year}", str(year)))
+                formatted[k] = Path(_apply_placeholders(str(v)))
             else:
                 formatted[k] = v
-        elif isinstance(v, str) and "{year}" in v:
+        elif isinstance(v, str) and (
+            "{year}" in v or (extra and any(f"{{{e}}}" in v for e in extra))
+        ):
             # replace instead of str.format to avoid conflicts with SPARQL {} braces
-            formatted[k] = v.replace("{year}", str(year))
+            formatted[k] = _apply_placeholders(v)
         else:
             formatted[k] = v
     # Handle url_suffix_by_year: append per-year suffix to the formatted URL

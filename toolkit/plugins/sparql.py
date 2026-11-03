@@ -399,11 +399,18 @@ class SparqlSource:
         Un errore di rete su una pagina NON e' "fine dati": ritenta e, se
         persiste, propaga per far fallire il run invece di troncare il CSV
         (regression: issue #449).
+
+        ``EmptyResultError`` (0 righe, risultato SPARQL valido ma vuoto) NON
+        viene ritentato: è una risposta definitiva, non un throttle. Per un
+        fetch incrementale è lo stato normale ("niente di nuovo") e ritentarlo
+        con backoff renderebbe lento ogni no-op.
         """
         last_error: DownloadError | None = None
         for attempt in range(self._page_retries):
             try:
                 return self._do_fetch(endpoint, q, accept_format)
+            except EmptyResultError:
+                raise
             except DownloadError as exc:
                 last_error = exc
                 if attempt < self._page_retries - 1:

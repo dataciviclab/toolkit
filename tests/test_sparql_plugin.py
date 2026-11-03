@@ -253,6 +253,32 @@ def test_sparql_fetch_empty_results():
             )
 
 
+def test_sparql_empty_result_not_retried():
+    """EmptyResultError NON è ritentato: 0 righe è definitivo, non un throttle.
+
+    Regressione: un delta incrementale vuoto veniva ritentato 3 volte con
+    backoff (5+10s), rendendo lento ogni no-op.
+    """
+    with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:
+        mock_cls.return_value.post.return_value = _http_ok(
+            status=200,
+            text='{"head":{"vars":["name"]},"results":{"bindings":[]}}',
+            headers={"Content-Type": "application/sparql-results+json"},
+        )
+        source = SparqlSource()
+        source._page_retry_delay = 0
+        with patch("toolkit.plugins.sparql.time.sleep") as sleep:
+            with pytest.raises(EmptyResultError):
+                source.fetch(
+                    "https://example.test/sparql",
+                    "SELECT ?name WHERE { }",
+                    accept_format="sparql-results+json",
+                    pages=3,
+                )
+            assert mock_cls.return_value.post.call_count == 1
+            sleep.assert_not_called()
+
+
 def test_sparql_fetch_invalid_json():
     """Invalid SPARQL JSON raises DownloadError."""
     with patch("toolkit.plugins.sparql.HttpClient") as mock_cls:

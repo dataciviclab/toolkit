@@ -610,7 +610,7 @@ def _estat_fake_get(allowed_urls=None, calls=None):
             return _ok(_FakeResponse(200, ESTAT_CONSTRAINTS_JSON, url))
         if url.endswith("/data/NAMA_10R_3GDP/all") and params.get("format") == "TSV":
             return _ok(_FakeResponse(200, ESTAT_TSV, url))
-        if url.endswith("/data/NAMA_10R_3GDP/A.EUR_HAB") and params.get("format") == "TSV":
+        if url.endswith("/data/NAMA_10R_3GDP/A.EUR_HAB.") and params.get("format") == "TSV":
             return _ok(_FakeResponse(200, ESTAT_TSV, url))
         if url.endswith("/data/NAMA_10R_3GDP/A.EUR_HAB.IT") and params.get("format") == "TSV":
             return _ok(_FakeResponse(200, ESTAT_TSV, url))
@@ -655,7 +655,30 @@ def test_sdmx_estat_filters_build_key(monkeypatch):
     )
 
     assert "A,EUR_HAB,IT,2000,21900.0," in payload.decode("utf-8")
-    assert any(c.endswith("/data/NAMA_10R_3GDP/A.EUR_HAB") for c in calls)
+    assert any(c.endswith("/data/NAMA_10R_3GDP/A.EUR_HAB.") for c in calls)
+
+
+def test_sdmx_estat_key_keeps_all_dimension_segments():
+    """Eurostat: un segmento per dimensione, anche vuoto in coda.
+
+    Regressione: `rstrip('.')` accorciava la key sotto il numero di dimensioni
+    → HTTP 400 (verificato live: `A.EUR_HAB.` → 200, `A.EUR_HAB` → 400).
+    """
+    src = SdmxSource()
+    dims = ["freq", "citizen", "age", "unit", "sex", "geo"]
+
+    key = src._build_key(dims, {"age": "TOTAL", "sex": "T"}, "ESTAT")
+    assert key == "..TOTAL..T."
+    assert key.count(".") == len(dims) - 1
+
+    # Filtri solo sulle prime dimensioni → i segmenti vuoti in coda restano.
+    assert (
+        src._build_key(["freq", "unit", "geo"], {"freq": "A", "unit": "EUR_HAB"}, "ESTAT")
+        == "A.EUR_HAB."
+    )
+
+    # Key interamente vuota → `all`.
+    assert src._build_key(dims, None, "ESTAT") == "all"
 
 
 def test_sdmx_estat_rejects_invalid_filter_value(monkeypatch):

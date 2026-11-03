@@ -125,18 +125,24 @@ Il campo è accettato per backward compatibilità ma ignorato.
 `legacy_aliases` è stato rimosso — non ha più effetto. Il profiler scrive solo `raw_profile.json`.
 
 
-## ANAC Delta Ingestion (Spike aperto)
+## Ingestione incrementale (delta)
 
-Il toolkit oggi offre solo diagnostica e confronto tra layer, non un merge stateful canonico.
+Il modello RAW è `fetch-all → overwrite`: ogni fonte è uno snapshot. Per le
+fonti **append-only** (stream) il toolkit supporta `raw.sources[].incremental`
+con placeholder `{since}` e append del delta — vedi `docs/config-schema.md` e
+**ADR-006** (PR #535).
 
-Disponibile: `status`/`inspect` espongono profili layer, `compare_layer_profiles` calcola `row_count_delta`, i report diagnostici mostrano `added_columns`, `removed_columns`, `type_changes`.
+Lo stato (baseline) vive nel **data plane**: su runner effimero va ripristinato
+prima del run. Senza baseline il fetch è full.
 
-Prima di introdurre un eventuale `delta_merge` servono verifiche su dati reali:
-- forma effettiva del payload ANAC/OCDS usato dal Lab
-- chiave operativa stabile per l'upsert
-- regole di conflitto per duplicati, rettifiche e annullamenti
+Disponibile: `status`/`inspect` espongono profili layer, `compare_layer_profiles`
+calcola `row_count_delta`, i report diagnostici mostrano `added_columns`,
+`removed_columns`, `type_changes`.
 
-**Stato**: Tenere come spike tecnico. Non aggiungere campi di config finché il modello non è verificato su dati reali.
+**Fuori scope** (follow-up `#534`): dedup/upsert con regole di conflitto per
+rettifiche e annullamenti. Il contratto attuale copre solo append esclusivo.
+Per una v1 di merge stateful su payload che cambiano (es. ANAC/OCDS) servono
+ancora verifiche su dati reali: chiave operativa stabile e regole di conflitto.
 
 ## Compat legacy
 

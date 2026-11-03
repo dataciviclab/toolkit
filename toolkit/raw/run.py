@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from toolkit.core.config import ensure_dict, parse_bool
+from toolkit.core.exceptions import EmptyResultError
 from toolkit.core.metadata import (
     config_hash_for_year,
     merge_layer_manifest,
@@ -27,6 +28,35 @@ from toolkit.raw._fetch_utils import (
     _resolve_output_path,
 )
 from toolkit.raw.extractors import get_extractor
+from toolkit.raw.incremental import (
+    append_delta,
+    build_since_clause,
+)
+
+
+def _baseline_filename(stype: str, name: str, formatted_args: dict, field_name: str) -> str:
+    """Nome del file raw che fa da baseline per il fetch incrementale.
+
+    Deve essere deterministico e **identico** al path di scrittura (che usa
+    ``formatted_args``): ``filename`` esplicito (con ``{year}`` già sostituito),
+    altrimenti ``{name}{ext}``. Con ``output_policy: overwrite`` è la stessa
+    path che il run riscrive.
+
+    Le sorgenti con estensione non deterministica (``from_origin``, es.
+    ``script``) sono rifiutate: la baseline non sarebbe individuale.
+    """
+    explicit = formatted_args.get("filename")
+    if explicit:
+        return str(explicit)
+    from toolkit.core.source_types import SOURCE_TYPES
+
+    spec = SOURCE_TYPES.get(stype)
+    if spec is not None and spec.ext_mode == "from_origin":
+        raise ValueError(
+            f"{field_name}.incremental: il source type '{stype}' ha estensione "
+            "non deterministica (from_origin); serve args.filename esplicito"
+        )
+    return f"{name}{_infer_ext(stype, formatted_args)}"
 
 
 def run_raw(
@@ -91,10 +121,49 @@ def run_raw(
             logger.info(f"SKIP source '{name}' (year={source_year} != requested year={year})")
             continue
 
-        formatted_args = _format_args(args, year)
+        # ── Fetch incrementale (append-only) ────────────────────────────
+        # La baseline è il raw del run precedente allo stesso path; il
+        # watermark ne ricava il filtro {since}. Su checkout fresco (nessuna
+        # baseline) il run resta full: corretto, solo più lento.
+        incremental = source.get("incremental")
+        baseline_path: Path | None = None
+        since_clause = ""
+        if incremental:
+            if output_policy != "overwrite":
+                raise ValueError(
+                    f"raw.sources[{i}].incremental richiede raw.output_policy: overwrite "
+                    f"(baseline stabile allo stesso path); trovato '{output_policy}'"
+                )
+            # La baseline va risolta sullo STESSO path di scrittura: gli args
+            # vanno formattati ({year}) prima di cercarla, altrimenti un
+            # filename tipo "voti_{year}.csv" non verrebbe mai trovato e il
+            # run sovrascriverebbe la storia col delta.
+            baseline_name = _baseline_filename(
+                stype, name, _format_args(args, year), f"raw.sources[{i}]"
+            )
+            baseline_path = out_dir / baseline_name
+            since_clause = build_since_clause(baseline_path, incremental)
+
+        formatted_args = _format_args(args, year, extra={"since": since_clause})
         if sample_bytes is not None:
             formatted_args["sample_bytes"] = sample_bytes
-        payload, origin = _fetch_payload(stype, client, formatted_args, base_dir=base_dir)
+        try:
+            payload, origin = _fetch_payload(stype, client, formatted_args, base_dir=base_dir)
+        except EmptyResultError:
+            # "Niente di nuovo" è uno stato legittimo per un delta, non un
+            # errore: con una baseline esistente il run è un no-op.
+            if baseline_path is None or not since_clause:
+                raise
+            payload = b""
+            origin = str(formatted_args.get("endpoint") or "")
+            logger.info("RAW incrementale -> nessun dato nuovo (delta vuoto)")
+
+        if baseline_path is not None and since_clause:
+            payload = append_delta(baseline_path, payload)
+            logger.info(
+                "RAW incrementale -> %s (delta accodato al baseline)",
+                short_path(baseline_path, root),
+            )
         inputs.append(
             {
                 "file": formatted_args.get("filename") or name,

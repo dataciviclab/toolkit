@@ -54,6 +54,7 @@ catalogazione; usato dai candidate per serie storiche (es. `ga-sentenze`:
 | `args` | `object` | `{}` |
 | `extractor` | `object \| null` | `null` |
 | `primary` | `bool` | `false` |
+| `incremental` | `object \| null` | `null` |
 
 `ClientConfig` shape minima:
 
@@ -65,6 +66,62 @@ catalogazione; usato dai candidate per serie storiche (es. `ga-sentenze`:
 | `headers` | `dict[string,string] \| null` | `null` |
 
 `raw.sources[].args` e `raw.extractor.args` devono essere sempre oggetti YAML, non liste o stringhe.
+
+### Fetch incrementale (`raw.sources[].incremental`)
+
+Per le fonti **append-only** (stream: voti, atti, interventi) il toolkit può
+estrarre solo il delta invece di rifare il full. Assente = `full` (default,
+backward compatible). Richiede `raw.output_policy: overwrite` (baseline stabile
+allo stesso path).
+
+| Campo | Tipo | Obbligatorio | Descrizione |
+|---|---|---|---|
+| `key_expr` | `string` | sì | espressione SPARQL del filtro (es. `STR(?data)`) |
+| `key_column` | `string` | sì | colonna del raw esistente da cui leggere il watermark |
+| `key_literal` | `auto \| uri \| string \| number` | no (`auto`) | come rendere il watermark nel filtro |
+
+Semantica: il watermark è il **valore massimo** di `key_column` nel raw
+esistente (la baseline). Il placeholder `{since}` nella query viene sostituito
+con `FILTER(key_expr > <watermark>)` — o con la stringa vuota se la baseline non
+esiste (→ full). Il delta viene **accodato** al raw esistente, preservando
+byte-per-byte le righe storiche.
+
+`{since}` è **obbligatorio** nella query: senza, il full verrebbe accodato al
+baseline (validato al load, non solo al run). Usa `key_expr: "STR(?data)"` se la
+proprietà è un `xsd:date` (confronto con stringa).
+
+La baseline è il file raw scritto dallo stesso source (con `filename` esplicito
+i `{year}` sono già sostituiti): deve esistere nel checkout. Su runner effimero
+va ripristinata prima del run (stato nel data plane — ADR-006, PR #535). Senza
+baseline il run è corretto ma full.
+
+Delta vuoto (nessuna riga nuova) = **no-op**: il run riesce e il raw resta
+invariato. Solo un full vuoto (senza baseline) resta un errore.
+
+Scope: **append-only**. La query deve filtrare in modo esclusivo (`>`). Dedup e
+upsert (rettifiche, annullamenti) sono fuori scope (follow-up #534). Limite noto:
+le righe con `key == max` pubblicate *dopo* il run sono perse (batch con la
+stessa data).
+
+```yaml
+raw:
+  output_policy: overwrite
+  sources:
+    - name: voti_raw
+      type: sparql
+      args:
+        endpoint: https://dati.camera.it/sparql
+        accept_format: sparql-results+json
+        query: |
+          SELECT ?data ?voto WHERE {
+            ?voto ocd:data ?data .
+            {since}
+          }
+      incremental:
+        key_expr: "STR(?data)"
+        key_column: "data"
+        key_literal: string
+```
 
 Esempio `ckan`:
 

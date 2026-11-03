@@ -18,7 +18,11 @@ from typing import Any
 from lab_connectors.http import HttpClient
 from lab_connectors.http.sparql import curl_sparql as _curl_sparql
 
-from toolkit.core.exceptions import DownloadError
+from toolkit.core.exceptions import DownloadError, EmptyResultError
+
+# Il rendering dei letterali SPARQL è condiviso con il fetch incrementale
+# ({since}): un'unica implementazione in toolkit.core.literals.
+from toolkit.core.literals import render_sparql_literal as _keyset_literal
 
 log = logging.getLogger(__name__)
 
@@ -395,11 +399,18 @@ class SparqlSource:
         Un errore di rete su una pagina NON e' "fine dati": ritenta e, se
         persiste, propaga per far fallire il run invece di troncare il CSV
         (regression: issue #449).
+
+        ``EmptyResultError`` (0 righe, risultato SPARQL valido ma vuoto) NON
+        viene ritentato: è una risposta definitiva, non un throttle. Per un
+        fetch incrementale è lo stato normale ("niente di nuovo") e ritentarlo
+        con backoff renderebbe lento ogni no-op.
         """
         last_error: DownloadError | None = None
         for attempt in range(self._page_retries):
             try:
                 return self._do_fetch(endpoint, q, accept_format)
+            except EmptyResultError:
+                raise
             except DownloadError as exc:
                 last_error = exc
                 if attempt < self._page_retries - 1:
@@ -764,7 +775,7 @@ def _sparql_json_to_csv(json_text: str) -> bytes:
         raise DownloadError("SPARQL JSON payload has unexpected structure")
 
     if not bindings:
-        raise DownloadError("SPARQL query returned no results")
+        raise EmptyResultError("SPARQL query returned no results")
 
     var_names: list[str] = (payload.get("head") or {}).get("vars") or list(bindings[0].keys())
     return _bindings_to_csv(bindings, var_names)
@@ -777,7 +788,7 @@ def _bindings_to_csv(bindings: list[dict[str, Any]], var_names: list[str] | None
     If *var_names* is not provided, columns are derived from the first binding.
     """
     if not bindings:
-        raise DownloadError("SPARQL query returned no results")
+        raise EmptyResultError("SPARQL query returned no results")
 
     if var_names is None:
         var_names = list(bindings[0].keys())
@@ -838,37 +849,3 @@ def _csv_last_value(csv_bytes: bytes, key_col: str) -> str | None:
         if len(row) > idx and row[idx]:
             last = row[idx]
     return last
-
-
-def _keyset_literal(value: str, mode: str = "auto") -> str:
-    """Rappresenta un valore come letterale SPARQL per il FILTER keyset.
-
-    ``mode``:
-    - ``auto`` (default): URI (http/https) → ``<uri>``, numero → nudo,
-      altrimenti stringa quotata.
-    - ``uri``: sempre ``<uri>``.
-    - ``number``: sempre nudo (errore se non numerico).
-    - ``string``: sempre quotato — necessario quando il FILTER usa
-      ``STR(?var)``: il valore è una stringa, non un IRI.
-    """
-    v = value.strip()
-    if mode == "uri":
-        return f"<{v}>"
-    if mode == "number":
-        if not re.fullmatch(r"-?\d+(\.\d+)?", v):
-            raise DownloadError(
-                f"keyset key_literal='number' ma l'ultimo valore non è numerico: {v!r}"
-            )
-        return v
-    if mode == "string":
-        return _quote_literal(v)
-    if v.startswith(("http://", "https://")):
-        return f"<{v}>"
-    if re.fullmatch(r"-?\d+(\.\d+)?", v):
-        return v
-    return _quote_literal(v)
-
-
-def _quote_literal(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'

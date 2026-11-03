@@ -56,6 +56,31 @@ Alternative considerate:
 5. **Il dataset è l'unità atomica di run+publish**: la pubblicazione avviene
    quando quel dataset riesce, non in un passo globale dopo tutti i run.
 
+## Implementazione incrementale (primo pezzo, #536)
+
+Il contratto è stato implementato in due fasi. Fase 1 (append-only):
+
+- `raw.sources[].incremental {key_expr, key_column, key_literal}` +
+  placeholder `{since}`; richiede `output_policy: overwrite`.
+- La baseline è il raw scritto dallo stesso source (**path formattato**, con
+  `{year}` sostituito); source con ext non deterministica (`from_origin`,
+  `script`) sono rifiutati.
+- `{since}` è **obbligatorio**: senza, il full verrebbe accodato al baseline.
+  La validazione (chiavi, presenza del placeholder) sta in `core.config` ed è
+  applicata al load — `validate`/`inspect` la vedono.
+- Delta vuoto = no-op (`EmptyResultError` distinta da `DownloadError`).
+- Append fedele byte-per-byte; header del delta confrontato col baseline
+  (schema drift → errore).
+
+**Limiti noti** (da coprire in fase 2 / follow-up):
+
+- solo **append esclusivo** (`>`). Le righe con `key == max` pubblicate *dopo*
+  il run sono perse (batch con la stessa data): per dati con revisioni serve
+  dedup/upsert.
+- la baseline va ancora ripristinata nel checkout (disco/runner o download):
+  la risoluzione automatica dal data plane (GCS) è il pezzo successivo.
+- nessuna scrittura di `_state.json`: il watermark è derivato dal raw stesso.
+
 ## Conseguenze
 
 **Positive:**

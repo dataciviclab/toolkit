@@ -20,6 +20,8 @@ from pathlib import Path
 import pytest
 
 TOOLKIT = Path(__file__).resolve().parent.parent / "toolkit"
+TESTS = Path(__file__).resolve().parent
+ROOT = TOOLKIT.parent
 
 pytestmark = pytest.mark.policy
 
@@ -43,8 +45,9 @@ def _usa_connessione_globale(path: Path) -> bool:
 
 def test_nessun_uso_della_connessione_duckdb_globale():
     hits = sorted(
-        str(path.relative_to(TOOLKIT.parent))
-        for path in TOOLKIT.rglob("*.py")
+        str(path.relative_to(ROOT))
+        for base in (TOOLKIT, TESTS)
+        for path in base.rglob("*.py")
         if _usa_connessione_globale(path)
     )
 

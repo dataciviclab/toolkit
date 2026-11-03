@@ -510,11 +510,15 @@ class TestMaterializeCodelist:
         target = materialize_codelist_to(entry, tmp_path)
         assert target.exists()
 
-        import duckdb
+        # Connessione dedicata: `duckdb.sql()` usa la connessione globale
+        # condivisa e riceve ResourceInUseException se un altro test ha
+        # lasciato un risultato in sospeso (flake non riproducibile in locale).
+        from lab_connectors.duckdb import safe_connect
 
-        rows = duckdb.sql(
-            f"SELECT code, label_en, LEVEL FROM read_parquet('{target}') ORDER BY code"
-        ).fetchall()
+        with safe_connect() as con:
+            rows = con.execute(
+                f"SELECT code, label_en, LEVEL FROM read_parquet('{target}') ORDER BY code"
+            ).fetchall()
         assert rows == [("IT", "Italy", "0"), ("ITC4", "Nord-Ovest", "2")]
 
     def test_unsupported_provider_raises(self, tmp_path: Path):

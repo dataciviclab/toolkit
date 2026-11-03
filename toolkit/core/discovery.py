@@ -27,10 +27,15 @@ def resolve_config_path(
     Args:
         hint: ``None`` → cerca ``dataset.yml`` nel CWD.
               Path o stringa con ``/`` o ``.yml`` → path diretto.
-              Stringa senza ``/`` né ``.yml`` → slug risolto nei repo del
+              Stringa senza ``/`` né ``.yml`` → slug risolto prima nel repo
+              corrente (``<cwd>/<section>/<slug>``) e poi nei repo del
               workspace (dataset-incubator candidates/compose/support_datasets,
               altri repo datasets/).
         workspace: Workspace root (default: ``WORKSPACE_ROOT``).
+
+    Nota sull'ordine: il repo corrente precede il workspace. Se lo stesso slug
+    esiste in due repo, vince quello da cui è partito il comando (è il
+    comportamento necessario in CI, dove il workspace non esiste).
 
     Returns:
         Path assoluto a ``dataset.yml``.
@@ -71,12 +76,26 @@ def resolve_config_path(
             f"File non trovato: {candidate}\n  Usa -c <slug> per risolvere automaticamente"
         )
 
-    # ── Stage 3: risoluzione slug nei repo del workspace ──────────────
-    from toolkit.registry.layout import repo_dataset_dirs, workspace_repo_dirs
-
     # Lo slug canonico è dataset.name (underscore); la dir è un contenitore
     # libero (hyphen). Prova entrambe le forme per coprire dir≠slug.
     hint_forms = {hint_str, hint_str.replace("_", "-")}
+
+    # ── Stage 2b: layout del repo corrente (checkout standalone / CI) ──
+    # In CI non esiste il workspace del Lab: `--config <slug>` deve trovare
+    # <cwd>/<section>/<slug>/dataset.yml. Senza questo, la risoluzione cade
+    # sul workspace (inesistente) e cerca nella directory del package.
+    for section in ("datasets", "support", "compose", "candidates", "support_datasets"):
+        section_dir = cwd / section
+        if not section_dir.is_dir():
+            continue
+        for form in sorted(hint_forms):
+            for name in ("dataset.yml", "dataset.yaml"):
+                probe = section_dir / form / name
+                if probe.is_file():
+                    return probe.resolve()
+
+    # ── Stage 3: risoluzione slug nei repo del workspace ──────────────
+    from toolkit.registry.layout import repo_dataset_dirs, workspace_repo_dirs
 
     searched: list[str] = []
     for repo_dir in workspace_repo_dirs(ws):
@@ -92,7 +111,7 @@ def resolve_config_path(
                 searched.append(str(section_dir / form))
 
     # ── Stage 4: fallback scan completo slug → config_path ────────────
-    # La dir può differire completamente dal slug (es. anag-enti vs
+    # La dir può differire completamente dallo slug (es. anag-enti vs
     # ca_anag_enti_seed; monthly HDD senza dir locale). Lo slug canonico
     # (da dataset.name nello scan) è la fonte ultima.
     from toolkit.registry.layout import iter_workspace_dataset_ymls

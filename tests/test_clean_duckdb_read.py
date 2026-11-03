@@ -51,7 +51,9 @@ def test_read_raw_to_relation_fallback_invokes_robust_after_strict_failure(
         assert calls[0].get("ignore_errors") is None
         assert calls[1]["ignore_errors"] is True
         assert calls[1]["null_padding"] is True
-        assert calls[1]["strict_mode"] is False
+        # Con null_padding il robust forza strict_mode=True: la combinazione
+        # con false misparsa i campi quotati con virgolette interne + newline.
+        assert calls[1]["strict_mode"] is True
         assert calls[1]["sample_size"] == -1
 
 
@@ -1063,5 +1065,6 @@ def test_read_raw_to_relation_robust_handles_quoted_newlines(tmp_path: Path):
 
     assert info.source == "robust"
     assert info.params_used["parallel"] is False
+    assert info.params_used["strict_mode"] is True
     assert rows[0] == (1, "line one\nline two")
     assert rows[1] == (2, "short")

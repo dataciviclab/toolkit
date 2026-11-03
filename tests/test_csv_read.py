@@ -181,6 +181,22 @@ def test_robust_preset_disables_parallel_when_null_padding():
 
 
 @pytest.mark.pure_unit
+def test_robust_preset_forces_strict_mode_with_null_padding():
+    """null_padding + strict_mode=false misparsa i campi quotati con "" e newline.
+
+    Osservato su camera_sindisp leg 16: 44.304 righe corrette -> 44.655
+    frammenti. ignore_errors resta attivo per le righe malformate.
+    """
+    from toolkit.core.csv_read import robust_preset
+
+    # Anche se il dataset dichiara strict_mode: false, con null_padding va forzato
+    cfg = robust_preset({"strict_mode": False})
+    assert cfg["null_padding"] is True
+    assert cfg["strict_mode"] is True
+    assert cfg["ignore_errors"] is True
+
+
+@pytest.mark.pure_unit
 def test_robust_preset_keeps_parallel_when_null_padding_off():
     from toolkit.core.csv_read import robust_preset
 

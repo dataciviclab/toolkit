@@ -587,12 +587,13 @@ class SdmxSource:
 
         key = ".".join(parts)
 
-        # Key stripping: solo Eurostat accetta key corte (i segmenti trailing
-        # possono essere omessi). ISTAT richiede un segmento per ogni
-        # dimensione — vuoto = all — verificato live: key corta → 422
-        # "not enough key values" (issue #444). OECD già non stripava (403).
-        if _safe_text(agency).upper() == EUROSTAT_AGENCY:
-            key = key.rstrip(".")
+        # Eurostat richiede ESATTAMENTE un segmento per dimensione (o `all`):
+        # i segmenti vuoti (wildcard) non vanno rimossi, nemmeno in coda —
+        # verificato live: `A.EUR_HAB.` → 200, `A.EUR_HAB` → 400. Rimuovere i
+        # trailing dot accorcia la key sotto il numero di dimensioni → 400.
+        # Solo una key interamente vuota collassa a `all`.
+        if _safe_text(agency).upper() == EUROSTAT_AGENCY and key.strip(".") == "":
+            return "all"
 
         return key or "all"
 

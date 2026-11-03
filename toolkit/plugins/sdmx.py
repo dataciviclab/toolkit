@@ -6,7 +6,7 @@ import json
 import logging
 import re
 import xml.etree.ElementTree as ET
-from typing import Iterable
+from typing import Iterable, Iterator
 
 import requests
 
@@ -104,36 +104,47 @@ def _detect_tsv_dims(raw_header: str) -> list[str]:
     return [d.strip() for d in dims_raw.split(",") if d.strip()]
 
 
-def _tsv_to_csv(text: str) -> tuple[list[str], list[dict[str, object]]]:
-    """Unpivot a Eurostat SDMX-TSV payload into long CSV rows.
+def _tsv_header(text: str) -> tuple[list[str], list[str], bool]:
+    """Parse the wide TSV header into ``(dims, year_cols, is_monthly)``.
 
-    Produces ``[dim1..dimN, year, (month), value, flag]`` — lo stesso contratto
-    di ``connectors/tsv_normalize.py`` del repo eurostat. Il TSV è wide: ogni
-    riga è una serie, le colonne successive alla prima sono i periodi.
+    Header format: ``dim1,dim2,...,dimN\\TIME_PERIOD\\t2020\\t2021...``.
     """
-    lines = text.splitlines()
-    if not lines:
+    first_line = text.split("\n", 1)[0]
+    if not first_line.strip():
         raise DownloadError("Empty Eurostat TSV payload")
 
-    raw_header = lines[0]
-    dims = _detect_tsv_dims(raw_header)
-
-    parts = raw_header.strip().split("\t")
+    dims = _detect_tsv_dims(first_line)
+    parts = first_line.strip().split("\t")
     year_cols = [y.strip() for y in parts[1:] if y.strip()]
     is_monthly = bool(year_cols and TSV_MONTHLY_RE.match(year_cols[0]))
+    return dims, year_cols, is_monthly
 
-    fieldnames = list(dims) + (
+
+def _tsv_fieldnames(dims: list[str], is_monthly: bool) -> list[str]:
+    """Output columns of the long CSV: dims + period + value + flag."""
+    return list(dims) + (
         ["year", "month", "value", "flag"] if is_monthly else ["year", "value", "flag"]
     )
 
-    rows: list[dict[str, object]] = []
-    for line in lines[1:]:
+
+def _iter_tsv_rows(
+    text: str, dims: list[str], year_cols: list[str], is_monthly: bool
+) -> Iterator[dict[str, object]]:
+    """Yield one long row per (series, period), streaming the wide TSV.
+
+    Il payload resta in memoria come stringa, ma le righe sono generate **una
+    alla volta**: niente lista di dict intermedia. Sui cubi Eurostat grandi
+    (es. migrazione, ~40M righe) la lista esauriva la RAM; qui il picco e' il
+    solo CSV di output. L'iterazione usa ``io.StringIO`` per non duplicare il
+    testo in una lista di righe.
+    """
+    stream = io.StringIO(text)
+    next(stream, None)  # salta l'header
+    for line in stream:
         line = line.strip()
         if not line:
             continue
         cols = line.split("\t")
-        if not cols:
-            continue
 
         dim_values = [v.strip() for v in cols[0].split(",")]
         base_row: dict[str, object] = {}
@@ -153,12 +164,33 @@ def _tsv_to_csv(text: str) -> tuple[list[str], list[dict[str, object]]]:
                 row["year"] = period
             row["value"] = "" if value is None else value
             row["flag"] = flag or ""
-            rows.append(row)
+            yield row
 
-    if not rows:
+
+def _tsv_to_csv_bytes(text: str) -> bytes:
+    """Unpivot a Eurostat SDMX-TSV payload into long CSV, in streaming.
+
+    Produces ``[dim1..dimN, year, (month), value, flag]`` — lo stesso contratto
+    di ``connectors/tsv_normalize.py`` del repo eurostat. Le righe sono scritte
+    man mano (``_iter_tsv_rows``) su un buffer binario via ``TextIOWrapper``:
+    il picco di memoria è il CSV di output, non la lista di dict intermedia.
+    """
+    dims, year_cols, is_monthly = _tsv_header(text)
+    header = _tsv_fieldnames(dims, is_monthly)
+
+    buffer = io.BytesIO()
+    text_buffer = io.TextIOWrapper(buffer, encoding="utf-8", newline="", write_through=True)
+    writer = csv.DictWriter(text_buffer, fieldnames=header)
+    writer.writeheader()
+    n_rows = 0
+    for row in _iter_tsv_rows(text, dims, year_cols, is_monthly):
+        writer.writerow(row)
+        n_rows += 1
+    text_buffer.flush()
+
+    if n_rows == 0:
         raise DownloadError("Eurostat TSV returned no rows")
-
-    return fieldnames, rows
+    return buffer.getvalue()
 
 
 class SdmxSource:
@@ -317,8 +349,7 @@ class SdmxSource:
             accept="text/tab-separated-values",
             params={"format": "TSV"},
         )
-        header, rows = _tsv_to_csv(tsv_text)
-        return self._rows_to_csv(header, rows), origin
+        return _tsv_to_csv_bytes(tsv_text), origin
 
     def fetch_codelist(self, codelist_id: str, agency: str = EUROSTAT_AGENCY) -> dict[str, object]:
         """Fetch una codelist SDMX (SDMX-JSON 2.0) e la normalizza.

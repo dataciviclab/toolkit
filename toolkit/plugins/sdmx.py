@@ -72,6 +72,55 @@ def _flow_ref(agency: str, flow: str, version: str) -> str:
     return f"{agency},{flow},{version}"
 
 
+# SDMX-CSV (OECD `format=csvfilewithlabels`): colonne di struttura che precedono
+# le coppie (codice, etichetta).
+_SDMX_CSV_PREFIX_COLS = 4
+
+
+def normalize_oecd_label_columns(csv_text: str) -> str:
+    """Rinomina le colonne etichetta OECD in ``{DIM}_label``.
+
+    ``format=csvfilewithlabels`` produce coppie ``(codice, etichetta)`` con nomi
+    umani: es. ``MEASURE`` (codice) e ``Measure`` (etichetta). I due nomi
+    collidono case-insensitive, quindi DuckDB rinomina l'etichetta
+    (``Measure_1``) e le query ``clean.sql`` finiscono sulla colonna **codice**
+    (label = codice). Questa funzione normalizza l'header a ``{DIM}`` /
+    ``{DIM}_label`` — lo stesso contratto del path JSON (``_normalize_rows``) —
+    rendendo i nomi univoci e le etichette risolvibili.
+
+    Le prime ``_SDMX_CSV_PREFIX_COLS`` colonne (STRUCTURE, STRUCTURE_ID,
+    STRUCTURE_NAME, ACTION) non hanno etichetta; da lì in poi ogni colonna è
+    seguita dalla propria etichetta.
+
+    Se l'header non ha la forma attesa, il testo è restituito invariato (meglio
+    il raw che un header riscritto male).
+    """
+    nl = csv_text.find("\n")
+    if nl == -1:
+        return csv_text
+    header_line = csv_text[:nl]
+    body = csv_text[nl + 1 :]
+    had_cr = header_line.endswith("\r")
+    if had_cr:
+        header_line = header_line[:-1]
+    try:
+        header = next(csv.reader([header_line]))
+    except csv.Error:
+        return csv_text
+    if not header or header[0].lstrip("\ufeff") != "STRUCTURE":
+        return csv_text
+    renamed = list(header)
+    for i in range(_SDMX_CSV_PREFIX_COLS, len(header) - 1, 2):
+        code, label = header[i], header[i + 1]
+        if code and label and not code.endswith("_label") and not label.endswith("_label"):
+            renamed[i + 1] = f"{code}_label"
+    if renamed == header:
+        return csv_text
+    buf = io.StringIO()
+    csv.writer(buf, lineterminator="\r\n" if had_cr else "\n").writerow(renamed)
+    return buf.getvalue() + body
+
+
 ISTAT_SDMX_BASE = "https://sdmx.istat.it/SDMXWS/rest"
 ISTAT_ESPLORADATI_BASE = "https://esploradati.istat.it/SDMXWS/rest"
 
@@ -831,7 +880,7 @@ class SdmxSource:
         parameter instead of Accept header. This produces CSV with both codes
         and labels, matching the official OECD Data Explorer output.
 
-        Output: CSV ``[DIM1, DIM1_LABEL, DIM2, DIM2_LABEL, ..., value]``
+        Output: CSV ``[DIM1, DIM1_label, DIM2, DIM2_label, ..., value]``
         """
         # OECD JSON 1.0 doesn't expose dimensions in data preview.
         # Fetch dimension IDs from datastructure XML to build correct key.
@@ -845,7 +894,7 @@ class SdmxSource:
             f"data/{flow_ref}/{key}",
             params={"format": "csvfilewithlabels"},
         )
-        return csv_text.encode("utf-8"), origin
+        return normalize_oecd_label_columns(csv_text).encode("utf-8"), origin
 
 
 # ---------------------------------------------------------------------------

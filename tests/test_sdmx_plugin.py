@@ -987,9 +987,9 @@ OECD_PREVIEW_JSON = """
 }
 """
 
-OECD_CSV = """DATAFLOW,REF_AREA,FREQ,CRITERIA,ACTIVITY,UNIT_MEASURE,PRICE_BASE,MEASURE,TIME_PERIOD,OBS_VALUE,OBS_STATUS,UNIT_MULT,DECIMALS,BASE_PER
-OECD.STI.STP:DSD_ANBERD@DF_ANBERDi4(1.0),ITA,A,MA,C30,USD_PPP,V,B,2020,1234,,0,0,
-OECD.STI.STP:DSD_ANBERD@DF_ANBERDi4(1.0),ITA,A,MA,C30,USD_PPP,V,B,2021,2345,,0,0,
+OECD_CSV = """STRUCTURE,STRUCTURE_ID,STRUCTURE_NAME,ACTION,REF_AREA,Reference area,FREQ,Frequency of observation,CRITERIA,Main activity,ACTIVITY,Activity,UNIT_MEASURE,Unit of measure,PRICE_BASE,Price base,MEASURE,Measure,TIME_PERIOD,Time period,OBS_VALUE,Observation value,OBS_STATUS,Observation status,UNIT_MULT,Unit multiplier,DECIMALS,Decimals
+DATAFLOW,OECD.STI.STP:DSD_ANBERD@DF_ANBERDi4(1.0),BERD,Information,ITA,Italy,A,Annual,MA,Main activity,C30,Manufacturing,USD_PPP,US dollars PPP,V,Current prices,B,BERD,2020,2020,1234,1234,A,Normal value,0,Units,0,Zero
+DATAFLOW,OECD.STI.STP:DSD_ANBERD@DF_ANBERDi4(1.0),BERD,Information,ITA,Italy,A,Annual,MA,Main activity,C30,Manufacturing,USD_PPP,US dollars PPP,V,Current prices,B,BERD,2021,2021,2345,2345,A,Normal value,0,Units,0,Zero
 """
 
 
@@ -1057,8 +1057,8 @@ def test_sdmx_oecd_fetch_csv(monkeypatch):
     )
 
     text = payload.decode("utf-8")
-    assert "DATAFLOW,REF_AREA" in text
-    assert "ITA" in text
+    assert "REF_AREA,REF_AREA_label" in text  # header normalizzato
+    assert "ITA,Italy" in text
     # Verify format=csvfilewithlabels was used
     csv_calls = [c for c in calls if c[2].get("format") == "csvfilewithlabels"]
     assert len(csv_calls) >= 1
@@ -1073,8 +1073,8 @@ def test_sdmx_oecd_fetch_csv(monkeypatch):
     )
 
     text = payload.decode("utf-8")
-    assert "DATAFLOW,REF_AREA" in text
-    assert "ITA" in text
+    assert "REF_AREA,REF_AREA_label" in text  # header normalizzato
+    assert "ITA,Italy" in text
     # Verify format=csvfilewithlabels was used
     csv_calls = [c for c in calls if c[2].get("format") == "csvfilewithlabels"]
     assert len(csv_calls) >= 1
@@ -1286,3 +1286,52 @@ def test_sdmx_istat_metadata_default_is_esploradati():
     src = SdmxSource(retries=1)
     assert src._metadata_base_urls("IT1") == ["https://esploradati.istat.it/SDMXWS/rest"]
     assert src._data_base_urls("IT1")[0] == "https://esploradati.istat.it/SDMXWS/rest"
+
+
+# ── OECD: normalizzazione colonne label ──────────────────────────────────────
+
+
+@pytest.mark.pure_unit
+def test_normalize_oecd_label_columns_renames_labels():
+    """Le etichette OECD diventano ``{DIM}_label``: niente collisione coi codici.
+
+    Senza normalizzazione ``MEASURE``/``Measure`` collidono case-insensitive e
+    DuckDB rinomina l'etichetta (``Measure_1``), facendo finire le query
+    ``clean.sql`` sulla colonna codice (label = codice).
+    """
+    from toolkit.plugins.sdmx import normalize_oecd_label_columns
+
+    out = normalize_oecd_label_columns(OECD_CSV)
+    header = out.split("\n", 1)[0]
+    assert header.startswith("STRUCTURE,STRUCTURE_ID,STRUCTURE_NAME,ACTION,")
+    assert "REF_AREA,REF_AREA_label" in header
+    assert "MEASURE,MEASURE_label" in header
+    assert "TIME_PERIOD,TIME_PERIOD_label" in header
+    # I valori restano intatti.
+    assert "ITA,Italy" in out
+    assert "1234,1234" in out
+
+
+@pytest.mark.pure_unit
+def test_normalize_oecd_label_columns_ignores_unexpected_header():
+    """Header non-OECD (senza ``STRUCTURE``) restituito invariato."""
+    from toolkit.plugins.sdmx import normalize_oecd_label_columns
+
+    raw = "DATAFLOW,REF_AREA,MEASURE\nX,ITA,B\n"
+    assert normalize_oecd_label_columns(raw) == raw
+
+
+@pytest.mark.pure_unit
+def test_normalize_oecd_label_columns_preserves_crlf():
+    """Il terminatore di riga originale è preservato."""
+    from toolkit.plugins.sdmx import normalize_oecd_label_columns
+
+    raw = (
+        "STRUCTURE,STRUCTURE_ID,STRUCTURE_NAME,ACTION,REF_AREA,Reference area\r\n"
+        "DATAFLOW,x,y,I,ITA,Italy\r\n"
+    )
+    out = normalize_oecd_label_columns(raw)
+    assert out.startswith(
+        "STRUCTURE,STRUCTURE_ID,STRUCTURE_NAME,ACTION,REF_AREA,REF_AREA_label\r\n"
+    )
+    assert out.endswith("DATAFLOW,x,y,I,ITA,Italy\r\n")

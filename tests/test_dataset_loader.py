@@ -289,6 +289,36 @@ class TestValidateConfig:
         assert result["ok"] is True
         assert not any("tags" in w or "category" in w for w in result["warnings"])
 
+    def test_warns_missing_primary_key(self, tmp_path: Path) -> None:
+        """Guardrail anti-duplicati: warning se clean.validate.primary_key manca."""
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test", "years": [2023]},
+                "raw": {"sources": [{"name": "src1"}]},
+                "clean": {"sql": "sql/clean.sql", "validate": {"min_rows": 1}},
+            },
+        )
+        result = validate_config(tmp_path)
+        assert result["ok"] is True
+        assert any("primary_key" in w for w in result["warnings"])
+
+    def test_no_warn_when_primary_key_declared(self, tmp_path: Path) -> None:
+        _write_dataset(
+            tmp_path,
+            {
+                "dataset": {"name": "test", "years": [2023]},
+                "raw": {"sources": [{"name": "src1"}]},
+                "clean": {
+                    "sql": "sql/clean.sql",
+                    "validate": {"primary_key": ["anno", "codice"], "min_rows": 1},
+                },
+            },
+        )
+        result = validate_config(tmp_path)
+        assert result["ok"] is True
+        assert not any("primary_key" in w for w in result["warnings"])
+
     def test_invalid_yaml(self, tmp_path: Path) -> None:
         (tmp_path / "dataset.yml").write_text("invalid: [")
         result = validate_config(tmp_path)

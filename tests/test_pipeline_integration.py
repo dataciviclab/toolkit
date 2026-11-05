@@ -342,36 +342,3 @@ def test_run_mart_supports_support_placeholder(tmp_path: Path) -> None:
         f"SELECT marker FROM read_parquet('{mart_output.as_posix()}')"
     ).fetchone() == ("ok",)
     assert result["output_rows"] == 1
-
-
-def test_clean_validation_warns_when_primary_key_missing(
-    project_example: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """P5: senza ``clean.validate.primary_key`` la validazione emette un warning.
-
-    Il warning spinge a dichiarare la chiave naturale: senza, le dimensioni
-    della fonte possono collassare sulla stessa chiave (serie indistinguibili).
-    """
-    _simplify_sql_project(project_example)
-    monkeypatch.chdir(project_example)
-    cfg = load_config(project_example / "dataset.yml")
-    year = cfg.years[0]
-    logger = NoopLogger()
-
-    run_raw(
-        cfg.dataset,
-        year,
-        cfg.root,
-        cfg.raw,
-        logger,
-        base_dir=cfg.base_dir,
-        output_cfg=cfg.output,
-        clean_cfg=cfg.clean,
-    )
-    run_profile_fn(cfg, [year], logger)
-    run_clean(
-        cfg.dataset, year, cfg.root, cfg.clean, logger, base_dir=cfg.base_dir, output_cfg=cfg.output
-    )
-
-    summary = run_clean_validation(cfg, year, logger)
-    assert any("primary_key" in w for w in summary["warnings"])

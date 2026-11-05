@@ -75,6 +75,8 @@ def _flow_ref(agency: str, flow: str, version: str) -> str:
 # SDMX-CSV (OECD `format=csvfilewithlabels`): colonne di struttura che precedono
 # le coppie (codice, etichetta).
 _SDMX_CSV_PREFIX_COLS = 4
+# Le colonne codice SDMX sono maiuscole con underscore (REF_AREA, OBS_VALUE, ...).
+_SDMX_CODE_RE = re.compile(r"^[A-Z0-9_]+$")
 
 
 def normalize_oecd_label_columns(csv_text: str) -> str:
@@ -112,7 +114,14 @@ def normalize_oecd_label_columns(csv_text: str) -> str:
     renamed = list(header)
     for i in range(_SDMX_CSV_PREFIX_COLS, len(header) - 1, 2):
         code, label = header[i], header[i + 1]
-        if code and label and not code.endswith("_label") and not label.endswith("_label"):
+        if not code or not label:
+            continue
+        # Le colonne codice SDMX sono ^[A-Z0-9_]+$. Se la forma non torna
+        # (prefisso cambiato, coppie slittate) lasciamo l'header invariato
+        # invece di rinominare la colonna sbagliata.
+        if not _SDMX_CODE_RE.match(code):
+            return csv_text
+        if not code.endswith("_label") and not label.endswith("_label"):
             renamed[i + 1] = f"{code}_label"
     if renamed == header:
         return csv_text

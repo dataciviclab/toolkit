@@ -1335,3 +1335,21 @@ def test_normalize_oecd_label_columns_preserves_crlf():
         "STRUCTURE,STRUCTURE_ID,STRUCTURE_NAME,ACTION,REF_AREA,REF_AREA_label\r\n"
     )
     assert out.endswith("DATAFLOW,x,y,I,ITA,Italy\r\n")
+
+
+@pytest.mark.pure_unit
+def test_normalize_oecd_label_columns_rejects_slid_pairs():
+    """Se le coppie slittano l'header resta invariato.
+
+    Con un prefisso di 5 colonne l'offset fisso 4 non allinea più codice ed
+    etichetta: a un certo punto la colonna "codice" è in realtà un'etichetta
+    (spazi/minuscole), la forma ``^[A-Z0-9_]+$`` non torna e non tocchiamo nulla.
+    """
+    from toolkit.plugins.sdmx import normalize_oecd_label_columns
+
+    raw = (
+        "STRUCTURE,STRUCTURE_ID,STRUCTURE_NAME,ACTION,DUMMY,REF_AREA,Reference area,"
+        "FREQ,Frequency of observation\n"
+        "DATAFLOW,x,y,I,z,ITA,Italy,A,Annual\n"
+    )
+    assert normalize_oecd_label_columns(raw) == raw

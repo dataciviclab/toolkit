@@ -59,6 +59,8 @@ def load_dataset_manifest(path: str | Path) -> dict[str, Any]:
         "time_coverage": ds.get("time_coverage"),
         "tags": ds.get("tags") or [],
         "category": ds.get("category"),
+        "clean_primary_key": ((cfg.get("clean") or {}).get("validate") or {}).get("primary_key")
+        or [],
     }
 
     # raw.sources
@@ -145,6 +147,15 @@ def validate_config(path: str | Path) -> dict[str, Any]:
     if not manifest.get("category"):
         warnings.append(
             "'dataset.category' non impostato (standard candidate: tema — vedi docs/candidate-standard.md)"
+        )
+
+    # Guardrail anti-duplicati: senza primary_key il clean non verifica che le
+    # dimensioni della fonte non collassino sulla stessa chiave. Warning una
+    # volta per dataset (il config check non gira per anno).
+    if not manifest.get("clean_primary_key"):
+        warnings.append(
+            "clean.validate.primary_key non dichiarato: nessun controllo "
+            "anti-duplicati sulla chiave naturale."
         )
 
     return {

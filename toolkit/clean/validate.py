@@ -394,6 +394,15 @@ def run_clean_validation(cfg, year: int, logger, *, sample_mode: bool = False) -
     merged_errors = result.errors + promotion_result.errors
     merged_warnings = result.warnings + promotion_result.warnings
 
+    # P5 — guardrail: senza primary_key non c'è controllo anti-duplicati.
+    # Le dimensioni della fonte possono collassare sulla stessa chiave (serie
+    # distinte indistinguibili nel clean): il warning spinge a dichiararlo.
+    if not spec.primary_key:
+        merged_warnings.append(
+            "clean.validate.primary_key non dichiarato: nessun controllo "
+            "anti-duplicati sulla chiave naturale."
+        )
+
     clean_cols = result.summary.get("columns") or []
     raw_row_count = promotion_result.summary.get("raw_row_count")
     clean_row_count = promotion_result.summary.get("clean_row_count") or result.summary.get(

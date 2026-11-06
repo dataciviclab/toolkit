@@ -83,14 +83,21 @@ def _run_sql(
     with safe_connect(config=duckdb_config) as con:
         _load_standard_macros(con, logger)
         read_info = read_raw_to_relation(con, input_files, read_cfg, read_mode, logger)
+        # Strip trailing semicolons: clean.sql spesso termina con ;
+        query = sql_query.rstrip().rstrip(";").rstrip()
         if sample_rows is not None:
-            # Strip trailing semicolons: clean.sql spesso termina con ;
-            stripped = sql_query.rstrip().rstrip(";").rstrip()
-            sql_query = f"SELECT * FROM ({stripped}) AS _smoke_sample LIMIT {int(sample_rows)}"
-        con.execute(f"CREATE TABLE {CLEAN_OUT_TABLE} AS {sql_query}")
-        output_profile = profile_relation(con, CLEAN_OUT_TABLE)
+            query = f"SELECT * FROM ({query}) AS _smoke_sample LIMIT {int(sample_rows)}"
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        # COPY diretto dalla query (streaming): niente CREATE TABLE intermedia.
+        # Sui cubi grandi (decine di milioni di righe) la materializzazione in
+        # tabella esauriva la RAM; il COPY in streaming tiene il picco al solo
+        # output. Il profilo e' poi letto dal parquet appena scritto.
         con.execute(
-            f"COPY {CLEAN_OUT_TABLE} TO '{sql_path(output_path)}' (FORMAT PARQUET, COMPRESSION ZSTD);"
+            f"COPY ({query}) TO '{sql_path(output_path)}' (FORMAT PARQUET, COMPRESSION ZSTD);"
         )
+        con.execute(
+            f"CREATE VIEW {CLEAN_OUT_TABLE} AS "
+            f"SELECT * FROM read_parquet('{sql_path(output_path)}')"
+        )
+        output_profile = profile_relation(con, CLEAN_OUT_TABLE)
         return read_info.source, read_info.params_used, output_profile

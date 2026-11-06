@@ -1,12 +1,22 @@
 from __future__ import annotations
 
+import csv
+import inspect
+import io
+
 import pytest
 import requests
 
 from lab_connectors.http import HttpClient, HttpResult
 
 from toolkit.core.exceptions import DownloadError
-from toolkit.plugins.sdmx import SdmxSource
+from toolkit.plugins.sdmx import (
+    SdmxSource,
+    _iter_tsv_rows,
+    _tsv_fieldnames,
+    _tsv_header,
+    _tsv_to_csv_bytes,
+)
 
 pytestmark = pytest.mark.adapter
 
@@ -716,6 +726,53 @@ def test_sdmx_estat_tsv_monthly(monkeypatch):
     assert "freq,unit,geo,year,month,value,flag" in text
     assert "A,EUR_HAB,IT,2024,1,10.0," in text
     assert "A,EUR_HAB,IT,2024,2,20.0," in text
+
+
+def test_sdmx_estat_tsv_streaming_is_lazy():
+    """Il parsing TSV è lazy: `_iter_tsv_rows` è un generatore, non una lista.
+
+    Regressione: sui cubi Eurostat grandi (es. migrazione, ~40M righe) la lista
+    di dict materializzata esauriva la RAM. Il fix genera una riga alla volta.
+    """
+    assert inspect.isgeneratorfunction(_iter_tsv_rows)
+
+    dims, year_cols, is_monthly = _tsv_header(ESTAT_TSV)
+    assert dims == ["freq", "unit", "geo"]
+    assert year_cols == ["2000", "2001"]
+    assert is_monthly is False
+    assert _tsv_fieldnames(dims, is_monthly) == ["freq", "unit", "geo", "year", "value", "flag"]
+
+    rows = _iter_tsv_rows(ESTAT_TSV, dims, year_cols, is_monthly)
+    assert inspect.isgenerator(rows)
+    assert next(rows) == {
+        "freq": "A",
+        "unit": "EUR_HAB",
+        "geo": "IT",
+        "year": "2000",
+        "value": 21900.0,
+        "flag": "",
+    }
+
+
+def test_sdmx_estat_tsv_streaming_matches_reference():
+    """Lo streaming produce esattamente lo stesso CSV della scrittura materializzata."""
+    dims, year_cols, is_monthly = _tsv_header(ESTAT_TSV)
+    header = _tsv_fieldnames(dims, is_monthly)
+
+    buffer = io.StringIO(newline="")
+    writer = csv.DictWriter(buffer, fieldnames=header)
+    writer.writeheader()
+    for row in _iter_tsv_rows(ESTAT_TSV, dims, year_cols, is_monthly):
+        writer.writerow(row)
+    expected = buffer.getvalue().encode("utf-8")
+
+    assert _tsv_to_csv_bytes(ESTAT_TSV) == expected
+
+
+def test_sdmx_estat_tsv_empty_raises():
+    """Header senza righe dati → DownloadError (stesso contratto di prima)."""
+    with pytest.raises(DownloadError, match="no rows"):
+        _tsv_to_csv_bytes("freq,unit,geo\\TIME_PERIOD\t2000 \n")
 
 
 ESTAT_CODELIST_JSON = """

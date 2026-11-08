@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from toolkit.core import duckdb_read
+from toolkit.core.input_file import RawInputFile
 from toolkit.clean.read_config import load_suggested_read, resolve_clean_read_cfg
 
 pd = pytest.importorskip("pandas")
@@ -1068,3 +1069,40 @@ def test_read_raw_to_relation_robust_handles_quoted_newlines(tmp_path: Path):
     assert info.params_used["strict_mode"] is True
     assert rows[0] == (1, "line one\nline two")
     assert rows[1] == (2, "short")
+
+
+@pytest.mark.contract
+def test_read_with_normalized_columns_and_inject_column(tmp_path: Path):
+    """Schema dichiarato + colonna iniettata: le due opzioni ora convivono.
+
+    Riproduce il caso OpenBDAP: tre fonti con colonne diverse, una sola
+    disponibile per un certo anno. Con lo schema dichiarato le colonne assenti
+    diventano NULL; ``inject_column`` deve continuare a marcare la fonte.
+    """
+    dlb = tmp_path / "dlb.csv"
+    dlb.write_text("a,quota\n1,10\n", encoding="utf-8")
+    rnd = tmp_path / "rnd.csv"
+    rnd.write_text("a,stanziamento\n2,20\n", encoding="utf-8")
+
+    inputs = [
+        RawInputFile(path=dlb, inject_column={"fase_codice": "DLB"}),
+        RawInputFile(path=rnd, inject_column={"fase_codice": "RND"}),
+    ]
+    read_cfg = {
+        "columns": {"a": "VARCHAR", "quota": "VARCHAR", "stanziamento": "VARCHAR"},
+        "normalize_rows_to_columns": True,
+        "align_by_header": True,
+        "header": True,
+        "delim": ",",
+        "encoding": "utf-8",
+    }
+
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.normalized_inject")
+        info = duckdb_read.read_raw_to_relation(con, inputs, read_cfg, "fallback", logger)
+        rows = con.execute(
+            "SELECT fase_codice, a, quota, stanziamento FROM raw_input ORDER BY a"
+        ).fetchall()
+
+    assert rows == [("DLB", "1", "10", None), ("RND", "2", None, "20")]
+    assert info.params_used["inject_column"]["fase_codice"]["dlb.csv"] == "DLB"

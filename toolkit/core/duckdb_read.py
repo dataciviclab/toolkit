@@ -169,7 +169,7 @@ def _execute_csv_read(
     read_cfg: dict[str, Any],
 ) -> dict[str, Any]:
     if read_cfg.get("normalize_rows_to_columns"):
-        return _execute_normalized_csv_read(con, [f.path for f in input_files], read_cfg)
+        return _execute_normalized_csv_read(con, input_files, read_cfg)
 
     if read_cfg.get("align_by_header"):
         raise ValueError("align_by_header=true requires normalize_rows_to_columns=true")

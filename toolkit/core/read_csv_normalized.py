@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     import pandas as pd
 
 from toolkit.core.constants import RAW_INPUT_VIEW, RAW_INPUT_DF_VIEW
+from toolkit.core.input_file import RawInputFile
 from toolkit.core.sql_utils import parse_column_value
 from toolkit.core.io import normalize_encoding
 
@@ -146,13 +147,19 @@ def _load_aligned_by_header(
 
 def _execute_normalized_csv_read(
     con,
-    input_files: list[Path],
+    input_files: list[RawInputFile],
     read_cfg: dict[str, Any],
 ) -> dict[str, Any]:
     """Execute CSV read with normalize_rows_to_columns=true.
 
     Reads each input file with the CSV reader into a pandas DataFrame,
-    concatenates if multiple files, registers as DuckDB view ``raw_input``.
+    applica le colonne iniettate (``inject_column``), concatena se ci sono più
+    file e registra la view ``raw_input``.
+
+    ``inject_column`` è supportato anche in questo ramo: ogni file può
+    aggiungere colonne costanti (es. ``fase_codice``) prima dell'unione. Senza
+    questo, un dataset che ha bisogno sia dello schema dichiarato sia del
+    discriminante di fonte non aveva modo di funzionare.
     """
     import pandas as pd
 
@@ -160,9 +167,15 @@ def _execute_normalized_csv_read(
     if not columns:
         raise ValueError("clean.read.normalize_rows_to_columns=true requires clean.read.columns")
 
-    frames = [
-        _load_normalized_csv_frame(input_file, read_cfg, columns) for input_file in input_files
-    ]
+    frames = []
+    inject_used: dict[str, dict[str, str]] = {}
+    for input_file in input_files:
+        frame = _load_normalized_csv_frame(input_file.path, read_cfg, columns)
+        for col_name, col_value in (input_file.inject_column or {}).items():
+            frame[col_name] = col_value
+            inject_used.setdefault(col_name, {})[input_file.path.name] = col_value
+        frames.append(frame)
+
     combined = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
     con.register(RAW_INPUT_DF_VIEW, combined)
     con.execute(f"CREATE OR REPLACE VIEW {RAW_INPUT_VIEW} AS SELECT * FROM {RAW_INPUT_DF_VIEW};")
@@ -174,6 +187,8 @@ def _execute_normalized_csv_read(
         "trim_whitespace": bool(read_cfg.get("trim_whitespace", True)),
         "header": bool(read_cfg.get("header", True)),
     }
+    if inject_used:
+        params_used["inject_column"] = inject_used
     if read_cfg.get("delim") is not None:
         params_used["delim"] = read_cfg.get("delim")
     if read_cfg.get("encoding") is not None:

@@ -163,6 +163,74 @@ def _collect_inject_columns(input_files: list[RawInputFile]) -> dict[str, dict[s
     return all_inject_cols
 
 
+def _probe_read_health(
+    con: duckdb.DuckDBPyConnection,
+    raw_paths: list[Path],
+    base_opts: list[str],
+) -> dict[str, Any]:
+    """Diagnostica la lettura quando ``ignore_errors`` e' attivo (B4).
+
+    - ``strict_readable``: il RAW e' leggibile anche SENZA ignore_errors? Se no,
+      ignore_errors sta mascherando errori (encoding/struttura).
+    - ``rejected_rows``/``reject_reasons``: righe scartate in silenzio
+      (``store_rejects`` → ``reject_errors``).
+
+    DuckDB non supporta ``store_rejects`` con ``union_by_name`` → i probe
+    rileggono i file senza ``union_by_name`` (approssimazione per schema
+    multi-file). Costo: una rilettura per probe, solo con ``ignore_errors``.
+    """
+    strict_opts = [
+        ("ignore_errors=false" if opt.startswith("ignore_errors") else opt)
+        for opt in base_opts
+        if not opt.startswith("union_by_name")
+    ]
+    strict_sql = ", ".join(strict_opts)
+    strict_readable = True
+    for path in raw_paths:
+        try:
+            con.execute(
+                "CREATE OR REPLACE TEMP TABLE _tk_strict_probe AS "
+                f"SELECT count(*) FROM read_csv('{sql_path(path)}', {strict_sql});"
+            )
+        except duckdb.Error:
+            strict_readable = False
+            break
+
+    reject_opts = [opt for opt in base_opts if not opt.startswith("union_by_name")]
+    reject_opts.append("store_rejects=true")
+    reject_sql = ", ".join(reject_opts)
+    total = 0
+    reasons: dict[str, int] = {}
+    for path in raw_paths:
+        try:
+            con.execute(
+                "CREATE OR REPLACE TEMP TABLE _tk_reject_probe AS "
+                f"SELECT count(*) FROM read_csv('{sql_path(path)}', {reject_sql});"
+            )
+        except duckdb.Error:
+            break
+        try:
+            rows = con.execute(
+                "SELECT error_type, count(*) FROM reject_errors GROUP BY 1"
+            ).fetchall()
+        except duckdb.Error:
+            rows = []
+        for error_type, count in rows:
+            reasons[str(error_type)] = reasons.get(str(error_type), 0) + int(count)
+            total += int(count)
+        for table in ("reject_errors", "reject_scans"):
+            try:
+                con.execute(f"DROP TABLE IF EXISTS {table}")
+            except duckdb.Error:
+                pass
+
+    return {
+        "strict_readable": strict_readable,
+        "rejected_rows": total,
+        "reject_reasons": reasons,
+    }
+
+
 def _execute_csv_read(
     con: duckdb.DuckDBPyConnection,
     input_files: list[RawInputFile],
@@ -190,6 +258,15 @@ def _execute_csv_read(
     if sample_size is not None:
         opts.append(f"sample_size={int(sample_size)}")
         params_used["sample_size"] = int(sample_size)
+
+    # B4: se ignore_errors e' attivo, DuckDB puo' scartare righe in silenzio o
+    # mascherare errori (encoding/struttura). Diagnostica la lettura e riportala.
+    if read_cfg.get("ignore_errors"):
+        health = _probe_read_health(con, raw_paths, opts)
+        params_used["ignore_errors_strict_readable"] = health["strict_readable"]
+        if health["rejected_rows"] > 0:
+            params_used["rejected_rows"] = health["rejected_rows"]
+            params_used["reject_reasons"] = health["reject_reasons"]
 
     # Build inject CASE expressions if needed
     inject_exprs, inject_names = _build_inject_expressions(input_files, all_inject_cols)
@@ -327,6 +404,22 @@ def _execute_csv_mode(
     logger,
 ) -> ReadInfo:
     params_used = _execute_csv_read(con, input_files, read_cfg)
+    rejected = params_used.get("rejected_rows")
+    if isinstance(rejected, int) and rejected > 0:
+        logger.warning(
+            "CLEAN read [%s]: %d righe scartate da ignore_errors — %s. "
+            "Dati potenzialmente incompleti: verifica encoding/struttura del RAW.",
+            source,
+            rejected,
+            params_used.get("reject_reasons"),
+        )
+    if params_used.get("ignore_errors_strict_readable") is False:
+        logger.warning(
+            "CLEAN read [%s]: il RAW NON e' leggibile senza ignore_errors — "
+            "ignore_errors sta mascherando errori (encoding/struttura). "
+            "Dati potenzialmente alterati: correggi la fonte o i parametri di lettura.",
+            source,
+        )
     logger.debug(
         "read_csv params used: source=%s params=%s",
         source,

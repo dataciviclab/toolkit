@@ -643,6 +643,58 @@ def test_validate_promotion_ignores_inject_column_in_read_params(tmp_path: Path)
     assert isinstance(result.ok, bool)
 
 
+@pytest.mark.contract
+def test_validate_promotion_warns_on_ignore_errors_masking(tmp_path: Path):
+    """B4: i metadata clean con reject/masking producono warning in validazione.
+
+    Protegge l'esito visibile: ``read_params_used.rejected_rows`` e
+    ``ignore_errors_strict_readable=False`` devono diventare warning (e quindi
+    ``SUCCESS_WITH_WARNINGS`` nel run record).
+    """
+    root = tmp_path / "root"
+    dataset = "test"
+    year = 2024
+
+    raw_dir = root / "data" / "raw" / dataset / str(year)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / "total.csv").write_text("a,b,c\n1,2,3\n4,5,6\n", encoding="utf-8")
+
+    clean_dir = root / "data" / "clean" / dataset / str(year)
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    write_parquet(
+        clean_dir / f"{dataset}_{year}_clean.parquet",
+        "CREATE TABLE t AS SELECT * FROM (VALUES (1,2,3),(4,5,6)) v(a,b,c)",
+    )
+
+    clean_meta = {
+        "input_files": ["total.csv"],
+        "read_params_used": {
+            "delim": ",",
+            "header": False,
+            "rejected_rows": 2,
+            "reject_reasons": {"MISSING COLUMNS": 2},
+            "ignore_errors_strict_readable": False,
+        },
+        "output_profile": {
+            "columns": [
+                {"name": "a", "type": "INTEGER"},
+                {"name": "b", "type": "INTEGER"},
+                {"name": "c", "type": "INTEGER"},
+            ],
+            "row_count": 2,
+        },
+        "outputs": [f"{dataset}_{year}_clean.parquet"],
+    }
+    (clean_dir / "metadata.json").write_text(json.dumps(clean_meta), encoding="utf-8")
+
+    result = validate_promotion(raw_dir, clean_dir, root=root)
+
+    assert result.ok
+    joined = "\n".join(result.warnings)
+    assert "scartato 2 righe" in joined
+    assert "NON e' leggibile senza ignore_errors" in joined
+
+
 # ---------------------------------------------------------------------------
 # Gap 5 — Transition errors when fail_on_row_drop_exceeded=True
 # ---------------------------------------------------------------------------

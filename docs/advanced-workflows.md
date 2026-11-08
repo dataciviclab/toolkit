@@ -130,10 +130,19 @@ Il campo è accettato per backward compatibilità ma ignorato.
 Il modello RAW è `fetch-all → overwrite`: ogni fonte è uno snapshot. Per le
 fonti **append-only** (stream) il toolkit supporta `raw.sources[].incremental`
 con placeholder `{since}` e append del delta — vedi `docs/config-schema.md` e
-**ADR-006** (PR #535).
+**ADR-006** (`docs/adr/006-incremental-stream-sources.md`).
 
 Lo stato (baseline) vive nel **data plane**: su runner effimero va ripristinato
 prima del run. Senza baseline il fetch è full.
+
+**Stato (2026-11): disponibile, nessun dataset lo usa ancora.** Il contratto è
+per fonti **dichiarative** (SPARQL/http) con delta e append esterno al raw. Per
+i flussi che fanno il merge **dentro** un parquet (dedup interno allo script,
+es. `open-politica/camera-voti` e `senato-votazioni`) resta il `--incremental`
+**script-level**: non è lo stesso meccanismo, non sostituirlo. Se entro il
+prossimo review trimestrale nessun `dataset.yml` usa `incremental:`, il campo e
+il modulo vanno rimossi (`literals`/`EmptyResultError` restano: sono già usati
+dal plugin keyset).
 
 Disponibile: `status`/`inspect` espongono profili layer, `compare_layer_profiles`
 calcola `row_count_delta`, i report diagnostici mostrano `added_columns`,

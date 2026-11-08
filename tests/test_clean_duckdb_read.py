@@ -1108,6 +1108,7 @@ def test_read_with_normalized_columns_and_inject_column(tmp_path: Path):
     assert info.params_used["inject_column"]["fase_codice"]["dlb.csv"] == "DLB"
 
 
+@pytest.mark.contract
 def test_ignore_errors_reports_rejected_rows(tmp_path: Path):
     """B4: ignore_errors scarta righe in silenzio → il read deve riportarle.
 

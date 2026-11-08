@@ -4,6 +4,7 @@ from pathlib import Path
 
 from tests.helpers import NoopLogger
 
+from toolkit.core.input_file import RawInputFile
 from toolkit.core.read_csv_normalized import (
     _execute_normalized_csv_read,
     _load_normalized_csv_frame,
@@ -144,7 +145,7 @@ def test_run_clean_positional_csv_multi_file_concat(tmp_path: Path):
     with safe_connect() as con:
         params = _execute_normalized_csv_read(
             con,
-            [tmp_path / "file1.csv", tmp_path / "file2.csv"],
+            [RawInputFile(path=tmp_path / "file1.csv"), RawInputFile(path=tmp_path / "file2.csv")],
             read_cfg,
         )
 
@@ -573,3 +574,36 @@ def test_run_clean_all_varchar_keeps_italian_numbers_intact(tmp_path: Path):
         ).fetchall()
 
     assert rows == [("Lazio", 121330, 287788942.0), ("Molise", 3220, 1234.0)]
+
+
+@pytest.mark.policy
+def test_normalized_csv_injects_constant_column_per_file(tmp_path: Path):
+    """inject_column convive con normalize_rows_to_columns/align_by_header.
+
+    Caso reale: un dataset che unisce fonti con schemi diversi (DLB/LB/RND) e
+    deve marcare la provenienza di ogni riga; un anno con una sola fonte
+    richiede anche lo schema dichiarato, altrimenti le colonne mancanti non
+    esistono e la UNION del clean.sql fallisce.
+    """
+    (tmp_path / "dlb.csv").write_text("a;b\n1;2\n", encoding="utf-8")
+    (tmp_path / "rnd.csv").write_text("a;c\n3;4\n", encoding="utf-8")
+
+    read_cfg = {
+        "columns": {"a": "VARCHAR", "b": "VARCHAR", "c": "VARCHAR"},
+        "normalize_rows_to_columns": True,
+        "align_by_header": True,
+        "header": True,
+        "delim": ";",
+    }
+    inputs = [
+        RawInputFile(path=tmp_path / "dlb.csv", inject_column={"fase_codice": "DLB"}),
+        RawInputFile(path=tmp_path / "rnd.csv", inject_column={"fase_codice": "RND"}),
+    ]
+
+    with safe_connect() as con:
+        params = _execute_normalized_csv_read(con, inputs, read_cfg)
+        rows = con.execute("SELECT fase_codice, a, b, c FROM raw_input ORDER BY a").fetchall()
+
+    assert rows == [("DLB", "1", "2", None), ("RND", "3", None, "4")]
+    assert params["inject_column"]["fase_codice"]["dlb.csv"] == "DLB"
+    assert params["inject_column"]["fase_codice"]["rnd.csv"] == "RND"

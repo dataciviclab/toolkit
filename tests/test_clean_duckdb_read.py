@@ -1106,3 +1106,50 @@ def test_read_with_normalized_columns_and_inject_column(tmp_path: Path):
 
     assert rows == [("DLB", "1", "10", None), ("RND", "2", None, "20")]
     assert info.params_used["inject_column"]["fase_codice"]["dlb.csv"] == "DLB"
+
+
+def test_ignore_errors_reports_rejected_rows(tmp_path: Path):
+    """B4: ignore_errors scarta righe in silenzio → il read deve riportarle.
+
+    CSV con 5 righe dati, 2 malformate (una corta, una lunga): la lettura
+    tollerante ne legge 3 e deve esporre ``rejected_rows`` = 2 con i motivi.
+    """
+    input_file = tmp_path / "dirty.csv"
+    input_file.write_text(
+        "a,b,c\n1,2,3\n4,5\n6,7,8\n9,10,11,12\n13,14,15\n",
+        encoding="utf-8",
+    )
+
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.rejects")
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {"header": True, "ignore_errors": True},
+            "fallback",
+            logger,
+        )
+        kept = con.execute("SELECT count(*) FROM raw_input").fetchone()[0]
+
+    assert kept == 3
+    assert info.params_used["rejected_rows"] == 2
+    assert info.params_used["reject_reasons"] == {"MISSING COLUMNS": 1, "TOO MANY COLUMNS": 1}
+
+
+@pytest.mark.contract
+def test_clean_read_without_ignore_errors_has_no_reject_report(tmp_path: Path):
+    """Senza ignore_errors non c'e' nulla da riportare (nessun reject)."""
+    input_file = tmp_path / "clean.csv"
+    input_file.write_text("a,b,c\n1,2,3\n4,5,6\n", encoding="utf-8")
+
+    with safe_connect() as con:
+        logger = logging.getLogger("tests.clean.duckdb_read.no_rejects")
+        info = duckdb_read.read_raw_to_relation(
+            con,
+            [input_file],
+            {"header": True},
+            "fallback",
+            logger,
+        )
+
+    assert "rejected_rows" not in info.params_used

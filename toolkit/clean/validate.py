@@ -230,6 +230,20 @@ def validate_promotion(
     read_cfg = _read_cfg_from_clean_metadata(clean_metadata)
     read_mode = str(clean_metadata.get("read_source_used") or "fallback")
 
+    # B4: righe scartate dalla lettura (ignore_errors), persistite nei metadata clean.
+    read_params_used = clean_metadata.get("read_params_used") or {}
+    rejected_rows = read_params_used.get("rejected_rows")
+    if isinstance(rejected_rows, int) and rejected_rows > 0:
+        reasons = read_params_used.get("reject_reasons") or {}
+        warnings.append(
+            f"CLEAN read ha scartato {rejected_rows} righe malformate (ignore_errors) — {reasons}"
+        )
+    if read_params_used.get("ignore_errors_strict_readable") is False:
+        warnings.append(
+            "CLEAN read: il RAW NON e' leggibile senza ignore_errors "
+            "(errori mascherati: encoding/struttura) — dati potenzialmente alterati"
+        )
+
     profile_dir = raw_path / "_profile"
     saved_profile_path = profile_dir / RAW_PROFILE
 

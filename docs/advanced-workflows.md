@@ -11,7 +11,6 @@ Percorso canonico:
 
 Questa categoria include anche tooling di supporto che non va confuso con il runtime principale del toolkit:
 
-- `toolkit inspect runs --resume`
 - `toolkit inspect config -l raw -m profile`
 - run parziali per layer
 
@@ -28,7 +27,8 @@ Regola pratica:
 - se hai aggiunto o modificato solo tabelle multi-anno, aggiungi/aggiorna
   `years: [...]` nella tabella `mart`
 - se un run si interrompe ma il run record e gli artefatti precedenti sono
-  ancora coerenti, usa `toolkit inspect runs --resume`
+  ancora coerenti, riparti dal layer successivo con `toolkit run clean` o
+  `toolkit run mart`
 - se hai toccato solo notebook, docs o script locali del repo dataset, non
   rilanciare la pipeline per default
 
@@ -42,7 +42,7 @@ Matrice minima:
 | cambio `clean.sql` o `clean.read` | `toolkit run clean --config dataset.yml` poi `toolkit run mart --config dataset.yml` |
 | cambio solo `mart.sql` | `toolkit run mart --config dataset.yml` |
 | cambio solo tabella multi-anno | `toolkit run mart --config dataset.yml` |
-| run interrotto a metà con run record/artifacts coerenti | `toolkit inspect runs --resume -c dataset.yml` |
+| run interrotto a metà con run record/artifacts coerenti | `toolkit run clean --config dataset.yml` (o `run mart` se clean è a posto) |
 | cambio solo notebook/docs | nessun rerun automatico |
 
 Il toolkit non impone di cancellare `raw/`, `clean/`, `mart/` tra un
@@ -55,7 +55,6 @@ In pratica:
 - non trattare `run` come default per ogni modifica minima
 - non cancellare gli output locali "per pulizia" se non hai cambiato il loro perimetro
 - usa i rerun parziali quando il punto di ingresso corretto è chiaro
-- usa `resume` per recovery, non come scorciatoia generica a metà sviluppo
 
 ## Step singoli
 
@@ -68,20 +67,6 @@ toolkit run mart --config dataset.yml
 ```
 
 Questi comandi non sono il happy path raccomandato per i nuovi repo dataset, ma restano strumenti operativi supportati.
-
-## Resume
-
-`inspect runs --resume` serve quando esiste già un run record e vuoi ripartire dal primo layer non `SUCCESS` oppure forzare una ripartenza da `raw|clean|mart`.
-
-Esempi:
-
-```bash
-toolkit inspect runs --resume -c dataset.yml
-toolkit inspect runs --resume -c dataset.yml --run-id <run_id>
-toolkit inspect runs --resume -c dataset.yml --from-layer clean
-```
-
-Il comando verifica anche gli artefatti minimi del layer precedente prima di ripartire.
 
 ## Profile RAW
 

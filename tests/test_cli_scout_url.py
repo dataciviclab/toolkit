@@ -345,7 +345,3 @@ class TestDetectCkan:
     def test_rejects_non_ckan_html(self) -> None:
         html = b"<html><body><p>Plain HTML page</p></body></html>"
         assert detect_ckan_in_html(html) is False
-
-
-# generate_yaml_scaffold rimosso.
-# Usa toolkit.scaffold.full.generate_full_scaffold per test di scaffold.

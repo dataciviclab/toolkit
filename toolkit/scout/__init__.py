@@ -1,8 +1,8 @@
-"""toolkit.scout — URL probe, routing, inferenze per candidate dataset.
+"""toolkit.scout — URL probe, routing, inferenze su fonti esterne.
 
 Strato indipendente dalla CLI, usabile da:
-- CLI (scout, scout --scaffold)
-- MCP tools (scout tools)
+- CLI (`toolkit scout`)
+- MCP tools (`toolkit_source`)
 - Notebook e script interni
 
 Moduli:
@@ -15,8 +15,6 @@ Moduli:
 Le primitive pure (link extraction, classificazione) sono ora in
 ``lab_connectors.discovery``. Questo modulo mantiene l'orchestrazione
 e le funzioni HTTP-specifiche che dipendono da toolkit.plugins.
-
-Scaffold non e' piu' in scout. Usa toolkit.scaffold.full e toolkit.scaffold.sources.
 """
 
 from toolkit.scout.sparql import fetch_sparql_count  # noqa: F401

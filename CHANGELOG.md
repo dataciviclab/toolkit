@@ -2,6 +2,7 @@
 
 ### Added
 
+- **`toolkit preview <URL>`**: comando CLI per profilare un CSV/TSV remoto (encoding, delimitatore, colonne, granularità, intervallo anni, quality score). Usa `toolkit.profile.preview.preview_url`, la stessa implementazione già usata da MCP `toolkit_query(preview)` e da `run preflight`. La funzione esisteva nel codice ma non era registrata: nessun nuovo motore, solo l'entry point che mancava.
 - **`clean.read.all_varchar`**: pass-through di `all_varchar=true` a DuckDB (`read_csv`). Tutte le colonne restano `VARCHAR` e lo sniffing non assegna tipi numerici. Protegge dai numeri in **formato italiano** con `source: auto`: lo sniffing tipizza `DOUBLE` una colonna i cui valori hanno un solo punto (`"121.330"`) e le macro `normalize_italian_*` la corrompono (×10 / ÷10). Una riga di config al posto di dichiarare a mano 15–22 colonne `VARCHAR`. Consente anche la lettura per nome colonna quando l'ordine cambia tra anni (#520).
 - **Registry: dataset mart-only**: i compose senza `clean:` non restano più fuori dal catalogo con i mart orfani. `build_clean_catalog` emette una entry dataset con metadati e `mart_refs`, senza `columns`/`location`; `registry.schema.json` rende i due campi opzionali. Così ACB/MCP vedono il dataset (`find`/`explore`) e risolvono i suoi mart (`gcs_query`).
 
@@ -20,6 +21,7 @@
 
 ### Removed
 
+- **Scaffold candidate da URL** (`toolkit scout --scaffold` / `--run` / `--slug`): rimosso. Il generatore produceva un `dataset.yml` senza i campi obbligatori (`source_id`, `tags`, `category`) e senza `validate`, quindi non passava il gate strict e andava comunque completato a mano; i candidate nascono da `infra/dataset-incubator/templates/candidate`. Eliminati `toolkit/scaffold/full.py`, `toolkit/scaffold/sources.py` e `profile_from_datastore`. `toolkit/scaffold/clean.py` resta: è usato da `run` per generare `clean.sql` quando manca.
 - **`inspect runs --resume`**: rimosso il resume dei run (flag `--resume`/`--from-layer`, modulo `cmd_resume`, campo `resumed_from` nei run record). Zero utilizzi misurati; per un run interrotto si riparte dal layer successivo con `toolkit run clean` / `toolkit run mart`. Aggiornati README, `docs/advanced-workflows.md` e `docs/feature-stability.md`.
 - **Azioni MCP a uso zero** (`toolkit_dataset`): rimosse `preflight`, `schema-diff` e `related` (0/1/2 chiamate). Restano disponibili via CLI (`toolkit run preflight`, `toolkit inspect config --diff`).
 - **Facade `toolkit.mcp.toolkit_client`**: eliminata (il server importa direttamente da `schema_ops`/`scout_ops`); rimosso `reset_resolver`, mai chiamato.

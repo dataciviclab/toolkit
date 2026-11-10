@@ -1,6 +1,6 @@
-"""Tests per scout — format detection, candidate links, CKAN detection, slugify.
+"""Tests per scout — format detection, candidate links, CKAN detection.
 
-pure_unit: is_html_content, is_file_like, extract_candidate_links, detect_ckan_in_html, extract_ckan_dataset_id, slugify
+pure_unit: is_html_content, is_file_like, extract_candidate_links, detect_ckan_in_html, extract_ckan_dataset_id
 """
 
 import pytest
@@ -12,7 +12,6 @@ from toolkit.scout.http import (
     is_html_content,
 )
 from toolkit.scout.link_extractor import extract_candidate_links
-from toolkit.scaffold.sources import slugify
 
 
 # ---------------------------------------------------------------------------
@@ -196,58 +195,3 @@ class TestDetectCkan:
     )
     def testdetect_ckan_in_html(self, html_bytes: bytes, expected: bool) -> None:
         assert detect_ckan_in_html(html_bytes) is expected
-
-
-# ---------------------------------------------------------------------------
-# contract — slugify: stesso URL → stesso slug
-# ---------------------------------------------------------------------------
-
-
-class TestSlugify:
-    """contract: slugify e` deterministica e stabile (uuid5)."""
-
-    @pytest.mark.contract
-    def test_slugify_deterministic(self) -> None:
-        """Stesso URL produce sempre lo stesso slug."""
-        url = "https://example.com/data/dataset.csv"
-        assert slugify(url) == slugify(url)
-
-    @pytest.mark.contract
-    def test_slugify_appends_hash(self) -> None:
-        """Lo slug contiene un suffisso hash di 6 caratteri."""
-        slug = slugify("https://example.com/data/file.csv")
-        # Formato: {stem}_{6hex}  es. file_abc123
-        parts = slug.split("_")
-        assert len(parts) >= 2, f"slug non ha suffisso hash: {slug}"
-        hash_part = parts[-1]
-        assert len(hash_part) == 6, f"hash non 6 caratteri: {hash_part}"
-        assert all(c in "0123456789abcdef" for c in hash_part), f"hash non esadecimale: {hash_part}"
-
-    @pytest.mark.contract
-    def test_slugify_different_urls_different_slugs(self) -> None:
-        """URL diversi producono slug diversi (anche se stesso stem)."""
-        a = slugify("https://example.com/data/dataset.csv")
-        b = slugify("https://other.org/data/dataset.csv")
-        assert a != b
-
-    @pytest.mark.contract
-    def test_slugify_decodes_percent_encoding(self) -> None:
-        """Il percent-encoding nell'URL viene decodificato prima di slugificare.
-        %20  spazio, %2F  /, ecc.  In questo caso %202023  ' 2023'  my_data_file_2023_."""
-        slug = slugify("https://example.com/data/posti%20per%20stabilimento.csv")
-        assert slug.startswith("posti_per_stabilimento_"), f"slug inizio errato: {slug}"
-
-    @pytest.mark.contract
-    def test_slugify_preserves_hyphens_as_underscores(self) -> None:
-        """Trattini nell'URL diventano underscore."""
-        slug = slugify("https://example.com/data/my-data-file.csv")
-        assert slug.startswith("my_data_file_"), f"slug inizio errato: {slug}"
-
-    @pytest.mark.contract
-    def test_slugify_deterministic_and_unique(self) -> None:
-        """slugify e` deterministica e produce hash univoco per URL diversi."""
-        a = slugify("https://example.com/data/dataset.csv")
-        b = slugify("https://other.org/data/dataset.csv")
-        assert len(a.split("_")[-1]) == 6
-        assert a.startswith("dataset_")
-        assert a != b

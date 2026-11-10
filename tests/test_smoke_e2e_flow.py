@@ -95,7 +95,7 @@ def _setup_project(tmp_path: Path, dataset: str = "smoke_test", year: int = 2024
 
 
 class TestEndToEndFlow:
-    """Flusso completo: run init → run full → validate → status."""
+    """Flusso completo: run raw (genera clean.sql) → run full → validate → status."""
 
     @pytest.mark.smoke
     def test_init_then_full_then_validate(self, tmp_path: Path):
@@ -103,9 +103,9 @@ class TestEndToEndFlow:
         dataset = "smoke_test"
         year = 2024
 
-        # --- FASE 1: run init (scaffold + raw) ---
+        # --- FASE 1: run raw (genera profilo + clean.sql se assente) ---
         result = _invoke(["run", "raw", "--config", str(config_path)])
-        assert result.exit_code == 0, f"run init fallito: {result.output}"
+        assert result.exit_code == 0, f"run raw fallito: {result.output}"
 
         out = tmp_path / "out"
         raw_dir = out / "data" / "raw" / dataset / str(year)

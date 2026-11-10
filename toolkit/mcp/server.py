@@ -21,14 +21,16 @@ from toolkit.mcp.response import shape
 from toolkit.mcp.errors import ToolkitClientError
 from lab_connectors.mcp.errors import ErrorCode
 
-from .toolkit_client import (
+from .schema_ops import (
     list_runs as list_runs_impl,
+    schema_diff as schema_diff_impl,
+)
+from .scout_ops import (
     mcp_ckan_package_show as ckan_package_show_impl,
     mcp_html_extract_links as html_extract_links_impl,
     mcp_preview_url as preview_url_impl,
     mcp_probe_url_routed as probe_url_routed_impl,
     mcp_sparql_query as sparql_query_impl,
-    schema_diff as schema_diff_impl,
 )
 
 from .aggregate_ops import (

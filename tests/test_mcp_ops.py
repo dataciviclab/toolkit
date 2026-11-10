@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from toolkit.mcp.toolkit_client import (
-    inspect_paths,
+from toolkit.mcp.cli_adapter import inspect_paths
+from toolkit.mcp.schema_ops import (
     list_runs,
     review_readiness,
     run_state,
@@ -66,7 +66,7 @@ def _make_project_smoke(
 # ── Test ─────────────────────────────────────────────────────────────
 
 
-def test_mcp_toolkit_client_works_from_repo_layout(
+def test_mcp_ops_work_from_repo_layout(
     mcp_project_example: tuple[Path, str, int],
 ) -> None:
     """Funzioni core: inspect_paths, show_schema, run_state, summary."""
@@ -216,7 +216,7 @@ def test_mcp_raw_profile(
     has_suggested: bool,
 ) -> None:
     """raw_profile: con suggested_read.yml → read_hints, senza → errore."""
-    from toolkit.mcp.toolkit_client import raw_profile
+    from toolkit.mcp.schema_ops import raw_profile
     from toolkit.mcp.errors import ToolkitClientError
 
     config_path, dataset, year = mcp_project_example
@@ -417,7 +417,7 @@ def test_clean_preview(
     expect_error: bool,
 ) -> None:
     """clean_preview su layer clean e mart."""
-    from toolkit.mcp.toolkit_client import clean_preview
+    from toolkit.mcp.schema_ops import clean_preview
     from toolkit.mcp.errors import ToolkitClientError
 
     config_path, dataset, year = mcp_project_example
@@ -459,7 +459,7 @@ def test_raw_preview_with_real_csv(
     mcp_project_example: tuple[Path, str, int],
 ) -> None:
     """raw_preview legge CSV reale dal raw dir."""
-    from toolkit.mcp.toolkit_client import raw_preview
+    from toolkit.mcp.schema_ops import raw_preview
 
     config_path, dataset, year = mcp_project_example
     raw_dir = Path(config_path).parent / "_smoke_out" / "data" / "raw" / dataset / str(year)
@@ -479,7 +479,7 @@ def test_dataset_info_from_config(
     mcp_project_example: tuple[Path, str, int],
 ) -> None:
     """dataset_info estrae campi da dataset.yml senza eseguire pipeline."""
-    from toolkit.mcp.toolkit_client import dataset_info
+    from toolkit.mcp.schema_ops import dataset_info
 
     config_path, _dataset, _year = mcp_project_example
     result = dataset_info(str(config_path))

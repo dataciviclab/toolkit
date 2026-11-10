@@ -23,12 +23,6 @@ def _get_resolver() -> CatalogResolver:
     return _resolver
 
 
-def reset_resolver() -> None:
-    """Resetta il resolver (utile nei test)."""
-    global _resolver
-    _resolver = None
-
-
 def mcp_find(
     query: str = "",
     layer: str | None = None,

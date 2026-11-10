@@ -20,6 +20,7 @@
 
 ### Removed
 
+- **Facade `toolkit.mcp.toolkit_client`**: eliminata (il server importa direttamente da `schema_ops`/`scout_ops`); rimosso `reset_resolver`, mai chiamato.
 - **Codice morto** (PR #505): comandi CLI mai registrati (`_run_probe_cmd`, `run_all_cmd`, `inspect paths`, comando Typer `inspect profile` — `run_profile` logica conservata), `_ALLOWED_BATCH_STEPS`, `mcp_probe_url` (mai registrato come tool MCP; `mcp_probe_url_routed` resta), `_helpers.py` di `cli/inspect`.
 
 ## [1.53.0] - 2026-09-27

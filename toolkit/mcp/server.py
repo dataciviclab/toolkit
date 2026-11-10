@@ -21,10 +21,7 @@ from toolkit.mcp.response import shape
 from toolkit.mcp.errors import ToolkitClientError
 from lab_connectors.mcp.errors import ErrorCode
 
-from .schema_ops import (
-    list_runs as list_runs_impl,
-    schema_diff as schema_diff_impl,
-)
+from .schema_ops import list_runs as list_runs_impl
 from .scout_ops import (
     mcp_ckan_package_show as ckan_package_show_impl,
     mcp_html_extract_links as html_extract_links_impl,
@@ -60,7 +57,7 @@ mcp = create_mcp_server(
         "Qui: pipeline locale, layer raw, contratti, runs, stato live del "
         "workspace (più fresco del catalogo pubblico).\n\n"
         "4 tool:\n"
-        "- toolkit_dataset: find, overview, status, preflight, schema-diff\n"
+        "- toolkit_dataset: find, overview, status\n"
         "- toolkit_query: run (SQL su raw/clean/mart), preview (URL CSV/TSV)\n"
         "- toolkit_pipeline: contract, runs, registry_list/show, graph\n"
         "- toolkit_source: probe HTTP, CKAN, HTML links, SPARQL\n\n"
@@ -78,16 +75,13 @@ mcp = create_mcp_server(
 
 @mcp.tool(
     description=(
-        "Ispezione dataset: find, overview, status, preflight, schema-diff, related.\n\n"
+        "Ispezione dataset: find, overview, status.\n\n"
         "Actions:\n"
         "- find: cerca dataset per slug/testo/source (params: query, layer, limit, source, stage, status_filter). "
         "È la vista live su workspace+GCS (registry committati, sviluppo locale): "
         "per discovery org-wide con query naturali usa `dataciviclab find` (server dataciviclab, dcl-mcp).\n"
         "- overview: schema colonne + conteggio + preview (params: slug, layer, year, source, profile)\n"
-        "- status: stato completo dataset (params: config_path, year, since, until)\n"
-        "- preflight: diagnostica pre-run (params: config_path, years)\n"
-        "- schema-diff: confronto schema raw tra anni (params: config_path)\n"
-        "- related: dataset correlati per tags/category/source/entities (params: slug)"
+        "- status: stato completo dataset (params: config_path, year, since, until)"
     ),
     structured_output=True,
 )
@@ -100,15 +94,14 @@ def toolkit_dataset(
     source: str = "all",
     stage: str = "all",
     status_filter: str | None = None,
-    # overview / related
+    # overview
     slug: str | None = None,
     year: int | None = None,
     profile: bool = False,
-    # status / preflight / schema-diff
+    # status
     config_path: str | None = None,
     since: str | None = None,
     until: str | None = None,
-    years: str | None = None,
 ) -> dict[str, Any]:
     if action == "find":
         result = guard_timed(
@@ -152,30 +145,8 @@ def toolkit_dataset(
         # Trim: paths_info è sovrapposto con summary
         result.pop("paths_info", None)
         return shape(result)
-    if action == "preflight":
-        if not config_path:
-            raise ToolkitClientError("preflight richiede config_path", ErrorCode.INVALID_PARAMS)
-        from toolkit.domain.preflight import run_preflight
-
-        result = guard_timed(
-            run_preflight, "toolkit_dataset_preflight", config_path, years_arg=years
-        )
-        # Trim: strip nulls da ogni source entry
-        if "sources" in result:
-            result["sources"] = [shape(s) for s in result["sources"]]
-        return shape(result)
-    if action == "schema-diff":
-        if not config_path:
-            raise ToolkitClientError("schema-diff richiede config_path", ErrorCode.INVALID_PARAMS)
-        return guard_timed(schema_diff_impl, "toolkit_dataset_schema_diff", config_path)
-    if action == "related":
-        if not slug:
-            raise ToolkitClientError("related richiede slug", ErrorCode.INVALID_PARAMS)
-        from toolkit.mcp.catalog_ops import mcp_dataset_related
-
-        return guard_timed(mcp_dataset_related, "toolkit_dataset_related", slug)
     raise ToolkitClientError(
-        f"Azione '{action}' non valida. Usare: find, overview, status, preflight, schema-diff, related",
+        f"Azione '{action}' non valida. Usare: find, overview, status",
         ErrorCode.INVALID_PARAMS,
     )
 

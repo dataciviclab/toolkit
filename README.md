@@ -113,7 +113,7 @@ locale, layer raw, contratti, runs, stato live del workspace.
 
 | Tool | Azioni | Cosa fa |
 |---|---|---|
-| `toolkit_dataset` | find, overview, status, preflight, schema-diff | Cerca, ispeziona, diagnostica dataset |
+| `toolkit_dataset` | find, overview, status | Cerca, ispeziona, diagnostica dataset |
 | `toolkit_query` | run, preview | SQL su raw/clean/mart, preview URL CSV/TSV |
 | `toolkit_pipeline` | contract, runs, registry_list, registry_show, graph | Contratti, run history, registry, grafo relazioni |
 | `toolkit_source` | probe, ckan, links, sparql | Probe HTTP, CKAN, HTML links, SPARQL |

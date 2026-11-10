@@ -30,7 +30,6 @@ Ogni tool ha un parametro `action` che fa da dispatch.
 | `runs` | config_path, year, since, until, status, limit | Run record con filtri |
 | `registry_list` | — | Elenca artifact registry committati |
 | `registry_show` | repo, artifact, slug | Mostra artifact registry |
-| `graph` | by_key, by_dataset, by_registry, by_domain | Mappa relazioni cross-dataset |
 
 ### `toolkit_source` — fonti dati esterne
 

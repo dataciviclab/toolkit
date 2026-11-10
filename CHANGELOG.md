@@ -21,6 +21,7 @@
 
 ### Removed
 
+- **Azione MCP `graph`** (`toolkit_pipeline`): rimosso il grafo cross-dataset dal server MCP. Restituiva 163 KB per 8 relazioni distinte, con filtri incoerenti (`by_domain` cambiava la forma della risposta; `by_registry`/`by_key` non filtravano i bridge) e bridge privi della colonna di arrivo. `entities`/`bridges` restano prodotti da `registry build`; la scoperta dei join è coperta da `join_suggestions` in dcl-mcp, derivata dai `semantic_type`.
 - **`run_init`**: rimosso il codice morto di `toolkit run init` (mai registrato in `run_sub`). Il contratto AI non elenca più `run init`; `run` resta il comando che genera `clean.sql` quando manca.
 - **Scaffold candidate da URL** (`toolkit scout --scaffold` / `--run` / `--slug`): rimosso. Il generatore produceva un `dataset.yml` senza i campi obbligatori (`source_id`, `tags`, `category`) e senza `validate`, quindi non passava il gate strict e andava comunque completato a mano; i candidate nascono da `infra/dataset-incubator/templates/candidate`. Eliminati `toolkit/scaffold/full.py`, `toolkit/scaffold/sources.py` e `profile_from_datastore`. `toolkit/scaffold/clean.py` resta: è usato da `run` per generare `clean.sql` quando manca.
 - **`inspect runs --resume`**: rimosso il resume dei run (flag `--resume`/`--from-layer`, modulo `cmd_resume`, campo `resumed_from` nei run record). Zero utilizzi misurati; per un run interrotto si riparte dal layer successivo con `toolkit run clean` / `toolkit run mart`. Aggiornati README, `docs/advanced-workflows.md` e `docs/feature-stability.md`.

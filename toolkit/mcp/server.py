@@ -5,7 +5,7 @@ Espone 4 tool aggregati per ispezione dataset, query, pipeline e fonti.
 Tool:
 - toolkit_dataset: find, overview, status
 - toolkit_query: run (SQL), preview (URL CSV/TSV)
-- toolkit_pipeline: contract, runs, registry_list, registry_show, graph
+- toolkit_pipeline: contract, runs, registry_list, registry_show
 - toolkit_source: probe, ckan, links, sparql
 
 Usa ``lab_connectors.mcp`` per init standardizzato, error handling e logging.
@@ -41,7 +41,6 @@ from .catalog_ops import (
 )
 
 from .registry_ops import (
-    mcp_graph as graph_impl,
     mcp_registry_list as registry_list_impl,
     mcp_registry_show as registry_show_impl,
 )
@@ -59,7 +58,7 @@ mcp = create_mcp_server(
         "4 tool:\n"
         "- toolkit_dataset: find, overview, status\n"
         "- toolkit_query: run (SQL su raw/clean/mart), preview (URL CSV/TSV)\n"
-        "- toolkit_pipeline: contract, runs, registry_list/show, graph\n"
+        "- toolkit_pipeline: contract, runs, registry_list/show\n"
         "- toolkit_source: probe HTTP, CKAN, HTML links, SPARQL\n\n"
         "📌 PRIMA di scrivere clean.sql o mart.sql: chiama "
         "toolkit_pipeline(action='contract', layer='clean') per view name (raw_input), "
@@ -230,19 +229,18 @@ def toolkit_query(
 
 
 # ---------------------------------------------------------------------------
-# toolkit_pipeline — contract, runs, registry, graph
+# toolkit_pipeline — contract, runs, registry
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool(
     description=(
-        "Pipeline toolkit: contratti, run history, registry e grafo relazioni.\n\n"
+        "Pipeline toolkit: contratti, run history e registry.\n\n"
         "Actions:\n"
         "- contract: contratti pipeline per layer (params: layer)\n"
         "- runs: lista run records (params: config_path, year, since, until, status, limit, cross_year)\n"
         "- registry_list: elenca artifact registry committati\n"
-        "- registry_show: mostra artifact registry (params: repo, artifact, slug)\n"
-        "- graph: mappa relazioni tra dataset (params: by_key, by_dataset, by_registry, by_domain)"
+        "- registry_show: mostra artifact registry (params: repo, artifact, slug)"
     ),
     structured_output=True,
 )
@@ -262,11 +260,6 @@ def toolkit_pipeline(
     repo: str | None = None,
     artifact: str | None = None,
     slug: str | None = None,
-    # graph
-    by_key: str = "",
-    by_dataset: str = "",
-    by_registry: str = "",
-    by_domain: str = "",
 ) -> dict[str, Any]:
     if action == "contract":
         from toolkit.contracts.pipeline import CONTRACTS
@@ -300,17 +293,8 @@ def toolkit_pipeline(
         return guard_timed(
             registry_show_impl, "toolkit_pipeline_registry_show", repo, artifact, slug
         )
-    if action == "graph":
-        return guard_timed(
-            graph_impl,
-            "toolkit_pipeline_graph",
-            by_key=by_key,
-            by_dataset=by_dataset,
-            by_registry=by_registry,
-            by_domain=by_domain,
-        )
     raise ToolkitClientError(
-        f"Azione '{action}' non valida. Usare: contract, runs, registry_list, registry_show, graph",
+        f"Azione '{action}' non valida. Usare: contract, runs, registry_list, registry_show",
         ErrorCode.INVALID_PARAMS,
     )
 

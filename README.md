@@ -63,6 +63,7 @@ La CI di `dataset-incubator` carica su GCS dopo ogni run validato.
 | `toolkit inspect` | Stato ultimo run (riassunto) |
 | `toolkit inspect config --diff` | Schema-diff RAW tra anni |
 | `toolkit scout <URL>` | Esplora fonte esterna (HTTP/CKAN/SDMX) |
+| `toolkit preview <URL>` | Profila un CSV/TSV remoto (colonne, anni, qualità) |
 
 `--config` è opzionale: se omesso, toolkit cerca `dataset.yml` nella directory corrente.
 Se passi uno slug (es. `terna-electricity-by-source`), lo risolve nel workspace.

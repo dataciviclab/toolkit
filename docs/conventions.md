@@ -61,7 +61,7 @@ Sostituiscono i pattern boilerplate (`TRY_CAST`, `REPLACE` per numeri italiani,
 
 ### Regole
 
-- **Stile raccomandato**: nei nuovi `clean.sql` usare le macro. Lo scaffold (`toolkit run init`) genera già SQL con macro.
+- **Stile raccomandato**: nei nuovi `clean.sql` usare le macro. `toolkit run` genera già SQL con macro quando `clean.sql` manca.
 - **Retrocompatibile**: i `clean.sql` esistenti continuano a funzionare senza modifiche. Le macro sono additive.
 - **Input `VARCHAR` obbligatorio**: `normalize_italian_*` e `remove_dot_thousands` falliscono con errore esplicito se ricevono una colonna già tipizzata (`DOUBLE`/`FLOAT`/`DECIMAL`), perché il formato italiano è già perso. Con `source: auto` + numeri italiani serve `clean.read.all_varchar: true` (o `columns` con `VARCHAR`).
 - **Nessuna config**: non serve abilitarle in `dataset.yml` — sono sempre caricate.

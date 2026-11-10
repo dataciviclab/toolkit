@@ -5,7 +5,20 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("mcp.server.fastmcp", reason="richiede mcp>=1.2 (lab-connectors[mcp])")
+# mcp 1.x espone FastMCP come ``mcp.server.fastmcp``; mcp 2.x lo rinomina in
+# ``mcp.server.mcpserver``. Accettiamo entrambi, altrimenti il test di
+# registrazione dei tool verrebbe saltato proprio dove gira mcp>=2.
+try:
+    import mcp.server.fastmcp  # noqa: F401
+except ModuleNotFoundError:
+    try:
+        import mcp.server.mcpserver  # noqa: F401
+    except ModuleNotFoundError:
+        pytest.skip(
+            "richiede mcp>=1.2 (lab-connectors[mcp])",
+            allow_module_level=True,
+        )
+
 from toolkit.mcp import server as mcp_server
 from toolkit.mcp.errors import ToolkitClientError
 

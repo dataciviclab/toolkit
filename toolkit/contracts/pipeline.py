@@ -221,11 +221,6 @@ _CLI_COMMANDS: list[dict[str, str]] = [
         "when": "Prima esecuzione o quando cambi fonte.",
     },
     {
-        "command": "toolkit run init --config dataset.yml",
-        "description": "Bootstrap: run raw + scaffold clean.sql se assente.",
-        "when": "Primo avvio di un nuovo dataset.",
-    },
-    {
         "command": "toolkit run clean --config dataset.yml",
         "description": "Applica clean.sql ai dati raw e produce parquet CLEAN.",
         "when": "Dopo aver scritto/modificato clean.sql.",
@@ -370,6 +365,6 @@ CONTRACTS: dict[str, Any] = {
         "mart.sql: SELECT ... FROM clean_input  |  "
         "support: {support.NAME.mart|clean|path} (skip-if-exists, --refresh-support per forzare)  |  "
         "validazione: inline nel run record (_runs/), non piu' file separati  |  "
-        "comandi: toolkit run init / preflight / all / scout / inspect"
+        "comandi: toolkit run (genera clean.sql se manca) / preflight / all / scout / preview / inspect"
     ),
 }

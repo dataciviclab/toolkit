@@ -14,8 +14,7 @@ Questa matrice serve a chiarire cosa il toolkit considera percorso canonico, cos
 | `inspect config --mode profile` | supported / advanced | diagnostica su RAW sporchi o ambigui |
 | `run raw\|clean\|mart` | supported / advanced | debug e re-run parziali |
 | `scout` | stable | esplorazione URL esterni, probe e routing automatico |
-| `scout --scaffold` | stable | probe + scaffold candidate dataset (dataset.yml, SQL, README) |
-| `scout --run` | supported / advanced | scout + scaffold + raw run in unico comando |
+| `preview` | stable | profilo CSV/TSV remoto: encoding, colonne, granularità, anni |
 | `mart` tabelle con `years` | stable | multi-year (sostituisce ex `cross_year`) |
 | `inspect config --diff` | supported / advanced | confronto rapido segnali schema RAW tra anni |
 | artifact policy | deprecated / ignored | accettato per backward compat ma senza effetto |

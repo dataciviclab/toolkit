@@ -8,10 +8,8 @@ from __future__ import annotations
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 
 import pytest
-import yaml
 
 from toolkit.cli.app import app
 from typer.testing import CliRunner
@@ -100,7 +98,7 @@ def test_scout_file_url_shows_probe_info() -> None:
     assert "Source type: file" in result.output
     assert "HTTP status: 200" in result.output
     assert "csv" in result.output
-    assert "Next: toolkit scout" in result.output
+    assert "Next: toolkit preview" in result.output
 
 
 @pytest.mark.policy
@@ -118,7 +116,7 @@ def test_scout_html_shows_candidate_links() -> None:
     assert "Source type: html" in result.output
     assert "Candidate links:" in result.output
     assert f"{base_url}/downloads/data.csv" in result.output
-    assert "Next: toolkit scout" in result.output
+    assert "Next: toolkit preview" in result.output
 
 
 @pytest.mark.policy
@@ -137,119 +135,6 @@ def test_scout_json_output() -> None:
     assert data["source_type"] == "file"
     assert data["status_code"] == 200
     assert "final_url" in data
-
-
-# ---------------------------------------------------------------------------
-# policy: toolkit scout --scaffold genera file candidate
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.policy
-def test_scout_scaffold_generates_dataset_yml(tmp_path: Path, monkeypatch) -> None:
-    """toolkit scout --scaffold genera dataset.yml valido (YAML parsabile)."""
-    server, base_url = _serve()
-    runner = CliRunner()
-    monkeypatch.chdir(tmp_path)
-    try:
-        result = runner.invoke(app, ["scout", "--scaffold", f"{base_url}/files/multi_col.csv"])
-        assert result.exit_code == 0, f"scout --scaffold failed: {result.output}"
-
-        # Trova la directory generata
-        dirs = [d for d in tmp_path.iterdir() if d.is_dir()]
-        assert len(dirs) >= 1, f"no directories created in {tmp_path}"
-        slug_dir = dirs[0]
-
-        # dataset.yml valido
-        yml_path = slug_dir / "dataset.yml"
-        assert yml_path.exists(), f"dataset.yml not found at {yml_path}"
-        data = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
-        assert data["dataset"]["name"].startswith("multi_col")
-        assert data["raw"]["sources"][0]["type"] == "http_file"
-        assert "clean" in data
-        assert "mart" in data
-
-        # SQL files
-        assert (slug_dir / "sql" / "clean.sql").exists()
-        assert (slug_dir / "sql" / "mart.sql").exists()
-    finally:
-        server.shutdown()
-        server.server_close()
-
-
-@pytest.mark.policy
-def test_scout_scaffold_has_type_casts_in_clean_sql(tmp_path: Path, monkeypatch) -> None:
-    """clean.sql generato da scout --scaffold ha TRY_CAST per colonne numeriche."""
-    server, base_url = _serve()
-    runner = CliRunner()
-    monkeypatch.chdir(tmp_path)
-    try:
-        result = runner.invoke(app, ["scout", "--scaffold", f"{base_url}/files/multi_col.csv"])
-        assert result.exit_code == 0
-
-        dirs = [d for d in tmp_path.iterdir() if d.is_dir()]
-        slug_dir = dirs[0]
-        clean_sql = (slug_dir / "sql" / "clean.sql").read_text()
-        mart_sql = (slug_dir / "sql" / "mart.sql").read_text()
-
-        # Verifica cast
-        assert clean_sql, "clean.sql is empty"
-        assert mart_sql, "mart.sql is empty"
-    finally:
-        server.shutdown()
-        server.server_close()
-
-
-# ---------------------------------------------------------------------------
-# policy: --slug flag
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.policy
-def test_scout_scaffold_with_slug_creates_custom_dir(tmp_path: Path, monkeypatch) -> None:
-    """toolkit scout --scaffold --slug <nome> usa lo slug personalizzato."""
-    server, base_url = _serve()
-    runner = CliRunner()
-    monkeypatch.chdir(tmp_path)
-    try:
-        result = runner.invoke(
-            app,
-            [
-                "scout",
-                "--scaffold",
-                "--slug",
-                "posti-letto-test",
-                f"{base_url}/files/multi_col.csv",
-            ],
-        )
-        assert result.exit_code == 0, f"scout --slug failed: {result.output}"
-        slug_dir = tmp_path / "posti-letto-test"
-        assert slug_dir.is_dir(), f"slug directory not found: {slug_dir}"
-        yml_path = slug_dir / "dataset.yml"
-        assert yml_path.exists()
-        data = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
-        # dataset.name usa underscore (SQL-safe), directory usa slug (-)
-        assert data["dataset"]["name"] == "posti_letto_test"
-    finally:
-        server.shutdown()
-        server.server_close()
-
-
-@pytest.mark.policy
-def test_scout_scaffold_with_invalid_slug_fails(tmp_path: Path, monkeypatch) -> None:
-    """toolkit scout --scaffold --slug con caratteri non validi fallisce."""
-    server, base_url = _serve()
-    runner = CliRunner()
-    monkeypatch.chdir(tmp_path)
-    try:
-        result = runner.invoke(
-            app,
-            ["scout", "--scaffold", "--slug", "Posti Letto!", f"{base_url}/files/multi_col.csv"],
-        )
-        assert result.exit_code != 0
-        assert "error: --slug" in result.output.lower()
-    finally:
-        server.shutdown()
-        server.server_close()
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +160,7 @@ def test_scout_shows_404_status() -> None:
 
 @pytest.mark.policy
 def test_scout_shows_next_steps_for_file() -> None:
-    """toolkit scout per file mostra suggerimento scout --scaffold."""
+    """toolkit scout per file suggerisce toolkit preview."""
     server, base_url = _serve()
     runner = CliRunner()
     try:
@@ -285,4 +170,42 @@ def test_scout_shows_next_steps_for_file() -> None:
         server.server_close()
 
     assert result.exit_code == 0
-    assert "Next: toolkit scout" in result.output
+    assert "Next: toolkit preview" in result.output
+
+
+# ---------------------------------------------------------------------------
+# contract: toolkit preview (profilo CSV/TSV remoto)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_preview_profiles_remote_csv() -> None:
+    """toolkit preview <URL> profila il file remoto e stampa le colonne."""
+    server, base_url = _serve()
+    runner = CliRunner()
+    try:
+        result = runner.invoke(app, ["preview", f"{base_url}/files/multi_col.csv"])
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert result.exit_code == 0, result.output
+    assert "Columns (" in result.output
+    assert "nome" in result.output
+
+
+@pytest.mark.contract
+def test_preview_json_output() -> None:
+    """toolkit preview --json restituisce un payload con le colonne."""
+    server, base_url = _serve()
+    runner = CliRunner()
+    try:
+        result = runner.invoke(app, ["preview", f"{base_url}/files/multi_col.csv", "--json"])
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["status"] == "success"
+    assert "nome" in payload["columns"]

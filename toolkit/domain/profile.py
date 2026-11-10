@@ -20,7 +20,7 @@ def csv_preview(csv_path: str, limit: int = 20) -> dict[str, Any]:
     """Sniffa encoding/delim/colonne di un CSV e restituisce schema + preview.
 
     Stessa pipeline di ``sniff_source_file`` + ``profile_with_read_cfg``
-    usata dal profiler RAW e da ``toolkit scout --scaffold``.
+    usata dal profiler RAW.
 
     Output compatibile col formato ``mapping_suggestions`` del profiler.
 

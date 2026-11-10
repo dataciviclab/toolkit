@@ -253,12 +253,16 @@ class TestScore:
 
     @pytest.mark.smoke
     def test_ipa_entire_file(self):
-        """Test con porzione del CSV IPA reale — si aspetta score ≥ 80."""
+        """Test con porzione del CSV IPA reale — si aspetta score ≥ 80.
+
+        Il dump IPA è grande (decine di MB): si legge solo un blocco iniziale,
+        altrimenti il test scarica tutto e sfonda il timeout della CI.
+        """
         import urllib.request
 
         url = "https://indicepa.gov.it/ipa-dati/datastore/dump/d09adf99-dc10-4349-8c53-27b1e5aa97b6?bom=True"
-        with urllib.request.urlopen(url) as f:
-            raw = f.read().decode("utf-8")
+        with urllib.request.urlopen(url, timeout=30) as f:
+            raw = f.read(200_000).decode("utf-8", errors="ignore")
         # Prime 100 righe
         lines = raw.split("\n")[:100]
         sample = "\n".join(lines)

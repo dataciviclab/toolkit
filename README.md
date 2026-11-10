@@ -116,7 +116,7 @@ locale, layer raw, contratti, runs, stato live del workspace.
 |---|---|---|
 | `toolkit_dataset` | find, overview, status | Cerca, ispeziona, diagnostica dataset |
 | `toolkit_query` | run, preview | SQL su raw/clean/mart, preview URL CSV/TSV |
-| `toolkit_pipeline` | contract, runs, registry_list, registry_show, graph | Contratti, run history, registry, grafo relazioni |
+| `toolkit_pipeline` | contract, runs, registry_list, registry_show | Contratti, run history, registry |
 | `toolkit_source` | probe, ckan, links, sparql | Probe HTTP, CKAN, HTML links, SPARQL |
 
 Config IDE (`.mcp.json`):

@@ -15,7 +15,7 @@ run records + parquet locali + GCS):
 | `marts` | "cosa esiste a livello analitico" (mart) | tabelle, PK, required_columns, min_rows, location, run | clean-query, data-explorer |
 | `signals` | "come è andato e cosa manca" (operativo) | status ok/warn/error, years, run, detail, action | ACB (bootstrap/triage) |
 | `codelists` | "quali valori hanno le dimensioni" | mappa nome-codelist → righe (code, label_en, ...) | agenti MCP (risoluzione codici) |
-| `entities` | "con chi si collega ogni dataset" | grafo entità → dataset, bridges | lab-dashboard, clean-query (dataset_graph) |
+| `entities` | "con chi si collega ogni dataset" | grafo entità → dataset, bridges | nessun servizio attivo: i join sono coperti da `join_suggestions` in dcl-mcp (dai `semantic_type` delle colonne) |
 
 Le definizioni condivise (dataset, column, location, run, mart, signal) sono
 inline come `$defs` — nessun `$ref` esterno.

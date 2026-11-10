@@ -181,8 +181,6 @@ def _print_execution_plan(
     typer.echo(f"year: {year}")
     typer.echo("status: DRY_RUN")
     typer.echo(f"run_id: {context.run_id}")
-    if context.resumed_from:
-        typer.echo(f"resumed_from: {context.resumed_from}")
     typer.echo(f"steps: {', '.join(layers)}")
     typer.echo(f"validation.fail_on_error: {fail_on_error}")
     typer.echo(f"run_record: {context.path}")
@@ -308,7 +306,6 @@ def run_year(
     start_from_layer: str | None = None,
     dry_run: bool = False,
     logger=None,
-    resumed_from: str | None = None,
     sample_rows: int | None = None,
     sample_bytes: int | None = None,
     smoke: bool = False,
@@ -321,7 +318,7 @@ def run_year(
     planned_layers = _validate_execution_plan(cfg, step)
     layers_to_run = _layers_from_start(planned_layers, start_from_layer)
 
-    context = RunContext(cfg.dataset, year, root=cfg.root, resumed_from=resumed_from, smoke=smoke)
+    context = RunContext(cfg.dataset, year, root=cfg.root, smoke=smoke)
     base_logger = bind_logger(
         logger,
         dataset=cfg.dataset,

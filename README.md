@@ -62,7 +62,6 @@ La CI di `dataset-incubator` carica su GCS dopo ogni run validato.
 | `toolkit run mart` | Solo layer MART |
 | `toolkit inspect` | Stato ultimo run (riassunto) |
 | `toolkit inspect config --diff` | Schema-diff RAW tra anni |
-| `toolkit inspect runs --resume` | Riprendi run interrotto |
 | `toolkit scout <URL>` | Esplora fonte esterna (HTTP/CKAN/SDMX) |
 
 `--config` è opzionale: se omesso, toolkit cerca `dataset.yml` nella directory corrente.
@@ -114,7 +113,7 @@ locale, layer raw, contratti, runs, stato live del workspace.
 
 | Tool | Azioni | Cosa fa |
 |---|---|---|
-| `toolkit_dataset` | find, overview, status, preflight, schema-diff | Cerca, ispeziona, diagnostica dataset |
+| `toolkit_dataset` | find, overview, status | Cerca, ispeziona, diagnostica dataset |
 | `toolkit_query` | run, preview | SQL su raw/clean/mart, preview URL CSV/TSV |
 | `toolkit_pipeline` | contract, runs, registry_list, registry_show, graph | Contratti, run history, registry, grafo relazioni |
 | `toolkit_source` | probe, ckan, links, sparql | Probe HTTP, CKAN, HTML links, SPARQL |
@@ -136,7 +135,7 @@ Config IDE (`.mcp.json`):
 | Problema | Soluzione |
 |---|---|---|
 | `toolkit: command not found` | Usa `python -m toolkit.cli.app` |
-| Run interrotto | `toolkit inspect runs --resume -c dataset.yml` |
+| Run interrotto | `toolkit run clean -c dataset.yml` (o `run mart` se clean è a posto) |
 | Schema diverso tra anni | `toolkit inspect config -c dataset.yml --diff` |
 | Dove sono i parquet? | `toolkit inspect -c dataset.yml` (mostra path nel riassunto) |
 

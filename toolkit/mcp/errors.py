@@ -1,4 +1,4 @@
-"""Error types for the MCP toolkit client.
+"""Error types for the MCP server.
 
 ToolkitClientError è un ponte verso lab_connectors.mcp.
 Tutte le eccezioni interne diventano McpError con codice UNEXPECTED

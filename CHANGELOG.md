@@ -20,6 +20,9 @@
 
 ### Removed
 
+- **`inspect runs --resume`**: rimosso il resume dei run (flag `--resume`/`--from-layer`, modulo `cmd_resume`, campo `resumed_from` nei run record). Zero utilizzi misurati; per un run interrotto si riparte dal layer successivo con `toolkit run clean` / `toolkit run mart`. Aggiornati README, `docs/advanced-workflows.md` e `docs/feature-stability.md`.
+- **Azioni MCP a uso zero** (`toolkit_dataset`): rimosse `preflight`, `schema-diff` e `related` (0/1/2 chiamate). Restano disponibili via CLI (`toolkit run preflight`, `toolkit inspect config --diff`).
+- **Facade `toolkit.mcp.toolkit_client`**: eliminata (il server importa direttamente da `schema_ops`/`scout_ops`); rimosso `reset_resolver`, mai chiamato.
 - **Codice morto** (PR #505): comandi CLI mai registrati (`_run_probe_cmd`, `run_all_cmd`, `inspect paths`, comando Typer `inspect profile` — `run_profile` logica conservata), `_ALLOWED_BATCH_STEPS`, `mcp_probe_url` (mai registrato come tool MCP; `mcp_probe_url_routed` resta), `_helpers.py` di `cli/inspect`.
 
 ## [1.53.0] - 2026-09-27

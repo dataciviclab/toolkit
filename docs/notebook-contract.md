@@ -18,7 +18,7 @@ File utili:
 Ruoli dei file:
 
 - `metadata.json`: payload ricco del layer. Contiene input, output, `config_hash`, summary di validazione e campi specifici del layer.
-- run record in `data/_runs/...`: stato del run (`run_id`, layer, validations, status), utile per `status` e `resume`.
+- run record in `data/_runs/...`: stato del run (`run_id`, layer, validations, status), utile per `status` e `inspect runs`.
 - `inspect --json` (o `inspect --config dataset.yml --json`): helper read-only per notebook e script locali; restituisce i path assoluti utili del runtime, incluso `latest_run`.
 
 Per evitare duplicazione di path logic nei notebook:

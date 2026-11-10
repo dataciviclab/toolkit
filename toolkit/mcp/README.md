@@ -14,8 +14,6 @@ Ogni tool ha un parametro `action` che fa da dispatch.
 | `find` | query, layer, limit, source, stage, status_filter | Cerca dataset per slug/testo/source |
 | `overview` | slug, layer, year, source, profile | Schema colonne + row count + preview |
 | `status` | config_path, year, since, until | Stato completo: paths, readiness, run_stats |
-| `preflight` | config_path, years | Diagnostica pre-run: valida config, verifica fonti |
-| `schema-diff` | config_path | Confronto segnali schema raw cross-year |
 
 ### `toolkit_query` — query dati
 

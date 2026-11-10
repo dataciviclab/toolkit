@@ -1,4 +1,4 @@
-"""Path safety and config loading for the MCP toolkit client.
+"""Path safety and config loading for the MCP server.
 
 Ora è un thin wrapper su ``toolkit.core.discovery`` — la logica di
 risoluzione slug/path è centralizzata in ``resolve_config_path()``.

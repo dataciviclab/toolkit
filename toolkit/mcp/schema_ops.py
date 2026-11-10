@@ -1,4 +1,4 @@
-"""Schema inspection and readiness diagnostics for the MCP toolkit client.
+"""Schema inspection and readiness diagnostics for the MCP server.
 
 Provides read-only diagnostics on config, layers, and run records:
 - show_schema: schema of a raw/clean/mart layer
@@ -6,7 +6,6 @@ Provides read-only diagnostics on config, layers, and run records:
 - run_state: run directory state and latest run record
 - summary: layer-level overview with existence checks
 - review_readiness: readiness check for candidate review
-- schema_diff: compare RAW schema signals across configured years
 - csv_preview: schema + preview of a CSV file via DuckDB auto-detect
 """
 
@@ -289,22 +288,6 @@ def review_readiness(config_path: str, year: int | None = None) -> dict[str, Any
         return _cli_review_readiness(str(_safe_path(str(config_path))), year=year)
     except FileNotFoundError as exc:
         raise ToolkitClientError(str(exc), code=ErrorCode.CONFIG_NOT_FOUND) from exc
-
-
-def schema_diff(config_path: str) -> dict[str, Any]:
-    """Compare RAW schema signals across the years configured for a dataset.
-
-    Thin wrapper MCP: delega a ``toolkit.cli.inspect.schema_diff_ops.schema_diff_payload``.
-    """
-    from toolkit.domain.schema_diff import schema_diff_payload as _payload
-
-    try:
-        return _payload(config_path)
-    except (ValueError, FileNotFoundError) as exc:
-        from toolkit.mcp.errors import ToolkitClientError
-        from lab_connectors.mcp.errors import ErrorCode
-
-        raise ToolkitClientError(str(exc), code=ErrorCode.INVALID_PARAMS) from exc
 
 
 def clean_preview(

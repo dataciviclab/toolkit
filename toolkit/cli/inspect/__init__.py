@@ -77,21 +77,15 @@ def register(app: typer.Typer) -> None:
             None, "--config", "-c", help="Path or slug to dataset.yml"
         ),
         year: int | None = typer.Option(None, "--year", "-y", help="Dataset year"),
-        resume: bool = typer.Option(False, "--resume", help="Riprendi run fallito"),
         run_id: str | None = typer.Option(None, "--run-id", help="Specific run id"),
-        from_layer: str | None = typer.Option(
-            None, "--from-layer", help="Forza ripartenza raw|clean|mart"
-        ),
         limit: int = typer.Option(10, "--limit", help="Max runs"),
         json_output: bool = typer.Option(False, "--json", help="Output JSON"),
     ):
-        """Mostra storico run o riprende un run fallito."""
+        """Mostra storico run o dettaglio di un run."""
         _runs(
             config=config,
             year=year,
-            resume=resume,
             run_id=run_id,
-            from_layer=from_layer,
             limit=limit,
             json_output=json_output,
         )

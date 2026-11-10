@@ -210,7 +210,6 @@ class TestInspectRuns:
         output = _strip_ansi(result.stdout)
         assert result.exit_code == 0
         assert "--config" in output
-        assert "--resume" in output
         assert "--run-id" in output
         assert "--limit" in output
 

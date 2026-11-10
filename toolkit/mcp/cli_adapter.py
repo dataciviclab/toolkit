@@ -1,4 +1,4 @@
-"""CLI-to-JSON adapter for the MCP toolkit client.
+"""CLI-to-JSON adapter for the MCP server.
 
 Provides:
 - inspect_paths: resolve all paths for a dataset/year (direct call, no subprocess)

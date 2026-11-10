@@ -1,16 +1,10 @@
-"""inspect runs — cronologia run, dettagli e resume.
-
-Comando canonico per gestire i run.
-``inspect runs --resume`` è il percorso canonico per il resume.
-La logica di resume è in ``cmd_resume.resume()`` (condivisa).
-"""
+"""inspect runs — cronologia ed elenco dei run di un dataset."""
 
 from __future__ import annotations
 
 
 import typer
 
-from toolkit.cli.cmd_resume import resume as _resume
 from toolkit.core.config import load_config
 from toolkit.core.run_records import get_run_dir, read_run_record
 
@@ -18,37 +12,16 @@ from toolkit.core.run_records import get_run_dir, read_run_record
 def runs(
     config: str | None = typer.Option(None, "--config", "-c", help="Path or slug to dataset.yml"),
     year: int | None = typer.Option(None, "--year", "-y", help="Dataset year (default: first)"),
-    resume: bool = typer.Option(False, "--resume", help="Resume latest/failed run"),
-    run_id: str | None = typer.Option(None, "--run-id", help="Specific run id (show o resume)"),
-    from_layer: str | None = typer.Option(
-        None, "--from-layer", help="Force restart from raw | clean | mart (solo con --resume)"
-    ),
+    run_id: str | None = typer.Option(None, "--run-id", help="Specific run id"),
     limit: int = typer.Option(10, "--limit", help="Max runs da elencare"),
     json_output: bool = typer.Option(False, "--json", help="Output JSON"),
 ):
-    """Mostra cronologia run, dettagli, o riprende un run fallito.
-
-    Con --resume riprende dal primo layer non SUCCESS.
-    La logica condivisa è in ``cmd_resume.resume()``.
+    """Mostra cronologia run e dettagli di un run specifico.
 
     Esempi:
-        toolkit inspect runs -c dataset.yml                              # elenca ultimi run
-        toolkit inspect runs -c dataset.yml --run-id <id>                 # dettaglio specifico
-        toolkit inspect runs -c dataset.yml --resume                      # riprendi dal fallimento
-        toolkit inspect runs -c dataset.yml --resume --from-layer clean  # forza ripartenza da clean
+        toolkit inspect runs -c dataset.yml                    # elenca ultimi run
+        toolkit inspect runs -c dataset.yml --run-id <id>      # dettaglio specifico
     """
-    # Resume flow → delega alla logica completa di cmd_resume.resume()
-    if resume:
-        _resume(
-            config=config,
-            year=year,
-            dataset=None,
-            run_id=run_id,
-            latest=(run_id is None),
-            from_layer=from_layer,
-        )
-        return
-
     cfg = load_config(config)
     yr = year if year is not None else (cfg.years[0] if cfg.years else None)
     if yr is None:

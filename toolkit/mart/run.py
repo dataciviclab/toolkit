@@ -36,6 +36,23 @@ from toolkit.core.template import build_runtime_template_ctx, public_template_ct
 _CLEAN_INPUT_TOKEN_RE = re.compile(rf"\b{CLEAN_INPUT_VIEW}\b", re.IGNORECASE)
 
 
+def parquet_copy_options(table_cfg: Any) -> str:
+    """Opzioni `COPY … (…)` per il parquet di una tabella mart.
+
+    Sempre Parquet + ZSTD; `row_group_size` solo se dichiarato in
+    `mart.tables[].row_group_size`. Il row group è l'unità minima che un
+    lettore scarica da un file remoto: con il default (122.880 righe) una
+    tabella più piccola finisce in un blocco solo, e ogni lookup per chiave
+    legge tutto il file.
+    """
+    opts = "FORMAT PARQUET, COMPRESSION ZSTD"
+    cfg = table_cfg if isinstance(table_cfg, dict) else {}
+    row_group_size = cfg.get("row_group_size")
+    if row_group_size:
+        opts += f", ROW_GROUP_SIZE {int(row_group_size)}"
+    return opts
+
+
 def _validate_multi_year_tables(
     mart_dir: Path,
     mart_cfg: dict[str, Any],
@@ -175,7 +192,7 @@ def run_mart_multi_year(
             total_rows += row_count
 
             out = multi_year_dir / f"{name}.parquet"
-            con.execute(f"COPY {name} TO '{out}' (FORMAT PARQUET, COMPRESSION ZSTD);")
+            con.execute(f"COPY {name} TO '{out}' ({parquet_copy_options(table)});")
 
             written.append(out)
             executed.append(
@@ -500,7 +517,7 @@ def run_mart(
             total_rows += row_count
 
             out = mart_dir / f"{name}.parquet"
-            con.execute(f"COPY {name} TO '{out}' (FORMAT PARQUET, COMPRESSION ZSTD);")
+            con.execute(f"COPY {name} TO '{out}' ({parquet_copy_options(table)});")
 
             written.append(out)
             table_profiles[name] = output_profile

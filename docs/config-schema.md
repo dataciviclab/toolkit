@@ -298,6 +298,10 @@ Note pratiche:
 |---|---|---|
 | `name` | `string` | nessuno |
 | `sql` | `string` | nessuno |
+| `years` | `list[int]` | `null` |
+| `source_layer` | `string` | `clean` |
+| `source_table` | `string \| null` | `null` |
+| `row_group_size` | `int \| null` | `null` |
 
 `MartValidate`:
 
@@ -317,6 +321,12 @@ Note pratiche:
 
 Note pratiche:
 
+- `mart.tables[].row_group_size` decide quante righe per row group nel parquet
+  di output (default DuckDB: 122.880). Serve alle tabelle lette **per chiave**
+  da file remoti (GCS/HTTP): il row group è l'unità minima che il lettore
+  scarica, e con il default una tabella più piccola finisce in un blocco solo.
+  Minimo 2048 (STANDARD_VECTOR_SIZE): valori più bassi sono rifiutati, perché
+  DuckDB li alzerebbe in silenzio.
 - `clean.validate` controlla il parquet CLEAN complessivo del dataset/anno
 - `mart.validate.table_rules` controlla invece ogni tabella MART per nome
 - le chiavi di `table_rules` devono corrispondere ai `name` dichiarati in `mart.tables`

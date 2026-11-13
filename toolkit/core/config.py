@@ -88,6 +88,27 @@ def reject_unknown_keys(value: dict, known: set[str], field_name: str) -> None:
         raise ValueError(f"{field_name}: unknown key(s) {unknown}; allowed keys: {sorted(known)}")
 
 
+# DuckDB scrive i row group a multipli di STANDARD_VECTOR_SIZE (2048 righe):
+# valori più piccoli vengono alzati in silenzio, quindi un `row_group_size: 256`
+# sembrerebbe applicato e non farebbe nulla. Meglio rifiutarlo.
+_ROW_GROUP_MIN = 2048
+
+
+def _optional_row_group_size(value: Any) -> int | None:
+    """Valida `mart.tables[].row_group_size`."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"mart.tables[].row_group_size must be an int, got {value!r}")
+    if value < _ROW_GROUP_MIN:
+        raise ValueError(
+            f"mart.tables[].row_group_size={value} non valido: DuckDB non scende "
+            f"sotto {_ROW_GROUP_MIN} righe per row group (STANDARD_VECTOR_SIZE). "
+            "La granularità si ottiene dichiarando una tabella con meno righe."
+        )
+    return value
+
+
 # ── Fetch incrementale (raw.sources[].incremental) ──────────────────────
 # Contratto validato al load: validate/inspect lo vedono, non solo il run.
 _INCREMENTAL_KEYS = {"key_expr", "key_column", "key_literal"}
@@ -404,6 +425,11 @@ class MartTableConfig:
     years: list[int] | None = None
     source_layer: str = "clean"
     source_table: str | None = None
+    # Righe per row group nel parquet di output (None = default DuckDB,
+    # 122.880). Serve alle tabelle lette per chiave da file remoti: il row
+    # group è l'unità minima che un lettore deve scaricare, e il default
+    # mette un'intera tabella in un blocco solo.
+    row_group_size: int | None = None
 
     @staticmethod
     def from_dict(d: dict) -> MartTableConfig:
@@ -414,6 +440,7 @@ class MartTableConfig:
             years=_ensure_int_list(d.get("years"), "mart.tables[].years") or None,
             source_layer=d.get("source_layer", "clean"),
             source_table=d.get("source_table"),
+            row_group_size=_optional_row_group_size(d.get("row_group_size")),
         )
 
 

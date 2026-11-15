@@ -380,7 +380,10 @@ def _run_hierarchy_levels(
         total_rows += row_count
 
         out = mart_dir / f"{table_name}.parquet"
-        con.execute(f"COPY \"{table_name}\" TO '{out}' (FORMAT PARQUET, COMPRESSION ZSTD);")
+        # Scrittura atomica: niente parquet troncati se il run viene interrotto.
+        tmp_out = out.with_name(f".{out.name}.tmp")
+        con.execute(f"COPY \"{table_name}\" TO '{tmp_out}' (FORMAT PARQUET, COMPRESSION ZSTD);")
+        tmp_out.replace(out)
         written.append(out)
 
         executed.append(

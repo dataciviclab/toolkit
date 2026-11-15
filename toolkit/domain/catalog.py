@@ -40,7 +40,7 @@ VALID_SOURCES: frozenset[Literal["gcs", "workspace", "all"]] = frozenset(
 VALID_STAGES: frozenset[Literal["candidates", "support", "all"]] = frozenset(
     {"candidates", "support", "all"}
 )
-VALID_RUN_STATUSES = frozenset({"SUCCESS", "FAILED", "DRY_RUN", "RUNNING"})
+VALID_RUN_STATUSES = frozenset({"SUCCESS", "FAILED", "DRY_RUN", "RUNNING", "ABORTED"})
 
 
 # ---------------------------------------------------------------------------

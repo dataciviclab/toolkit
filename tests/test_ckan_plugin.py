@@ -991,3 +991,104 @@ def test_fetch_all_split_restituisce_uno_zip_ordinato_per_risorsa():
         assert nomi == ["000-agg_csv.csv", "001-20260401-agg_csv.csv"]
         assert zf.read("000-agg_csv.csv").decode() == "a,b\n1,2\n"
         assert zf.read("001-20260401-agg_csv.csv").decode() == "a,b\n9,9\n"
+
+
+def test_fetch_all_split_fallisce_se_manca_il_full():
+    """Senza il full lo ZIP conterrebbe solo i delta (che portano solo novita'):
+    meglio un errore esplicito che un dataset ridotto in silenzio."""
+    import pytest
+
+    from toolkit.core.exceptions import DownloadError
+
+    fake = FakeHttpClient()
+    fake.responses["https://portal.example.org/api/3/action/package_show"] = _all_resources_package(
+        "test-pkg",
+        [
+            {
+                "id": "id-full",
+                "name": "full_csv",
+                "format": "CSV",
+                "url": "https://dl.example.org/broken-full.zip",
+                "last_modified": "2026-01-15T00:00:00",
+            },
+            {
+                "id": "id-delta",
+                "name": "20260401-delta_csv",
+                "format": "CSV",
+                "url": "https://dl.example.org/delta.zip",
+                "last_modified": "2026-04-02T00:00:00",
+            },
+        ],
+    )
+    # il full non risponde: il delta si'
+    fake.responses["https://dl.example.org/broken-full.zip"] = HttpResult(
+        response=fake_response(404, text="not found"), err=None
+    )
+    fake.responses["https://dl.example.org/delta.zip"] = HttpResult(
+        response=fake_response(200, text="a,b\n9,9\n"), err=None
+    )
+
+    source = CkanSource()
+    source._client = fake
+
+    with pytest.raises(DownloadError, match="full"):
+        source.fetch_all("https://portal.example.org/api/3", "test-pkg", split=True)
+
+
+def test_fetch_all_split_regge_una_risorsa_senza_last_modified():
+    """`last_modified` assente non deve rompere l'ordine: la risorsa finisce
+    prima (chiave vuota), quindi resta davanti ai delta."""
+    import io
+    import zipfile
+
+    fake = FakeHttpClient()
+    fake.responses["https://portal.example.org/api/3/action/package_show"] = _all_resources_package(
+        "test-pkg",
+        [
+            {
+                "id": "id-delta",
+                "name": "20260401-delta_csv",
+                "format": "CSV",
+                "url": "https://dl.example.org/delta.zip",
+                "last_modified": "2026-04-02T00:00:00",
+            },
+            {
+                "id": "id-full",
+                "name": "full_csv",
+                "format": "CSV",
+                "url": "https://dl.example.org/full.zip",
+            },
+        ],
+    )
+    fake.responses["https://dl.example.org/delta.zip"] = HttpResult(
+        response=fake_response(200, text="a,b\n9,9\n"), err=None
+    )
+    fake.responses["https://dl.example.org/full.zip"] = HttpResult(
+        response=fake_response(200, text="a,b\n1,2\n"), err=None
+    )
+
+    source = CkanSource()
+    source._client = fake
+
+    payload, _origin = source.fetch_all("https://portal.example.org/api/3", "test-pkg", split=True)
+    with zipfile.ZipFile(io.BytesIO(payload)) as zf:
+        assert sorted(zf.namelist()) == ["000-full_csv.csv", "001-20260401-delta_csv.csv"]
+
+
+def test_fetch_ckan_split_resources_senza_download_all_e_errore(monkeypatch):
+    """`split_resources` senza `download_all` scaricherebbe una sola risorsa:
+    opzione ignorata in silenzio, quindi tanto vale un errore in config."""
+    import pytest
+
+    from toolkit.core.source_types import _fetch_ckan
+
+    with pytest.raises(ValueError, match="download_all"):
+        _fetch_ckan(
+            "ckan",
+            {},
+            {
+                "portal_url": "https://portal.example.org/api/3",
+                "dataset_id": "pkg-1",
+                "split_resources": True,
+            },
+        )

@@ -129,15 +129,18 @@ CREATE OR REPLACE MACRO remove_dot_thousands(val) AS
    END;
 
 -- ── safe_date ──────────────────────────────────────────────────────────────
--- TRY_CAST a DATE scartando gli anni impossibili (fuori 1990-2100).
+-- TRY_CAST a DATE scartando gli anni impossibili (fuori 1800-2100).
 -- Le fonti pubbliche contengono refusi (es. anno 4202 al posto di 2024, 9202
 -- al posto di 2022): senza filtro `max(data)` e qualunque metrica temporale
 -- diventano inutilizzabili, e il valore non e' NULL quindi nessuno se ne accorge.
+-- Il limite inferiore e' volutamente largo: la macro e' generica, e un dataset
+-- storico puo' avere date ottocentesche. Le attese per dominio (per ANAC: dal
+-- 1990) vivono nei controlli di quadratura, non qui.
 -- @contract returns: DATE
 -- @contract example: safe_date("DATA_CERT_COLLAUDO") AS data_cert_collaudo
 CREATE OR REPLACE MACRO safe_date(val) AS
    CASE
       WHEN TRY_CAST(val AS DATE) IS NULL THEN NULL
-      WHEN year(TRY_CAST(val AS DATE)) BETWEEN 1990 AND 2100 THEN TRY_CAST(val AS DATE)
+      WHEN year(TRY_CAST(val AS DATE)) BETWEEN 1800 AND 2100 THEN TRY_CAST(val AS DATE)
       ELSE NULL
    END;

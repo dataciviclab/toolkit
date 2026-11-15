@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from toolkit.core.config import ensure_dict, parse_bool
-from toolkit.core.exceptions import EmptyResultError
+from toolkit.core.exceptions import DownloadError, EmptyResultError
 from toolkit.core.metadata import (
     config_hash_for_year,
     merge_layer_manifest,
@@ -158,11 +158,7 @@ def run_raw(
             payload = b""
             origin = str(formatted_args.get("endpoint") or "")
             logger.info("RAW incrementale -> nessun dato nuovo (delta vuoto)")
-        except (AttributeError, ImportError, NameError, TypeError):
-            # Errore di programmazione (plugin rotto, argomento sbagliato): non
-            # va nascosto da `optional`, che copre la fonte assente, non i bug.
-            raise
-        except Exception as exc:
+        except DownloadError as exc:
             # Sorgente opzionale: il pacchetto può non esistere per questo anno
             # (es. dataset annuale ANAC che parte solo fino all'anno precedente,
             # coperto da una sorgente delta). Il run prosegue senza quella fonte,

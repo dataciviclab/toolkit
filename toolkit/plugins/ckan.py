@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import re
 import zipfile
 from typing import Any
@@ -11,6 +12,8 @@ from lab_connectors.http import HttpClient
 
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins._http_utils import truncate_at_line
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # CKAN detection constants + pure helpers (shared with toolkit.scout.http)
@@ -402,26 +405,50 @@ class CkanSource:
             )
             buffer = io.BytesIO()
             written = 0
+            full_ok = False
+            skipped: list[str] = []
             with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                for resource in ordered:
+                for index, resource in enumerate(ordered):
+                    label = str(resource.get("name") or resource.get("id") or f"resource_{index}")
                     outcome = self._try_resource(
                         resource, prefer_datastore, portal_url, api_url, sample_bytes=sample_bytes
                     )
                     if outcome is None:
+                        skipped.append(f"{label} (download fallito)")
                         continue
                     raw, _url = outcome
                     if raw[:2] == b"PK":
                         try:
                             raw = self._extract_csv_from_zip(raw)
                         except DownloadError:
+                            skipped.append(f"{label} (ZIP senza CSV)")
                             continue
                     member = str(resource.get("name") or f"resource_{written}").strip()
                     if not member.lower().endswith(".csv"):
                         member = f"{member}.csv"
                     zf.writestr(f"{written:03d}-{member}", raw)
                     written += 1
+                    if index == 0:
+                        full_ok = True
             if not written:
                 raise DownloadError(f"Failed to download any resource from dataset {dataset_id}")
+            # La prima risorsa in ordine cronologico e' il full, le altre sono
+            # delta: senza il full il dataset si ridurrebbe ai soli delta, che
+            # contengono solo novita'. Meglio fallire che pubblicare un parziale
+            # silenzioso (lo ZIP non lo direbbe a nessuno).
+            if not full_ok:
+                raise DownloadError(
+                    f"Risorsa piu' vecchia (il full) non scaricata per dataset {dataset_id}: "
+                    f"lo ZIP conterrebbe solo i delta. Risorse saltate: {skipped}"
+                )
+            if skipped:
+                logger.warning(
+                    "split_resources: %d risorsa/e saltata/e per dataset %s (lo ZIP e' "
+                    "incompleto, ma il full c'e'): %s",
+                    len(skipped),
+                    dataset_id,
+                    "; ".join(skipped),
+                )
             return buffer.getvalue(), f"{dataset_id}_split.zip"
 
         all_chunks: list[bytes] = []

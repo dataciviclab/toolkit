@@ -397,3 +397,26 @@ def test_sorgente_optional_non_nasconde_un_bug(tmp_path: Path, monkeypatch):
     }
     with pytest.raises(TypeError, match="argomento sbagliato"):
         raw_run.run_raw("ds", 2026, str(tmp_path), cfg, logging.getLogger("t"))
+
+
+def test_sorgente_optional_non_copre_i_guasti_di_rete(tmp_path: Path, monkeypatch):
+    """`optional` copre il pacchetto assente (DownloadError), non un guasto
+    transitorio: se la rete cade, il run deve fallire invece di pubblicare un
+    dataset parziale."""
+    import logging
+
+    from toolkit.raw import run as raw_run
+
+    def _rete_giu(stype, client, args, base_dir=None):
+        raise OSError("connection reset by peer")
+
+    monkeypatch.setattr(raw_run, "_fetch_payload", _rete_giu)
+    cfg = {
+        "output_policy": "overwrite",
+        "sources": [
+            {"name": "annuale", "type": "local_file", "optional": True, "args": {}},
+            {"name": "delta", "type": "local_file", "primary": True, "args": {}},
+        ],
+    }
+    with pytest.raises(OSError, match="connection reset"):
+        raw_run.run_raw("ds", 2026, str(tmp_path), cfg, logging.getLogger("t"))

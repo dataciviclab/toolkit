@@ -369,10 +369,12 @@ class CkanSource:
         """Fetch ALL CSV/ZIP resources from a CKAN dataset.
 
         Con ``split=True`` restituisce uno ZIP con un CSV per risorsa, ordinati
-        per ``last_modified`` e prefissati da un contatore a due cifre
-        (``00-...csv``, ``01-...csv``): il nome file diventa così l'ordine
+        per ``last_modified`` e prefissati da un contatore a tre cifre
+        (``000-...csv``, ``001-...csv``): il nome file diventa così l'ordine
         cronologico della risorsa, utile per la sostituzione per chiave nei
-        dataset che pubblicano un full + delta mensili.
+        dataset che pubblicano un full + delta mensili. Tre cifre, non due:
+        i delta mensili superano il centinaio di risorse e l'ordinamento
+        lessicografico di ``100-`` finirebbe prima di ``11-``.
 
         Senza ``split`` mantiene il comportamento storico: un unico CSV
         concatenato.
@@ -416,7 +418,7 @@ class CkanSource:
                     member = str(resource.get("name") or f"resource_{written}").strip()
                     if not member.lower().endswith(".csv"):
                         member = f"{member}.csv"
-                    zf.writestr(f"{written:02d}-{member}", raw)
+                    zf.writestr(f"{written:03d}-{member}", raw)
                     written += 1
             if not written:
                 raise DownloadError(f"Failed to download any resource from dataset {dataset_id}")

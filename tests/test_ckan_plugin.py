@@ -988,6 +988,6 @@ def test_fetch_all_split_restituisce_uno_zip_ordinato_per_risorsa():
     assert origin.endswith("_split.zip")
     with zipfile.ZipFile(io.BytesIO(payload)) as zf:
         nomi = sorted(zf.namelist())
-        assert nomi == ["00-agg_csv.csv", "01-20260401-agg_csv.csv"]
-        assert zf.read("00-agg_csv.csv").decode() == "a,b\n1,2\n"
-        assert zf.read("01-20260401-agg_csv.csv").decode() == "a,b\n9,9\n"
+        assert nomi == ["000-agg_csv.csv", "001-20260401-agg_csv.csv"]
+        assert zf.read("000-agg_csv.csv").decode() == "a,b\n1,2\n"
+        assert zf.read("001-20260401-agg_csv.csv").decode() == "a,b\n9,9\n"

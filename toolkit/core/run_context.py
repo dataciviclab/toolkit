@@ -198,6 +198,7 @@ class RunContext:
         col_count: int | None = None,
         tables_count: int | None = None,
         source_urls: list[str] | None = None,
+        skipped_sources: list[dict[str, Any]] | None = None,
     ) -> None:
         info = self._layer(layer)
         info["metrics"] = {
@@ -206,6 +207,10 @@ class RunContext:
             "col_count": col_count,
             "tables_count": tables_count,
         }
+        # Sorgenti `optional` saltate: senza questo, un run che ha perso una
+        # fonte sarebbe indistinguibile da uno che ha caricato tutto.
+        if skipped_sources:
+            info["metrics"]["skipped_sources"] = list(skipped_sources)
         if source_urls:
             self.source_urls = list(dict.fromkeys(self.source_urls + source_urls))
         self.save()

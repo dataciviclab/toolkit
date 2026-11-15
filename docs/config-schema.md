@@ -165,7 +165,7 @@ raw:
 
 - `download_all: true` scarica tutte le risorse CSV/ZIP del package (esclude i log)
 - con `split_resources: true` produce uno ZIP con **un file per risorsa**, nominato
-  `00-<nome>.csv`, `01-<nome>.csv`, ... in ordine di `last_modified`: il nome file
+  `000-<nome>.csv`, `001-<nome>.csv`, ... in ordine di `last_modified`: il nome file
   diventa l'ordine cronologico e va letto con l'extractor `unzip_all`
 - senza `split_resources` il comportamento resta quello storico: un unico CSV
   concatenato (`<dataset>_all.csv`)

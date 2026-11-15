@@ -39,6 +39,7 @@ ALLOWED_READ_CSV_KEYS = {
     "sheet_name",
     "dateformat",
     "timestampformat",
+    "source_file",
 }
 FORMAT_HINT_KEYS = {
     "delim",
@@ -58,6 +59,7 @@ FORMAT_HINT_KEYS = {
     "trim_whitespace",
     "dateformat",
     "timestampformat",
+    "source_file",
 }
 READ_SELECTION_KEYS = {"mode", "glob", "prefer_from_raw_run", "allow_ambiguous", "include"}
 READ_SOURCE_MODES = {"auto", "config_only"}

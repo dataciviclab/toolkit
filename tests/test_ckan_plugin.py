@@ -943,3 +943,51 @@ def test_fetch_ckan_forwards_prefer_datastore_to_fetch_all(monkeypatch):
         },
     )
     assert captured["prefer_datastore"] is False
+
+
+def test_fetch_all_split_restituisce_uno_zip_ordinato_per_risorsa():
+    """split=True → uno ZIP con un CSV per risorsa, prefissato dall'ordine
+    cronologico (last_modified), cosi' il clean puo' applicare la sostituzione
+    per chiave (full + delta)."""
+    import io
+    import zipfile
+
+    fake = FakeHttpClient()
+    fake.responses["https://portal.example.org/api/3/action/package_show"] = _all_resources_package(
+        "test-pkg",
+        [
+            # il delta e' elencato prima del full, ma ha last_modified piu' recente
+            {
+                "id": "id-delta",
+                "name": "20260401-agg_csv",
+                "format": "CSV",
+                "url": "https://dl.example.org/delta.zip",
+                "last_modified": "2026-04-02T00:00:00",
+            },
+            {
+                "id": "id-full",
+                "name": "agg_csv",
+                "format": "CSV",
+                "url": "https://dl.example.org/full.zip",
+                "last_modified": "2026-01-15T00:00:00",
+            },
+        ],
+    )
+    fake.responses["https://dl.example.org/delta.zip"] = HttpResult(
+        response=fake_response(200, text="a,b\n9,9\n"), err=None
+    )
+    fake.responses["https://dl.example.org/full.zip"] = HttpResult(
+        response=fake_response(200, text="a,b\n1,2\n"), err=None
+    )
+
+    source = CkanSource()
+    source._client = fake
+
+    payload, origin = source.fetch_all("https://portal.example.org/api/3", "test-pkg", split=True)
+
+    assert origin.endswith("_split.zip")
+    with zipfile.ZipFile(io.BytesIO(payload)) as zf:
+        nomi = sorted(zf.namelist())
+        assert nomi == ["00-agg_csv.csv", "01-20260401-agg_csv.csv"]
+        assert zf.read("00-agg_csv.csv").decode() == "a,b\n1,2\n"
+        assert zf.read("01-20260401-agg_csv.csv").decode() == "a,b\n9,9\n"

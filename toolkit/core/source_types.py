@@ -93,6 +93,7 @@ def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, 
             str(formatted_args["dataset_id"]),
             prefer_datastore=bool(prefer_datastore),
             sample_bytes=sample_bytes,
+            split=bool(formatted_args.get("split_resources", False)),
         )
     return src.fetch(
         formatted_args["portal_url"],

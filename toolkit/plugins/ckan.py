@@ -364,13 +364,20 @@ class CkanSource:
         *,
         prefer_datastore: bool = True,
         sample_bytes: int | None = None,
+        split: bool = False,
     ) -> tuple[bytes, str]:
-        """Fetch ALL CSV/ZIP resources from a CKAN dataset and concatenate them into one CSV.
+        """Fetch ALL CSV/ZIP resources from a CKAN dataset.
 
-        Useful for datasets with monthly files (e.g. ANAC CIG) where you need
-        all resources, not just the best-ranked one.
+        Con ``split=True`` restituisce uno ZIP con un CSV per risorsa, ordinati
+        per ``last_modified`` e prefissati da un contatore a due cifre
+        (``00-...csv``, ``01-...csv``): il nome file diventa così l'ordine
+        cronologico della risorsa, utile per la sostituzione per chiave nei
+        dataset che pubblicano un full + delta mensili.
 
-        Returns (concatenated_csv_bytes, dataset_id).
+        Senza ``split`` mantiene il comportamento storico: un unico CSV
+        concatenato.
+
+        Returns (payload_bytes, url_sintetica).
         """
         api_url = _normalize_package_show_url(portal_url)
         metadata = self._get_json(api_url, {"id": dataset_id})
@@ -385,6 +392,35 @@ class CkanSource:
                 f"No CSV/ZIP resources found in dataset {dataset_id} "
                 f"(available formats: {set(r.get('format', '?').upper() for r in resources)})"
             )
+
+        if split:
+            ordered = sorted(
+                csv_resources,
+                key=lambda r: (str(r.get("last_modified") or ""), str(r.get("name") or "")),
+            )
+            buffer = io.BytesIO()
+            written = 0
+            with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                for resource in ordered:
+                    outcome = self._try_resource(
+                        resource, prefer_datastore, portal_url, api_url, sample_bytes=sample_bytes
+                    )
+                    if outcome is None:
+                        continue
+                    raw, _url = outcome
+                    if raw[:2] == b"PK":
+                        try:
+                            raw = self._extract_csv_from_zip(raw)
+                        except DownloadError:
+                            continue
+                    member = str(resource.get("name") or f"resource_{written}").strip()
+                    if not member.lower().endswith(".csv"):
+                        member = f"{member}.csv"
+                    zf.writestr(f"{written:02d}-{member}", raw)
+                    written += 1
+            if not written:
+                raise DownloadError(f"Failed to download any resource from dataset {dataset_id}")
+            return buffer.getvalue(), f"{dataset_id}_split.zip"
 
         all_chunks: list[bytes] = []
         downloaded = 0

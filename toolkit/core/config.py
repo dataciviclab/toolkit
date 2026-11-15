@@ -322,6 +322,10 @@ class CleanReadConfig:
     trim_whitespace: bool = True
     sample_size: int | None = None
     sheet_name: str | int | None = None
+    # Provenienza per riga: espone `__source_file` (nome del file raw) nella
+    # view raw_input. Serve ai dataset con risorse full + delta, dove la
+    # sostituzione va fatta per chiave applicativa e non per riga.
+    source_file: bool = False
 
     def __post_init__(self) -> None:
         if self.align_by_header and not self.normalize_rows_to_columns:

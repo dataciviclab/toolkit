@@ -211,3 +211,44 @@ def test_write_run_record_retries_on_permission_error(tmp_path: Path, monkeypatc
     assert replace_calls["n"] >= 2
     stored = json.loads(written.read_text(encoding="utf-8"))
     assert stored["run_id"] == "retry_case"
+
+
+def test_run_orfano_chiuso_come_aborted(tmp_path):
+    """Un record RUNNING rimasto da un processo morto non deve restare appeso."""
+    import json
+    from datetime import datetime, timedelta, timezone
+
+    from toolkit.core.run_context import RunContext
+
+    runs_dir = tmp_path / "data" / "_runs" / "ds" / "2026"
+    runs_dir.mkdir(parents=True)
+    started = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    orfano = runs_dir / "20200101T000000Z_deadbeef.json"
+    orfano.write_text(
+        json.dumps({"status": "RUNNING", "started_at": started, "dataset": "ds", "year": 2026}),
+        encoding="utf-8",
+    )
+
+    RunContext("ds", 2026, root=str(tmp_path))
+
+    payload = json.loads(orfano.read_text(encoding="utf-8"))
+    assert payload["status"] == "ABORTED"
+    assert payload["finished_at"]
+
+
+def test_read_by_year_override():
+    """`clean.read_by_year` normalizza le chiavi e valida le opzioni."""
+    import pytest
+
+    from toolkit.core.config import CleanConfig
+
+    cfg = CleanConfig.from_dict(
+        {"read": {"delim": ";"}, "read_by_year": {2026: {"parallel": False}}}
+    )
+    assert cfg.read_by_year == {"2026": {"parallel": False}}
+
+    with pytest.raises(ValueError, match="non supportate"):
+        CleanConfig.from_dict({"read_by_year": {2026: {"parallelx": False}}})
+
+    with pytest.raises(ValueError, match="must be a mapping"):
+        CleanConfig.from_dict({"read_by_year": [1, 2]})

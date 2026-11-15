@@ -255,6 +255,12 @@ def _execute_csv_read(
     original_columns = read_cfg.get("columns")
 
     opts, params_used, source_columns = _csv_read_options(read_cfg, input_files=input_files)
+    # Provenienza per riga: il nome del file raw da cui arriva la riga.
+    # Serve ai dataset con risorse full + delta, dove la sostituzione va fatta
+    # per chiave applicativa (es. CIG) e non per riga.
+    source_file = bool(read_cfg.get("source_file", False))
+    if source_file and "filename=true" not in opts:
+        opts.append("filename=true")
     if sample_size is not None:
         opts.append(f"sample_size={int(sample_size)}")
         params_used["sample_size"] = int(sample_size)
@@ -301,14 +307,19 @@ def _execute_csv_read(
         full_projection = projection
         if inject_projection:
             full_projection = f"{projection}, {inject_projection}"
+        if source_file:
+            full_projection = f"{full_projection}, filename AS __source_file"
         con.execute(
             f"CREATE OR REPLACE VIEW {RAW_INPUT_VIEW} AS SELECT {full_projection} FROM {RAW_INPUT_SOURCE_VIEW};"
         )
     else:
+        extra = ", filename AS __source_file" if source_file else ""
         con.execute(
-            f"CREATE OR REPLACE VIEW {RAW_INPUT_VIEW} AS SELECT *{inject_sql} FROM read_csv([{paths}], {opt_sql});"
+            f"CREATE OR REPLACE VIEW {RAW_INPUT_VIEW} AS SELECT *{inject_sql}{extra} FROM read_csv([{paths}], {opt_sql});"
         )
     params_used["trim_whitespace"] = bool(trim_whitespace)
+    if source_file:
+        params_used["source_file"] = True
     if inject_exprs:
         params_used["inject_column"] = {name: dict(vals) for name, vals in all_inject_cols.items()}
     return params_used

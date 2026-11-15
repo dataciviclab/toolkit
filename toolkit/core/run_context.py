@@ -8,6 +8,7 @@ have been migrated to dedicated sub-modules:
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +42,44 @@ def _duration_seconds(started: str | None, finished: str | None) -> float | None
 
 def _empty_layer_metrics() -> dict[str, Any]:
     return {"output_rows": None, "output_bytes": None, "col_count": None, "tables_count": None}
+
+
+_ORPHAN_RUN_AGE_SECONDS = 3600
+
+
+def _close_orphan_runs(runs_dir: Path, logger=None) -> None:
+    """Chiude i run record rimasti RUNNING (processo ucciso, macchina spenta).
+
+    Senza questo un run interrotto resta RUNNING per sempre e falsa lo stato
+    del dataset. Si toccano solo i record piu' vecchi di un'ora, per non
+    interferire con un run concorrente legittimo.
+    """
+    if not runs_dir.is_dir():
+        return
+    now = datetime.now(timezone.utc)
+    for path in runs_dir.glob("*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if payload.get("status") != "RUNNING":
+            continue
+        started_raw = payload.get("started_at")
+        try:
+            started = datetime.fromisoformat(str(started_raw))
+        except (TypeError, ValueError):
+            started = None
+        if started is not None and (now - started).total_seconds() < _ORPHAN_RUN_AGE_SECONDS:
+            continue
+        payload["status"] = "ABORTED"
+        payload["error"] = payload.get("error") or "run interrotto: processo terminato"
+        payload["finished_at"] = payload.get("finished_at") or now.isoformat()
+        try:
+            path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            continue
+        if logger is not None:
+            logger.warning("Run record orfano chiuso come ABORTED: %s", path.name)
 
 
 # --- RunContext ---------------------------------------------------------------
@@ -79,6 +118,7 @@ class RunContext:
         self.error: str | None = None
         self._runs_dir = get_run_dir(self.root, self.dataset, self.year)
         self._path = self._runs_dir / f"{self.run_id}.json"
+        _close_orphan_runs(self._runs_dir)
         self.save()
 
     @property
@@ -158,6 +198,7 @@ class RunContext:
         col_count: int | None = None,
         tables_count: int | None = None,
         source_urls: list[str] | None = None,
+        skipped_sources: list[dict[str, Any]] | None = None,
     ) -> None:
         info = self._layer(layer)
         info["metrics"] = {
@@ -166,6 +207,10 @@ class RunContext:
             "col_count": col_count,
             "tables_count": tables_count,
         }
+        # Sorgenti `optional` saltate: senza questo, un run che ha perso una
+        # fonte sarebbe indistinguibile da uno che ha caricato tutto.
+        if skipped_sources:
+            info["metrics"]["skipped_sources"] = list(skipped_sources)
         if source_urls:
             self.source_urls = list(dict.fromkeys(self.source_urls + source_urls))
         self.save()

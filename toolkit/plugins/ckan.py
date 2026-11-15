@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import re
 import zipfile
 from typing import Any
@@ -11,6 +12,8 @@ from lab_connectors.http import HttpClient
 
 from toolkit.core.exceptions import DownloadError
 from toolkit.plugins._http_utils import truncate_at_line
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # CKAN detection constants + pure helpers (shared with toolkit.scout.http)
@@ -364,13 +367,22 @@ class CkanSource:
         *,
         prefer_datastore: bool = True,
         sample_bytes: int | None = None,
+        split: bool = False,
     ) -> tuple[bytes, str]:
-        """Fetch ALL CSV/ZIP resources from a CKAN dataset and concatenate them into one CSV.
+        """Fetch ALL CSV/ZIP resources from a CKAN dataset.
 
-        Useful for datasets with monthly files (e.g. ANAC CIG) where you need
-        all resources, not just the best-ranked one.
+        Con ``split=True`` restituisce uno ZIP con un CSV per risorsa, ordinati
+        per ``last_modified`` e prefissati da un contatore a tre cifre
+        (``000-...csv``, ``001-...csv``): il nome file diventa così l'ordine
+        cronologico della risorsa, utile per la sostituzione per chiave nei
+        dataset che pubblicano un full + delta mensili. Tre cifre, non due:
+        i delta mensili superano il centinaio di risorse e l'ordinamento
+        lessicografico di ``100-`` finirebbe prima di ``11-``.
 
-        Returns (concatenated_csv_bytes, dataset_id).
+        Senza ``split`` mantiene il comportamento storico: un unico CSV
+        concatenato.
+
+        Returns (payload_bytes, url_sintetica).
         """
         api_url = _normalize_package_show_url(portal_url)
         metadata = self._get_json(api_url, {"id": dataset_id})
@@ -385,6 +397,59 @@ class CkanSource:
                 f"No CSV/ZIP resources found in dataset {dataset_id} "
                 f"(available formats: {set(r.get('format', '?').upper() for r in resources)})"
             )
+
+        if split:
+            ordered = sorted(
+                csv_resources,
+                key=lambda r: (str(r.get("last_modified") or ""), str(r.get("name") or "")),
+            )
+            buffer = io.BytesIO()
+            written = 0
+            full_ok = False
+            skipped: list[str] = []
+            with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                for index, resource in enumerate(ordered):
+                    label = str(resource.get("name") or resource.get("id") or f"resource_{index}")
+                    outcome = self._try_resource(
+                        resource, prefer_datastore, portal_url, api_url, sample_bytes=sample_bytes
+                    )
+                    if outcome is None:
+                        skipped.append(f"{label} (download fallito)")
+                        continue
+                    raw, _url = outcome
+                    if raw[:2] == b"PK":
+                        try:
+                            raw = self._extract_csv_from_zip(raw)
+                        except DownloadError:
+                            skipped.append(f"{label} (ZIP senza CSV)")
+                            continue
+                    member = str(resource.get("name") or f"resource_{written}").strip()
+                    if not member.lower().endswith(".csv"):
+                        member = f"{member}.csv"
+                    zf.writestr(f"{written:03d}-{member}", raw)
+                    written += 1
+                    if index == 0:
+                        full_ok = True
+            if not written:
+                raise DownloadError(f"Failed to download any resource from dataset {dataset_id}")
+            # La prima risorsa in ordine cronologico e' il full, le altre sono
+            # delta: senza il full il dataset si ridurrebbe ai soli delta, che
+            # contengono solo novita'. Meglio fallire che pubblicare un parziale
+            # silenzioso (lo ZIP non lo direbbe a nessuno).
+            if not full_ok:
+                raise DownloadError(
+                    f"Risorsa piu' vecchia (il full) non scaricata per dataset {dataset_id}: "
+                    f"lo ZIP conterrebbe solo i delta. Risorse saltate: {skipped}"
+                )
+            if skipped:
+                logger.warning(
+                    "split_resources: %d risorsa/e saltata/e per dataset %s (lo ZIP e' "
+                    "incompleto, ma il full c'e'): %s",
+                    len(skipped),
+                    dataset_id,
+                    "; ".join(skipped),
+                )
+            return buffer.getvalue(), f"{dataset_id}_split.zip"
 
         all_chunks: list[bytes] = []
         downloaded = 0

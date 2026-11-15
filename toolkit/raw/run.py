@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from toolkit.core.config import ensure_dict, parse_bool
-from toolkit.core.exceptions import EmptyResultError
+from toolkit.core.exceptions import DownloadError, EmptyResultError
 from toolkit.core.metadata import (
     config_hash_for_year,
     merge_layer_manifest,
@@ -107,6 +107,7 @@ def run_raw(
     files_written: list[dict] = []
     inputs: list[dict] = []
     manifest_sources: list[dict] = []
+    skipped_sources: list[dict] = []
 
     for i, source in enumerate(sources):
         stype = source.get("type") or source.get("plugin") or "http_file"
@@ -157,6 +158,25 @@ def run_raw(
             payload = b""
             origin = str(formatted_args.get("endpoint") or "")
             logger.info("RAW incrementale -> nessun dato nuovo (delta vuoto)")
+        except DownloadError as exc:
+            # Sorgente opzionale: il pacchetto può non esistere per questo anno
+            # (es. dataset annuale ANAC che parte solo fino all'anno precedente,
+            # coperto da una sorgente delta). Il run prosegue senza quella fonte,
+            # ma la perdita resta scritta nel run record e nel metadata del layer.
+            if source.get("optional"):
+                reason = f"{type(exc).__name__}: {exc}"
+                skipped_sources.append({"source": name, "type": stype, "reason": reason})
+                manifest_sources.append(
+                    {"name": name, "output_file": "", "primary": False, "skipped": True}
+                )
+                logger.warning(
+                    "RAW source '%s' opzionale saltata per year=%s (il run prosegue): %s",
+                    name,
+                    year,
+                    reason,
+                )
+                continue
+            raise
 
         if baseline_path is not None and since_clause:
             payload = append_delta(baseline_path, payload)
@@ -262,6 +282,8 @@ def run_raw(
     }
     if source_id:
         metadata_payload["source_id"] = source_id
+    if skipped_sources:
+        metadata_payload["skipped_sources"] = skipped_sources
     write_metadata(out_dir, metadata_payload)
 
     # Track output files in metadata (validation is done by run_raw_validation)
@@ -306,4 +328,5 @@ def run_raw(
         "source_urls": source_urls,
         "output_rows": output_rows,
         "col_count": col_count,
+        "skipped_sources": skipped_sources,
     }

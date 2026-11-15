@@ -146,6 +146,34 @@ Note pratiche per `ckan`:
 - se il portale restituisce un file URL in `http://`, il toolkit lo forza automaticamente a `https://`
 - se `filename` non e dichiarato, il toolkit prova a inferire l'estensione dall'URL risolto
 
+`download_all` e `split_resources` (risorse full + delta):
+
+```yaml
+raw:
+  sources:
+    - name: aggiudicazioni
+      type: ckan
+      extractor:
+        type: unzip_all
+        args: { only_ext: [".csv"] }
+      args:
+        portal_url: https://dati.anticorruzione.it/opendata
+        dataset_id: aggiudicazioni
+        download_all: true
+        split_resources: true
+```
+
+- `download_all: true` scarica tutte le risorse CSV/ZIP del package (esclude i log)
+- con `split_resources: true` produce uno ZIP con **un file per risorsa**, nominato
+  `000-<nome>.csv`, `001-<nome>.csv`, ... in ordine di `last_modified`: il nome file
+  diventa l'ordine cronologico e va letto con l'extractor `unzip_all`
+- senza `split_resources` il comportamento resta quello storico: un unico CSV
+  concatenato (`<dataset>_all.csv`)
+
+Serve ai dataset che pubblicano un FULL + delta mensili e in cui la sostituzione
+va fatta **per chiave applicativa** (es. per CIG) e non per riga: abilita
+`clean.read.source_file: true`, che espone `__source_file` in `raw_input`.
+
 Esempio `sdmx`:
 
 ```yaml
@@ -238,6 +266,7 @@ Note pratiche per `http_post_file`:
 | `trim_whitespace` | `bool` | `true` |
 | `sample_size` | `int \| null` | `null` |
 | `sheet_name` | `string \| int \| null` | `null` |
+| `source_file` | `bool` | `false` |
 | `mode` | `explicit \| latest \| largest \| all \| null` | `latest`¹ |
 | `glob` | `string` | `*` |
 | `prefer_from_raw_run` | `bool` | `true` |

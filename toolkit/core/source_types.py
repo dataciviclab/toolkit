@@ -82,6 +82,15 @@ def _sdmx_root_from_url(url: str) -> str:
 def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, str]:
     from toolkit.core.registry import registry
 
+    # Validazione di config prima di istanziare il plugin: un errore qui deve
+    # uscire anche quando il tipo non e' registrato (es. dry-run, test).
+    if formatted_args.get("split_resources", False) and not formatted_args.get(
+        "download_all", False
+    ):
+        raise ValueError(
+            "split_resources richiede download_all: true: senza, viene scaricata una sola "
+            "risorsa e l'opzione resterebbe ignorata in silenzio"
+        )
     src = registry.create(stype, **(client or {}))
     sample_bytes = formatted_args.get("sample_bytes")
     prefer_datastore = formatted_args.get("prefer_datastore", True)
@@ -93,6 +102,7 @@ def _fetch_ckan(stype: str, client: dict, formatted_args: dict) -> tuple[bytes, 
             str(formatted_args["dataset_id"]),
             prefer_datastore=bool(prefer_datastore),
             sample_bytes=sample_bytes,
+            split=bool(formatted_args.get("split_resources", False)),
         )
     return src.fetch(
         formatted_args["portal_url"],

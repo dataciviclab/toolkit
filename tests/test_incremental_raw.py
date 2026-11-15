@@ -333,3 +333,90 @@ def test_run_raw_incremental_rejects_nondeterministic_ext(tmp_path: Path):
     }
     with pytest.raises(ValueError, match="from_origin"):
         raw_run.run_raw("ds", 2026, str(tmp_path), cfg, logging.getLogger("t"))
+
+
+def test_sorgente_optional_non_fa_fallire_il_run(tmp_path: Path, monkeypatch):
+    """Una sorgente `optional: true` che fallisce non blocca il run (es. il
+    pacchetto annuale che non esiste per l'anno corrente, coperto dal delta).
+
+    La perdita pero' deve restare scritta: senza traccia, un run che ha saltato
+    una fonte e' indistinguibile da uno che ha caricato tutto.
+    """
+    import json
+    import logging
+
+    from toolkit.raw import run as raw_run
+
+    def _fake(stype, client, args, base_dir=None):
+        if args.get("dataset_id") == "missing":
+            raise DownloadError("CKAN package not found")
+        return b"a,b\n1,2\n", "https://x"
+
+    monkeypatch.setattr(raw_run, "_fetch_payload", _fake)
+    cfg = {
+        "output_policy": "overwrite",
+        "sources": [
+            {
+                "name": "annuale",
+                "type": "local_file",
+                "optional": True,
+                "args": {"dataset_id": "missing"},
+            },
+            {"name": "delta", "type": "local_file", "primary": True, "args": {"dataset_id": "ok"}},
+        ],
+    }
+
+    metrics = raw_run.run_raw("ds", 2026, str(tmp_path), cfg, logging.getLogger("t"))
+
+    out_dir = tmp_path / "data" / "raw" / "ds" / "2026"
+    files = [p for p in out_dir.iterdir() if p.is_file()]
+    assert files, "la sorgente non opzionale deve aver prodotto il raw"
+
+    assert [s["source"] for s in metrics["skipped_sources"]] == ["annuale"]
+    assert "CKAN package not found" in metrics["skipped_sources"][0]["reason"]
+    stored = json.loads((out_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert stored["skipped_sources"][0]["source"] == "annuale"
+
+
+def test_sorgente_optional_non_nasconde_un_bug(tmp_path: Path, monkeypatch):
+    """`optional` copre la fonte assente, non un errore di programmazione."""
+    import logging
+
+    from toolkit.raw import run as raw_run
+
+    def _rotto(stype, client, args, base_dir=None):
+        raise TypeError("argomento sbagliato")
+
+    monkeypatch.setattr(raw_run, "_fetch_payload", _rotto)
+    cfg = {
+        "output_policy": "overwrite",
+        "sources": [
+            {"name": "annuale", "type": "local_file", "optional": True, "args": {}},
+            {"name": "delta", "type": "local_file", "primary": True, "args": {}},
+        ],
+    }
+    with pytest.raises(TypeError, match="argomento sbagliato"):
+        raw_run.run_raw("ds", 2026, str(tmp_path), cfg, logging.getLogger("t"))
+
+
+def test_sorgente_optional_non_copre_i_guasti_di_rete(tmp_path: Path, monkeypatch):
+    """`optional` copre il pacchetto assente (DownloadError), non un guasto
+    transitorio: se la rete cade, il run deve fallire invece di pubblicare un
+    dataset parziale."""
+    import logging
+
+    from toolkit.raw import run as raw_run
+
+    def _rete_giu(stype, client, args, base_dir=None):
+        raise OSError("connection reset by peer")
+
+    monkeypatch.setattr(raw_run, "_fetch_payload", _rete_giu)
+    cfg = {
+        "output_policy": "overwrite",
+        "sources": [
+            {"name": "annuale", "type": "local_file", "optional": True, "args": {}},
+            {"name": "delta", "type": "local_file", "primary": True, "args": {}},
+        ],
+    }
+    with pytest.raises(OSError, match="connection reset"):
+        raw_run.run_raw("ds", 2026, str(tmp_path), cfg, logging.getLogger("t"))

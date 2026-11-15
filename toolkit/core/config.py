@@ -322,6 +322,10 @@ class CleanReadConfig:
     trim_whitespace: bool = True
     sample_size: int | None = None
     sheet_name: str | int | None = None
+    # Provenienza per riga: espone `__source_file` (nome del file raw) nella
+    # view raw_input. Serve ai dataset con risorse full + delta, dove la
+    # sostituzione va fatta per chiave applicativa e non per riga.
+    source_file: bool = False
 
     def __post_init__(self) -> None:
         if self.align_by_header and not self.normalize_rows_to_columns:
@@ -393,6 +397,9 @@ class CleanConfig:
     read_mode: str = "fallback"
     read_source: str = "auto"
     read: CleanReadConfig | None = None
+    # Override di `clean.read` per singolo anno: {2026: {parallel: false}}.
+    # Serve ai dataset multi-anno in cui un anno ha file sporchi e gli altri no.
+    read_by_year: dict[str, dict[str, Any]] | None = None
     required_columns: list[str] = field(default_factory=list)
     validate: CleanValidateConfig | None = None
     extra: dict[str, Any] = field(default_factory=dict)
@@ -403,13 +410,37 @@ class CleanConfig:
             return CleanConfig()
         validate = CleanValidateConfig.from_dict(d.get("validate"))
         read = CleanReadConfig.from_dict(d.get("read"))
-        known = {"sql", "read_mode", "read_source", "read", "required_columns", "validate"}
+        raw_by_year = d.get("read_by_year")
+        if raw_by_year is not None and not isinstance(raw_by_year, dict):
+            raise ValueError("clean.read_by_year must be a mapping year -> read options")
+        read_by_year = {str(k): dict(v) for k, v in raw_by_year.items()} if raw_by_year else None
+        if read_by_year:
+            from toolkit.core.csv_read import ALLOWED_READ_CSV_KEYS
+
+            unknown = sorted(
+                {key for opts in read_by_year.values() for key in opts} - ALLOWED_READ_CSV_KEYS
+            )
+            if unknown:
+                raise ValueError(
+                    f"clean.read_by_year: opzioni non supportate {unknown}. "
+                    f"Ammesse: {sorted(ALLOWED_READ_CSV_KEYS)}"
+                )
+        known = {
+            "sql",
+            "read_mode",
+            "read_source",
+            "read",
+            "read_by_year",
+            "required_columns",
+            "validate",
+        }
         extra = {k: v for k, v in d.items() if k not in known}
         return CleanConfig(
             sql=d.get("sql"),
             read_mode=d.get("read_mode", "fallback"),
             read_source=d.get("read_source", "auto"),
             read=read,
+            read_by_year=read_by_year,
             required_columns=ensure_str_list(
                 d.get("required_columns", []), "clean.required_columns"
             ),
@@ -541,6 +572,9 @@ class RawSourceConfig:
     year: int | None = None
     args: dict = field(default_factory=dict)
     primary: bool = False
+    # Sorgente opzionale: se il download fallisce il run prosegue (es. pacchetto
+    # annuale che non esiste per l'anno corrente, coperto da un'altra sorgente).
+    optional: bool = False
     inject_column: dict[str, str] | None = None
     # Client config (flattened from old client: {})
     timeout: int | None = None
@@ -562,6 +596,7 @@ class RawSourceConfig:
                 "year",
                 "args",
                 "primary",
+                "optional",
                 "inject_column",
                 "client",
                 "extractor",
@@ -590,6 +625,7 @@ class RawSourceConfig:
             year=d.get("year"),
             args=args,
             primary=parse_bool(d.get("primary", False), "raw.sources[].primary"),
+            optional=parse_bool(d.get("optional", False), "raw.sources[].optional"),
             inject_column=d.get("inject_column"),
             timeout=client.get("timeout") if isinstance(client, dict) else None,
             retries=client.get("retries") if isinstance(client, dict) else None,
@@ -615,6 +651,8 @@ class RawSourceConfig:
             result["year"] = self.year
         if self.primary:
             result["primary"] = True
+        if self.optional:
+            result["optional"] = True
         if self.inject_column is not None:
             result["inject_column"] = self.inject_column
         client = {

@@ -14,7 +14,7 @@ pytestmark = pytest.mark.contract
 
 
 def test_read_macros_returns_all() -> None:
-    """read_macros restituisce tutte le 8 macro standard."""
+    """read_macros restituisce tutte le macro standard."""
     from toolkit.core.macro_reader import read_macros
 
     macros = read_macros()
@@ -28,6 +28,7 @@ def test_read_macros_returns_all() -> None:
         "cast_double",
         "decode_flag",
         "remove_dot_thousands",
+        "safe_date",
     }
     assert names == expected, (
         f"Macro lette: {names - expected} in piu', {expected - names} mancanti"
@@ -114,3 +115,30 @@ def test_read_macros_file_not_found(tmp_path: Path) -> None:
 
     result = read_macros(tmp_path / "nonexistent.sql")
     assert result == []
+
+
+def test_safe_date_comportamento() -> None:
+    """safe_date scarta gli anni impossibili e tiene quelli storici.
+
+    Il controllo e' sul comportamento, non solo sull'esistenza della macro: la
+    macro e' generica, quindi il limite inferiore non deve mangiarsi un atto
+    del 1942 mentre deve scartare il refuso 4202.
+    """
+    import duckdb
+
+    from toolkit.clean.sql_execute import _load_standard_macros
+
+    con = duckdb.connect()
+    _load_standard_macros(con, logger=None)
+    valida, storica, refuso, anno_basso, invalida, nulla = con.execute(
+        """
+        SELECT safe_date('2024-03-01'), safe_date('1942-06-15'), safe_date('4202-01-01'),
+               safe_date('1001-01-01'), safe_date('non-una-data'), safe_date(NULL)
+        """
+    ).fetchone()
+    assert str(valida) == "2024-03-01"
+    assert str(storica) == "1942-06-15", "un atto del 1942 e' una data valida"
+    assert refuso is None, "4202 e' un refuso (2024)"
+    assert anno_basso is None, "1001 non e' una data plausibile"
+    assert invalida is None
+    assert nulla is None

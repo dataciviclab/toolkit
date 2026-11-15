@@ -90,7 +90,11 @@ def _run_sql(
         con.execute(f"CREATE TABLE {CLEAN_OUT_TABLE} AS {sql_query}")
         output_profile = profile_relation(con, CLEAN_OUT_TABLE)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        # Scrittura atomica: se il run viene interrotto non deve restare un
+        # parquet troncato al posto di quello buono (visto su anac_cross).
+        tmp_path = output_path.with_name(f".{output_path.name}.tmp")
         con.execute(
-            f"COPY {CLEAN_OUT_TABLE} TO '{sql_path(output_path)}' (FORMAT PARQUET, COMPRESSION ZSTD);"
+            f"COPY {CLEAN_OUT_TABLE} TO '{sql_path(tmp_path)}' (FORMAT PARQUET, COMPRESSION ZSTD);"
         )
+        tmp_path.replace(output_path)
         return read_info.source, read_info.params_used, output_profile

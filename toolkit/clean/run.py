@@ -210,6 +210,14 @@ def run_clean(
     memory_limit: str | None = None,
 ):
     clean_cfg = ensure_dict(clean_cfg)
+    override = (clean_cfg.get("read_by_year") or {}).get(str(year))
+    if override:
+        # Override di lettura per anno (es. un dataset multi-anno in cui solo
+        # l'anno corrente ha file con newline dentro le virgolette).
+        merged = dict(clean_cfg.get("read") or {})
+        merged.update(override)
+        clean_cfg = {**clean_cfg, "read": merged}
+        logger.info("CLEAN read override per year=%s: %s", year, sorted(override))
     output_cfg = ensure_dict(output_cfg)
     root_dir = resolve_root(root)
     raw_dir = layer_year_dir(root, "raw", dataset, year)

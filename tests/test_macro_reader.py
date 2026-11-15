@@ -14,7 +14,7 @@ pytestmark = pytest.mark.contract
 
 
 def test_read_macros_returns_all() -> None:
-    """read_macros restituisce tutte le 8 macro standard."""
+    """read_macros restituisce tutte le macro standard."""
     from toolkit.core.macro_reader import read_macros
 
     macros = read_macros()
@@ -28,6 +28,7 @@ def test_read_macros_returns_all() -> None:
         "cast_double",
         "decode_flag",
         "remove_dot_thousands",
+        "safe_date",
     }
     assert names == expected, (
         f"Macro lette: {names - expected} in piu', {expected - names} mancanti"

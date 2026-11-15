@@ -127,3 +127,17 @@ CREATE OR REPLACE MACRO remove_dot_thousands(val) AS
             'Usa clean.read.all_varchar: true oppure dichiara la colonna VARCHAR.')
       ELSE TRY_CAST(REPLACE(val::VARCHAR, '.', '') AS DOUBLE)
    END;
+
+-- ── safe_date ──────────────────────────────────────────────────────────────
+-- TRY_CAST a DATE scartando gli anni impossibili (fuori 1990-2100).
+-- Le fonti pubbliche contengono refusi (es. anno 4202 al posto di 2024, 9202
+-- al posto di 2022): senza filtro `max(data)` e qualunque metrica temporale
+-- diventano inutilizzabili, e il valore non e' NULL quindi nessuno se ne accorge.
+-- @contract returns: DATE
+-- @contract example: safe_date("DATA_CERT_COLLAUDO") AS data_cert_collaudo
+CREATE OR REPLACE MACRO safe_date(val) AS
+   CASE
+      WHEN TRY_CAST(val AS DATE) IS NULL THEN NULL
+      WHEN year(TRY_CAST(val AS DATE)) BETWEEN 1990 AND 2100 THEN TRY_CAST(val AS DATE)
+      ELSE NULL
+   END;

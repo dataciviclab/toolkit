@@ -397,6 +397,9 @@ class CleanConfig:
     read_mode: str = "fallback"
     read_source: str = "auto"
     read: CleanReadConfig | None = None
+    # Override di `clean.read` per singolo anno: {2026: {parallel: false}}.
+    # Serve ai dataset multi-anno in cui un anno ha file sporchi e gli altri no.
+    read_by_year: dict[str, dict[str, Any]] | None = None
     required_columns: list[str] = field(default_factory=list)
     validate: CleanValidateConfig | None = None
     extra: dict[str, Any] = field(default_factory=dict)
@@ -407,13 +410,37 @@ class CleanConfig:
             return CleanConfig()
         validate = CleanValidateConfig.from_dict(d.get("validate"))
         read = CleanReadConfig.from_dict(d.get("read"))
-        known = {"sql", "read_mode", "read_source", "read", "required_columns", "validate"}
+        raw_by_year = d.get("read_by_year")
+        if raw_by_year is not None and not isinstance(raw_by_year, dict):
+            raise ValueError("clean.read_by_year must be a mapping year -> read options")
+        read_by_year = {str(k): dict(v) for k, v in raw_by_year.items()} if raw_by_year else None
+        if read_by_year:
+            from toolkit.core.csv_read import ALLOWED_READ_CSV_KEYS
+
+            unknown = sorted(
+                {key for opts in read_by_year.values() for key in opts} - ALLOWED_READ_CSV_KEYS
+            )
+            if unknown:
+                raise ValueError(
+                    f"clean.read_by_year: opzioni non supportate {unknown}. "
+                    f"Ammesse: {sorted(ALLOWED_READ_CSV_KEYS)}"
+                )
+        known = {
+            "sql",
+            "read_mode",
+            "read_source",
+            "read",
+            "read_by_year",
+            "required_columns",
+            "validate",
+        }
         extra = {k: v for k, v in d.items() if k not in known}
         return CleanConfig(
             sql=d.get("sql"),
             read_mode=d.get("read_mode", "fallback"),
             read_source=d.get("read_source", "auto"),
             read=read,
+            read_by_year=read_by_year,
             required_columns=ensure_str_list(
                 d.get("required_columns", []), "clean.required_columns"
             ),

@@ -234,3 +234,21 @@ def test_run_orfano_chiuso_come_aborted(tmp_path):
     payload = json.loads(orfano.read_text(encoding="utf-8"))
     assert payload["status"] == "ABORTED"
     assert payload["finished_at"]
+
+
+def test_read_by_year_override():
+    """`clean.read_by_year` normalizza le chiavi e valida le opzioni."""
+    import pytest
+
+    from toolkit.core.config import CleanConfig
+
+    cfg = CleanConfig.from_dict(
+        {"read": {"delim": ";"}, "read_by_year": {2026: {"parallel": False}}}
+    )
+    assert cfg.read_by_year == {"2026": {"parallel": False}}
+
+    with pytest.raises(ValueError, match="non supportate"):
+        CleanConfig.from_dict({"read_by_year": {2026: {"parallelx": False}}})
+
+    with pytest.raises(ValueError, match="must be a mapping"):
+        CleanConfig.from_dict({"read_by_year": [1, 2]})

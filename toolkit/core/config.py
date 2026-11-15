@@ -545,6 +545,9 @@ class RawSourceConfig:
     year: int | None = None
     args: dict = field(default_factory=dict)
     primary: bool = False
+    # Sorgente opzionale: se il download fallisce il run prosegue (es. pacchetto
+    # annuale che non esiste per l'anno corrente, coperto da un'altra sorgente).
+    optional: bool = False
     inject_column: dict[str, str] | None = None
     # Client config (flattened from old client: {})
     timeout: int | None = None
@@ -566,6 +569,7 @@ class RawSourceConfig:
                 "year",
                 "args",
                 "primary",
+                "optional",
                 "inject_column",
                 "client",
                 "extractor",
@@ -594,6 +598,7 @@ class RawSourceConfig:
             year=d.get("year"),
             args=args,
             primary=parse_bool(d.get("primary", False), "raw.sources[].primary"),
+            optional=parse_bool(d.get("optional", False), "raw.sources[].optional"),
             inject_column=d.get("inject_column"),
             timeout=client.get("timeout") if isinstance(client, dict) else None,
             retries=client.get("retries") if isinstance(client, dict) else None,
@@ -619,6 +624,8 @@ class RawSourceConfig:
             result["year"] = self.year
         if self.primary:
             result["primary"] = True
+        if self.optional:
+            result["optional"] = True
         if self.inject_column is not None:
             result["inject_column"] = self.inject_column
         client = {

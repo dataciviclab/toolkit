@@ -333,3 +333,36 @@ def test_run_raw_incremental_rejects_nondeterministic_ext(tmp_path: Path):
     }
     with pytest.raises(ValueError, match="from_origin"):
         raw_run.run_raw("ds", 2026, str(tmp_path), cfg, logging.getLogger("t"))
+
+
+def test_sorgente_optional_non_fa_fallire_il_run(tmp_path: Path, monkeypatch):
+    """Una sorgente `optional: true` che fallisce non blocca il run (es. il
+    pacchetto annuale che non esiste per l'anno corrente, coperto dal delta)."""
+    import logging
+
+    from toolkit.raw import run as raw_run
+
+    def _fake(stype, client, args, base_dir=None):
+        if args.get("dataset_id") == "missing":
+            raise DownloadError("CKAN package not found")
+        return b"a,b\n1,2\n", "https://x"
+
+    monkeypatch.setattr(raw_run, "_fetch_payload", _fake)
+    cfg = {
+        "output_policy": "overwrite",
+        "sources": [
+            {
+                "name": "annuale",
+                "type": "local_file",
+                "optional": True,
+                "args": {"dataset_id": "missing"},
+            },
+            {"name": "delta", "type": "local_file", "primary": True, "args": {"dataset_id": "ok"}},
+        ],
+    }
+
+    raw_run.run_raw("ds", 2026, str(tmp_path), cfg, logging.getLogger("t"))
+
+    out_dir = tmp_path / "data" / "raw" / "ds" / "2026"
+    files = [p for p in out_dir.iterdir() if p.is_file()]
+    assert files, "la sorgente non opzionale deve aver prodotto il raw"

@@ -157,6 +157,19 @@ def run_raw(
             payload = b""
             origin = str(formatted_args.get("endpoint") or "")
             logger.info("RAW incrementale -> nessun dato nuovo (delta vuoto)")
+        except Exception as exc:
+            # Sorgente opzionale: il pacchetto può non esistere per questo anno
+            # (es. dataset annuale ANAC che parte solo fino all'anno precedente,
+            # coperto da una sorgente delta). Il run prosegue senza quella fonte.
+            if source.get("optional"):
+                logger.warning(
+                    "RAW source '%s' opzionale non disponibile per year=%s: %s",
+                    name,
+                    year,
+                    exc,
+                )
+                continue
+            raise
 
         if baseline_path is not None and since_clause:
             payload = append_delta(baseline_path, payload)

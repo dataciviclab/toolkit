@@ -17,6 +17,7 @@
 
 ### Fixed
 
+- **`read_parquet` multi-file: unione per nome**: il ramo che legge più file parquet nella stessa view raw non passava `union_by_name`, quindi due export della stessa fonte con colonne diverse (es. serie storica + anno corrente) morivano con `schema mismatch in glob` e il dataset non partiva. Ora usa `union_by_name=true`, come già il ramo CSV. Per file con lo stesso schema il risultato è identico. Caso reale: `dcl-bologna`/`centraline_aria`, che unisce `centraline-qualita-aria` (`reftime/stazione/value/agente_atm`) e `dati-centraline-bologna-storico` (`cod_staz/agente/data_inizio/valore/um`) per avere la serie oraria 2016-2026. Resta non coperto il caso `inject_column` + schemi eterogenei: quel ramo costruisce un `UNION ALL` posizionale di `SELECT *` per file.
 - **Preflight `http_file`: client della fonte e HEAD fallito**: `run_preflight` ora passa `client.user_agent/timeout/retries` a `preview_url`; un HEAD 404/403 con Range GET riuscito non marca più la fonte come irraggiungibile. Sblocca fonti che richiedono UA browser o che rifiutano HEAD (es. PNRR Italia Domani).
 - **`http_file`: fallback `wget` su 403/407**: quando requests (anche via proxy) resta bloccato, il download riprova con wget diretto e UA configurato. Sblocca AEM/Akamai (es. open-pnrr) che accettano wget ma bloccano requests.
 

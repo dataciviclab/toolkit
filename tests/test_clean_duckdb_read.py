@@ -969,6 +969,49 @@ def test_parquet_inject_column_escapes_apostrophe(tmp_path: Path):
         assert "inject_column" in info.params_used
 
 
+@pytest.mark.contract
+def test_parquet_multi_file_different_schema_unions_by_name(tmp_path: Path):
+    """Due parquet con schemi diversi nella stessa view raw: unione per nome.
+
+    Regressione: il ramo multi-file usava ``read_parquet([...])`` senza
+    ``union_by_name``, che su schemi diversi fallisce con "schema mismatch in
+    glob". Serve ai dataset che uniscono due export della stessa fonte con
+    colonne diverse (es. serie storica + anno corrente). Senza il fix la view
+    non si crea affatto.
+    """
+    with safe_connect() as con:
+        corrente = tmp_path / "corrente.parquet"
+        con.execute(
+            "COPY (SELECT 1 AS id, '2026-01-01' AS reftime, 'NO2' AS agente, 10.0 AS value) "
+            "TO ? (FORMAT PARQUET)",
+            [str(corrente)],
+        )
+        storico = tmp_path / "storico.parquet"
+        con.execute(
+            "COPY (SELECT 'NO2' AS agente, '2019-01-01' AS data_inizio, 20.0 AS valore, 'ug/m3' AS um) "
+            "TO ? (FORMAT PARQUET)",
+            [str(storico)],
+        )
+
+    from toolkit.core.input_file import RawInputFile
+
+    inputs = [RawInputFile(path=corrente), RawInputFile(path=storico)]
+
+    logger = logging.getLogger("tests.clean.duckdb_read.parquet_multi_schema")
+    with safe_connect() as con:
+        duckdb_read.read_raw_to_relation(con, inputs, None, "fallback", logger)
+        columns = {row[0] for row in con.execute("DESCRIBE SELECT * FROM raw_input").fetchall()}
+        assert {"id", "reftime", "agente", "value", "data_inizio", "valore", "um"} <= columns, (
+            f"Colonne mancanti nella union: {columns}"
+        )
+        rows = con.execute(
+            "SELECT agente, value, valore, um FROM raw_input ORDER BY agente, value"
+        ).fetchall()
+        assert rows == [("NO2", 10.0, None, None), ("NO2", None, 20.0, "ug/m3")], (
+            f"Unexpected rows: {rows}"
+        )
+
+
 @pytest.mark.regression
 def test_load_suggested_read_raw_profile_wins_over_suggested_yml(tmp_path: Path):
     """Con entrambi raw_profile.json (con decimal) e suggested_read.yml (senza decimal)

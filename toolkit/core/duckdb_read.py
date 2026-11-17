@@ -340,7 +340,7 @@ def _execute_parquet_read(
         else:
             paths_sql = quote_list(raw_paths)
             con.execute(
-                f"CREATE VIEW {RAW_INPUT_VIEW} AS SELECT * FROM read_parquet([{paths_sql}]);"
+                f"CREATE VIEW {RAW_INPUT_VIEW} AS SELECT * FROM read_parquet([{paths_sql}], union_by_name=true);"
             )
         return ReadInfo(source="parquet", params_used={})
 

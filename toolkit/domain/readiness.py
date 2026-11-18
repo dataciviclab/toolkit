@@ -196,6 +196,9 @@ def summary(config_path: str | None = None, year: int | None = None) -> dict[str
                 "decimal_suggested": (paths.get("raw_hints") or {}).get("decimal"),
                 "skip_suggested": (paths.get("raw_hints") or {}).get("skip"),
                 "raw_warnings": (paths.get("raw_hints") or {}).get("warnings", []),
+                "profile_status": (paths.get("raw_hints") or {}).get("profile_status"),
+                "profile_columns": (paths.get("raw_hints") or {}).get("profile_columns"),
+                "profile_warnings": (paths.get("raw_hints") or {}).get("profile_warnings", []),
                 "run_status": layer_run_statuses.get("raw"),
                 "validation": layer_validations.get("raw"),
             },
@@ -472,6 +475,11 @@ def review_readiness(config_path: str | None = None, year: int | None = None) ->
     clean_val = clean.get("validation") or {}
     mart_val = mart.get("validation") or {}
     raw_profile_warnings = raw.get("raw_warnings") or []
+    if raw.get("profile_status") == "failed":
+        raw_profile_warnings = list(raw_profile_warnings) + [
+            "raw_profile_empty: il profilo RAW non ha prodotto colonne "
+            f"({raw.get('profile_columns') or 0} colonne) — hint CLEAN ridotti allo sniff leggero"
+        ]
     raw_profile_hints = {
         "encoding": raw.get("encoding_suggested"),
         "delim": raw.get("delim_suggested"),

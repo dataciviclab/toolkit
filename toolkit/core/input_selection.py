@@ -1,3 +1,15 @@
+"""Selezione dei file RAW da leggere — contratto condiviso CLEAN / profilo.
+
+Il profilo RAW deve profilarare **la stessa relazione** che il CLEAN leggerà:
+se la selezione divergesse, gli hint (delim/encoding/skip/columns), il
+row_count e il null-count descriverebbero un altro dataset. Per questo la
+regola di selezione vive in ``core/`` e non in un layer.
+
+Precedenza: con ``mode=latest``/``fallback`` vince il ``primary_output_file``
+del manifest RAW; con ``all``/``explicit``/``largest`` si selezione l'insieme
+di file (``include``/``glob``) come fa il CLEAN.
+"""
+
 from __future__ import annotations
 
 import json
@@ -62,12 +74,12 @@ def _metadata_candidates(raw_dir: Path) -> list[Path]:
     candidates: list[Path] = []
     for name in file_names:
         candidate = raw_dir / name
-        if _is_usable_input_file(candidate):
+        if is_usable_input_file(candidate):
             candidates.append(candidate)
     return _sorted_unique_paths(candidates)
 
 
-def _is_usable_input_file(path: Path) -> bool:
+def is_usable_input_file(path: Path) -> bool:
     return (
         path.exists()
         and path.is_file()
@@ -133,7 +145,7 @@ def _manifest_primary_input(raw_year_dir: Path) -> tuple[Path | None, str | None
         return None, "CLEAN RAW metadata missing primary_output_file; using legacy selection."
 
     manifest_path = from_root_relative(primary_output_file, raw_year_dir)
-    if _is_usable_input_file(manifest_path):
+    if is_usable_input_file(manifest_path):
         return manifest_path, None
 
     return (

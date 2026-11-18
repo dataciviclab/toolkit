@@ -9,6 +9,7 @@ from toolkit.core.validation import (
     ValidationResult,
     build_validation_summary,
 )
+from toolkit.profile.raw import load_raw_profile_status
 
 TEXT_EXT = {".csv", ".txt", ".tsv", ".json", ".xml", ".html"}
 CSV_EXT = {".csv", ".tsv"}
@@ -109,6 +110,18 @@ def run_raw_validation(root: str | None, dataset: str, year: int, logger) -> dic
 
     result = validate_raw_output(out_dir, files)
 
+    # Profilo RAW deludente ma run verde: il clean legge con hint ridotti e i
+    # controlli a valle (scaffold, NOT NULL inferito, dateformat) si spengono.
+    # Il warning lo rende visibile nel gate, non solo dentro l'artefatto.
+    profile_state = load_raw_profile_status(out_dir)
+    warnings = list(result.warnings)
+    if profile_state["status"] == "failed":
+        warnings.append(
+            "raw_profile_empty: il profilo RAW non ha prodotto colonne "
+            f"({profile_state['file'] or 'file sconosciuto'}) — gli hint per il CLEAN "
+            "vengono solo dallo sniff leggero; controlla raw_profile.json"
+        )
+
     hints = metadata.get("profile_hints") or {}
     primary_file = hints.get("file_used") or (files[0].get("file") if files else None)
     enriched_summary = {
@@ -117,12 +130,14 @@ def run_raw_validation(root: str | None, dataset: str, year: int, logger) -> dic
         **({"file": primary_file} if primary_file else {}),
         **({"encoding": hints["encoding_suggested"]} if hints.get("encoding_suggested") else {}),
         **({"delim": hints["delim_suggested"]} if hints.get("delim_suggested") else {}),
+        "profile_status": profile_state["status"],
+        "profile_columns": profile_state["columns"],
         **result.summary,
     }
     result = ValidationResult(
         ok=result.ok,
         errors=result.errors,
-        warnings=result.warnings,
+        warnings=warnings,
         summary=enriched_summary,
         sections=result.sections,
     )
@@ -131,6 +146,8 @@ def run_raw_validation(root: str | None, dataset: str, year: int, logger) -> dic
         parts.append(f"enc={hints['encoding_suggested']}")
     if hints.get("delim_suggested"):
         parts.append(f"delim={hints['delim_suggested']}")
+    if profile_state["status"] == "failed":
+        parts.append("PROFILE EMPTY")
     if files:
         parts.append(f"{len(files)} files")
     if result.errors:

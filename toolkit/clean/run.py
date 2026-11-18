@@ -5,7 +5,7 @@ from typing import Any
 
 from toolkit.core.duckdb_read import SUPPORTED_INPUT_EXTS
 from toolkit.clean.read_config import resolve_clean_read_cfg
-from toolkit.clean.input_selection import select_raw_input
+from toolkit.core.input_selection import select_raw_input
 from toolkit.core.config import ensure_dict
 from toolkit.core.input_file import RawInputFile, enrich_input_files
 from toolkit.core.metadata import (

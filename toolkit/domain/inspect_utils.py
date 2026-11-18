@@ -13,7 +13,7 @@ from toolkit.core.duckdb_shape import parquet_preview, parquet_row_count, parque
 from toolkit.core.io import read_json_or_none
 from toolkit.core.metadata import read_layer_metadata
 from toolkit.core.paths import RAW_PROFILE, RAW_PROFILE_DIR, layer_year_dir
-from toolkit.profile.raw import sniff_source_file
+from toolkit.profile.raw import load_raw_profile_status, sniff_source_file
 
 
 def _raw_primary_file(raw_dir: Path, metadata: dict[str, Any]) -> Path | None:
@@ -58,6 +58,13 @@ def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
     if sniff_error is not None:
         warnings.append(f"profile_hint_fallback_failed: {sniff_error}")
 
+    profile_state = load_raw_profile_status(raw_dir)
+    if profile_state["status"] == "failed":
+        warnings.append(
+            "raw_profile_empty: il profilo RAW non ha prodotto colonne "
+            f"({profile_state['file'] or 'file sconosciuto'}) — hint CLEAN ridotti allo sniff leggero"
+        )
+
     return {
         "year": year,
         "raw_dir": str(raw_dir),
@@ -65,6 +72,8 @@ def _raw_schema_payload(cfg, year: int) -> dict[str, Any]:
         "primary_output_file": raw_meta.get("primary_output_file"),
         "file_used": profile_hints.get("file_used"),
         "profile_source": profile_source,
+        "profile_status": profile_state["status"],
+        "profile_columns": profile_state["columns"],
         "is_binary_file": profile_hints.get("is_binary_file"),
         "encoding": profile_hints.get("encoding_suggested"),
         "delim": profile_hints.get("delim_suggested"),

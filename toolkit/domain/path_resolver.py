@@ -20,6 +20,7 @@ from toolkit.core.paths import (
 )
 from toolkit.core.run_records import get_run_dir, latest_run
 from toolkit.core.support import resolve_support_payloads
+from toolkit.profile.raw import load_raw_profile_status
 
 
 def _raw_output_paths(root: Path, dataset: str, year: int) -> dict[str, str | None]:
@@ -91,6 +92,7 @@ def payload_for_year(cfg, year: int) -> dict[str, Any]:
     raw_meta = read_layer_metadata(raw_dir)
     suggested_read_path = raw_dir / RAW_PROFILE_DIR / RAW_SUGGESTED_READ
     profile_hints = raw_meta.get("profile_hints") or {}
+    profile_state = load_raw_profile_status(raw_dir)
 
     run_files = sorted(run_dir.glob("*.json")) if run_dir.exists() else []
     years_seen = (
@@ -136,6 +138,9 @@ def payload_for_year(cfg, year: int) -> dict[str, Any]:
             "decimal": profile_hints.get("decimal_suggested"),
             "skip": profile_hints.get("skip_suggested"),
             "warnings": profile_hints.get("warnings") or [],
+            "profile_status": profile_state["status"],
+            "profile_columns": profile_state["columns"],
+            "profile_warnings": profile_state["warnings"],
         },
         "latest_run": latest_payload,
     }

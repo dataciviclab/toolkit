@@ -49,6 +49,7 @@ def _run(tmp_path: Path, csv_text: str, *, read_mode: str = "fallback") -> dict:
     return json.loads((out_dir / METADATA).read_text())
 
 
+@pytest.mark.contract
 def test_metadata_records_profile_ok(tmp_path: Path):
     metadata = _run(tmp_path, "id;valore\n1;10\n2;20\n")
 
@@ -57,6 +58,7 @@ def test_metadata_records_profile_ok(tmp_path: Path):
     assert metadata["profile"]["row_count"] == 2
 
 
+@pytest.mark.contract
 def test_metadata_records_profile_failed_and_validation_warns(tmp_path: Path):
     """File che la read config dichiarata non riesce a leggere in strict."""
     metadata = _run(tmp_path, "col1;col2\n1;2;3\n4;5\n", read_mode="strict")
@@ -70,6 +72,7 @@ def test_metadata_records_profile_failed_and_validation_warns(tmp_path: Path):
     assert summary["summary"]["profile_status"] == "failed"
 
 
+@pytest.mark.contract
 def test_load_raw_profile_status_missing_profile(tmp_path: Path):
     state = load_raw_profile_status(tmp_path)
 
@@ -81,6 +84,7 @@ def test_load_raw_profile_status_missing_profile(tmp_path: Path):
     ("columns", "expected"),
     [(["a", "b"], "ok"), ([], "failed")],
 )
+@pytest.mark.contract
 def test_load_raw_profile_status_reads_artifact(tmp_path: Path, columns, expected):
     profile_dir = tmp_path / RAW_PROFILE_DIR
     profile_dir.mkdir(parents=True)

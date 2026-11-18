@@ -185,10 +185,16 @@ def merge_read_cfg(
 
 
 def robust_preset(read_cfg: dict[str, Any] | None) -> dict[str, Any]:
+    """Preset "robusto" per un CSV irregolare.
+
+    ``None`` vale "non impostato" (la config tipizzata emette tutte le chiavi):
+    ``dict.setdefault`` non basta, perché una chiave presente con valore
+    ``None`` bloccherebbe il default e il preset resterebbe senza effetto.
+    """
     robust = dict(read_cfg or {})
-    robust.setdefault("ignore_errors", True)
-    robust.setdefault("null_padding", True)
-    robust.setdefault("sample_size", -1)
+    for key, value in (("ignore_errors", True), ("null_padding", True), ("sample_size", -1)):
+        if robust.get(key) is None:
+            robust[key] = value
     if robust.get("null_padding"):
         # DuckDB: il parallel scanner non supporta null_padding insieme ai
         # quoted newlines ("The parallel scanner does not support

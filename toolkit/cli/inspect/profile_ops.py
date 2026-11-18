@@ -25,7 +25,14 @@ def run_profile(cfg: ToolkitConfig, years: list[int], logger: Logger) -> None:
         out_dir = raw_dir / "_profile"
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        prof = profile_raw(raw_dir, cfg.dataset, y, read_cfg=clean_cfg.get("read"))
+        prof = profile_raw(
+            raw_dir,
+            cfg.dataset,
+            y,
+            read_cfg=clean_cfg.get("read"),
+            read_mode=str(clean_cfg.get("read_mode") or "fallback"),
+            root=cfg.root,
+        )
         paths = write_raw_profile(out_dir, prof)
         written_paths = list(paths.values())
 

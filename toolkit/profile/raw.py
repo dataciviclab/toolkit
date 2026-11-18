@@ -283,9 +283,9 @@ _MULTI_FILE_MODES = {"all", "explicit", "largest"}
 def _raw_root(raw_dir: Path) -> Path | None:
     """Root del dataset, se ``raw_dir`` ha il layout ``<root>/data/raw/<ds>/<year>``.
 
-    Serve a ``select_raw_input`` per usare la stessa selezione del clean (le
-    entry del manifest). Con un layout diverso — es. una tmp dir nei test —
-    restituisce ``None`` e la selezione ricade sulla directory.
+    Fallback per i chiamanti che non passano ``root`` esplicito (test, preview).
+    Con un layout diverso restituisce ``None`` e la selezione ricade sulla
+    directory.
     """
     if raw_dir.parent.parent.name != "raw" or raw_dir.parent.parent.parent.name != "data":
         return None
@@ -301,6 +301,7 @@ def _select_profile_files(
     source_files: list[Path] | None = None,
     dataset: str | None = None,
     year: int | None = None,
+    root: str | Path | None = None,
 ) -> list[Path]:
     """I file che il CLEAN leggerà davvero.
 
@@ -331,18 +332,18 @@ def _select_profile_files(
 
     prof_logger = logger if logger is not None else get_logger("toolkit.profile")
     candidates = None
-    root: Path | None = None
+    explicit_root: str | Path | None = root
     if source_files:
         candidates = [p for p in source_files if is_usable_input_file(p)]
-    else:
-        root = _raw_root(raw_dir)
+    elif explicit_root is None:
+        explicit_root = _raw_root(raw_dir)
     try:
-        use_manifest = root is not None and not candidates
+        use_manifest = explicit_root is not None and not candidates
         selected = select_raw_input(
             raw_dir,
             prof_logger,
             mode=mode,
-            root=str(root) if use_manifest else None,
+            root=str(explicit_root) if use_manifest else None,
             dataset=dataset if use_manifest else None,
             year=year if use_manifest else None,
             glob=str(cfg.get("glob") or "*"),
@@ -412,6 +413,10 @@ def create_profile_relation(
     cfg = dict(read_cfg or {})
     # `source` è una chiave di selezione del layer clean, non un'opzione CSV.
     cfg.pop("source", None)
+    # `None` = "non impostato" (la config tipizzata emette tutte le chiavi).
+    # Il clean riceve un dict già filtrato da `merge_read_cfg`; il profilo no,
+    # e con le chiavi a None il preset robusto non avrebbe effetto.
+    cfg = {key: value for key, value in cfg.items() if value is not None}
     selected = [files] if isinstance(files, Path) else list(files)
     return read_raw_to_relation(
         con,
@@ -751,6 +756,7 @@ def profile_raw(
     primary_file: Path | None = None,
     read_mode: str = "fallback",
     source_files: list[Path] | None = None,
+    root: str | Path | None = None,
     logger=None,
 ) -> RawProfile:
     """Profile a RAW directory.
@@ -785,6 +791,10 @@ def profile_raw(
         I file scritti dal run RAW corrente (``run_raw``). Quando presenti
         hanno precedenza sul manifest su disco, che a questo punto è ancora
         quello del run precedente.
+    root:
+        Root del dataset (la directory che contiene ``data/raw/...``). Esplicito
+        è meglio: senza, si inferisce dal layout di ``raw_dir``. Serve a
+        ``select_raw_input`` per leggere le entry del manifest come fa il clean.
     logger:
         Logger for the shared read pipeline (retry/fallback diagnostics).
 
@@ -809,6 +819,7 @@ def profile_raw(
         source_files=source_files,
         dataset=dataset,
         year=year,
+        root=root,
     )
     # Lo sniff descrive la relazione che viene letta: con `include` il primary
     # del manifest può non essere tra i file selezionati.

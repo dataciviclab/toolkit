@@ -260,6 +260,55 @@ def test_profile_uses_manifest_files_not_directory_listing(tmp_path: Path):
 
 
 @pytest.mark.regression
+def test_inspect_profile_passes_read_mode(tmp_path: Path):
+    """`inspect profile` deve usare il `read_mode` del dataset, non il default.
+
+    Regressione: `run_profile` chiamava `profile_raw` senza `read_mode`, quindi
+    usava `fallback` anche su dataset `strict` — la frase "il profilo non può
+    dichiarare leggibile un file che il clean rifiuterebbe" non valeva per
+    questo percorso.
+    """
+    from toolkit.cli.inspect.profile_ops import run_profile
+    from toolkit.core.config import load_config
+    from toolkit.core.paths import RAW_PROFILE, RAW_PROFILE_DIR, layer_year_dir
+
+    def _project(read_mode: str) -> int:
+        proj = tmp_path / read_mode
+        (proj / "sql").mkdir(parents=True)
+        (proj / "sql" / "clean.sql").write_text("select 1 as x", encoding="utf-8")
+        (proj / "dataset.yml").write_text(
+            "\n".join(
+                [
+                    f'root: "{(proj / "out").as_posix()}"',
+                    "dataset:",
+                    '  name: "ds"',
+                    "  years: [2024]",
+                    "raw: {}",
+                    "clean:",
+                    '  sql: "sql/clean.sql"',
+                    f"  read_mode: {read_mode}",
+                    "  read:",
+                    '    delim: ";"',
+                    "mart: {}",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        raw_year = layer_year_dir(proj / "out", "raw", "ds", 2024)
+        raw_year.mkdir(parents=True)
+        (raw_year / "dirty.csv").write_text("col1;col2\n1;2;3\n4;5\n", encoding="utf-8")
+
+        cfg = load_config(str(proj / "dataset.yml"), strict_config=False)
+        run_profile(cfg, [2024], logging.getLogger("test.inspect"))
+
+        profile = json.loads((raw_year / RAW_PROFILE_DIR / RAW_PROFILE).read_text())
+        return len(profile["columns_raw"])
+
+    assert _project("fallback") > 0
+    assert _project("strict") == 0
+
+
+@pytest.mark.regression
 def test_profile_falls_back_to_manifest_without_source_files(tmp_path: Path):
     """Senza `source_files` (chiamante diretto) la selezione è quella del manifest."""
     root = tmp_path / "root"

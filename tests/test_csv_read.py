@@ -199,6 +199,33 @@ def test_robust_preset_forces_strict_mode_with_null_padding():
     assert cfg["ignore_errors"] is True
 
 
+@pytest.mark.regression
+def test_robust_preset_treats_none_as_unset():
+    """`None` = "non impostato": con `setdefault` il preset restava disattivato.
+
+    La config tipizzata emette tutte le chiavi; `dict.setdefault` non sovrascrive
+    una chiave presente con valore `None`, quindi `robust_preset` restituiva
+    `ignore_errors=None`/`null_padding=None` e la lettura robusta falliva come
+    quella strict. Il clean non lo vedeva (riceve un dict già filtrato da
+    `merge_read_cfg`), il profilo sì.
+    """
+    from toolkit.core.csv_read import robust_preset
+
+    cfg = robust_preset(
+        {
+            "ignore_errors": None,
+            "null_padding": None,
+            "sample_size": None,
+            "strict_mode": None,
+        }
+    )
+    assert cfg["ignore_errors"] is True
+    assert cfg["null_padding"] is True
+    assert cfg["sample_size"] == -1
+    assert cfg["parallel"] is False
+    assert cfg["strict_mode"] is True
+
+
 @pytest.mark.pure_unit
 def test_robust_preset_keeps_parallel_when_null_padding_off():
     from toolkit.core.csv_read import robust_preset

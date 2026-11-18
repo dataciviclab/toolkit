@@ -280,11 +280,27 @@ def _pick_data_file(files: list[Path]) -> Path:
 _MULTI_FILE_MODES = {"all", "explicit", "largest"}
 
 
+def _raw_root(raw_dir: Path) -> Path | None:
+    """Root del dataset, se ``raw_dir`` ha il layout ``<root>/data/raw/<ds>/<year>``.
+
+    Serve a ``select_raw_input`` per usare la stessa selezione del clean (le
+    entry del manifest). Con un layout diverso — es. una tmp dir nei test —
+    restituisce ``None`` e la selezione ricade sulla directory.
+    """
+    if raw_dir.parent.parent.name != "raw" or raw_dir.parent.parent.parent.name != "data":
+        return None
+    return raw_dir.parents[3]
+
+
 def _select_profile_files(
     raw_dir: Path,
     primary_file: Path,
     read_cfg: dict[str, Any] | None,
     logger,
+    *,
+    source_files: list[Path] | None = None,
+    dataset: str | None = None,
+    year: int | None = None,
 ) -> list[Path]:
     """I file che il CLEAN leggerà davvero.
 
@@ -292,6 +308,16 @@ def _select_profile_files(
     (comportamento storico, una sola relazione). ``all``/``explicit``/
     ``largest`` → la selezione del clean, riusando
     ``core.input_selection.select_raw_input``: stessi file, stesso ``include``.
+
+    Precedenza dei candidati:
+
+    1. ``source_files`` — i file scritti da *questo* run RAW. È la verità
+       quando il profilo gira dentro ``run_raw``: il ``metadata.json`` sul
+       disco è ancora quello del run precedente, quindi leggerlo darebbe la
+       relazione vecchia.
+    2. le entry del manifest (``_metadata_candidates``), come fa il clean, per
+       i chiamanti diretti che profilano una directory esistente.
+    3. la lista della directory, se non c'è manifest utilizzabile.
 
     Se la selezione non trova nulla si ricade sul primary: meglio un profilo
     parziale e dichiarato che nessun profilo.
@@ -301,16 +327,27 @@ def _select_profile_files(
     if mode not in _MULTI_FILE_MODES:
         return [primary_file]
 
-    from toolkit.core.input_selection import select_raw_input
+    from toolkit.core.input_selection import is_usable_input_file, select_raw_input
 
     prof_logger = logger if logger is not None else get_logger("toolkit.profile")
+    candidates = None
+    root: Path | None = None
+    if source_files:
+        candidates = [p for p in source_files if is_usable_input_file(p)]
+    else:
+        root = _raw_root(raw_dir)
     try:
+        use_manifest = root is not None and not candidates
         selected = select_raw_input(
             raw_dir,
             prof_logger,
             mode=mode,
+            root=str(root) if use_manifest else None,
+            dataset=dataset if use_manifest else None,
+            year=year if use_manifest else None,
             glob=str(cfg.get("glob") or "*"),
             prefer_from_raw_run=bool(cfg.get("prefer_from_raw_run", True)),
+            candidates=candidates,
             include=cfg.get("include"),
             allow_ambiguous=bool(cfg.get("allow_ambiguous", False)),
         )
@@ -713,6 +750,7 @@ def profile_raw(
     *,
     primary_file: Path | None = None,
     read_mode: str = "fallback",
+    source_files: list[Path] | None = None,
     logger=None,
 ) -> RawProfile:
     """Profile a RAW directory.
@@ -743,6 +781,10 @@ def profile_raw(
         Clean read mode (``strict`` | ``fallback`` | ``robust``). Pass the
         dataset's ``clean.read_mode`` so the profile cannot succeed with a
         config the clean layer would reject.
+    source_files:
+        I file scritti dal run RAW corrente (``run_raw``). Quando presenti
+        hanno precedenza sul manifest su disco, che a questo punto è ancora
+        quello del run precedente.
     logger:
         Logger for the shared read pipeline (retry/fallback diagnostics).
 
@@ -759,7 +801,15 @@ def profile_raw(
     # Stessa selezione del CLEAN: con mode=all/explicit/largest il clean legge
     # più file (o un sottoinsieme per `include`), e profile_relation
     # descriverebbe un'altra relazione se guardasse solo il primary.
-    selected = _select_profile_files(raw_dir, file0, read_cfg, logger)
+    selected = _select_profile_files(
+        raw_dir,
+        file0,
+        read_cfg,
+        logger,
+        source_files=source_files,
+        dataset=dataset,
+        year=year,
+    )
     # Lo sniff descrive la relazione che viene letta: con `include` il primary
     # del manifest può non essere tra i file selezionati.
     file0 = selected[0]

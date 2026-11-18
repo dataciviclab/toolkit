@@ -15,6 +15,8 @@ contratto: una sola pipeline di lettura, e il profilo la segue.
 
 from __future__ import annotations
 
+import json
+
 import logging
 from pathlib import Path
 
@@ -208,3 +210,83 @@ def test_profile_latest_keeps_manifest_primary(tmp_path: Path):
 
     assert profile.columns_raw == ["x", "y", "z"]
     assert profile.row_count == 1
+
+
+@pytest.mark.regression
+def test_profile_uses_manifest_files_not_directory_listing(tmp_path: Path):
+    """Un file sciolto nella directory non deve entrare nel profilo.
+
+    Regressione: `select_raw_input` invocato senza `root/dataset/year` ricade
+    su `list_input_files(raw_dir)` (la directory), mentre il clean usa le entry
+    del manifest. Su `anac_stati_avanzamento` una copia del full
+    (`stati-avanzamento_csv.csv`) non elencata nel manifest gonfiava il profilo
+    a 3.459.926 righe contro le 2.185.125 lette dal clean.
+    """
+    root = tmp_path / "root"
+    raw_year = root / "data" / "raw" / "ds" / "2024"
+    raw_year.mkdir(parents=True)
+    (raw_year / "a.csv").write_text("id;valore\n1;10\n", encoding="utf-8")
+    (raw_year / "b.csv").write_text("id;altro\n2;x\n", encoding="utf-8")
+    # file presente su disco ma NON scritto da questo run (artefatto sciolto)
+    (raw_year / "raw_input.csv").write_text("id;valore\n1;10\n2;20\n3;30\n", encoding="utf-8")
+
+    files = [{"file": "a.csv"}, {"file": "b.csv"}]
+    (raw_year / "metadata.json").write_text(
+        json.dumps({"layer": "raw", "dataset": "ds", "year": 2024, "files": files}),
+        encoding="utf-8",
+    )
+    # il clean usa il manifest solo se l'ultimo run RAW è SUCCESS
+    run_dir = root / "data" / "_runs" / "ds" / "2024"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run1.json").write_text(
+        json.dumps({"run_id": "run1", "layers": {"raw": {"status": "SUCCESS"}}}),
+        encoding="utf-8",
+    )
+
+    profile = profile_raw(
+        raw_year,
+        "ds",
+        2024,
+        {"mode": "all", "delim": ";"},
+        primary_file=raw_year / "a.csv",
+        # run_raw passa i file del run corrente: ground truth
+        source_files=[raw_year / "a.csv", raw_year / "b.csv"],
+    )
+
+    # 1 riga da a.csv + 1 da b.csv. Il file sciolto ne ha 3: se entrasse,
+    # row_count sarebbe 5 (e comparirebbe la sua colonna extra).
+    assert profile.row_count == 2, f"letti file fuori dal run: {profile.row_count}"
+    assert set(profile.columns_raw) == {"id", "valore", "altro"}
+
+
+@pytest.mark.regression
+def test_profile_falls_back_to_manifest_without_source_files(tmp_path: Path):
+    """Senza `source_files` (chiamante diretto) la selezione è quella del manifest."""
+    root = tmp_path / "root"
+    raw_year = root / "data" / "raw" / "ds" / "2024"
+    raw_year.mkdir(parents=True)
+    (raw_year / "a.csv").write_text("id;valore\n1;10\n", encoding="utf-8")
+    (raw_year / "b.csv").write_text("id;altro\n2;x\n", encoding="utf-8")
+    (raw_year / "raw_input.csv").write_text("id;valore\n1;10\n2;20\n3;30\n", encoding="utf-8")
+    (raw_year / "metadata.json").write_text(
+        json.dumps(
+            {
+                "layer": "raw",
+                "dataset": "ds",
+                "year": 2024,
+                "files": [{"file": "a.csv"}, {"file": "b.csv"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    run_dir = root / "data" / "_runs" / "ds" / "2024"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run1.json").write_text(
+        json.dumps({"run_id": "run1", "layers": {"raw": {"status": "SUCCESS"}}}),
+        encoding="utf-8",
+    )
+
+    profile = profile_raw(raw_year, "ds", 2024, {"mode": "all", "delim": ";"})
+
+    assert profile.row_count == 2
+    assert set(profile.columns_raw) == {"id", "valore", "altro"}

@@ -255,6 +255,12 @@ def run_raw(
     }:
         try:
             profile_hints = sniff_source_file(primary_output_path)
+            # I file di *questo* run: il metadata.json sul disco è ancora
+            # quello del run precedente, quindi non è una fonte affidabile per
+            # la selezione multi-file (mode all/explicit/largest).
+            profile_source_files = [
+                out_dir / str(entry["file"]) for entry in files_written if entry.get("file")
+            ]
             raw_profile = profile_raw(
                 out_dir,
                 dataset,
@@ -262,6 +268,7 @@ def run_raw(
                 read_cfg=(clean_cfg or {}).get("read", {}),
                 primary_file=primary_output_path,
                 read_mode=str((clean_cfg or {}).get("read_mode") or "fallback"),
+                source_files=profile_source_files,
                 logger=logger,
             )
             profile_dir = out_dir / "_profile"

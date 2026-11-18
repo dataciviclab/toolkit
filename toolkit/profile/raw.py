@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import re
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -16,14 +17,15 @@ from typing import Any, cast
 import duckdb
 from lab_connectors.duckdb import safe_connect
 
+from toolkit.core.constants import RAW_INPUT_VIEW
 from toolkit.core.csv_read import (
-    csv_read_option_strings,
     normalize_read_cfg,
-    robust_preset,
 )
-from toolkit.core.sql_utils import sql_str
-from toolkit.core.paths import RAW_PROFILE
-from toolkit.core.io import write_json_atomic
+from toolkit.core.duckdb_read import ReadInfo, read_raw_to_relation
+from toolkit.core.input_file import RawInputFile
+from toolkit.core.logging import get_logger
+from toolkit.core.paths import RAW_PROFILE, RAW_PROFILE_DIR
+from toolkit.core.io import read_json_or_none, write_json_atomic
 from toolkit.profile._sniff_encoding import is_binary_file as _is_binary_file, sniff_encoding
 from toolkit.profile._sniff_delimiter import sniff_decimal, sniff_delim, suggest_skip
 from toolkit.profile._column_profile import _build_mapping_suggestions, _normalize_colname
@@ -255,11 +257,11 @@ def build_suggested_read_cfg(
 
     cfg.setdefault("header", True)
 
-    if data.get("robust_read_suggested"):
-        cfg.setdefault("auto_detect", False)
-        cfg.setdefault("strict_mode", False)
-        cfg.setdefault("null_padding", True)
-        cfg.setdefault("ignore_errors", True)
+    # NOTA: `robust_read_suggested` NON viene tradotto in ignore_errors /
+    # null_padding / auto_detect. Il layer CLEAN filtra comunque quelle chiavi
+    # (``filter_suggested_format_keys``), perché attivare ``ignore_errors`` da
+    # solo maskererebbe righe scartate e corruzione di encoding. Il flag resta
+    # nel profilo come segnale per l'operatore (e per la preview).
 
     return normalize_read_cfg(cfg)
 
@@ -272,6 +274,56 @@ def _pick_data_file(files: list[Path]) -> Path:
         if p.suffix.lower() not in {".json", ".md", ".yml", ".yaml"}:
             return p
     return files[0]
+
+
+# Mode in cui il CLEAN legge un insieme di file, non il solo primary del manifest.
+_MULTI_FILE_MODES = {"all", "explicit", "largest"}
+
+
+def _select_profile_files(
+    raw_dir: Path,
+    primary_file: Path,
+    read_cfg: dict[str, Any] | None,
+    logger,
+) -> list[Path]:
+    """I file che il CLEAN leggerà davvero.
+
+    ``mode: latest``/``fallback`` → il ``primary_output_file`` del manifest
+    (comportamento storico, una sola relazione). ``all``/``explicit``/
+    ``largest`` → la selezione del clean, riusando
+    ``core.input_selection.select_raw_input``: stessi file, stesso ``include``.
+
+    Se la selezione non trova nulla si ricade sul primary: meglio un profilo
+    parziale e dichiarato che nessun profilo.
+    """
+    cfg = read_cfg or {}
+    mode = str(cfg.get("mode") or "fallback")
+    if mode not in _MULTI_FILE_MODES:
+        return [primary_file]
+
+    from toolkit.core.input_selection import select_raw_input
+
+    prof_logger = logger if logger is not None else get_logger("toolkit.profile")
+    try:
+        selected = select_raw_input(
+            raw_dir,
+            prof_logger,
+            mode=mode,
+            glob=str(cfg.get("glob") or "*"),
+            prefer_from_raw_run=bool(cfg.get("prefer_from_raw_run", True)),
+            include=cfg.get("include"),
+            allow_ambiguous=bool(cfg.get("allow_ambiguous", False)),
+        )
+    except Exception as exc:
+        prof_logger.warning(
+            "profile: selezione RAW (mode=%s) fallita, profilo solo su %s: %s: %s",
+            mode,
+            primary_file.name,
+            type(exc).__name__,
+            exc,
+        )
+        return [primary_file]
+    return selected or [primary_file]
 
 
 def _effective_profile_read_cfg(
@@ -300,24 +352,44 @@ def _effective_profile_read_cfg(
     return effective_read_cfg
 
 
-def _profile_view(
+def create_profile_relation(
     con: duckdb.DuckDBPyConnection,
-    file0: Path,
+    files: Path | Sequence[Path],
+    read_cfg: dict[str, Any],
     *,
-    effective_read_cfg: dict[str, Any],
-) -> None:
-    opts = csv_read_option_strings(effective_read_cfg, include_header_skip=True)
-    opt_sql = f"union_by_name=true, {', '.join(opts)}"
-    con.execute(
-        f"CREATE OR REPLACE VIEW v AS SELECT * FROM read_csv('{sql_str(str(file0))}', {opt_sql});"
+    read_mode: str = "fallback",
+    logger=None,
+) -> ReadInfo:
+    """Crea ``RAW_INPUT_VIEW`` con la STESSA pipeline che usa il layer clean.
+
+    Il profilo non deve avere un proprio parser: se lo avesse, "come leggerà il
+    clean" sarebbe una promessa non verificata. Delega a
+    ``core.duckdb_read.read_raw_to_relation``, che gestisce formato compatto
+    ``clean_name:DUCKDB_TYPE``, ``normalize_rows_to_columns``,
+    ``align_by_header``, multi-file, Excel e parquet.
+
+    Returns:
+        ``ReadInfo`` — ``info.source`` vale ``strict`` se la config dichiarata
+        è bastata, ``robust`` se è servito il preset robusto.
+    """
+    cfg = dict(read_cfg or {})
+    # `source` è una chiave di selezione del layer clean, non un'opzione CSV.
+    cfg.pop("source", None)
+    selected = [files] if isinstance(files, Path) else list(files)
+    return read_raw_to_relation(
+        con,
+        [RawInputFile(path=path.resolve()) for path in selected],
+        cfg,
+        read_mode,
+        logger if logger is not None else get_logger("toolkit.profile"),
     )
 
 
 def _describe_columns(con: duckdb.DuckDBPyConnection) -> tuple[list[str], list[str], list[str]]:
-    cols = con.execute("DESCRIBE v").fetchall()
-    columns_raw = [r[0] for r in cols]
+    cols = con.execute(f"DESCRIBE {RAW_INPUT_VIEW}").fetchall()
+    columns_raw = [str(r[0]) for r in cols]
     columns_norm = [_normalize_colname(c) for c in columns_raw]
-    duckdb_types = [r[1] for r in cols]  # DuckDB-inferred types
+    duckdb_types = [str(r[1]) for r in cols]  # DuckDB-inferred types
     return columns_raw, columns_norm, duckdb_types
 
 
@@ -333,7 +405,7 @@ def _sample_profile_rows(
         - ``null_count`` e' una mappa completa ``{col_name: missing_pct}`` per TUTTE
           le colonne (non troncata). Usata dall'inferenza NOT NULL della validazione.
     """
-    df = con.execute("SELECT * FROM v LIMIT 50").fetchdf()
+    df = con.execute(f"SELECT * FROM {RAW_INPUT_VIEW} LIMIT 50").fetchdf()
     # pandas-stubs: to_dict(orient='records') restituisce dict[Hashable, Any];
     # le chiavi sono sempre str (nomi colonna) → cast esplicito.
     sample_rows = cast(list[dict[str, Any]], df.to_dict(orient="records"))
@@ -351,7 +423,9 @@ def _sample_profile_rows(
                 f"SUM(CASE WHEN {col_ref} IS NULL OR TRIM(CAST({col_ref} AS VARCHAR)) = '' THEN 1 ELSE 0 END) AS \"{c}__missing\""
             )
 
-        row = con.execute(f"SELECT COUNT(*) AS n_total, {', '.join(case_exprs)} FROM v").fetchone()
+        row = con.execute(
+            f"SELECT COUNT(*) AS n_total, {', '.join(case_exprs)} FROM {RAW_INPUT_VIEW}"
+        ).fetchone()
         if row is not None:
             n_total = int(row[0])
             if n_total > 0:
@@ -367,89 +441,62 @@ def _sample_profile_rows(
     return sample_rows, missingness_top, null_counts
 
 
-def profile_excel(file0: Path, read_cfg: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Profile an Excel file using the same pandas reader as ``clean.read_excel``.
+def profile_excel(
+    files: Path | Sequence[Path],
+    read_cfg: dict[str, Any] | None = None,
+    *,
+    read_mode: str = "fallback",
+    logger=None,
+) -> dict[str, Any]:
+    """Profile an Excel file with the shared CLEAN read pipeline.
 
-    Reuses ``_load_excel_frame`` from ``clean.read_excel`` to stay in sync
-    with the clean runtime's Excel handling (sheet_name, header, skip, columns,
-    trim_whitespace, mismatch detection).
-
-    Returns the same dict shape as ``profile_with_read_cfg``.
+    Thin wrapper over ``profile_with_read_cfg``: Excel non ha un lettore
+    dedicato al profilo. Il runtime clean usa ``_load_excel_frame`` via
+    ``read_raw_to_relation``, e il profilo profila la stessa view — un
+    secondo parser avrebbe la stessa deriva già pagata sui CSV.
     """
-    from toolkit.core.read_excel import _load_excel_frame
-
-    cfg = read_cfg or {}
-    try:
-        df, _ = _load_excel_frame(file0, cfg)
-    except Exception as exc:
-        return {
-            "columns_raw": [],
-            "columns_norm": [],
-            "duckdb_types": [],
-            "sample_rows": [],
-            "missingness_top": [],
-            "mapping_suggestions": {},
-            "warnings": [f"excel_profile_failed: {type(exc).__name__}: {exc}"],
-            "robust_read_suggested": True,
-        }
-
-    # Normalize column names
-    columns_raw = list(df.columns)
-    columns_norm = [_normalize_colname(str(c)) for c in columns_raw]
-
-    # Sample rows
-    sample_rows = df.head(5).fillna("").to_dict(orient="records")
-
-    # Missingness
-    n = len(df)
-    missingness_top: list[dict[str, Any]] = []
-    null_counts: dict[str, float] = {}
-    if n > 0:
-        for col in columns_raw:
-            nmiss = int(df[col].isna().sum())
-            pct = float(nmiss) / float(n) * 100.0
-            null_counts[col] = pct
-            if nmiss > 0:
-                missingness_top.append({"column": str(col), "missing_pct": pct})
-    missingness_top = sorted(missingness_top, key=lambda x: -x["missing_pct"])[:25]
-
-    # Mapping suggestions — no DuckDB types for Excel, use empty
-    mapping_suggestions: dict[str, Any] = {}
-    duckdb_types: list[str] = []
-
-    return {
-        "columns_raw": columns_raw,
-        "columns_norm": columns_norm,
-        "duckdb_types": duckdb_types,
-        "sample_rows": sample_rows,
-        "missingness_top": missingness_top,
-        "null_counts": null_counts,
-        "mapping_suggestions": mapping_suggestions,
-        "warnings": [],
-        "robust_read_suggested": False,
-    }
+    first = files if isinstance(files, Path) else list(files)[0]
+    return profile_with_read_cfg(
+        files,
+        sniff_source_file(first),
+        dict(read_cfg or {}),
+        read_mode=read_mode,
+        logger=logger,
+    )
 
 
 def profile_with_read_cfg(
-    file0: Path,
+    files: Path | Sequence[Path],
     sniff_hints: dict[str, Any],
     effective_read_cfg: dict[str, Any],
+    *,
+    read_mode: str = "fallback",
+    logger=None,
 ) -> dict[str, Any]:
-    """Profile a file using DuckDB with a specific read configuration.
+    """Profile the RAW relation the CLEAN layer will read.
 
-    This is the "runtime" half of profiling: it reads the file exactly as
-    ``clean.read`` would and returns column-level statistics.
+    This is the "runtime" half of profiling: it builds ``RAW_INPUT_VIEW`` with
+    ``core.duckdb_read.read_raw_to_relation`` — the exact function the clean
+    layer uses — and profiles that view. Non esiste un parser "del profilo":
+    se esistesse, "legge come il clean" sarebbe una promessa non verificata
+    (era la causa dei profili vuoti su ``columns`` compatto e su
+    ``normalize_rows_to_columns``).
 
     Parameters
     ----------
-    file0:
-        Path to the data file.
+    files:
+        Data file, oppure lista di file quando il CLEAN ne legge più di uno
+        (``mode: all|explicit|largest``). Con più file la view è quella di
+        ``read_csv`` con ``union_by_name`` — la stessa del clean.
     sniff_hints:
         Output of ``sniff_source_file`` — provides ``true_header_line`` for
-        mismatch detection and carries the sniff-level warnings.
+        mismatch diagnostics and carries the sniff-level warnings.
     effective_read_cfg:
-        Fully-resolved read configuration (encoding, delim, skip, etc.)
-        to pass to DuckDB's ``read_csv``.
+        Read configuration (encoding, delim, skip, columns, ...) to use.
+    read_mode:
+        Clean read mode: ``strict`` | ``fallback`` | ``robust``. Deve essere
+        lo stesso del clean, altrimenti il profilo può riuscire dove il clean
+        fallisce (o viceversa).
 
     Returns
     -------
@@ -459,6 +506,7 @@ def profile_with_read_cfg(
         - duckdb_types (list[str])
         - sample_rows (list[dict])
         - missingness_top (list[dict])
+        - row_count (int | None)
         - mapping_suggestions (dict)
         - warnings (list[str]): extended with runtime-specific warnings
         - robust_read_suggested (bool): True if robust preset was needed
@@ -466,46 +514,39 @@ def profile_with_read_cfg(
     true_header_line: str | None = sniff_hints.get("true_header_line")
     warnings = list(sniff_hints.get("warnings") or [])
     robust_read_suggested = False
+    row_count: int | None = None
 
     try:
         with safe_connect() as con:
-            try:
-                _profile_view(
-                    con,
-                    file0,
-                    effective_read_cfg=effective_read_cfg,
-                )
-                # Forza eager evaluation: DuckDB crea la vista in modo
-                # lazy, l'eccezione di parsing scoppia solo al primo
-                # SELECT effettivo (e.g. CSV con numero colonne errato).
-                con.execute("SELECT COUNT(*) FROM v")
-            except Exception as e:
-                warnings.append(f"profile_read_retry: {type(e).__name__}: {e}")
+            info = create_profile_relation(
+                con, files, effective_read_cfg, read_mode=read_mode, logger=logger
+            )
+            if info.source == "robust":
+                # Il fallback strict→robust è dentro read_raw_to_relation: qui
+                # resta solo il fatto (e resta nel warning, con lo stesso tag
+                # usato dal resto della diagnostica).
                 robust_read_suggested = True
-                fallback_cfg = robust_preset(effective_read_cfg)
-                # auto_detect=True riedelegge a DuckDB la rilevazione della
-                # struttura — necessario per CSV con righe irregolari o
-                # decimali con virgola (es. Farmacie, DAIT).
-                fallback_cfg["auto_detect"] = True
-                # Parallel=false necessario quando null_padding è attivo
-                # e il CSV ha quoted new lines (DuckDB incompatibilità nota).
-                fallback_cfg["parallel"] = False
-                _profile_view(
-                    con,
-                    file0,
-                    effective_read_cfg=fallback_cfg,
+                warnings.append(
+                    "profile_read_retry: strict read failed, profiled with robust preset"
                 )
+
+            # Forza eager evaluation e riusa il conteggio: DuckDB crea la
+            # vista in modo lazy, l'errore di parsing scoppia al primo SELECT
+            # che tocca le colonne.
+            row_count = int(con.execute(f"SELECT COUNT(*) FROM {RAW_INPUT_VIEW}").fetchone()[0])
 
             columns_raw, columns_norm, duckdb_types = _describe_columns(con)
 
-            # Detect column-count mismatch between header and data.
-            # When true_header_line (ground truth at line 0) has fewer tokens
-            # than what DESCRIBE returns, the file has more columns in data
-            # rows than in the header row (IRPEF comunale pattern:
-            # header=50 cols, data rows=52 cols).
-            if true_header_line is not None:
-                # Usa lo stesso separatore effettivo di csv_read_option_strings:
-                # `sep` vince su `delim`, e un delim None non deve cadere su ";" .
+            # Diagnostica (non più meccanismo): l'header reale del file ha meno
+            # token delle colonne lette? Con `read_raw_to_relation` la lettura
+            # è già avvenuta e, se il file è irregolare, è il fallback robusto
+            # ad averla risolta. Qui resta il segnale per l'operatore.
+            # Escluso quando le colonne sono dichiarate in config (il conteggio
+            # riflette la config, non il file) e quando i file sono più di uno
+            # (la union per nome allarga legittimamente le colonne).
+            explicit_columns = (effective_read_cfg or {}).get("columns")
+            multi_file = not isinstance(files, Path) and len(list(files)) > 1
+            if true_header_line is not None and not explicit_columns and not multi_file:
                 sep_effective = (
                     effective_read_cfg.get("sep") or effective_read_cfg.get("delim") or ";"
                 )
@@ -513,19 +554,9 @@ def profile_with_read_cfg(
                 if len(columns_raw) > true_header_tokens:
                     warnings.append(
                         f"header_data_cols_mismatch: header has {true_header_tokens} tokens, "
-                        f"data has {len(columns_raw)} columns; retrying with null_padding=true"
+                        f"data has {len(columns_raw)} columns; the file rows are wider than "
+                        "its header — consider null_padding/align_by_header"
                     )
-                    robust_read_suggested = True
-                    fallback_cfg = robust_preset(effective_read_cfg)
-                    fallback_cfg["auto_detect"] = True
-                    fallback_cfg["null_padding"] = True
-                    fallback_cfg["parallel"] = False
-                    _profile_view(
-                        con,
-                        file0,
-                        effective_read_cfg=fallback_cfg,
-                    )
-                    columns_raw, columns_norm, duckdb_types = _describe_columns(con)
 
             duckdb_type_map: dict[str, str] = {
                 raw: dtype for raw, dtype in zip(columns_raw, duckdb_types)
@@ -543,6 +574,7 @@ def profile_with_read_cfg(
         sample_rows, missingness_top, null_counts = [], [], {}
         mapping_suggestions = {}
         robust_read_suggested = True
+        row_count = None
 
     return {
         "columns_raw": columns_raw,
@@ -551,6 +583,7 @@ def profile_with_read_cfg(
         "sample_rows": sample_rows,
         "missingness_top": missingness_top,
         "null_counts": null_counts,
+        "row_count": row_count,
         "mapping_suggestions": mapping_suggestions,
         "warnings": warnings,
         "robust_read_suggested": robust_read_suggested,
@@ -679,12 +712,15 @@ def profile_raw(
     read_cfg: dict[str, Any] | None = None,
     *,
     primary_file: Path | None = None,
+    read_mode: str = "fallback",
+    logger=None,
 ) -> RawProfile:
     """Profile a RAW directory.
 
-    This is a facade that firstsniffs the source file (encoding, delimiter,
-    skip, header) then profiles it with DuckDB using the resolved read
-    configuration.
+    Facade: seleziona i file come il CLEAN (``_select_profile_files``), sniffa
+    il primo file selezionato (encoding, delimiter, skip, header) e profila la
+    relazione con la stessa pipeline di lettura del CLEAN
+    (``core.duckdb_read.read_raw_to_relation``).
 
     Parameters
     ----------
@@ -695,13 +731,20 @@ def profile_raw(
     year:
         Year of the dataset.
     read_cfg:
-        Optional explicit read configuration. Values here override the
-        sniffed suggestions.
+        Optional explicit read configuration (``clean.read``). Values here
+        override the sniffed suggestions. Contiene anche ``mode``/``include``/
+        ``glob``, che determinano **quali** file vengono letti.
     primary_file:
-        Optional explicit path to the primary source file. When provided,
-        takes precedence over the alphabetical glob fallback. Should match
-        the ``primary_output_file`` from the RAW manifest (via
-        ``_choose_primary_output``).
+        Optional explicit path to the primary source file. Vincola la
+        selezione con ``mode: latest``/``fallback`` (la maggioranza dei
+        dataset); con ``mode: all|explicit|largest`` vince la selezione del
+        clean e questo valore fa solo da fallback.
+    read_mode:
+        Clean read mode (``strict`` | ``fallback`` | ``robust``). Pass the
+        dataset's ``clean.read_mode`` so the profile cannot succeed with a
+        config the clean layer would reject.
+    logger:
+        Logger for the shared read pipeline (retry/fallback diagnostics).
 
     Returns
     -------
@@ -713,6 +756,14 @@ def profile_raw(
 
     file0 = primary_file if primary_file is not None else _pick_data_file(files)
 
+    # Stessa selezione del CLEAN: con mode=all/explicit/largest il clean legge
+    # più file (o un sottoinsieme per `include`), e profile_relation
+    # descriverebbe un'altra relazione se guardasse solo il primary.
+    selected = _select_profile_files(raw_dir, file0, read_cfg, logger)
+    # Lo sniff descrive la relazione che viene letta: con `include` il primary
+    # del manifest può non essere tra i file selezionati.
+    file0 = selected[0]
+
     # Phase 1: pure source sniffing
     sniff_hints = sniff_source_file(file0)
 
@@ -722,10 +773,17 @@ def profile_raw(
     skip = sniff_hints["skip_suggested"]
     header_line = sniff_hints["header_line"]
 
-    # Phase 1b: Excel files — profile via pandas (same reader as clean runtime)
+    # Phase 1b: Excel-like files — profilo via la stessa view del runtime clean
+    # (.ods incluso: è supportato dal clean, non è un "zip non supportato")
     binary_fmt = sniff_hints.get("is_binary_file")
-    if binary_fmt in ("xlsx", "xls"):
-        runtime_result = profile_excel(file0, read_cfg)
+    if binary_fmt in ("xlsx", "xls", "ods"):
+        runtime_result = profile_excel(
+            selected[0] if len(selected) == 1 else selected,
+            read_cfg,
+            read_mode=read_mode,
+            logger=logger,
+        )
+
         return RawProfile(
             dataset=dataset,
             year=year,
@@ -776,35 +834,30 @@ def profile_raw(
         skip=skip,
     )
 
-    # Phase 3: DuckDB runtime profiling
-    runtime_result = profile_with_read_cfg(file0, sniff_hints, effective_read_cfg)
-
-    # Count total rows using DuckDB (riusa read_csv options from profiling)
-    row_count: int | None = None
-    try:
-        from lab_connectors.duckdb import safe_connect
-        from toolkit.core.csv_read import csv_read_option_strings
-
-        with safe_connect() as _con:
-            _read_opts = ", ".join(csv_read_option_strings(effective_read_cfg))
-            csv_path = str(file0.resolve())
-            _con.execute(
-                f"CREATE OR REPLACE VIEW _profile_count AS SELECT * FROM read_csv('{csv_path}', {_read_opts})"
-            )
-            row_count = int(_con.execute("SELECT COUNT(*) FROM _profile_count").fetchone()[0])
-    except Exception:
-        pass
+    # Phase 3: runtime profiling — stessa pipeline di lettura del layer CLEAN
+    runtime_result = profile_with_read_cfg(
+        selected,
+        sniff_hints,
+        effective_read_cfg,
+        read_mode=read_mode,
+        logger=logger,
+    )
+    # row_count arriva dal profilo: la view è già stata scansionata una volta,
+    # non serve una seconda connessione che rilegge il file da capo.
+    row_count = runtime_result.get("row_count")
 
     # Phase 4: extract raw string values for date-typed columns
     # (DuckDB converts dates to Timestamp, losing the original format).
-    # Uses the same effective_read_cfg as DuckDB (encoding, delim, header,
-    # skip, quote, escape) so the raw parser stays in sync with the runtime.
-    date_raw_values = _extract_date_raw_values(
-        file0,
-        runtime_result["mapping_suggestions"],
-        runtime_result["columns_raw"],
-        effective_read_cfg,
-    )
+    # Solo con un file: la mappa è posizionale, e su una union multi-file
+    # l'ordine delle colonne può differire da quello del singolo file.
+    date_raw_values: dict[str, list[str]] = {}
+    if len(selected) == 1:
+        date_raw_values = _extract_date_raw_values(
+            selected[0],
+            runtime_result["mapping_suggestions"],
+            runtime_result["columns_raw"],
+            effective_read_cfg,
+        )
 
     return RawProfile(
         dataset=dataset,
@@ -844,3 +897,32 @@ def write_raw_profile(
         written["raw_json"] = p_raw_json
 
     return written
+
+
+def load_raw_profile_status(raw_dir: Path) -> dict[str, Any]:
+    """Stato compatto del profilo RAW di un anno, per validation/readiness.
+
+    Il profilo vive in ``_profile/raw_profile.json`` e può esistere anche
+    quando è *vuoto*: ``profile_raw`` cattura l'errore, scrive i warning
+    nell'artefatto e restituisce zero colonne. Senza questo stato il run
+    resterebbe verde con un profilo inutilizzabile.
+
+    Returns:
+        ``{"status": "ok"|"failed"|"missing", "row_count", "columns",
+        "file", "warnings"}``. ``status`` è ``failed`` quando il profilo
+        esiste ma non ha colonne (fallback allo sniff leggero).
+    """
+    path = raw_dir / RAW_PROFILE_DIR / RAW_PROFILE
+    if not path.exists():
+        return {"status": "missing", "row_count": None, "columns": 0, "file": None, "warnings": []}
+
+    payload = read_json_or_none(path) or {}
+    columns = payload.get("columns_raw") or []
+    warnings = [str(w) for w in (payload.get("warnings") or [])]
+    return {
+        "status": "ok" if columns else "failed",
+        "row_count": payload.get("row_count"),
+        "columns": len(columns),
+        "file": payload.get("file_used"),
+        "warnings": warnings,
+    }

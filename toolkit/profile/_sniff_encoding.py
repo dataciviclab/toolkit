@@ -17,10 +17,11 @@ _XLSX_ZIP_MAGIC = b"PK\x03\x04"
 def is_binary_file(filepath: Path) -> str | None:
     """Detect binary file format from magic bytes.
 
-    Returns 'xls', 'xlsx', 'zip', or None.
+    Returns 'xls', 'xlsx', 'ods', 'zip', or None.
     - 'xls': OLE2/BIFF magic — unambiguous legacy Excel format
     - 'xlsx': ZIP magic + .xlsx/.xlsm suffix — ZIP-based Excel format
-    - 'zip': ZIP magic with non-Excel suffix — generic ZIP, not profiled as Excel
+    - 'ods': ZIP magic + .ods suffix — OpenDocument spreadsheet (letto da clean)
+    - 'zip': ZIP magic with other suffix — generic ZIP, not profiled as Excel
     - None: not a binary format we handle specially
     """
     ext = filepath.suffix.lower()
@@ -31,6 +32,8 @@ def is_binary_file(filepath: Path) -> str | None:
     if header.startswith(_XLSX_ZIP_MAGIC):
         if ext in (".xlsx", ".xlsm"):
             return "xlsx"
+        if ext == ".ods":
+            return "ods"
         return "zip"
     return None
 

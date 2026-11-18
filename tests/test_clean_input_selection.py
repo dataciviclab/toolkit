@@ -8,7 +8,7 @@ import pytest
 
 from tests.helpers import NoopLogger
 
-from toolkit.clean.input_selection import _metadata_candidates, list_raw_candidates, select_inputs
+from toolkit.core.input_selection import _metadata_candidates, list_raw_candidates, select_inputs
 from toolkit.clean.run import run_clean
 from toolkit.core.io import write_json_atomic
 

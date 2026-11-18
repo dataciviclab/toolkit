@@ -98,10 +98,12 @@ def test_profile_raw_suggests_robust_read_options_for_dirty_csv(tmp_path: Path):
 
     suggested = build_suggested_read_cfg(profile)
     assert suggested["skip"] == 1
-    assert suggested["auto_detect"] is False
-    assert suggested["strict_mode"] is False
-    assert suggested["null_padding"] is True
-    assert suggested["ignore_errors"] is True
+    assert suggested["delim"] == ";"
+    # Le chiavi "robuste" NON vengono propagate al clean: attivare ignore_errors
+    # da solo maschererebbe righe scartate. Il segnale resta su
+    # `robust_read_suggested`, che il clean non applica.
+    for key in ("ignore_errors", "null_padding", "auto_detect", "strict_mode"):
+        assert key not in suggested
 
 
 @pytest.mark.policy
@@ -123,7 +125,7 @@ def test_profile_raw_writes_suggested_read_even_when_duckdb_sniff_fails(
             return None
 
     monkeypatch.setattr(
-        profile_raw_module.duckdb, "connect", lambda *_args, **_kwargs: BrokenConnection()
+        profile_raw_module, "safe_connect", lambda *_args, **_kwargs: BrokenConnection()
     )
 
     profile = profile_raw(raw_dir, "demo", 2024)
@@ -341,45 +343,34 @@ def test_profile_with_read_cfg_reads_exactly_like_runtime(tmp_path: Path):
 
 
 @pytest.mark.policy
-def test_profile_with_read_cfg_retry_sets_robust_read_suggested(tmp_path: Path, monkeypatch):
-    """When first DuckDB read fails but retry with robust preset succeeds, flag must be True.
+def test_profile_with_read_cfg_retry_sets_robust_read_suggested(tmp_path: Path):
+    """Quando la config dichiarata non basta e serve il preset robusto, il flag è True.
 
-    Regression test: before the fix, retry-success kept robust_read_suggested=False
-    because the flag was initialised after the retry logic.
+    Regression test: prima del fix il flag restava False perché veniva
+    inizializzato dopo il retry. Ora il retry vive dentro
+    ``read_raw_to_relation`` (stessa pipeline del clean) e il profilo deve
+    solo riportarne l'esito.
+
+    Il file ha una riga con più campi dell'header: la lettura strict fallisce,
+    quella robusta (null_padding) riesce.
     """
-    import toolkit.profile.raw as raw_mod
-
     csv_path = tmp_path / "data.csv"
-    csv_path.write_text("col1;col2\n1;2\n", encoding="utf-8")
+    csv_path.write_text('col1;col2\n1;2;3\n4;5\n"6;7";8\n', encoding="utf-8")
 
     sniff_hints = sniff_source_file(csv_path)
     effective_cfg = {
         "delim": ";",
         "encoding": "utf-8",
         "header": True,
-        "skip": 0,
     }
-
-    _original_profile_view = raw_mod._profile_view
-    call_count = 0
-
-    def failing_profile_view(con, file0, *, effective_read_cfg):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            raise RuntimeError("first read fails")
-        # retry succeeds — call the real function directly (not via module, to avoid loop)
-        _original_profile_view(con, file0, effective_read_cfg=effective_read_cfg)
-
-    monkeypatch.setattr(raw_mod, "_profile_view", failing_profile_view)
 
     result = profile_with_read_cfg(csv_path, sniff_hints, effective_cfg)
 
-    assert call_count == 2, f"Expected exactly 2 calls (fail + retry), got {call_count}"
     assert result["robust_read_suggested"] is True, (
-        "robust_read_suggested must be True after retry-success"
+        "robust_read_suggested must be True when the strict read fails"
     )
-    assert "profile_read_retry" in result["warnings"][-1]
+    assert any("profile_read_retry" in w for w in result["warnings"])
+    assert result["columns_raw"], "il profilo deve comunque restituire le colonne"
 
 
 @pytest.mark.policy
@@ -429,7 +420,9 @@ def test_profile_raw_xlsx_produces_real_columns(tmp_path: Path):
 
     assert profile.columns_raw == ["anno", "comune", "importo"]
     assert profile.columns_norm == ["anno", "comune", "importo"]
-    assert profile.warnings == []
+    # Nessun warning di parsing. `binary_file_detected` resta: è il segnale di
+    # sniff (già in profile_hints), non un problema del profilo.
+    assert not [w for w in profile.warnings if not w.startswith("binary_file_detected")]
 
 
 @pytest.mark.policy
@@ -457,8 +450,8 @@ def test_profile_excel_parity_header_false_columns(tmp_path: Path):
 
     # columns_raw must reflect what the clean runtime will actually read after applying columns map
     assert result["columns_raw"] == ["col0", "col1"]
-    # No warnings — valid sheet + config
-    assert result["warnings"] == []
+    # Nessun warning di parsing su sheet + config validi
+    assert not [w for w in result["warnings"] if not w.startswith("binary_file_detected")]
     # Sample rows contain the data from "Export" sheet (as dicts, not raw lists)
     assert result["sample_rows"] == [{"col0": "A", "col1": 1}, {"col0": "B", "col1": 2}]
 
@@ -561,6 +554,18 @@ def test_profile_with_read_cfg_preamble_with_skip_resets_true_header_line(tmp_pa
     assert len(mismatch_warnings) == 0, (
         f"Falsi positivi header_data_cols_mismatch: {mismatch_warnings}"
     )
+
+
+@pytest.mark.policy
+def test_sniff_source_file_detects_ods_as_spreadsheet(tmp_path: Path):
+    """.ods è uno spreadsheet letto dal clean, non un "zip non supportato"."""
+    ods_path = tmp_path / "input.ods"
+    ods_path.write_bytes(b"PK\x03\x04" + b"\x00" * 16)
+
+    hints = sniff_source_file(ods_path)
+
+    assert hints["is_binary_file"] == "ods"
+    assert "binary_file_detected: ods" in hints["warnings"]
 
 
 @pytest.mark.policy

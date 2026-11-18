@@ -1,3 +1,15 @@
+"""Selezione dei file RAW da leggere — contratto condiviso CLEAN / profilo.
+
+Il profilo RAW deve profilarare **la stessa relazione** che il CLEAN leggerà:
+se la selezione divergesse, gli hint (delim/encoding/skip/columns), il
+row_count e il null-count descriverebbero un altro dataset. Per questo la
+regola di selezione vive in ``core/`` e non in un layer.
+
+Precedenza: con ``mode=latest``/``fallback`` vince il ``primary_output_file``
+del manifest RAW; con ``all``/``explicit``/``largest`` si selezione l'insieme
+di file (``include``/``glob``) come fa il CLEAN.
+"""
+
 from __future__ import annotations
 
 import json

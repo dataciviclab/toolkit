@@ -243,6 +243,8 @@ def run_raw(
     primary_output_file = _choose_primary_output(manifest_sources, logger)
     primary_output_path = out_dir / primary_output_file
     profile_hints = None
+    profile_meta: dict[str, object] | None = None
+    raw_profile = None
     if primary_output_path.exists() and primary_output_path.suffix.lower() in {
         ".csv",
         ".tsv",
@@ -259,12 +261,35 @@ def run_raw(
                 year,
                 read_cfg=(clean_cfg or {}).get("read", {}),
                 primary_file=primary_output_path,
+                read_mode=str((clean_cfg or {}).get("read_mode") or "fallback"),
+                logger=logger,
             )
             profile_dir = out_dir / "_profile"
             write_raw_profile(profile_dir, raw_profile)
             logger.debug("RAW profile -> %s", profile_dir / RAW_PROFILE)
         except Exception as exc:
             logger.warning("RAW profile generation failed: %s: %s", type(exc).__name__, exc)
+
+        # Un profilo vuoto non è un successo: il clean leggerebbe con i soli
+        # hint dello sniff leggero (o senza hint). Lo stato va nel metadata,
+        # altrimenti il run resta verde con un profilo inutilizzabile.
+        if raw_profile is not None:
+            profile_meta = {
+                "status": "ok" if raw_profile.columns_raw else "failed",
+                "file": raw_profile.file_used,
+                "row_count": raw_profile.row_count,
+                "columns": len(raw_profile.columns_raw),
+                "warnings": [str(w) for w in raw_profile.warnings],
+            }
+            if not raw_profile.columns_raw:
+                logger.warning(
+                    "RAW profile EMPTY for %s/%s: clean hints ridotti allo sniff leggero (%s)",
+                    dataset,
+                    year,
+                    "; ".join(
+                        w.splitlines()[0] for w in raw_profile.warnings if "profile_failed" in w
+                    ),
+                )
 
     metadata_payload = {
         "layer": "raw",
@@ -279,6 +304,7 @@ def run_raw(
         ],
         "files": files_written,
         "profile_hints": profile_hints,
+        "profile": profile_meta,
     }
     if source_id:
         metadata_payload["source_id"] = source_id
@@ -308,20 +334,14 @@ def run_raw(
         )
     )
 
-    # Legge righe/colonne dal raw_profile appena scritto (se disponibile)
-    output_rows = None
-    col_count = None
-    try:
-        profile_dir = out_dir / "_profile"
-        profile_path = profile_dir / RAW_PROFILE
-        if profile_path.exists():
-            from toolkit.core.io import read_json_or_none as _read_json
-
-            prof = _read_json(profile_path) or {}
-            output_rows = prof.get("row_count")
-            col_count = len(prof.get("columns_raw", [])) if prof.get("columns_raw") else None
-    except Exception:
-        pass
+    # Righe/colonne dal profilo appena prodotto: nessuna rilettura dell'artefatto
+    # (era una seconda lettura dello stesso file, con lo stesso risultato).
+    output_rows = raw_profile.row_count if raw_profile is not None else None
+    col_count = (
+        len(raw_profile.columns_raw)
+        if raw_profile is not None and raw_profile.columns_raw
+        else None
+    )
 
     return {
         "output_bytes": output_bytes,

@@ -265,6 +265,7 @@ def _fetch_script(stype: str, client: dict, formatted_args: dict) -> tuple[bytes
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        errors="replace",
         bufsize=1,
     )
     tail: deque[str] = deque(maxlen=50)

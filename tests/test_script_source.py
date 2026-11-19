@@ -270,3 +270,34 @@ def test_script_failure_keeps_tail_in_error(script_dir: Path):
             {"command": f"bash {script}", "output": str(output_file)},
             base_dir=script_dir,
         )
+
+
+def test_script_non_utf8_stderr_non_blocca(script_dir: Path, capfd):
+    """Byte non-UTF-8 sullo stderr non devono uccidere il reader.
+
+    Con ``errors='strict'`` (default) la thread muore alla riga non
+    decodificabile, la pipe smette di essere drenata e il figlio può bloccarsi
+    fino a ``client.timeout``. Con ``errors='replace'`` le righe successive
+    continuano ad arrivare nel log.
+    """
+    output_file = script_dir / "out.csv"
+    script = _make_script(
+        script_dir,
+        output_file,
+        'echo "prima" >&2\n'
+        "printf '\\377\\376\\n' >&2\n"
+        'echo "dopo" >&2\n'
+        f'echo "a,b" > {output_file}',
+    )
+
+    payload, _ = _fetch_payload(
+        "script",
+        {},
+        {"command": f"bash {script}", "output": str(output_file)},
+        base_dir=script_dir,
+    )
+
+    assert payload == b"a,b\n"
+    err = capfd.readouterr().err
+    assert "prima" in err
+    assert "dopo" in err

@@ -17,6 +17,9 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
+import threading
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -250,17 +253,44 @@ def _fetch_script(stype: str, client: dict, formatted_args: dict) -> tuple[bytes
             f"Output path {output_abs} is outside candidate base directory {candidate_root}"
         )
 
-    result = subprocess.run(
+    # Lo stderr del subprocess va nel log del job mentre il comando gira:
+    # ``capture_output`` lo teneva nascosto fino alla fine, quindi un harvest
+    # lungo (es. senato-votazioni, 78 min) era un buco nero nel log. Le ultime
+    # righe restano in un buffer per l'errore, se il comando fallisce.
+    timeout = (client or {}).get("timeout", 600)
+    proc = subprocess.Popen(
         command,
         shell=True,
-        capture_output=True,
-        text=True,
-        timeout=(client or {}).get("timeout", 600),
         cwd=candidate_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
     )
-    if result.returncode != 0:
-        stderr_preview = result.stderr[:500] if result.stderr else "(no stderr)"
-        raise DownloadError(f"Script failed (exit {result.returncode}): {stderr_preview}")
+    tail: deque[str] = deque(maxlen=50)
+
+    def _tee_output() -> None:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            if line:
+                tail.append(line)
+                print(f"[script] {line}", file=sys.stderr, flush=True)
+
+    reader = threading.Thread(target=_tee_output, daemon=True)
+    reader.start()
+    try:
+        returncode = proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        raise
+    finally:
+        reader.join(timeout=5)
+
+    if returncode != 0:
+        preview = "\n".join(tail)[-500:] or "(no output)"
+        raise DownloadError(f"Script failed (exit {returncode}): {preview}")
 
     if not output_abs.exists():
         raise DownloadError(f"Script did not produce expected output file: {output_abs}")

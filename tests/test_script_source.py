@@ -219,3 +219,54 @@ def test_script_rejects_prefix_collision(tmp_path: Path):
             {"command": "echo ok", "output": str(evil_file)},
             base_dir=candidate,
         )
+
+
+# ---------------------------------------------------------------------------
+# Osservabilità: lo stderr del comando deve arrivare nel log mentre gira
+# ---------------------------------------------------------------------------
+
+
+def test_script_stderr_forwarded_to_log(script_dir: Path, capfd):
+    """Regressione: ``capture_output`` teneva lo stderr nascosto fino alla fine.
+
+    Un harvest di 78 minuti senza una riga di log è indistinguibile da un
+    hang. Con il tee su stderr le righe del comando compaiono nel job log
+    mentre il comando gira.
+    """
+    output_file = script_dir / "out.csv"
+    script = _make_script(
+        script_dir,
+        output_file,
+        f'echo "progress 1" >&2\necho "progress 2" >&2\necho "a,b" > {output_file}',
+    )
+
+    payload, _ = _fetch_payload(
+        "script",
+        {},
+        {"command": f"bash {script}", "output": str(output_file)},
+        base_dir=script_dir,
+    )
+
+    assert payload == b"a,b\n"
+    err = capfd.readouterr().err
+    assert "progress 1" in err
+    assert "progress 2" in err
+    assert "[script]" in err
+
+
+def test_script_failure_keeps_tail_in_error(script_dir: Path):
+    """Sul fallimento il messaggio porta le ultime righe, anche col tee."""
+    output_file = script_dir / "missing.csv"
+    script = _make_script(
+        script_dir,
+        output_file,
+        'echo "errore specifico della fonte" >&2\nexit 3',
+    )
+
+    with pytest.raises(DownloadError, match="errore specifico della fonte"):
+        _fetch_payload(
+            "script",
+            {},
+            {"command": f"bash {script}", "output": str(output_file)},
+            base_dir=script_dir,
+        )

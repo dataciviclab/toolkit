@@ -46,7 +46,7 @@ def test_list_registries(mini_workspace: Path) -> None:
     reg = repo["artifacts"][0]
     assert reg["name"] == "registry"
     assert reg["sections"]["datasets"] == 1
-    assert reg["sections"]["signals"] == 2
+    assert reg["sections"]["checks"] == 0
 
 
 @pytest.mark.contract
@@ -82,6 +82,26 @@ def test_show_registry_slug_missing(mini_workspace: Path) -> None:
         show_registry("eurostat", "signals", slug="missing", workspace=mini_workspace)
 
 
+@pytest.mark.contract
+def test_show_registry_nested_repo(tmp_path: Path) -> None:
+    """Repo annidato ({dominio}/{repo}): il nome è la chiave, non il path (v2)."""
+    nested = tmp_path / "pubblica-amministrazione" / "open-siope" / "registry"
+    nested.mkdir(parents=True)
+    (nested / "registry.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "datasets": [{"slug": "siope_entrate", "partitions": {"2024": 10}}],
+                "marts": [],
+                "gcs": {"prefix": "siope/", "clean": "year"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    data = show_registry("open-siope", "datasets", workspace=tmp_path)
+    assert data["data"][0]["slug"] == "siope_entrate"
+
+
 @pytest.mark.pure_unit
 def test_section_count_pure() -> None:
     """Conteggio entries per sezione del registry unico (pure_unit)."""
@@ -98,6 +118,8 @@ def test_section_count_pure() -> None:
     )
     assert _section_count("datasets", reg) == 2
     assert _section_count("marts", reg) == 1
-    assert _section_count("signals", reg) == 3
     assert _section_count("codelists", reg) == 2
+    assert _section_count("checks", reg) == 0
+    # vista v1 sintetizzata: una voce per dataset (non più i signals del file)
+    assert _section_count("signals", reg) == 2
     assert _section_count("entities", reg) == 0

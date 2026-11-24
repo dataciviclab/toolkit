@@ -1,10 +1,10 @@
 """toolkit registry — consulta e genera gli artifact registry.
 
-Legge i registry.json committati nei repo (fusion ADR): sezioni datasets,
-marts, signals, codelists, entities. Cross-repo, senza riprogettare la
-discovery.
+Legge i registry.json committati nei repo (schema v2, con compatibilità v1):
+sezioni datasets, marts, checks, codelists. Cross-repo, senza riprogettare
+la discovery.
 
-Speculare al tool MCP toolkit_registry.
+Speculare al tool MCP toolkit_pipeline (registry_list/registry_show).
 """
 
 from __future__ import annotations
@@ -44,7 +44,10 @@ def registry_list(json_output: bool = typer.Option(False, "--json", help="Output
 
 def registry_show(
     repo: str = typer.Argument(..., help="Repo (es. 'eurostat')"),
-    artifact: str = typer.Argument(..., help="Artifact (es. 'clean_catalog')"),
+    artifact: str = typer.Argument(
+        ...,
+        help="Sezione: datasets | marts | checks | codelists | signals (vista v1) | registry",
+    ),
     slug: str = typer.Option(None, "--slug", help="Filtra un'entry (dataset/mart/signal/codelist)"),
     json_output: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
@@ -141,82 +144,37 @@ def registry_build(
     flat: bool = typer.Option(False, "--flat", help="Layout flat per clean+mart (no year)"),
     write: bool = typer.Option(False, "--write", help="Scrive registry.json (default: dry-run)"),
     out: str = typer.Option("registry", "--out", help="Dir di output (default: registry)"),
-    only_entities: bool = typer.Option(
-        False,
-        "--only-entities",
-        help="Rigenera solo la sezione entities (dopo cambio semantic_types)",
-    ),
 ) -> None:
-    """Genera registry.json del repo (auto-discovery, fusion ADR).
+    """Genera registry.json del repo (auto-discovery, schema v2).
 
     Sostituisce i wrapper ``scripts/build_registry.py`` per-repo: scopre le
     sezioni dati per convenzione (``repo_dataset_dirs``) e deriva ``source_repo``
-    dal git remote. Il PathContract si configura con i flag (default: root/year).
+    dal git remote. Il contratto GCS si configura con i flag (default:
+    root/year) e viene scritto nel blocco ``gcs`` del registry.
 
     Uso:
         toolkit registry build                     # dry-run sul repo corrente
         toolkit registry build --write             # scrive registry/registry.json
         toolkit registry build --prefix eurostat --flat --write
-        toolkit registry build --write --only-entities  # solo grafo dopo cambio semantic_types
     """
-    from toolkit.registry.builders import build_registry, build_entity_graph, build_clean_catalog
+    from toolkit.registry.builders import build_registry
 
     repo_root = Path(repo).resolve() if repo else Path.cwd()
     out_dir = repo_root / out
     layout, contract, existing_path = _setup_build(repo_root, prefix, flat, out_dir)
 
-    # ── Modalità --only-entities: rigenera solo la sezione entities ──
-    if only_entities:
-        if not existing_path.is_file():
-            typer.echo(
-                "ERRORE: registry.json non esistente — usa `registry build --write` prima", err=True
-            )
-            raise typer.Exit(code=1)
-
-        existing = json.loads(existing_path.read_text(encoding="utf-8"))
-        catalog, _ = build_clean_catalog(layout, path_contract=contract)
-        graph = build_entity_graph(catalog)
-
-        existing["entities"] = {
-            "entities": graph.get("entities", {}),
-            "bridges": graph.get("bridges", []),
-        }
-
-        typer.echo(
-            f"entities aggiornate: {len(existing['entities']['entities'])} entità, "
-            f"{len(existing['entities']['bridges'])} bridge"
-        )
-
-        if not write:
-            typer.echo("Dry-run: usa --write per scrivere il file.")
-            return
-
-        existing_path.write_text(
-            json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-        typer.echo(f"scritto {existing_path} (solo entities)")
-        return
-
     # ── Modalità normale: rigenera tutto ──
-    existing_catalog = None
-    existing_signals = None
+    existing = None
     if existing_path.is_file():
         try:
             existing = json.loads(existing_path.read_text(encoding="utf-8"))
-            existing_catalog = {
-                "datasets": existing.get("datasets", []),
-                "marts": existing.get("marts", []),
-            }
-            existing_signals = {"signals": existing.get("signals", [])}
         except json.JSONDecodeError:
             typer.echo("WARN: registry.json esistente illeggibile — riparto da zero", err=True)
 
     result = build_registry(
         layout,
         path_contract=contract,
-        existing_catalog=existing_catalog,
-        existing_signals=existing_signals,
+        existing=existing,
     )
 
     all_warnings: list[str] = []
@@ -236,7 +194,7 @@ def registry_build(
     typer.echo(
         f"registry.json — datasets {len(registry['datasets'])}, "
         f"marts {len(registry['marts'])}, "
-        f"signals {len(registry['signals'])} (repo: {layout.source_repo})"
+        f"checks {len(registry['checks'])} (repo: {layout.source_repo})"
     )
     if not write:
         typer.echo("Dry-run: usa --write per scrivere il file.")

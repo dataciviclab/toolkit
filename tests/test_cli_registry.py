@@ -23,25 +23,25 @@ from tests.test_registry_builder import _make_repo  # noqa: E402
 runner = CliRunner()
 
 
-def _write_existing(out_dir: Path, with_mart_run: bool = True) -> None:
-    """Registry esistente con un mart con run storico (simula CI post-merge)."""
+def _write_existing(out_dir: Path, with_last_run: bool = True) -> None:
+    """Registry esistente con stato (simula CI post-merge: dataset non rieseguito)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     existing = {
-        "schema_version": 1,
+        "schema_version": 2,
         "repo": "open-siope",
         "source_repo": "dataciviclab/open-siope",
         "updated_at": "2026-08-01",
+        "gcs": {"prefix": "siope/", "clean": "year"},
         "datasets": [],
         "marts": [],
-        "signals": [],
+        "checks": [],
     }
-    if with_mart_run:
-        existing["marts"] = [
+    if with_last_run:
+        existing["datasets"] = [
             {
-                "slug": "my_dataset__mart_trend",
-                "dataset": "my_dataset",
-                "table": "mart_trend",
-                "run": {"run_id": "OLD", "year": 2025, "status": "SUCCESS"},
+                "slug": "my_dataset",
+                "partitions": {"2023": 40},
+                "last_run": {"at": "2025-12-31T00:00:00Z", "year": 2023, "status": "SUCCESS"},
             }
         ]
     (out_dir / "registry.json").write_text(
@@ -65,24 +65,35 @@ def test_build_dry_run_reports_counts(tmp_path: Path) -> None:
 
 
 @pytest.mark.pure_unit
-def test_build_write_keeps_registry_slim(tmp_path: Path) -> None:
-    """Il comando scrive registry.json snello: niente run su datasets/marts.
+def test_build_write_v2_shape(tmp_path: Path) -> None:
+    """Il comando scrive registry v2: contratto gcs, partitions, last_run, checks.
 
-    Registry snello (ADR): il blocco run vive solo nei signals (usato dal
-    dashboard); datasets/marts non lo portano (nessun consumer lo legge).
+    Niente location per voce, niente signals/entities/stage: i path si derivano
+    dal contratto (lab_connectors.registry.locations).
     """
     _make_repo(tmp_path, with_run=False)
     out = tmp_path / "outreg"
-    _write_existing(out, with_mart_run=True)
+    _write_existing(out, with_last_run=True)
     result = runner.invoke(
         app, ["registry", "build", "--repo", str(tmp_path), "--write", "--out", str(out)], obj={}
     )
     assert result.exit_code == 0, result.stdout + result.stderr
     payload = json.loads((out / "registry.json").read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 2
+    assert payload["gcs"]["clean"] == "year"
     mart = next(m for m in payload["marts"] if m["slug"] == "my_dataset__mart_trend")
-    assert "run" not in mart  # registry snello: niente run sui marts
+    assert "location" not in mart
+    assert mart["layout"] == "glob"
     ds = next(d for d in payload["datasets"] if d["slug"] == "my_dataset")
-    assert "run" not in ds  # registry snello: niente run sui datasets
+    assert "location" not in ds
+    assert "stage" not in ds
+    # partitions: locali (2024, 2025) + preserved (2023) — chiavi stringa nel JSON
+    assert set(ds["partitions"]) == {"2023", "2024", "2025"}
+    # last_run preservato da existing (nessun run locale)
+    assert ds["last_run"]["year"] == 2023
+    assert "signals" not in payload
+    assert "entities" not in payload
+    assert payload["checks"] == []
     assert payload["source_repo"] == "dataciviclab/toolkit" or payload["source_repo"]
 
 
@@ -92,84 +103,3 @@ def test_build_no_datasets_dir_fails(tmp_path: Path) -> None:
     result = runner.invoke(app, ["registry", "build", "--repo", str(tmp_path)], obj={})
     assert result.exit_code != 0
     assert "nessuna sezione dati" in result.stderr
-
-
-# ---------------------------------------------------------------------------
-# --only-entities flag
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.pure_unit
-def test_only_entities_dry_run(tmp_path: Path) -> None:
-    """--only-entities dry-run: ricalcola solo le entities senza scrivere."""
-    _make_repo(tmp_path, with_run=False)
-    out = tmp_path / "registry"
-    # Prima genera il registry completo
-    result = runner.invoke(
-        app, ["registry", "build", "--repo", str(tmp_path), "--write", "--out", str(out)], obj={}
-    )
-    assert result.exit_code == 0, result.stdout + result.stderr
-
-    # Poi dry-run --only-entities
-    result2 = runner.invoke(
-        app,
-        ["registry", "build", "--repo", str(tmp_path), "--only-entities", "--out", str(out)],
-        obj={},
-    )
-    assert result2.exit_code == 0, result2.stdout + result2.stderr
-    assert "entities" in result2.stdout
-    assert "Dry-run" in result2.stdout
-
-
-@pytest.mark.pure_unit
-def test_only_entities_preserves_other_sections(tmp_path: Path) -> None:
-    """--only-entities --write: rigenera solo entities, preserva datasets/marts/signals."""
-    _make_repo(tmp_path, with_run=False)
-    out = tmp_path / "registry"
-    # Prima genera tutto
-    runner.invoke(
-        app, ["registry", "build", "--repo", str(tmp_path), "--write", "--out", str(out)], obj={}
-    )
-    payload_before = json.loads((out / "registry.json").read_text(encoding="utf-8"))
-    ds_before = len(payload_before["datasets"])
-    marts_before = len(payload_before["marts"])
-    signals_before = len(payload_before["signals"])
-
-    # Poi --only-entities --write
-    result = runner.invoke(
-        app,
-        [
-            "registry",
-            "build",
-            "--repo",
-            str(tmp_path),
-            "--only-entities",
-            "--write",
-            "--out",
-            str(out),
-        ],
-        obj={},
-    )
-    assert result.exit_code == 0, result.stdout + result.stderr
-
-    payload_after = json.loads((out / "registry.json").read_text(encoding="utf-8"))
-    # Datasets, marts, signals invariati
-    assert len(payload_after["datasets"]) == ds_before
-    assert len(payload_after["marts"]) == marts_before
-    assert len(payload_after["signals"]) == signals_before
-    # Entities potrebbe essere diverso (ricostruito)
-    assert "entities" in payload_after
-
-
-@pytest.mark.pure_unit
-def test_only_entities_fails_without_existing_registry(tmp_path: Path) -> None:
-    """--only-entities senza registry.json esistente → errore."""
-    _make_repo(tmp_path, with_run=False)
-    out = tmp_path / "registry"
-    result = runner.invoke(
-        app,
-        ["registry", "build", "--repo", str(tmp_path), "--only-entities", "--out", str(out)],
-        obj={},
-    )
-    assert result.exit_code != 0
-    assert "registry.json non esistente" in result.stderr

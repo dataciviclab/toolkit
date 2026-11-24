@@ -104,6 +104,30 @@ def parquet_row_count(path: Path) -> int | None:
         return None
 
 
+def parquet_row_counts(paths: list[Path]) -> list[int | None]:
+    """Righe di più file Parquet con UNA sola connessione.
+
+    Aprire una connessione per file costa ~30 ms contro ~5 ms di query:
+    sul registry (migliaia di partizioni) la differenza è un ordine di
+    grandezza. Stessa semantica di ``parquet_row_count``: ``None`` per i
+    file mancanti o illeggibili.
+    """
+    if not paths:
+        return []
+    counts: list[int | None] = []
+    with _parquet_connect(paths[0]) as con:
+        for path in paths:
+            if not _is_s3_path(path) and not path.exists():
+                counts.append(None)
+                continue
+            try:
+                result = con.execute(f"SELECT COUNT(*) FROM {_rel(path)}").fetchone()
+                counts.append(int(result[0]) if result else None)
+            except Exception:
+                counts.append(None)
+    return counts
+
+
 def parquet_preview(
     path: Path,
     limit: int = 10,

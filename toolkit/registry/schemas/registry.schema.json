@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "registry.schema.json",
-  "title": "Lab Registry (fusionato)",
-  "description": "Artifact registry unico per repo: datasets + marts + signals + codelists + entities. Sostituisce clean_catalog/mart_catalog/pipeline_signals/codelists/entity_graph (ADR fusion).",
+  "title": "Lab Registry (v2)",
+  "description": "Artifact registry unico per repo (schema v2): catalogo di discovery del repo. `gcs` + `datasets[].partitions` + `marts[].layout` determinano i path pubblicati; lo stato operativo vive in `datasets[].last_run`; `checks` contiene solo anomalie. Le sezioni v1 (`signals`, `entities`) e i campi editoriali di esecuzione (`stage`, `source`) non sono più prodotti. La compatibilità v1/v2 è in lab_connectors.registry.models.",
   "type": "object",
   "required": [
     "schema_version",
@@ -13,7 +13,7 @@
   "properties": {
     "schema_version": {
       "type": "integer",
-      "const": 1
+      "const": 2
     },
     "repo": {
       "type": "string"
@@ -24,26 +24,42 @@
     "updated_at": {
       "type": "string"
     },
+    "gcs": {
+      "type": "object",
+      "description": "Contratto di pubblicazione del repo: i path non sono scritti voce per voce.",
+      "properties": {
+        "prefix": {
+          "type": "string",
+          "description": "Prefisso nel bucket, con trailing slash (es. 'open-politica/')."
+        },
+        "clean": {
+          "type": "string",
+          "enum": ["year", "flat"],
+          "description": "Layout del layer clean: 'year' = {slug}/{year}/..., 'flat' = {slug}/{slug}_{year}_clean.parquet."
+        }
+      },
+      "additionalProperties": false
+    },
     "datasets": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/dataset"
       },
-      "description": "Dataset del repo (ex clean_catalog). I dataset mart-only non hanno clean: columns e location sono opzionali."
+      "description": "Dataset del repo. I dataset mart-only non hanno clean: columns e partitions sono assenti."
     },
     "marts": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/mart"
       },
-      "description": "Tabelle mart (ex mart_catalog)."
+      "description": "Tabelle analitiche (mart) pubblicate, con il layout di partizionamento."
     },
-    "signals": {
+    "checks": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/signal"
+        "$ref": "#/$defs/check"
       },
-      "description": "Health check operativo (ex pipeline_signals.signals)."
+      "description": "Anomalie riproducibili dal config (vuoto = tutto a posto)."
     },
     "codelists": {
       "type": "array",
@@ -51,18 +67,6 @@
         "type": "string"
       },
       "description": "Nomi dei codelist del repo (contenuto letto dal CSV in repo, non embeddato)."
-    },
-    "entities": {
-      "type": "object",
-      "properties": {
-        "entities": {
-          "type": "object"
-        },
-        "bridges": {
-          "type": "array"
-        }
-      },
-      "description": "Grafo entità → dataset (ex entity_graph)."
     }
   },
   "additionalProperties": true,
@@ -72,7 +76,6 @@
       "required": [
         "slug",
         "name",
-        "description",
         "period"
       ],
       "properties": {
@@ -84,9 +87,6 @@
           "type": "string"
         },
         "description": {
-          "type": "string"
-        },
-        "source": {
           "type": "string"
         },
         "source_id": {
@@ -104,17 +104,9 @@
           "type": "string",
           "description": "Categoria principale del dataset (es. sanità, energia, finanza)"
         },
-        "stage": {
-          "type": "string",
-          "enum": [
-            "incubating",
-            "published",
-            "deprecated"
-          ],
-          "description": "incubating = parquet su GCS ma non in DE; published = ha pagina su data-explorer; deprecated = non piu' mantenuto"
-        },
         "period": {
           "type": "object",
+          "description": "Copertura dichiarata nel config (time_coverage) o estremi delle partizioni.",
           "required": [
             "start",
             "end"
@@ -126,37 +118,44 @@
             "end": {
               "type": "integer"
             }
-          },
-          "additionalProperties": false,
-          "description": "Copertura temporale dei dati (da time_coverage del dataset.yml)."
+          }
+        },
+        "partitions": {
+          "type": "object",
+          "description": "Partizioni clean pubblicate: chiave di partizione (anno o legislatura) -> righe del parquet. Assente per i mart-only e per le entry non ancora rieseguite.",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/column"
+          }
         },
         "mart_refs": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "description": "Slug mart appartenenti al dataset, convention {dataset}__{mart} (vedi mart_catalog.schema.json). Opzionale."
+          "description": "Slug dei mart del dataset ({dataset}__{table})."
         },
-        "columns": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/column"
-          },
-          "description": "Colonne del clean. Assente/vuoto per i dataset mart-only."
+        "last_run": {
+          "$ref": "#/$defs/last_run"
         },
         "location": {
-          "$ref": "#/$defs/location"
+          "type": "string",
+          "description": "Override del path GCS (solo per pubblicazioni fuori contratto): normalmente assente e derivato da gcs + partitions."
         }
-      },
-      "additionalProperties": true
+      }
     },
     "column": {
       "type": "object",
       "required": [
         "name",
         "type",
-        "role",
-        "description"
+        "role"
       ],
       "properties": {
         "name": {
@@ -167,107 +166,40 @@
         },
         "role": {
           "type": "string",
-          "enum": [
-            "dimension",
-            "metric"
-          ]
+          "enum": ["dimension", "metric"]
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "Descrizione editoriale (assente se vuota)."
         },
         "semantic_type": {
           "type": "string",
-          "description": "Tipo semantico della colonna (es. municipality_code, fiscal_code, ...)"
+          "description": "Tipo semantico dal vocabolario condiviso (semantic_types.yaml)."
         }
-      },
-      "additionalProperties": false
+      }
     },
-    "location": {
+    "last_run": {
       "type": "object",
+      "description": "Esecuzione più recente su tutte le partizioni (non l'anno più alto).",
       "required": [
-        "type",
-        "path"
-      ],
-      "properties": {
-        "type": {
-          "type": "string",
-          "enum": [
-            "gcs",
-            "local"
-          ]
-        },
-        "path": {
-          "type": "string"
-        },
-        "multi_file": {
-          "type": "boolean",
-          "description": "true = path con glob su più file (clean multi-anno, mart per-anno su dataset multi-anno); false = file singolo (clean mono-anno, mart flat o mono-anno)."
-        }
-      },
-      "additionalProperties": false
-    },
-    "run": {
-      "type": "object",
-      "required": [
-        "run_id",
+        "at",
         "year",
         "status"
       ],
       "properties": {
-        "run_id": {
-          "type": "string"
+        "at": {
+          "type": "string",
+          "description": "started_at ISO 8601 (UTC) della run."
         },
         "year": {
-          "type": "integer"
+          "type": "integer",
+          "description": "Chiave di partizione della run (anno o legislatura)."
         },
         "status": {
           "type": "string",
-          "enum": [
-            "SUCCESS",
-            "FAILED",
-            "PENDING",
-            "SKIPPED",
-            "RUNNING",
-            "DRY_RUN"
-          ]
-        },
-        "quality_score": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "number"
-          }
-        },
-        "output_rows": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "integer"
-          }
-        },
-        "started_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "finished_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "duration_seconds": {
-          "type": "number"
-        },
-        "updated_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "output_bytes": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "integer"
-          },
-          "description": "Byte prodotti per layer (es. {\"raw\": 6961784}). Presente anche quando output_rows e' null (es. layer raw)."
+          "description": "Stato della run (SUCCESS/FAILED/RUNNING/DRY_RUN/ABORTED)."
         }
-      },
-      "additionalProperties": true,
-      "description": "Blocco run condiviso — inline copy da run.schema.json (canonica)."
+      }
     },
     "mart": {
       "type": "object",
@@ -275,60 +207,42 @@
         "slug",
         "dataset",
         "table",
-        "location"
+        "layout"
       ],
       "properties": {
         "slug": {
           "type": "string",
-          "pattern": "^[a-z0-9_]+__[a-z0-9_]+$",
-          "description": "Slug canonico del mart: {dataset}__{mart_name} (es. eurostat_gdp_nuts3__mart_geo_benchmark)."
+          "description": "{dataset}__{table}"
         },
         "dataset": {
-          "type": "string",
-          "description": "Slug del dataset clean parent (vedi clean_catalog.schema.json)."
+          "type": "string"
         },
         "table": {
+          "type": "string"
+        },
+        "layout": {
           "type": "string",
-          "description": "Nome della tabella mart (es. mart_geo_benchmark)."
+          "enum": ["flat", "year", "glob"],
+          "description": "flat = {dataset}/{table}.parquet; year = {dataset}/{year}/{table}.parquet; glob = {dataset}/*/{table}.parquet."
         },
-        "name": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
-        "location": {
-          "$ref": "#/$defs/location"
+        "year": {
+          "type": "integer",
+          "description": "Obbligatorio con layout=year."
         },
         "primary_key": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "description": "Chiave primaria dichiarata (dal dataset.yml mart.validate.table_rules)."
+          "description": "Chiave primaria dichiarata in dataset.yml (mart.validate.table_rules)."
         },
-        "required_columns": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Colonne richieste dichiarate (dal dataset.yml)."
-        },
-        "min_rows": {
-          "type": "integer",
-          "description": "Soglia minima di righe dichiarata (dal dataset.yml)."
-        },
-        "columns": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/column"
-          },
-          "description": "Schema colonne reale (dal parquet locale in derive_mode=local). Opzionale in v1."
+        "location": {
+          "type": "string",
+          "description": "Override del path GCS (normalmente assente e derivato)."
         }
-      },
-      "additionalProperties": true
+      }
     },
-    "signal": {
+    "check": {
       "type": "object",
       "required": [
         "id",
@@ -336,30 +250,18 @@
       ],
       "properties": {
         "id": {
-          "type": "string"
-        },
-        "source_id": {
-          "type": "string"
+          "type": "string",
+          "description": "Slug del dataset (o nome del controllo)."
         },
         "status": {
           "type": "string",
-          "enum": [
-            "ok",
-            "warn",
-            "error"
-          ]
-        },
-        "label": {
-          "type": "string"
+          "enum": ["warn", "error"]
         },
         "detail": {
           "type": "string"
         },
         "action": {
           "type": "string"
-        },
-        "run": {
-          "$ref": "#/$defs/run"
         }
       }
     }

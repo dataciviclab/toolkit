@@ -169,6 +169,29 @@ def parquet_columns(
     return columns
 
 
+def clean_partition_rows(manifest: DatasetManifest) -> dict[int, int]:
+    """Righe clean per partizione pubblicata (parquet locali del dataset).
+
+    Legge i parquet del config (una connessione DuckDB per dataset) e ritorna
+    ``{partizione: righe}`` solo per i file presenti. Il conteggio viene dal
+    parquet, non dai run record: il layer clean può essere saltato da un run
+    incrementale e ``output_rows.clean`` resterebbe vuoto (22% dei dataset-anno
+    nel workspace).
+    """
+    from toolkit.core.duckdb_shape import parquet_row_counts
+
+    years: list[int] = []
+    paths: list[Path] = []
+    for year in sorted(manifest.years):
+        path = clean_parquet_path(manifest.cfg, year)
+        if path is not None:
+            years.append(year)
+            paths.append(path)
+
+    counts = parquet_row_counts(paths)
+    return {year: count for year, count in zip(years, counts, strict=False) if count is not None}
+
+
 def latest_clean_columns(
     manifest: DatasetManifest,
     alias_map: dict[str, str] | None = None,

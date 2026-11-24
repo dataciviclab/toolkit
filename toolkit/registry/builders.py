@@ -1,31 +1,42 @@
-"""Builder degli artifact registry condivisi.
+"""Builder dell'artifact registry condiviso (schema v2).
 
-Genera l'artifact registry UNICO per repo (fusion ADR): ``registry.json``
-con sezioni ``datasets``, ``marts``, ``signals``, ``codelists``, ``entities``.
-Le sezioni sono proiezioni dello stesso stato (dataset.yml + run records +
-parquet locali + GCS), validate contro ``registry.schema.json``.
+Genera l'artifact registry UNICO per repo (fusion ADR): ``registry.json`` con
+sezioni ``datasets``, ``marts``, ``checks``, ``codelists``.
 
-Tutta la lettura del runtime è delegata al toolkit (config model, path resolver,
-run_state, parquet_schema) — qui solo proiezione e arricchimento di catalogo.
+Il registry è un catalogo di discovery, non un report di esecuzione:
 
-Derive-mode:
-- ``local`` (default): schemi e anni dai parquet locali e dai run records.
-  Nessuna lettura GCS.
+- ``datasets``: cosa esiste (metadati, colonne, partizioni pubblicate con le
+  righe clean, ultima esecuzione) — niente location per voce: il contratto
+  GCS del repo (``gcs.prefix``/``gcs.clean``) e ``partitions`` permettono ai
+  consumer di derivare i path (``lab_connectors.registry.locations``);
+- ``marts``: tabelle analitiche con il *come* sono partizionate (``layout``);
+- ``checks``: solo anomalie riproducibili dal config (clean.sql mancante,
+  nessun mart) — vuoto quando è tutto a posto;
+- ``codelists``: nomi dei codelist (contenuto letto dai CSV del repo).
+
+Il contratto v1 (``location`` per voce, ``signals``, ``entities``, ``stage``)
+non è più prodotto. ``schema_version: 2``; il parsing di v1 e v2 è
+centralizzato in ``lab_connectors.registry.models``.
+
+Derive-mode: locale. Schemi, partizioni e run records vengono dal workspace,
+nessuna lettura GCS.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from lab_connectors.registry.locations import normalize_prefix
+
 from toolkit.registry.layout import DatasetManifest, RepoLayout, iter_manifests
 from toolkit.registry.paths import PathContract
-from toolkit.registry.runs import latest_run_record, run_block
+from toolkit.registry.runs import last_run, latest_run_record
 from toolkit.registry.schema_reader import (
-    clean_parquet_path,
+    clean_partition_rows,
     latest_clean_columns,
     load_semantic_types,
     load_valid_types,
@@ -35,13 +46,7 @@ from toolkit.registry.validation import validate_artifact
 
 log = logging.getLogger(__name__)
 
-
-def _section_of(manifest: DatasetManifest, layout: RepoLayout) -> str:
-    """Nome della sezione del layout che contiene il manifest (es. 'compose')."""
-    try:
-        return str(manifest.yml_path.relative_to(layout.repo_root).parts[0])
-    except ValueError:
-        return ""
+SCHEMA_VERSION = 2
 
 
 def _mart_ok(manifest: DatasetManifest) -> bool:
@@ -65,43 +70,82 @@ def _dedup_tags(tags: Iterable[str]) -> list[str]:
     return out
 
 
+def _omit_empty(entry: dict[str, Any]) -> dict[str, Any]:
+    """Rimuove i campi vuoti (``""``, ``None``, liste/dict vuoti).
+
+    Il contratto v2 non scrive campi vuoti: la stessa entry costava ~209 KB
+    di sole ``"description": ""`` su 7.215 colonne. Il parsing tollera
+    l'assenza (``.get(..., "")``), quindi il file resta compatibile.
+
+    Si applica anche alle colonne: sono il grosso del file e la descrizione
+    è quasi sempre vuota finché non arriva l'arricchimento editoriale.
+    """
+    out: dict[str, Any] = {}
+    for key, value in entry.items():
+        if key == "columns" and isinstance(value, list):
+            value = [_omit_empty(col) if isinstance(col, dict) else col for col in value]
+        if value not in ("", None) and not (isinstance(value, (list, dict)) and not value):
+            out[key] = value
+    return out
+
+
+def _partition_map(partitions: Mapping[Any, int] | None) -> dict[int, int]:
+    """Normalizza le chiavi di ``partitions`` a interi (anno o legislatura)."""
+    if not partitions:
+        return {}
+    out: dict[int, int] = {}
+    for key, value in partitions.items():
+        try:
+            out[int(key)] = int(value)
+        except (TypeError, ValueError):
+            continue
+    return dict(sorted(out.items()))
+
+
 # ---------------------------------------------------------------------------
-# clean_catalog
+# datasets
 # ---------------------------------------------------------------------------
 
 
-# Chiavi valide per una entry dataset (registry snello): il builder le deriva
-# da dataset.yml/parquet, le entry editoriali preservate (senza parquet locale)
-# vengono filtrate su questi campi — le chiavi morte (run, years,
-# registry_source) non devono tornare dall'existing.
+# Chiavi valide per una entry dataset. Il builder le deriva da dataset.yml,
+# parquet e run records; le entry editoriali preservate (senza parquet locale)
+# vengono filtrate su questi campi — le chiavi v1 morte (signals, entities,
+# stage, source) non devono tornare dall'existing.
 _DATASET_ENTRY_FIELDS: tuple[str, ...] = (
     "slug",
     "name",
     "description",
-    "source",
     "source_id",
-    "period",
     "tags",
     "category",
+    "period",
+    "partitions",
     "columns",
-    "location",
-    "stage",
     "mart_refs",
+    "last_run",
+    "location",
 )
 
 
 def _slim_dataset_entry(entry: dict[str, Any]) -> dict[str, Any]:
-    """Filtra una entry dataset (es. editoriale) sulle sole chiavi contratto.
+    """Filtra una entry dataset (es. editoriale v1) sulle chiavi contratto v2.
 
     Ricalcola anche ``role`` delle colonne con ``semantic_type`` → dimension:
     l'existing storico può avere role sbagliati (es. ``year`` → metric) che il
     builder deriva correttamente solo sulle entry con parquet locale.
+
+    ``location`` resta un override ammesso: durante la transizione v1→v2 le
+    entry non rieseguite non hanno ancora ``partitions`` e senza location
+    perderebbero il parquet pubblicato.
     """
     slim = {k: v for k, v in entry.items() if k in _DATASET_ENTRY_FIELDS}
+    slim["partitions"] = _partition_map(slim.get("partitions"))
+    if isinstance(slim.get("location"), dict):
+        slim["location"] = slim["location"].get("path") or ""
     for col in slim.get("columns", []) or []:
         if col.get("semantic_type") and col.get("role") != "dimension":
             col["role"] = "dimension"
-    return slim
+    return _omit_empty(slim)
 
 
 def build_clean_catalog(
@@ -111,23 +155,24 @@ def build_clean_catalog(
     semantic_types_path: Path | None = None,
     path_contract: PathContract | None = None,
 ) -> tuple[dict[str, Any], dict[str, list[str]]]:
-    """Costruisce il clean_catalog per il layout del repo.
+    """Costruisce la sezione ``datasets`` del registry.
 
     Args:
         layout: Struttura del repo (dataset_dirs, source_repo).
-        existing: Catalogo precedente (metadata editoriali preservati:
-            name/description/source/stage umani, role/semantic_type colonne).
+        existing: Registry precedente (metadata editoriali preservati:
+            name/description/source_id, role/semantic_type colonne, partitions
+            e last_run delle partizioni non rieseguite).
         slug: Limita a un singolo slug (per test e debug).
         semantic_types_path: Path a semantic_types.yaml (opzionale).
-        path_contract: Contratto GCS (default: layout DI, year).
+        path_contract: Contratto GCS (accettato per compatibilità di firma:
+            i path non sono più scritti nel registry).
 
     Returns:
         Tuple (catalog, errors) con errors = {"derive": [...], "validation": [...]}.
         Gli errori derive NON bloccano il catalogo: le entry non derivabili
-        sono escluse e segnalate. Gli errori validation indicano un artifact
-        non conforme allo schema.
+        sono escluse e segnalate.
     """
-    contract = path_contract or PathContract()
+    del path_contract  # i path si derivano dal contratto gcs a valle
     alias_map = load_semantic_types(semantic_types_path)
     valid_types = load_valid_types(semantic_types_path)
 
@@ -138,66 +183,82 @@ def build_clean_catalog(
 
     datasets: list[dict[str, Any]] = []
     derive_errors: list[str] = []
+    coverage_gaps: list[str] = []
 
     for manifest in iter_manifests(layout):
         if slug and manifest.slug != slug:
             continue
 
-        columns, latest_year = latest_clean_columns(manifest, alias_map)
-        if columns is None and not manifest.is_mart_only:
+        old = editorial.get(manifest.slug)
+        columns, _latest_year = latest_clean_columns(manifest, alias_map)
+        local_partitions = clean_partition_rows(manifest)
+        if manifest.has_clean_sql and not local_partitions:
+            # Il run ha prodotto clean per questo dataset? Se no è un run
+            # selettivo (o un dataset fallito): `partitions` sarebbe parziale.
+            coverage_gaps.append(manifest.slug)
+        # Le partizioni non rieseguite (CI: run per dataset) restano dal
+        # registry committato; il locale vince sempre sulla stessa chiave.
+        partitions = _partition_map(
+            {**_partition_map((old or {}).get("partitions")), **local_partitions}
+        )
+
+        if not partitions and columns is None and not manifest.is_mart_only:
             # Nessun parquet locale: possibile solo se l'entry è editoriale
             # (preservata) — altrimenti errore e skip.
-            if manifest.slug in editorial:
-                datasets.append(_slim_dataset_entry(editorial[manifest.slug]))
+            if old is not None:
+                datasets.append(_slim_dataset_entry(old))
                 continue
             derive_errors.append(
                 f"{manifest.slug}: nessun parquet clean locale "
                 f"per anni {manifest.years} (runnare la pipeline per generarlo)"
             )
             continue
-        if latest_year is None and not manifest.is_mart_only:
-            derive_errors.append(f"{manifest.slug}: schema letto ma anno non risolvibile")
-            continue
-
-        years_present = sorted(y for y in manifest.years if clean_parquet_path(manifest.cfg, y))
-        # mart-only: nessun clean locale → period dagli years dichiarati
-        years_eff = years_present or ([latest_year] if latest_year else list(manifest.years))
-        if not years_eff:
-            derive_errors.append(f"{manifest.slug}: years non dichiarati — period non risolvibile")
-            continue
 
         entry: dict[str, Any] = {
             "slug": manifest.slug,
             "name": manifest.slug.replace("_", " ").title(),
             "description": manifest.description,
-            "source": "",
             "source_id": manifest.source_id,
-            "period": manifest.period or {"start": years_eff[0], "end": years_eff[-1]},
             "tags": _dedup_tags(manifest.tags),
             "category": manifest.category,
-            "stage": "incubating",
         }
-        # Un dataset mart-only non ha clean: niente columns/location. La card
-        # resta comunque visibile e i mart sono linkati da mart_refs.
+        # period: time_coverage dichiarato vince; altrimenti gli estremi delle
+        # partizioni pubblicate; altrimenti gli anni dichiarati nel config.
+        if manifest.period:
+            entry["period"] = manifest.period
+        elif partitions:
+            years = sorted(partitions)
+            entry["period"] = {"start": years[0], "end": years[-1]}
+        elif manifest.years:
+            entry["period"] = {"start": min(manifest.years), "end": max(manifest.years)}
+        if partitions:
+            entry["partitions"] = partitions
+        # Un dataset mart-only non ha clean: niente columns/partitions. La card
+        # resta visibile e i mart sono linkati da mart_refs.
         if columns is not None:
             entry["columns"] = columns
-            entry["location"] = contract.clean_location(manifest.slug, years_eff)
+
+        # Mai restringere la copertura pubblicata: se l'existing dichiarava un
+        # glob multi-file e le partizioni note sono una sola (out/ locale
+        # parziale, run selettiva), derivare un path puntuale nasconderebbe le
+        # altre partizioni pubblicate. Si conserva la location v1 come override.
+        old_path = ""
+        if old:
+            old_loc = old.get("location")
+            old_path = old_loc.get("path", "") if isinstance(old_loc, dict) else (old_loc or "")
+        if old_path and "*" in old_path and len(partitions) <= 1:
+            entry["location"] = old_path
 
         # Merge editoriale: i campi umani sovrascrivono. role è SEMPRE
-        # derivato (semantic_type/type), mai dall'editoriale: l'existing
-        # storico può avere role sbagliati (es. year→metric) che bloccherebbero
-        # il fix. description e semantic_type restano editabili a mano.
-        # semantic_type viene normalizzato: se il valore storico è un alias
-        # o un tipo invalido, viene risolto al tipo corretto dal vocabolario.
-        old = editorial.get(manifest.slug)
+        # derivato (semantic_type/type), mai dall'editoriale.
         if old:
-            for field in ("name", "description", "source", "source_id", "stage"):
+            for field in ("name", "description", "source_id"):
                 if old.get(field):
                     entry[field] = old[field]
-            # period: il time_coverage dichiarato nel config ha priorita'
-            # sull'editoriale; l'editoriale copre solo l'assenza di time_coverage
-            # (senza questa eccezione un cambio di copertura nel config non
-            # propagherebbe mai al registry — regression energia-italia #6)
+            # period: il time_coverage dichiarato nel config ha priorità
+            # sull'editoriale; l'editoriale copre solo l'assenza (senza questa
+            # eccezione un cambio di copertura nel config non propagherebbe
+            # mai al registry — regression energia-italia #6)
             if not manifest.period and old.get("period"):
                 entry["period"] = old["period"]
             old_cols = {c.get("name"): c for c in old.get("columns", [])}
@@ -225,7 +286,10 @@ def build_clean_catalog(
                 f"{manifest.slug}__{t.get('name')}" for t in manifest.mart_tables if t.get("name")
             ]
 
-        datasets.append(entry)
+        entry["last_run"] = last_run(latest_run_record(str(manifest.yml_path))) or (
+            old.get("last_run") if old else None
+        )
+        datasets.append(_omit_empty(entry))
 
     # Preserva entry editoriali senza parquet locale né derive (es. adottati)
     derived_slugs = {d["slug"] for d in datasets}
@@ -234,21 +298,33 @@ def build_clean_catalog(
             datasets.append(_slim_dataset_entry(ds))
 
     catalog: dict[str, Any] = {
-        "schema_version": 1,
-        "name": "Lab Clean Registry",
-        "description": "Catalogo canonico dei clean parquet pubblici del Lab.",
         "source_repo": layout.source_repo,
-        "updated_at": str(datetime.now(UTC).date()),
         "datasets": sorted(datasets, key=lambda d: d["slug"]),
     }
-
-    # Validazione: sul registry completo (registry.schema.json), non per sezione.
-    return catalog, {"derive": derive_errors, "validation": []}
+    return catalog, {"derive": derive_errors, "validation": [], "coverage": coverage_gaps}
 
 
 # ---------------------------------------------------------------------------
-# mart_catalog
+# marts
 # ---------------------------------------------------------------------------
+
+
+def _mart_layout(
+    manifest: DatasetManifest, contract: PathContract
+) -> tuple[str, int | None, str | None]:
+    """Layout di pubblicazione del mart: (layout, year, errore).
+
+    Rispecchia il runner: tabella con ``years`` esplicite → flat; repo flat →
+    flat; dataset multi-anno → glob (i file per-anno hanno lo stesso nome);
+    mono-anno → path puntuale.
+    """
+    if contract.mart_layout == "flat":
+        return "flat", None, None
+    if len(manifest.years) > 1:
+        return "glob", None, None
+    if len(manifest.years) == 1:
+        return "year", manifest.years[0], None
+    return "", None, "layout 'year' senza years dichiarati"
 
 
 def build_mart_catalog(
@@ -256,11 +332,10 @@ def build_mart_catalog(
     path_contract: PathContract | None = None,
     slug: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, list[str]]]:
-    """Costruisce il mart_catalog per il layout del repo.
+    """Costruisce la sezione ``marts``.
 
-    Sorgenti: sezione ``mart:`` del dataset.yml (tables, validate.table_rules)
-    + run records (blocco run). Nessuna lettura parquet in v1 (columns
-    opzionale, non popolato).
+    Nessun path: ogni mart dichiara ``layout`` (flat|year|glob) e, per
+    ``year``, l'anno. Il path è derivato dal contratto ``gcs`` del repo.
     """
     contract = path_contract or PathContract()
     marts: list[dict[str, Any]] = []
@@ -269,6 +344,7 @@ def build_mart_catalog(
     for manifest in iter_manifests(layout):
         if slug and manifest.slug != slug:
             continue
+        rules = manifest.mart_rules or {}
         for table in manifest.mart_tables:
             name = table.get("name")
             if not name:
@@ -279,125 +355,58 @@ def build_mart_catalog(
                 "table": name,
             }
             # Tabella con years esplicite = multi-anno: il runner la scrive
-            # flat (data/mart/{dataset}/{table}.parquet, no dir anno) → la
-            # location pubblicata deve essere flat. Tabella per-anno → year.
-            table_years = table.get("years")
-            if table_years:
-                # Flat: stessa struttura del runner multi-anno.
-                entry["location"] = contract.mart_location(manifest.slug, name, year=None)
-                marts.append(entry)
-                continue
-            year = max(manifest.years, default=None)
-            if contract.mart_layout == "year" and year is None:
-                derive_errors.append(
-                    f"{manifest.slug}__{name}: location mart non risolvibile "
-                    "(layout 'year' senza years dichiarati)"
-                )
-                continue
-            entry["location"] = contract.mart_location(
-                manifest.slug, name, year=year, years=sorted(manifest.years)
-            )
-            marts.append(entry)
+            # flat (data/mart/{dataset}/{table}.parquet, no dir anno).
+            if table.get("years"):
+                entry["layout"] = "flat"
+            else:
+                mart_layout, year, error = _mart_layout(manifest, contract)
+                if error:
+                    derive_errors.append(f"{manifest.slug}__{name}: {error}")
+                    continue
+                entry["layout"] = mart_layout
+                if year is not None:
+                    entry["year"] = year
+            primary_key = (rules.get(name) or {}).get("primary_key")
+            if primary_key:
+                entry["primary_key"] = list(primary_key)
+            marts.append(_omit_empty(entry))
 
-    catalog: dict[str, Any] = {
-        "schema_version": 1,
-        "name": "Lab Mart Registry",
-        "description": "Tabelle analitiche (mart) pubblicate dal Lab.",
-        "source_repo": layout.source_repo,
-        "updated_at": str(datetime.now(UTC).date()),
-        "marts": sorted(marts, key=lambda m: m["slug"]),
-    }
+    catalog: dict[str, Any] = {"marts": sorted(marts, key=lambda m: m["slug"])}
     return catalog, {"derive": derive_errors, "validation": []}
 
 
 # ---------------------------------------------------------------------------
-# pipeline_signals
+# checks (anomalie)
 # ---------------------------------------------------------------------------
 
 
-def build_signals(
-    layout: RepoLayout,
-    topic: str = "pipeline_state",
-) -> tuple[dict[str, Any], dict[str, list[str]]]:
-    """Costruisce pipeline_signals per ACB (repo-signals standard).
+def build_checks(layout: RepoLayout) -> tuple[dict[str, Any], dict[str, list[str]]]:
+    """Anomalie di struttura riproducibili dal config (vuoto = tutto a posto).
 
-    Semantica status: ok = struttura coerente + mart presente; warn = nessun
-    mart; error = struttura rotta (clean.sql mancante per dataset non-compose).
-    NOTA: status=ok NON significa pubblicato (vedi clean_catalog.stage).
+    Sostituisce la vecchia sezione ``signals``: solo voci ``warn``/``error``,
+    nessuna riga di stato "ok" per ogni dataset (era il 16% del file senza
+    aggiungere informazione — lo stato operativo vive in ``last_run``).
 
-    Il fallback sui run storici (run record locale mancante in CI) è
-    centralizzato in ``_merge_existing_runs`` (build_registry).
+    Unico controllo oggi: dataset senza mart. La vecchia regola "mancante
+    sql/clean.sql" era irraggiungibile (``is_mart_only`` è definito come
+    ``not has_clean_sql``), per questo tutte le 559 signals storiche erano
+    ``ok``.
     """
-    signals: list[dict[str, Any]] = []
-    compose_ids: set[str] = set()
+    checks: list[dict[str, Any]] = []
 
     for manifest in iter_manifests(layout):
-        mart_ok = _mart_ok(manifest)
-        is_compose = manifest.is_mart_only
+        if _mart_ok(manifest):
+            continue
+        checks.append(
+            {
+                "id": manifest.slug,
+                "status": "warn",
+                "detail": "nessun mart",
+                "action": "aggiungere mart SQL per completare il dataset",
+            }
+        )
 
-        failures: list[str] = []
-        if not is_compose and not manifest.has_clean_sql:
-            failures.append("missing sql/clean.sql")
-
-        if failures:
-            status = "error"
-            action = "correggere la struttura del dataset"
-        elif not mart_ok:
-            status = "warn"
-            action = "aggiungere mart SQL per completare il dataset"
-        else:
-            status = "ok"
-            action = ""
-
-        years_label = _years_label(manifest.years)
-        mart_label = "mart: si" if mart_ok else "mart: no"
-        detail = f"{years_label} — {mart_label}"
-        if failures:
-            detail += " — " + "; ".join(failures)
-
-        signal: dict[str, Any] = {
-            "id": manifest.slug,
-            "source_id": manifest.source_id,
-            "status": status,
-            "label": manifest.slug,
-            "detail": detail,
-            "action": action,
-        }
-        run_rec = latest_run_record(str(manifest.yml_path))
-        if run_block(run_rec):
-            signal["run"] = run_block(run_rec)
-        signals.append(signal)
-
-        # Prefisso "compose:" per i manifest in sezione compose del layout
-        if _section_of(manifest, layout) == "compose":
-            compose_ids.add(manifest.slug)
-
-    for sig in signals:
-        if sig["id"] in compose_ids:
-            sig["id"] = f"compose:{sig['id']}"
-
-    by_status = {"ok": 0, "warn": 0, "error": 0}
-    for s in signals:
-        by_status[s["status"]] = by_status.get(s["status"], 0) + 1
-
-    payload: dict[str, Any] = {
-        "schema_version": "1",
-        "generated_at": datetime.now(UTC).date().isoformat(),
-        "repo": layout.source_repo.split("/")[-1] or "unknown",
-        "topic": topic,
-        "summary": {"total": len(signals), "by_status": by_status},
-        "signals": signals,
-    }
-    return payload, {"derive": [], "validation": []}
-
-
-def _years_label(years: Iterable[int]) -> str:
-    years = sorted(years)
-    if not years:
-        return "anni: ?"
-    if len(years) == 1:
-        return f"anno {years[0]}"
-    return f"anni {years[0]}-{years[-1]}"
+    return {"checks": checks}, {"derive": [], "validation": []}
 
 
 # ---------------------------------------------------------------------------
@@ -414,31 +423,13 @@ def build_codelists(
     Legge ``{repo_root}/codelists/*.csv`` (convenzione eurostat: geo.csv,
     units.csv, freq.csv, ...) e pubblica solo i nomi come lista. Il contenuto
     (le righe) NON è embeddato: è letto dal CSV del repo dal consumer on-demand
-    (pattern eurostat-mcp). Embeddare le righe rendeva il registry enorme
-    (es. eurostat: codelists = 60% del file) senza che alcun consumer leggesse
-    i valori dal registry.
-
-    Returns:
-        Tuple (payload, errors) con errors = {"derive": [], "validation": [...]}.
-        Se la dir codelists non esiste, ritorna una lista vuota senza errori
-        (codelists è opzionale).
+    (pattern eurostat-mcp). Se la dir non esiste, lista vuota senza errori.
     """
     codelists_dir = codelists_dir or (layout.repo_root / "codelists")
-
     if not codelists_dir.is_dir():
-        return (
-            {"schema_version": 1, "source_repo": layout.source_repo, "codelists": []},
-            {"derive": [], "validation": []},
-        )
-
+        return {"codelists": []}, {"derive": [], "validation": []}
     names = sorted(p.stem for p in codelists_dir.glob("*.csv"))
-    payload: dict[str, Any] = {
-        "schema_version": 1,
-        "source_repo": layout.source_repo,
-        "updated_at": str(datetime.now(UTC).date()),
-        "codelists": names,
-    }
-    return payload, {"derive": [], "validation": []}
+    return {"codelists": names}, {"derive": [], "validation": []}
 
 
 # ---------------------------------------------------------------------------
@@ -450,101 +441,109 @@ def build_registry(
     layout: RepoLayout,
     *,
     path_contract: PathContract | None = None,
-    existing_catalog: dict[str, Any] | None = None,
-    existing_signals: dict[str, Any] | None = None,
+    existing: dict[str, Any] | None = None,
     semantic_types_path: Path | None = None,
     slug: str | None = None,
 ) -> dict[str, Any]:
-    """Genera l'artifact registry UNICO per un repo (fusion ADR).
+    """Genera l'artifact registry UNICO per un repo (schema v2).
 
-    Il file ``registry.json`` committato sostituisce i 5 artifact separati
-    (clean_catalog/mart_catalog/pipeline_signals/codelists/entity_graph):
-    le proiezioni sono sezioni dello stesso dict, validato contro
-    ``registry.schema.json``.
+    Args:
+        layout: Repo layout.
+        path_contract: Contratto GCS del repo (``--prefix``/``--flat``).
+        existing: Registry committato precedente: metadata editoriali,
+            partizioni e ultima esecuzione delle entry non rieseguite.
+        semantic_types_path: Vocabolario semantic types (opzionale).
+        slug: Limita a un singolo slug (debug).
 
     Returns:
-        Dict ``{"registry": {...}, "errors": {...}}`` con:
-        - ``registry``: il payload unico (``datasets``, ``marts``,
-          ``signals``, ``codelists``, ``entities``, ``summary``);
-        - ``errors``: per sezione ``{"derive": [...], "validation": [...]}``
-          + ``registry`` per la validazione dell'intero artifact.
+        Dict ``{"registry": {...}, "errors": {...}}`` con ``errors`` per
+        sezione (``derive``/``validation``) + ``registry`` per la validazione
+        dell'intero artifact.
     """
+    contract = path_contract or PathContract()
     catalog, cc_errors = build_clean_catalog(
         layout,
-        existing=existing_catalog,
+        existing=existing,
         semantic_types_path=semantic_types_path,
-        path_contract=path_contract,
+        path_contract=contract,
         slug=slug,
     )
-    marts, mc_errors = build_mart_catalog(layout, path_contract=path_contract, slug=slug)
-    signals, ps_errors = build_signals(layout)
+    marts, mc_errors = build_mart_catalog(layout, path_contract=contract, slug=slug)
+    checks_payload, ck_errors = build_checks(layout)
     codelists, cl_errors = build_codelists(layout)
-    graph = build_entity_graph(catalog, semantic_types_path=semantic_types_path)
+
+    gcs: dict[str, str] = {"clean": contract.clean_layout}
+    prefix = normalize_prefix(contract.prefix)
+    if prefix:
+        gcs["prefix"] = prefix
 
     registry: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": SCHEMA_VERSION,
         "repo": layout.source_repo.split("/")[-1] or "unknown",
         "source_repo": layout.source_repo,
         "updated_at": str(datetime.now(UTC).date()),
+        "gcs": gcs,
         "datasets": catalog.get("datasets", []),
         "marts": marts.get("marts", []),
-        "signals": signals.get("signals", []),
+        "checks": checks_payload.get("checks", []),
         "codelists": codelists.get("codelists", []),
-        "entities": {
-            "entities": graph.get("entities", {}),
-            "bridges": graph.get("bridges", []),
-        },
     }
 
-    # Preserva i run storici dei signals: in CI post-merge i dataset non
-    # rieseguiti non hanno run record locali, quindi il blocco run sparirebbe
-    # a ogni rigenerazione. Un UNICO pass centralizzato (dopo la costruzione
-    # delle sezioni) ripopola i run mancanti da existing — niente fallback
-    # duplicati nei singoli builder.
-    registry = _merge_existing_runs(registry, existing_signals=existing_signals)
+    # Preserva `last_run` delle entry non rieseguite: in CI post-merge le
+    # partizioni non rieseguite non hanno run record locali, quindi il blocco
+    # sparirebbe a ogni rigenerazione. Le partizioni sono già fuse in
+    # build_clean_catalog (locale vince).
+    registry = _merge_existing_last_run(registry, existing=existing)
 
     # Ordine chiavi deterministico: le entry derivano da path diversi
-    # (builder, existing, run restore) e l'ordine di inserimento del dict
-    # cambierebbe a ogni rigenerazione → diff rumorosi (v. PR post-merge
-    # #815/#817). Un UNICO pass finalizza l'ordine canonico per sezione.
+    # (builder, existing) e l'ordine di inserimento cambierebbe a ogni
+    # rigenerazione → diff rumorosi.
     registry = _canonicalize_registry(registry)
 
     registry_errors = validate_artifact(registry, "registry.schema.json")
+    coverage_gaps = cc_errors.get("coverage", [])
     errors = {
         "datasets": cc_errors,
         "marts": mc_errors,
-        "signals": ps_errors,
+        "checks": ck_errors,
         "codelists": cl_errors,
-        "entities": {"derive": [], "validation": []},
         "registry": {"derive": [], "validation": registry_errors},
     }
-    return {"registry": registry, "errors": errors}
+    return {"registry": registry, "errors": errors, "incomplete": coverage_gaps}
 
 
-def _merge_existing_runs(
+def _merge_existing_last_run(
     registry: dict[str, Any],
     *,
-    existing_signals: dict[str, Any] | None = None,
+    existing: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Ripopola i blocco ``run`` mancanti dei signals dall'existing (CI).
+    """Ripopola i blocchi ``last_run`` mancanti dall'existing (CI e transizione v1).
 
-    Quando il run record locale manca (post-merge: i dataset non rieseguiti
-    non sono nel runner), i signals derivati non hanno ``run``. L'existing
-    (registry.json committato) preserva lo storico.
-
-    Solo i signals hanno il blocco ``run`` nel registry snello (datasets/marts
-    non lo portano più: nessun consumer lo legge). Il run locale vince sempre;
-    l'existing interviene solo dove manca.
+    Due sorgenti, in ordine:
+    - ``existing.datasets[].last_run`` (registry v2 già committato);
+    - ``existing.signals[].run`` (registry v1: la freschezza stava lì; al primo
+      build v2 le entry senza run record locali la perderebbero).
     """
-    signals_run: dict[str, dict[str, Any]] = {}
-    if existing_signals:
-        for s in existing_signals.get("signals", []) or []:
-            if s.get("run") and s.get("id"):
-                signals_run[s["id"]] = s["run"]
+    previous: dict[str, dict[str, Any]] = {}
+    if existing:
+        for ds in existing.get("datasets", []) or []:
+            block = ds.get("last_run")
+            if block and block.get("at") and ds.get("slug"):
+                previous[ds["slug"]] = block
+        for sig in existing.get("signals", []) or []:
+            run = sig.get("run") or {}
+            at = run.get("started_at") or run.get("at")
+            year = run.get("year")
+            status = run.get("status")
+            if not (at and year is not None and status):
+                continue
+            slug = str(sig.get("label") or sig.get("id") or "").rsplit(":", 1)[-1]
+            if slug:
+                previous.setdefault(slug, {"at": at, "year": year, "status": status})
 
-    for s in registry.get("signals", []) or []:
-        if "run" not in s and s.get("id") in signals_run:
-            s["run"] = signals_run[s["id"]]
+    for ds in registry.get("datasets", []) or []:
+        if "last_run" not in ds and ds.get("slug") in previous:
+            ds["last_run"] = previous[ds["slug"]]
 
     return registry
 
@@ -556,30 +555,30 @@ _CANONICAL_ORDER: dict[str, tuple[str, ...]] = {
         "slug",
         "name",
         "description",
-        "source",
         "source_id",
-        "period",
         "tags",
         "category",
+        "period",
+        "partitions",
         "columns",
-        "location",
-        "stage",
         "mart_refs",
+        "last_run",
+        "location",
     ),
     "marts": (
         "slug",
         "dataset",
         "table",
+        "layout",
+        "year",
+        "primary_key",
         "location",
     ),
-    "signals": (
+    "checks": (
         "id",
-        "source_id",
         "status",
-        "label",
         "detail",
         "action",
-        "run",
     ),
 }
 
@@ -607,112 +606,3 @@ def _canonicalize_registry(registry: dict[str, Any]) -> dict[str, Any]:
         if isinstance(entries, list):
             registry[section] = [_canonicalize_entry(e, order) for e in entries]
     return registry
-
-
-# Nomi display delle entità nel grafo (default: il nome entity dal vocabolario).
-ENTITY_LABELS: dict[str, str] = {
-    "Comune": "Comune (ISTAT)",
-    "Ente": "Ente pubblico",
-    "Provincia": "Provincia",
-    "Regione": "Regione",
-    "Scuola": "Scuola",
-    "Gara": "Gara / Appalto",
-    "Progetto": "Progetto",
-    "Impresa": "Impresa",
-    "Nazione": "Nazione",
-    "Tempo": "Tempo / data",
-    "Attività economica": "Attività economica",
-    "Stazione Appaltante": "Stazione Appaltante",
-    "Ente sanitario": "Ente sanitario",
-    "Procedimento": "Procedimento giudiziario",
-    "Categoria merceologica": "Categoria merceologica",
-    "Persona": "Persona",
-    "Atto legislativo": "Atto legislativo / Disegno di legge",
-    "Gruppo parlamentare": "Gruppo parlamentare",
-}
-
-
-def build_entity_graph(
-    catalog: dict[str, Any],
-    semantic_types_path: Path | None = None,
-) -> dict[str, Any]:
-    """Grafo entità → dataset dal clean_catalog (5° artifact registry).
-
-    Nodi = entità del mondo reale (dalla semantic_type di ogni colonna),
-    archi = dataset che le descrivono, bridge = relazioni tra entità
-    (via ``bridge`` del vocabolario semantic_types). Logica portata da
-    ``dataset-incubator/tools/graph/build_graph.py``; consumata da
-    lab-dashboard (pagina dataset) e dal MCP clean-query (dataset_graph).
-    """
-    alias_map = load_semantic_types(semantic_types_path)
-    # Struttura completa {stype: {entity, bridge}} dal vocabolario raw
-    # (load_semantic_types ritorna solo alias→stype).
-    from toolkit.registry.schema_reader import DEFAULT_SEMANTIC_TYPES
-
-    vocab_path = semantic_types_path or DEFAULT_SEMANTIC_TYPES
-    types_info: dict[str, dict[str, Any]] = {}
-    if vocab_path.is_file():
-        import yaml
-
-        data = yaml.safe_load(vocab_path.read_text(encoding="utf-8")) or {}
-        for stype, info in (data.get("types") or {}).items():
-            if isinstance(info, dict):
-                types_info[stype] = info
-    if not types_info:
-        # Fallback: vocabolario ridotto da alias_map (senza entity/bridge)
-        types_info = {stype: {"entity": "", "bridge": None} for stype in alias_map}
-
-    nodes: dict[str, dict[str, Any]] = {}
-    relations: list[dict[str, Any]] = []
-
-    for ds in catalog.get("datasets", []) or []:
-        slug = ds.get("slug", "")
-        ds_name = ds.get("name", slug)
-        for col in ds.get("columns", []) or []:
-            st = col.get("semantic_type")
-            if not st:
-                continue
-            type_info = types_info.get(st, {})
-            entity = type_info.get("entity") or "Sconosciuto"
-
-            if entity not in nodes:
-                nodes[entity] = {
-                    "entity": entity,
-                    "label": ENTITY_LABELS.get(entity, entity),
-                    "datasets": [],
-                    "types": {},
-                }
-            ds_entry = {"slug": slug, "name": ds_name, "column": col["name"], "semantic_type": st}
-            if not any(
-                d["slug"] == slug and d["column"] == col["name"] for d in nodes[entity]["datasets"]
-            ):
-                nodes[entity]["datasets"].append(ds_entry)
-            nodes[entity]["types"][st] = nodes[entity]["types"].get(st, 0) + 1
-
-            bridge = type_info.get("bridge")
-            if bridge:
-                via = bridge.get("via", "")
-                on = bridge.get("on_column", "")
-                to_st = bridge.get("to", "")
-                to_entity = (types_info.get(to_st) or {}).get("entity", "Sconosciuto")
-                if to_entity and to_entity != entity:
-                    rel = {
-                        "from": {"entity": entity, "dataset": slug, "via": st},
-                        "to": {
-                            "entity": to_entity,
-                            "bridge": via,
-                            "on": on,
-                            "semantic_type": to_st,
-                        },
-                    }
-                    if rel not in relations:
-                        relations.append(rel)
-
-    for entity in nodes:
-        nodes[entity]["datasets"].sort(key=lambda d: d["slug"])
-
-    return {
-        "schema_version": 1,
-        "entities": {e: info for e, info in sorted(nodes.items())},
-        "bridges": relations,
-    }

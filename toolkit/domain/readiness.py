@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from toolkit.core.io import read_json_or_none
+from toolkit.core.run_records import get_run_dir
 
 from toolkit.domain.inspect_utils import (
     _check_run_record_coherence,
@@ -18,7 +19,6 @@ from toolkit.domain.inspect_utils import (
 from toolkit.domain.path_resolver import payload_for_year as _payload_for_year
 from toolkit.core.config import load_config
 from toolkit.core.duckdb_shape import parquet_row_count
-from toolkit.core.run_records import get_run_dir
 
 
 # ---------------------------------------------------------------------------
@@ -55,15 +55,18 @@ def run_state(config_path: str, year: int | None = None) -> dict[str, Any]:
         else []
     )
 
-    # Ultimo run record assoluto: attraverso TUTTI gli anni con run records
-    # (non solo il target year). Usato dai consumer aggregati (registry builder).
+    # Ultimo run record assoluto: attraverso TUTTE le partizioni con run
+    # records (non solo il target year). È l'esecuzione più recente per
+    # ``started_at``: i ``run_id`` iniziano col timestamp UTC, quindi l'ordine
+    # per nome file è cronologico (una lettura sola). Usato dai consumer
+    # aggregati (registry builder).
     latest_run_record_abs: dict[str, Any] | None = None
     if years_seen:
-        abs_year = int(max(years_seen))
-        abs_run_dir = get_run_dir(Path(cfg.root), cfg.dataset, abs_year)
-        abs_files = sorted(abs_run_dir.glob("*.json")) if abs_run_dir.exists() else []
-        if abs_files:
-            latest_run_record_abs = read_json_or_none(abs_files[-1])
+        year_files = [
+            path for path in sorted(run_dir.parent.glob("*/*.json")) if path.parent.name.isdigit()
+        ]
+        if year_files:
+            latest_run_record_abs = read_json_or_none(max(year_files, key=lambda p: p.name))
 
     return {
         "dataset": paths.get("dataset"),

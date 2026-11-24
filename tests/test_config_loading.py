@@ -822,7 +822,16 @@ def test_raw_source_unknown_key_rejected(tmp_path: Path):
     _yml(
         yml,
         years=[2024],
-        raw={"sources": [{"name": "src", "type": "http_file", "args": {"url": "x"}, "extractpr": {"type": "unzip_first_csv"}}]},
+        raw={
+            "sources": [
+                {
+                    "name": "src",
+                    "type": "http_file",
+                    "args": {"url": "x"},
+                    "extractpr": {"type": "unzip_first_csv"},
+                }
+            ]
+        },
     )
 
     with pytest.raises(ValueError, match=r"raw\.sources\[0\]: unknown key\(s\) \['extractpr'\]"):
@@ -836,8 +845,14 @@ def test_raw_source_client_unknown_key_rejected(tmp_path: Path):
     _yml(
         yml,
         years=[2024],
-        raw={"sources": [{"name": "src", "type": "http_file", "args": {"url": "x"}, "client": {"retry": 3}}]},
+        raw={
+            "sources": [
+                {"name": "src", "type": "http_file", "args": {"url": "x"}, "client": {"retry": 3}}
+            ]
+        },
     )
 
-    with pytest.raises(ValueError, match=r"raw\.sources\[0\]\.client: unknown key\(s\) \['retry'\]"):
+    with pytest.raises(
+        ValueError, match=r"raw\.sources\[0\]\.client: unknown key\(s\) \['retry'\]"
+    ):
         load_config(yml)

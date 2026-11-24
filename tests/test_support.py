@@ -244,6 +244,18 @@ class TestResolveSupportPayloadsHappy:
 
 
 class TestResolveSupportPayloadsErrors:
+    def test_mart_only_senza_mart_fallisce_ancora(self, tmp_path: Path):
+        """Il ramo nuovo non è permissivo: senza mart resta un errore.
+
+        `is_mart_only` toglie il clean dagli output attesi, non li svuota:
+        un compose mart-only con il mart assente deve fallire come prima,
+        altrimenti il fix trasformerebbe un controllo in un via libera.
+        """
+        config_path = _make_support_dataset(tmp_path, create_mart_outputs=False, create_clean=False)
+        entries = [_make_support_entry(config_path)]
+        with pytest.raises(FileNotFoundError, match="output mancante"):
+            resolve_support_payloads(entries, require_exists=True)
+
     def test_missing_mart_outputs_raises_on_require_exists(self, tmp_path: Path):
         config_path = _make_support_dataset(tmp_path, create_mart_outputs=False)
         entries = [_make_support_entry(config_path)]

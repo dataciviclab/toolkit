@@ -99,7 +99,11 @@ def _resolve_dataset_entry(
     for year in years:
         mart_paths = _support_expected_mart_outputs(support_cfg, year)
         clean_path = _support_expected_clean_output(support_cfg, year)
-        expected_paths = [clean_path, *mart_paths]
+        # Un compose MART-only non materializza il clean: pretenderlo
+        # bloccherebbe il support verso un compose fratello (es. `legal-index`
+        # che legge `search_keys` di `legal-graph`).
+        clean_expected = None if support_cfg.is_mart_only else clean_path
+        expected_paths = ([clean_path] if clean_expected else []) + list(mart_paths)
         output_paths = [str(path) for path in expected_paths]
         existing_paths = [str(path) for path in expected_paths if path.exists()]
         all_outputs_exist = len(output_paths) > 0 and len(existing_paths) == len(output_paths)
@@ -124,7 +128,7 @@ def _resolve_dataset_entry(
                 "mart_dir": str(
                     layer_year_dir(support_cfg.root, "mart", support_cfg.dataset, year)
                 ),
-                "clean": str(clean_path),
+                "clean": str(clean_path) if clean_expected else None,
                 "outputs": output_paths,
                 "existing_outputs": existing_paths,
                 "all_outputs_exist": all_outputs_exist,

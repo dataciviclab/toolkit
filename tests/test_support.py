@@ -44,6 +44,7 @@ def _make_support_dataset(
     years: list[int] | None = None,
     mart_tables: list[str] | None = None,
     create_mart_outputs: bool = False,
+    create_clean: bool = True,
 ) -> Path:
     """Create a minimal support dataset project with config, mart dir, and optional parquet outputs."""
     years = years or [2024]
@@ -54,12 +55,17 @@ def _make_support_dataset(
 
     years_str = ", ".join(str(y) for y in years)
     tables_yml = "\n".join(f"    - name: {t}\n      sql: sql/mart/{t}.sql" for t in mart_tables)
+    # Un dataset con `clean.sql` non è mart-only: il support pretenderà anche
+    # il clean accanto ai mart (ADR-005). Senza sezione clean il config è
+    # mart-only e il clean non va atteso.
+    clean_yml = "clean:\n  sql: sql/clean.sql\n" if create_clean else ""
 
     yml_content = (
         f"root: {ds_dir}\n"
         f"dataset:\n"
         f"  name: {name}\n"
         f"  years: [{years_str}]\n"
+        f"{clean_yml}"
         f"mart:\n"
         f"  tables:\n"
         f"{tables_yml}\n"
@@ -74,9 +80,10 @@ def _make_support_dataset(
             for table in mart_tables:
                 (mart_dir / f"{table}.parquet").write_bytes(b"")
             # ADR-005: output attesi = clean + mart → il fixture crea anche il clean
-            clean_dir = ds_dir / "data" / "clean" / name / str(year)
-            clean_dir.mkdir(parents=True, exist_ok=True)
-            (clean_dir / f"{name}_{year}_clean.parquet").write_bytes(b"")
+            if create_clean:
+                clean_dir = ds_dir / "data" / "clean" / name / str(year)
+                clean_dir.mkdir(parents=True, exist_ok=True)
+                (clean_dir / f"{name}_{year}_clean.parquet").write_bytes(b"")
 
     return config_path
 
@@ -143,6 +150,27 @@ class TestSupportExpectedMartOutputs:
 
 
 class TestResolveSupportPayloadsHappy:
+    def test_mart_only_support_non_richiede_clean(self, tmp_path: Path):
+        """Un compose mart-only (no clean.sql) è un support valido.
+
+        Regressione: `_resolve_dataset_entry` pretendeva sempre il clean
+        accanto ai mart, quindi un compose fratello che legge solo i mart
+        (es. legal-index → search_keys di legal-graph) falliva con
+        FileNotFoundError sul clean che non esiste per costruzione.
+        """
+        config_path = _make_support_dataset(tmp_path, create_mart_outputs=True, create_clean=False)
+        entries = [_make_support_entry(config_path)]
+        result = resolve_support_payloads(entries, require_exists=True)
+
+        payload = result[0]
+        assert payload["all_outputs_exist"] is True
+        yr = payload["years_resolved"][0]
+        assert yr["all_outputs_exist"] is True
+        assert yr["clean"] is None
+        assert payload["clean"] is None
+        assert payload["mart_by_table"]["table_a"].endswith("table_a.parquet")
+        assert "support.my_support.clean" not in flatten_support_template_ctx(result)
+
     def test_single_support_single_year(self, tmp_path: Path):
         config_path = _make_support_dataset(tmp_path, create_mart_outputs=True)
         entries = [_make_support_entry(config_path)]
@@ -216,6 +244,18 @@ class TestResolveSupportPayloadsHappy:
 
 
 class TestResolveSupportPayloadsErrors:
+    def test_mart_only_senza_mart_fallisce_ancora(self, tmp_path: Path):
+        """Il ramo nuovo non è permissivo: senza mart resta un errore.
+
+        `is_mart_only` toglie il clean dagli output attesi, non li svuota:
+        un compose mart-only con il mart assente deve fallire come prima,
+        altrimenti il fix trasformerebbe un controllo in un via libera.
+        """
+        config_path = _make_support_dataset(tmp_path, create_mart_outputs=False, create_clean=False)
+        entries = [_make_support_entry(config_path)]
+        with pytest.raises(FileNotFoundError, match="output mancante"):
+            resolve_support_payloads(entries, require_exists=True)
+
     def test_missing_mart_outputs_raises_on_require_exists(self, tmp_path: Path):
         config_path = _make_support_dataset(tmp_path, create_mart_outputs=False)
         entries = [_make_support_entry(config_path)]

@@ -159,7 +159,7 @@ def test_clean_catalog_contract(tmp_path: Path) -> None:
     layout = _make_repo(tmp_path)
     catalog, errors = build_clean_catalog(layout)
 
-    assert errors == {"derive": [], "validation": []}, f"errori inattesi: {errors}"
+    assert errors["derive"] == [] and errors["validation"] == [], f"errori inattesi: {errors}"
     assert len(catalog["datasets"]) == 1
     ds = catalog["datasets"][0]
     assert ds["slug"] == "my_dataset"
@@ -292,7 +292,7 @@ def test_clean_catalog_slims_editorial_entry_without_parquet(tmp_path: Path) -> 
     }
 
     catalog, errors = build_clean_catalog(layout, existing=existing)
-    assert errors == {"derive": [], "validation": []}, f"errori inattesi: {errors}"
+    assert errors["derive"] == [] and errors["validation"] == [], f"errori inattesi: {errors}"
     ds = catalog["datasets"][0]
     assert ds["slug"] == "my_dataset"
     # chiavi morte v1 filtrate

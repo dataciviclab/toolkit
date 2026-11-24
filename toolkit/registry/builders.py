@@ -183,6 +183,7 @@ def build_clean_catalog(
 
     datasets: list[dict[str, Any]] = []
     derive_errors: list[str] = []
+    coverage_gaps: list[str] = []
 
     for manifest in iter_manifests(layout):
         if slug and manifest.slug != slug:
@@ -191,6 +192,10 @@ def build_clean_catalog(
         old = editorial.get(manifest.slug)
         columns, _latest_year = latest_clean_columns(manifest, alias_map)
         local_partitions = clean_partition_rows(manifest)
+        if manifest.has_clean_sql and not local_partitions:
+            # Il run ha prodotto clean per questo dataset? Se no è un run
+            # selettivo (o un dataset fallito): `partitions` sarebbe parziale.
+            coverage_gaps.append(manifest.slug)
         # Le partizioni non rieseguite (CI: run per dataset) restano dal
         # registry committato; il locale vince sempre sulla stessa chiave.
         partitions = _partition_map(
@@ -296,7 +301,7 @@ def build_clean_catalog(
         "source_repo": layout.source_repo,
         "datasets": sorted(datasets, key=lambda d: d["slug"]),
     }
-    return catalog, {"derive": derive_errors, "validation": []}
+    return catalog, {"derive": derive_errors, "validation": [], "coverage": coverage_gaps}
 
 
 # ---------------------------------------------------------------------------
@@ -496,6 +501,7 @@ def build_registry(
     registry = _canonicalize_registry(registry)
 
     registry_errors = validate_artifact(registry, "registry.schema.json")
+    coverage_gaps = cc_errors.get("coverage", [])
     errors = {
         "datasets": cc_errors,
         "marts": mc_errors,
@@ -503,7 +509,7 @@ def build_registry(
         "codelists": cl_errors,
         "registry": {"derive": [], "validation": registry_errors},
     }
-    return {"registry": registry, "errors": errors}
+    return {"registry": registry, "errors": errors, "incomplete": coverage_gaps}
 
 
 def _merge_existing_last_run(

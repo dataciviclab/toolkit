@@ -103,3 +103,62 @@ def test_build_no_datasets_dir_fails(tmp_path: Path) -> None:
     result = runner.invoke(app, ["registry", "build", "--repo", str(tmp_path)], obj={})
     assert result.exit_code != 0
     assert "nessuna sezione dati" in result.stderr
+
+
+@pytest.mark.contract
+def test_build_require_complete_skips_partial_run(tmp_path: Path) -> None:
+    """Run selettiva (parquet mancanti) → exit 3 e registry non scritto."""
+    _make_repo(tmp_path, with_run=True)
+    # un secondo dataset con clean.sql ma senza parquet: non è stato eseguito
+    extra = tmp_path / "datasets" / "secondo"
+    extra.mkdir()
+    (extra / "dataset.yml").write_text(
+        "root: '../../out'\n"
+        "dataset:\n"
+        "  name: 'secondo'\n"
+        "  years: [2024]\n"
+        "clean:\n"
+        "  sql: 'sql/clean.sql'\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "outreg"
+    result = runner.invoke(
+        app,
+        [
+            "registry",
+            "build",
+            "--repo",
+            str(tmp_path),
+            "--write",
+            "--require-complete",
+            "--out",
+            str(out),
+        ],
+        obj={},
+    )
+    assert result.exit_code == 3, result.stdout + result.stderr
+    assert "run incompleta" in result.stderr
+    assert not (out / "registry.json").is_file()
+
+
+@pytest.mark.contract
+def test_build_require_complete_writes_full_run(tmp_path: Path) -> None:
+    """Tutti i dataset con clean.sql hanno parquet locali → scrive."""
+    _make_repo(tmp_path, with_mart=False)
+    out = tmp_path / "outreg"
+    result = runner.invoke(
+        app,
+        [
+            "registry",
+            "build",
+            "--repo",
+            str(tmp_path),
+            "--write",
+            "--require-complete",
+            "--out",
+            str(out),
+        ],
+        obj={},
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert (out / "registry.json").is_file()

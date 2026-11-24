@@ -144,6 +144,14 @@ def registry_build(
     flat: bool = typer.Option(False, "--flat", help="Layout flat per clean+mart (no year)"),
     write: bool = typer.Option(False, "--write", help="Scrive registry.json (default: dry-run)"),
     out: str = typer.Option("registry", "--out", help="Dir di output (default: registry)"),
+    require_complete: bool = typer.Option(
+        False,
+        "--require-complete",
+        help=(
+            "Non scrivere il registry se un dataset con clean.sql non ha parquet "
+            "locali (run selettiva): exit 3. Usato da registry-update-pr."
+        ),
+    ),
 ) -> None:
     """Genera registry.json del repo (auto-discovery, schema v2).
 
@@ -189,6 +197,22 @@ def registry_build(
             typer.echo(f"ERROR: {e}", err=True)
         typer.echo("Artifact NON scritto: errori di validazione.", err=True)
         raise typer.Exit(code=1)
+
+    incomplete = result.get("incomplete") or []
+    if require_complete and incomplete:
+        listed = ", ".join(incomplete[:10])
+        if len(incomplete) > 10:
+            listed += f", … (+{len(incomplete) - 10})"
+        typer.echo(
+            f"WARN: run incompleta — {len(incomplete)} dataset con clean.sql senza "
+            f"parquet locale: {listed}",
+            err=True,
+        )
+        typer.echo(
+            "Registry NON scritto (serve un run completo o togliere --require-complete).",
+            err=True,
+        )
+        raise typer.Exit(code=3)
 
     registry = result["registry"]
     typer.echo(

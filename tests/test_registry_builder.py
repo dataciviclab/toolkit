@@ -664,6 +664,57 @@ class TestRegistryExistingState:
         }
 
     @pytest.mark.contract
+    def test_preserves_whole_entry_when_partitions_but_no_parquet(self, tmp_path: Path) -> None:
+        """Entry già pubblicata e non rieseguita: si preserva INTERA, anche con partitions.
+
+        Regressione dataset-incubator#959: in una run post-merge selettiva
+        ``out/`` contiene solo il dataset appena eseguito. Per ogni altro
+        dataset ``columns`` è None, ma le ``partitions`` arrivano dall'existing;
+        il guard ``not partitions`` escludeva la preservazione, l'entry veniva
+        ricostruita dal manifest e perdeva ``columns`` (``gse_cer_elenco``:
+        12 → 0) e la ``location`` puntuale, che il blocco no-narrowing non
+        recupera (salva solo le glob). Copiare le sole colonne non basta:
+        ``location`` e ``mart_refs`` resterebbero fuori.
+        """
+        import shutil
+
+        from toolkit.registry.builders import build_registry
+
+        layout = _make_repo(tmp_path, with_mart=False)
+        # Run selettiva: nessun parquet clean locale per questo dataset.
+        shutil.rmtree(layout.repo_root / "out" / "data" / "clean")
+
+        existing = {
+            "schema_version": 2,
+            "datasets": [
+                {
+                    "slug": "my_dataset",
+                    "name": "My Dataset",
+                    "partitions": {"2024": 40},
+                    "columns": [
+                        {"name": "anno", "type": "INTEGER", "role": "dimension"},
+                        {"name": "importo", "type": "DOUBLE", "role": "metric"},
+                    ],
+                    "location": (
+                        "gs://dataciviclab-clean/my_dataset/2024/my_dataset_2024_clean.parquet"
+                    ),
+                    "last_run": {"at": "2026-01-01T00:00:00Z", "year": 2024, "status": "SUCCESS"},
+                    # chiave morta v1: la preservazione passa da _slim_dataset_entry
+                    "stage": "published",
+                }
+            ],
+            "marts": [],
+        }
+
+        reg = build_registry(layout, existing=existing)["registry"]
+        ds = next(d for d in reg["datasets"] if d["slug"] == "my_dataset")
+        assert ds["columns"] == existing["datasets"][0]["columns"]
+        assert ds["location"] == existing["datasets"][0]["location"]
+        assert ds["partitions"] == {2024: 40}
+        assert ds["last_run"] == existing["datasets"][0]["last_run"]
+        assert "stage" not in ds
+
+    @pytest.mark.contract
     def test_preserves_last_run_from_v1_signals(self, tmp_path: Path) -> None:
         """Primo build v2: la freschezza di un registry v1 arriva dai signals."""
         from toolkit.registry.builders import build_registry

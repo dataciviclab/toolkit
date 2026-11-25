@@ -202,9 +202,15 @@ def build_clean_catalog(
             {**_partition_map((old or {}).get("partitions")), **local_partitions}
         )
 
-        if not partitions and columns is None and not manifest.is_mart_only:
-            # Nessun parquet locale: possibile solo se l'entry è editoriale
-            # (preservata) — altrimenti errore e skip.
+        # Nessun parquet locale (run selettiva, dataset non rieseguito, run
+        # fallita): si preserva l'entry committata ANCHE quando ha già
+        # `partitions`. Il guard `not partitions` la escludeva, e l'entry
+        # veniva ricostruita dal manifest perdendo `columns` — e la `location`
+        # non-glob, che il blocco no-narrowing qui sotto non recupera (salva
+        # solo le glob). Visto su dataset-incubator#959: `gse_cer_elenco`
+        # perdeva 12 colonne perché era l'unico con `partitions` e senza
+        # parquet locale (run post-merge selettiva su un altro dataset).
+        if columns is None and not manifest.is_mart_only:
             if old is not None:
                 datasets.append(_slim_dataset_entry(old))
                 continue

@@ -426,3 +426,93 @@ def test_execute_pipeline_validates_via_context_not_direct_calls(
             f"{layer}: chiamata {call_counts[layer]} volte "
             f"(atteso 1 — 0 = non eseguita, 2+ = doppia validazione reintrodotta)"
         )
+
+
+@pytest.mark.regression
+def test_readiness_computed_after_multi_year_mart(tmp_path: Path, monkeypatch) -> None:
+    """La readiness per-anno va calcolata DOPO il mart multi-year (issue #550).
+
+    Se calcolata dentro il loop per-anno, le tabelle con ``mart.tables[].years``
+    non esistono ancora e readiness segnala mart_outputs_missing.
+    """
+    sql_dir = tmp_path / "sql" / "mart"
+    sql_dir.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "sql" / "clean.sql").write_text("select 1 as value", encoding="utf-8")
+    (sql_dir / "mart_multi.sql").write_text("select * from clean_input", encoding="utf-8")
+    config_path = tmp_path / "dataset.yml"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'root: "{(tmp_path / "out").as_posix()}"',
+                "dataset:",
+                '  name: "test_dataset"',
+                "  years: [2022, 2023]",
+                "raw: {}",
+                "clean:",
+                '  sql: "sql/clean.sql"',
+                "mart:",
+                "  tables:",
+                '    - name: "mart_multi"',
+                '      sql: "sql/mart/mart_multi.sql"',
+                "      years: [2022, 2023]",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    events: list[str] = []
+
+    class _Ctx:
+        validations = {layer: {"passed": True} for layer in ("raw", "clean", "mart")}
+
+    def _fake_run_year(cfg, year, **kwargs):
+        events.append(f"run_year:{year}")
+        return _Ctx()
+
+    def _fake_multi_year(*args, **kwargs):
+        events.append("multi_year_mart")
+
+    monkeypatch.setattr(cmd_run, "run_year", _fake_run_year)
+    monkeypatch.setattr(cmd_run, "_maybe_run_multi_year_mart", _fake_multi_year)
+    monkeypatch.setattr(
+        "toolkit.domain.preflight.run_config_check",
+        lambda *args, **kwargs: {"ok": True, "errors": [], "warnings": [], "slug": "test"},
+    )
+    monkeypatch.setattr(
+        "toolkit.domain.preflight.run_preflight",
+        lambda *args, **kwargs: {
+            "config_check": {"ok": True, "errors": [], "warnings": [], "slug": "test"},
+            "sources": [],
+            "status": "passed",
+        },
+    )
+    import toolkit.domain.readiness as _readiness_ops
+
+    def _fake_readiness(config, year=None, **kwargs):
+        events.append(f"readiness:{year}")
+        return {"readiness": "ready", "check_count": 8, "ok_count": 8, "fail_count": 0}
+
+    monkeypatch.setattr(_readiness_ops, "review_readiness", _fake_readiness)
+
+    results = cmd_run._run_pipeline(
+        str(config_path),
+        None,
+        step="all",
+        smoke=False,
+        sample_rows=None,
+        sample_bytes=None,
+        root=None,
+        dry_run=False,
+        refresh_support=False,
+    )
+
+    assert results["multi_year_mart"] == "ok"
+    mart_idx = events.index("multi_year_mart")
+    readiness_idx = [i for i, e in enumerate(events) if e.startswith("readiness:")]
+    assert readiness_idx, f"readiness mai calcolata: {events}"
+    assert all(i > mart_idx for i in readiness_idx), (
+        f"readiness calcolata prima del mart multi-year: {events}"
+    )
+    for year in ("2022", "2023"):
+        assert results["steps"][year]["readiness"] == "ready"
+        assert results["steps"][year]["checks_ok"] == 8

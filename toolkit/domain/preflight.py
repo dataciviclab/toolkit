@@ -8,9 +8,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from toolkit.core.config import load_config
+from toolkit.core.config import ensure_dict, load_config
 from toolkit.core.dataset_loader import validate_config
 from toolkit.domain.common import iter_selected_years
+from toolkit.domain.sql_validation import (
+    schema_from_preview,
+    validate_sql_dry_run,
+    validate_sql_syntax,
+)
 
 
 def _preview_client(client_cfg: Any):
@@ -55,6 +60,7 @@ def run_preflight(
     config: str | Path | None = None,
     *,
     years_arg: str | None = None,
+    sql_check: bool = False,
 ) -> dict[str, Any]:
     """Pre-flight check per un dataset config.
 
@@ -64,6 +70,14 @@ def run_preflight(
          (reachability + quality score + encoding + schema)
        - ``ckan`` → ``probe_url_headers`` (reachability)
        - ``local_file``, ``sdmx``, ``sparql`` → skip (non timeoutano)
+    3. **SQL check** (solo con ``sql_check=True``):
+       - ``sql_syntax``: parse-only di clean.sql/mart.sql, senza binding.
+         E' deterministico anche senza RAW, quindi adatto alla CI/PR. Gli
+         errori di sintassi rendono ``status = failed``.
+       - ``sql_validation``: binding reale contro lo schema del preview,
+         quando disponibile (es. CSV ``http_file``). E' **advisory**: non
+         cambia ``status``, perche' lo schema della fonte puo' non essere
+         noto in PR (sdmx, script, local_file).
 
     Returns:
         Report strutturato::
@@ -86,9 +100,15 @@ def run_preflight(
                         "encoding": str | None,
                         "delim": str | None,
                         "columns": list[str] | None,
+                        "col_types": dict[str, str] | None,
                         "quality_score": int | None,
                         "quality_verdict": str | None,
                     },
+                    ...
+                ],
+                "sql_syntax": {"ok": bool, "checked": [...], "errors": [...]},
+                "sql_validation": [
+                    {"year": int, "schema_source": str, "ok": bool, "error": str | None},
                     ...
                 ],
                 "status": "passed" | "failed",
@@ -103,6 +123,8 @@ def run_preflight(
         "years": [],
         "config_check": {},
         "sources": [],
+        "sql_syntax": {},
+        "sql_validation": [],
         "status": "passed",
     }
 
@@ -147,6 +169,7 @@ def run_preflight(
                 "encoding": None,
                 "delim": None,
                 "columns": None,
+                "col_types": None,
                 "quality_score": None,
                 "quality_verdict": None,
             }
@@ -189,6 +212,7 @@ def run_preflight(
                 entry["encoding"] = preview.encoding_suggested
                 entry["delim"] = preview.delim_suggested
                 entry["columns"] = preview.columns
+                entry["col_types"] = getattr(preview, "col_types", None)
                 entry["quality_score"] = preview.quality_score
                 entry["quality_verdict"] = preview.quality_verdict
 
@@ -203,6 +227,7 @@ def run_preflight(
                         "encoding",
                         "delim",
                         "columns",
+                        "col_types",
                         "quality_score",
                         "quality_verdict",
                     )
@@ -260,5 +285,35 @@ def run_preflight(
             # local_file, sdmx, sparql → skipped (entry defaults preserved)
 
             results["sources"].append(entry)
+
+    # ── 4. SQL check (opt-in) ──────────────────────────────────────────
+    if sql_check:
+        layers = ["clean", "mart"] if cfg.clean.sql else ["mart"]
+        results["sql_syntax"] = validate_sql_syntax(cfg, layers=layers)
+        if not results["sql_syntax"]["ok"]:
+            results["status"] = "failed"
+
+        clean_cfg = ensure_dict(cfg.clean)
+        for year in results["years"]:
+            schema, schema_source = None, None
+            for entry in results["sources"]:
+                if entry["year"] != year or not entry.get("columns"):
+                    continue
+                schema = schema_from_preview(clean_cfg, entry["columns"], entry.get("col_types"))
+                if schema:
+                    schema_source = entry.get("url") or entry["name"]
+                    break
+            if not schema:
+                continue
+            try:
+                validate_sql_dry_run(cfg, year=year, layers=layers, dry_run=True, raw_schema=schema)
+                ok, error = True, None
+            except Exception as exc:
+                # Advisory: lo schema della fonte puo' essere parziale (preview
+                # su un chunk) o non rappresentare il file completo.
+                ok, error = False, str(exc)
+            results["sql_validation"].append(
+                {"year": year, "schema_source": schema_source, "ok": ok, "error": error}
+            )
 
     return results

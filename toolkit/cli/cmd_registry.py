@@ -149,7 +149,9 @@ def registry_build(
         "--require-complete",
         help=(
             "Non scrivere il registry se un dataset con clean.sql non ha parquet "
-            "locali (run selettiva): exit 3. Usato da registry-update-pr."
+            "locali (run selettiva/parziale): exit 3. Per i run manuali e locali "
+            "(es. rigenerazione wave da un out/ incompleto); la CI non lo usa: "
+            "salterebbe ogni aggiornamento post-merge."
         ),
     ),
 ) -> None:

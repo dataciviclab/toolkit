@@ -1006,15 +1006,6 @@ def _run_pipeline(
                 if not all_passed and fail_on_error_flag:
                     results["status"] = "failed"
 
-                from toolkit.domain.readiness import review_readiness as _review_readiness
-
-                readiness = _review_readiness(str(cfg.base_dir / "dataset.yml"), year or None)
-                results["steps"][str(year)]["readiness"] = readiness.get("readiness")
-                results["steps"][str(year)]["checks"] = readiness.get("check_count", 0)
-                results["steps"][str(year)]["checks_ok"] = readiness.get("ok_count", 0)
-                results["steps"][str(year)]["checks_fail"] = readiness.get("fail_count", 0)
-                results["steps"][str(year)]["layers"] = readiness.get("layers", {})
-
         if results["status"] == "passed" and not dry_flag and cfg.has_multi_year_mart:
             try:
                 _maybe_run_multi_year_mart(
@@ -1029,6 +1020,23 @@ def _run_pipeline(
                 results["multi_year_mart"] = f"failed: {exc}"
                 if fail_on_error_flag:
                     results["status"] = "failed"
+
+        # Readiness calcolata DOPO il mart multi-year: le tabelle con
+        # mart.tables[].years vengono scritte solo a fine loop, quindi una
+        # review per-anno dentro il loop le vedrebbe mancanti (issue #550).
+        if not dry_flag:
+            from toolkit.domain.readiness import review_readiness as _review_readiness
+
+            for year in selected_years:
+                step_result = results["steps"].get(str(year))
+                if not step_result or step_result.get("run") != "ok":
+                    continue
+                readiness = _review_readiness(str(cfg.base_dir / "dataset.yml"), year or None)
+                step_result["readiness"] = readiness.get("readiness")
+                step_result["checks"] = readiness.get("check_count", 0)
+                step_result["checks_ok"] = readiness.get("ok_count", 0)
+                step_result["checks_fail"] = readiness.get("fail_count", 0)
+                step_result["layers"] = readiness.get("layers", {})
 
     return results
 
@@ -1121,6 +1129,8 @@ def _execute_pipeline(
         typer.echo(
             f"       readiness: {s.get('readiness', '?')}  ({s.get('checks_ok', 0)}/{s.get('checks', 0)})"
         )
+    if results.get("multi_year_mart"):
+        typer.echo(f"multi_year_mart: {results['multi_year_mart']}")
 
     if results["status"] != "passed":
         raise typer.Exit(code=1)

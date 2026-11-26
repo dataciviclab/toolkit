@@ -5,17 +5,69 @@ from pathlib import Path
 from typing import Any
 
 _UNRESOLVED_PLACEHOLDER_RE = re.compile(r"\{[A-Za-z_][A-Za-z0-9_.]*\}")
-_SQL_COMMENT_LINE_RE = re.compile(r"^\s*--.*$", re.MULTILINE)
+_QUOTE_CHARS = ("'", '"')
 
 
 def _strip_sql_comments(sql: str) -> str:
-    """Remove SQL single-line comments (-- ...) from the text.
+    """Rimuove i commenti SQL (``-- ...`` e ``/* ... */``) fuori dai letterali.
 
-    Used to avoid false positives when checking for unresolved template
-    placeholders — DuckDB error messages embedded in SQL comments can
-    contain ``{n}`` or similar patterns that are not actual placeholders.
+    I letterali (``'...'`` e ``"..."``) sono preservati intatti: possono
+    contenere template veri (``read_parquet('{support.x.mart}')``) o sequenze
+    ``--`` che non sono commenti. Rimuovere il loro contenuto renderebbe cieco
+    il check dei placeholder proprio sui support.
+
+    Un commento inline dopo il codice (``select 1 -- nota``) viene rimosso,
+    non solo quelli che iniziano la riga. I newline dei commenti di blocco
+    sono conservati, cosi' i numeri di riga non si spostano.
+
+    Limite noto: il dollar-quoting (``$$...$$``) non e' gestito; negli SQL
+    dei dataset non e' usato.
     """
-    return _SQL_COMMENT_LINE_RE.sub("", sql)
+    out: list[str] = []
+    i = 0
+    n = len(sql)
+    while i < n:
+        ch = sql[i]
+
+        # Letterali e identificatori quotati: copia fino alla chiusura,
+        # gestendo l'escape raddoppiato ('' o "").
+        if ch in _QUOTE_CHARS:
+            quote = ch
+            out.append(ch)
+            i += 1
+            while i < n:
+                out.append(sql[i])
+                if sql[i] == quote:
+                    if i + 1 < n and sql[i + 1] == quote:
+                        out.append(sql[i + 1])
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            continue
+
+        # Commento di riga: salta fino al newline (che resta nell'output).
+        if ch == "-" and i + 1 < n and sql[i + 1] == "-":
+            newline = sql.find("\n", i)
+            i = n if newline == -1 else newline
+            continue
+
+        # Commento di blocco: salta fino a */ conservando i newline.
+        if ch == "/" and i + 1 < n and sql[i + 1] == "*":
+            end = sql.find("*/", i + 2)
+            if end == -1:
+                out.append("\n" * sql.count("\n", i, n))
+                i = n
+            else:
+                out.append("\n" * sql.count("\n", i, end + 2))
+                i = end + 2
+            continue
+
+        out.append(ch)
+        i += 1
+
+    return "".join(out)
 
 
 def render_template(text: str, ctx: dict[str, Any]) -> str:

@@ -79,8 +79,8 @@ def test_strip_sql_comments_empty():
 
 
 def test_strip_sql_comments_only_comments():
-    # A single comment line -- the regex removes the text but the newline
-    # is not part of the match (multiline $), so we get empty string.
+    # Un commento di riga viene rimosso per intero (il newline non fa parte
+    # del commento): il risultato e' stringa vuota.
     assert _strip_sql_comments("-- just a comment") == ""
 
 
@@ -90,3 +90,51 @@ def test_strip_sql_comments_mixed():
     assert "comment" not in result
     assert "SELECT 1" in result
     assert "FROM raw" in result
+
+
+def test_strip_sql_comments_inline_after_code():
+    """Un commento inline non e' una riga che inizia con `--`."""
+    text = "SELECT 1 AS x -- nota inline\nFROM raw\n"
+    result = _strip_sql_comments(text)
+    assert "nota inline" not in result
+    assert "SELECT 1 AS x" in result
+    assert "FROM raw" in result
+
+
+def test_strip_sql_comments_keeps_dashes_inside_literal():
+    """`--` dentro un letterale non e' un commento."""
+    text = "SELECT 'a--b' AS x, '--' AS y\nFROM raw\n"
+    assert _strip_sql_comments(text) == text
+
+
+def test_strip_sql_comments_keeps_template_inside_literal():
+    """I template veri vivono dentro stringhe: non vanno rimossi."""
+    text = "SELECT * FROM read_parquet('{support.x.mart}')\n"
+    assert "{support.x.mart}" in _strip_sql_comments(text)
+
+
+def test_strip_sql_comments_keeps_quoted_identifier():
+    text = 'SELECT "a--b" FROM raw\n'
+    assert _strip_sql_comments(text) == text
+
+
+def test_strip_sql_comments_block_comment_keeps_line_numbers():
+    text = "SELECT 1 /* nota\nsu due righe */\nFROM raw\n"
+    result = _strip_sql_comments(text)
+    assert "nota" not in result
+    assert "su due righe" not in result
+    assert result.count("\n") == text.count("\n")
+
+
+def test_render_template_inline_comment_placeholder_does_not_raise():
+    """Un placeholder ignoto in un commento inline non deve bloccare il render."""
+    sql = "SELECT {year}::INTEGER AS anno -- nota {foo}\nFROM raw_input\n"
+    result = render_template(sql, {"year": 2024})
+    assert "2024" in result
+
+
+def test_render_template_unresolved_in_literal_still_raises():
+    """I letterali non sono commenti: un template non risolto li' e' un errore."""
+    sql = "SELECT * FROM read_parquet('{support.manca.mart}')\n"
+    with pytest.raises(ValueError, match=r"\{support.manca.mart\}"):
+        render_template(sql, {})

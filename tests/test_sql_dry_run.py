@@ -235,13 +235,24 @@ class TestSqlSyntax:
 
     @pytest.mark.policy
     def test_support_ref_in_comment_is_not_flagged(self, tmp_path: Path):
-        """Un esempio in un commento non e' un riferimento reale."""
+        """Un esempio in un commento (a inizio riga o inline) non e' un riferimento."""
         cfg = _make_cfg(
             tmp_path,
-            clean_sql="-- esempio: {support.altro.path}\nselect x from raw_input",
+            clean_sql="-- esempio: {support.altro.path}\nselect x -- anche {support.altro.path}\nfrom raw_input",
         )
         result = validate_sql_syntax(cfg, layers=["clean"])
         assert result["ok"] is True
+
+    @pytest.mark.policy
+    def test_support_ref_inside_literal_is_flagged(self, tmp_path: Path):
+        """Il template vero vive dentro una stringa: deve restare visibile."""
+        cfg = _make_cfg(
+            tmp_path,
+            clean_sql="select * from read_parquet('{support.manca.mart}')",
+        )
+        result = validate_sql_syntax(cfg, layers=["clean"])
+        assert result["ok"] is False
+        assert "manca" in result["errors"][0]
 
     @pytest.mark.policy
     def test_non_serializable_statement_is_skipped(self, tmp_path: Path):

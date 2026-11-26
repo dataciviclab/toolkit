@@ -1139,6 +1139,11 @@ def _execute_pipeline(
 def run_preflight_cmd(
     config: str | None = typer.Option(None, "--config", "-c", help="Path or slug to dataset.yml"),
     years: str | None = typer.Option(None, "--years", help="Comma-separated dataset years"),
+    sql_check: bool = typer.Option(
+        False,
+        "--sql-check",
+        help="Valida clean.sql/mart.sql: sintassi (bloccante, senza RAW) + binding col preview (advisory)",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output JSON report"),
 ):
     """Pre-flight check: valida config, verifica raggiungibilita' fonti,
@@ -1148,7 +1153,7 @@ def run_preflight_cmd(
     """
     from toolkit.domain.preflight import run_preflight
 
-    result = run_preflight(config, years_arg=years)
+    result = run_preflight(config, years_arg=years, sql_check=sql_check)
 
     if json_output:
         from toolkit.cli.common import echo_json
@@ -1177,6 +1182,25 @@ def run_preflight_cmd(
             if src.get("columns"):
                 parts.append(f"{len(src['columns'])} colonne")
             typer.echo(f"   {'  '.join(parts)}")
+
+        syntax = result.get("sql_syntax") or {}
+        if syntax:
+            if syntax.get("ok"):
+                labels = ", ".join(item["label"] for item in syntax.get("checked", []))
+                typer.echo(f"   SQL syntax: ✅ {labels or 'niente da controllare'}")
+            else:
+                typer.echo("   SQL syntax: 🔴")
+                for err in syntax.get("errors", []):
+                    typer.echo(f"      ✗ {err}")
+            for note in syntax.get("skipped") or []:
+                typer.echo(f"      ⏭ non verificabile: {note.splitlines()[0]}")
+
+        for item in result.get("sql_validation") or []:
+            icon = "✅" if item["ok"] else "⚠"
+            line = f"   SQL binding ({item['year']}, advisory, schema: {item['schema_source']}): {icon}"
+            typer.echo(line)
+            if item.get("error"):
+                typer.echo(f"      {item['error'].splitlines()[0]}")
 
     if result["status"] != "passed":
         raise typer.Exit(code=1)

@@ -68,6 +68,30 @@ toolkit run mart --config dataset.yml
 
 Questi comandi non sono il happy path raccomandato per i nuovi repo dataset, ma restano strumenti operativi supportati.
 
+## Validazione SQL prima del run
+
+Due strumenti distinti, con scopi diversi.
+
+### `toolkit run preflight --sql-check` (CI / PR)
+
+Il preflight verifica config, raggiungibilità fonti e — per i CSV `http_file` — scarica un preview con colonne e quality score. Con `--sql-check` aggiunge:
+
+- **`sql_syntax`** (bloccante): parse-only di `clean.sql` e dei mart SQL con `json_serialize_sql` di DuckDB. Non serve il RAW e non serve lo schema: intercetta errori di sintassi e riferimenti `{support.NOME}` non dichiarati. I placeholder `{...}` vengono neutralizzati prima del parse, quindi funziona anche in PR dove il support non è materializzato. Gli SQL non serializzabili da DuckDB (es. `PIVOT`) vengono riportati come `skipped`, non come errori.
+- **`sql_validation`** (advisory): binding reale contro lo schema del preview, solo quando il preview restituisce colonne (CSV/TSV `http_file`). Non cambia lo `status`: per `sdmx`, `script`, `local_file`, `ckan` e formati non CSV lo schema della fonte non è noto prima del run.
+
+```bash
+toolkit run preflight --config dataset.yml --sql-check
+toolkit run preflight --config dataset.yml --sql-check --json
+```
+
+In CI conviene bloccare sulla sintassi (deterministica) e lasciare il binding advisory: l'euristica senza schema produce falsi negativi su SQL validi.
+
+### `toolkit run --dry-run` (locale)
+
+Stampa il piano di esecuzione e valida il binding senza eseguire i layer. Senza schema reale costruisce un `raw_input` sintetico, inferendo le colonne dagli errori del binder e provando i tipi in cascata (`read.columns` → `VARCHAR` → `INTEGER` → `TIMESTAMP`). È utile per una verifica veloce in locale, ma non è un gate affidabile: su SQL che mescolano stringhe e numerici, o che usano `SELECT COLUMNS('regex')`, può fallire pur essendo valido. Quando i tipi sono noti (`clean.read.columns` con tipo, preview, profilo) la validazione diventa deterministica.
+
+Attenzione: il dry-run scrive un run record per anno (`status: DRY_RUN`) in `root/data/_runs`, quindi compare in `toolkit inspect runs`.
+
 ## Profile RAW
 
 `toolkit inspect config -c dataset.yml -l raw -m profile` genera il profilo diagnostico RAW (encoding, delimitatore, colonne, statistiche).

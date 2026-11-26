@@ -127,6 +127,89 @@ class TestPreflightOps:
         assert result["status"] == "passed"
 
     @pytest.mark.policy
+    def test_sql_check_reports_syntax_without_raw(self, tmp_path: Path, _mock_http) -> None:
+        """Con --sql-check il parse-only gira anche senza RAW e senza schema."""
+        config_path = _write_test_config(tmp_path)
+        sql_dir = config_path.parent / "sql"
+        sql_dir.mkdir()
+        (sql_dir / "clean.sql").write_text("select comune from raw_input", encoding="utf-8")
+        (sql_dir / "mart.sql").write_text("select * from clean_input", encoding="utf-8")
+
+        result = run_preflight(str(config_path), sql_check=True)
+
+        assert result["sql_syntax"]["ok"] is True
+        labels = {item["label"] for item in result["sql_syntax"]["checked"]}
+        assert labels == {"clean", "mart:mart_test"}
+        assert result["status"] == "passed"
+
+    @pytest.mark.policy
+    def test_sql_check_syntax_error_fails_status(self, tmp_path: Path, _mock_http) -> None:
+        """Un errore di sintassi blocca il preflight (nessun falso positivo: no schema)."""
+        config_path = _write_test_config(tmp_path)
+        sql_dir = config_path.parent / "sql"
+        sql_dir.mkdir()
+        (sql_dir / "clean.sql").write_text("select from raw_input where (", encoding="utf-8")
+        (sql_dir / "mart.sql").write_text("select * from clean_input", encoding="utf-8")
+
+        result = run_preflight(str(config_path), sql_check=True)
+
+        assert result["sql_syntax"]["ok"] is False
+        assert result["status"] == "failed"
+
+    @pytest.mark.policy
+    def test_sql_check_is_opt_in(self, tmp_path: Path, _mock_http) -> None:
+        """Senza --sql-check il comportamento resta quello di prima."""
+        config_path = _write_test_config(tmp_path)
+        sql_dir = config_path.parent / "sql"
+        sql_dir.mkdir()
+        (sql_dir / "clean.sql").write_text("select from raw_input where (", encoding="utf-8")
+
+        result = run_preflight(str(config_path))
+
+        assert result["status"] == "passed"
+        assert result["sql_syntax"] == {}
+        assert result["sql_validation"] == []
+
+    @pytest.mark.policy
+    def test_sql_check_binding_is_advisory_with_preview_schema(
+        self, tmp_path: Path, _mock_http
+    ) -> None:
+        """Binding contro lo schema del preview: riportato, ma non blocca."""
+        config_path = _write_test_config(tmp_path)
+        sql_dir = config_path.parent / "sql"
+        sql_dir.mkdir()
+        (sql_dir / "clean.sql").write_text(
+            "select colonna_inesistente from raw_input", encoding="utf-8"
+        )
+        (sql_dir / "mart.sql").write_text("select * from clean_input", encoding="utf-8")
+
+        result = run_preflight(str(config_path), sql_check=True)
+
+        assert result["sql_syntax"]["ok"] is True
+        assert result["status"] == "passed"  # advisory, non bloccante
+        assert len(result["sql_validation"]) == 2  # un anno
+        item = result["sql_validation"][0]
+        assert item["ok"] is False
+        assert "colonna_inesistente" in (item["error"] or "")
+
+    @pytest.mark.policy
+    def test_sql_check_binding_ok_with_preview_schema(self, tmp_path: Path, _mock_http) -> None:
+        """Il preview fornisce i tipi: avg/aggregazioni bindano."""
+        config_path = _write_test_config(tmp_path)
+        sql_dir = config_path.parent / "sql"
+        sql_dir.mkdir()
+        (sql_dir / "clean.sql").write_text(
+            "select comune, sum(valore) as tot from raw_input group by comune", encoding="utf-8"
+        )
+        (sql_dir / "mart.sql").write_text("select * from clean_input", encoding="utf-8")
+
+        result = run_preflight(str(config_path), sql_check=True)
+
+        assert result["sql_validation"], "schema del preview atteso"
+        assert all(item["ok"] for item in result["sql_validation"])
+        assert result["status"] == "passed"
+
+    @pytest.mark.policy
     def test_preflight_reports_http_file_source(self, tmp_path: Path, _mock_http) -> None:
         """http_file CSV: reachable, colonne, quality score."""
         config_path = _write_test_config(tmp_path)

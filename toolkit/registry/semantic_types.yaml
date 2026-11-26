@@ -287,6 +287,12 @@ types:
     aliases: [mese, month, periodo]
     weight: 1
 
+  quarter:
+    description: "Trimestre di riferimento (1-4)"
+    entity: Tempo
+    aliases: [trimestre, quarter]
+    weight: 1
+
   # ═══════════════════════════════════════════════════════════════════════
   # PERSONE (sistema parlamentare e non solo)
   # ═══════════════════════════════════════════════════════════════════════

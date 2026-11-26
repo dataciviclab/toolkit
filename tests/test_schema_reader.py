@@ -47,6 +47,12 @@ class TestNormalizeSemanticType:
         assert normalize_semantic_type("ATTO_NUM", self.alias_map, self.valid_types) == "ddl_id"
 
     @pytest.mark.pure_unit
+    def test_quarter_alias_resolves(self) -> None:
+        # `trimestre` è una dimensione temporale, non una metrica: senza il
+        # tipo semantico il builder v2 lo classificava `role: metric`.
+        assert normalize_semantic_type("trimestre", self.alias_map, self.valid_types) == "quarter"
+
+    @pytest.mark.pure_unit
     def test_unknown_type_returns_none(self) -> None:
         assert normalize_semantic_type("fake_type_xyz", self.alias_map, self.valid_types) is None
 

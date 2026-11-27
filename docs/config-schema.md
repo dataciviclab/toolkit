@@ -331,6 +331,17 @@ Note pratiche:
 | `source_layer` | `string` | `clean` |
 | `source_table` | `string \| null` | `null` |
 | `row_group_size` | `int \| null` | `null` |
+| `internal` | `bool` | `false` |
+
+`internal: true` = tabella intermedia del compose. Viene materializzata in
+`out/` (le tabelle successive la leggono nella stessa sessione), ma **non**
+entra in `mart_refs`/`marts` del registry: nessun consumer deve leggerla su
+GCS. Usala per lo staging condiviso (es. una lettura unica di un support che
+altrimenti verrebbe riscaricato da nodi, archi e copertura).
+
+Il flag governa il **contratto**, non il trasporto: un workflow che sincronizza
+tutta `out/data/mart/` (es. `gsutil rsync`) carica comunque il parquet. Per non
+pubblicarlo serve un sync a lista esplicita, come fa `legal-graph`.
 
 `MartValidate`:
 

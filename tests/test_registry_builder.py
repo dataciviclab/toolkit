@@ -1017,3 +1017,43 @@ class TestMartMultiYearLocation:
         assert mart["layout"] == "year"
         assert mart["year"] == 2024
         assert "location" not in mart
+
+
+@pytest.mark.contract
+def test_internal_mart_fuori_dal_contratto_pubblico(tmp_path: Path) -> None:
+    """`internal: true` = staging: materializzata, ma fuori da mart_refs/marts.
+
+    Il parquet non viene caricato su GCS: se finisse nel registry il catalogo
+    annuncerebbe un oggetto inesistente. Il caso reale è lo staging condiviso
+    di un compose (una lettura unica di un support usata da nodi, archi e
+    copertura).
+    """
+    ds_dir = tmp_path / "compose" / "demo"
+    ds_dir.mkdir(parents=True)
+    (ds_dir / "dataset.yml").write_text(
+        "root: '../../out'\n"
+        "dataset:\n"
+        "  name: demo\n"
+        "  years: [2024]\n"
+        "mart:\n"
+        "  tables:\n"
+        "    - name: stg_base\n"
+        "      sql: 'sql/stg_base.sql'\n"
+        "      internal: true\n"
+        "    - name: mart_pubblico\n"
+        "      sql: 'sql/mart_pubblico.sql'\n",
+        encoding="utf-8",
+    )
+    layout = RepoLayout(
+        repo_root=tmp_path, dataset_dirs=("compose",), source_repo="dataciviclab/test"
+    )
+
+    catalog, errors = build_clean_catalog(layout)
+    assert not errors["derive"], errors["derive"]
+    ds = catalog["datasets"][0]
+    assert ds["mart_refs"] == ["demo__mart_pubblico"]
+
+    contract = PathContract(prefix="test", clean_layout="year", mart_layout="year")
+    marts_catalog, mart_errors = build_mart_catalog(layout, path_contract=contract)
+    assert not mart_errors["derive"], mart_errors["derive"]
+    assert [m["table"] for m in marts_catalog["marts"]] == ["mart_pubblico"]

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import typer
 
 from toolkit.cli.cmd_run import register as register_run
@@ -10,6 +12,11 @@ from toolkit.cli.cmd_registry import register as register_registry
 from toolkit.cli.cmd_column_values import register as register_column_values
 from toolkit.cli.cmd_validate import register as register_validate
 from toolkit.version import __version__
+
+# Identità del client nei usage log GCS: la pipeline dichiara sé stessa invece
+# di presentarsi come `duckdb/vX python/3.12` (impossibile da attribuire).
+# Va impostata prima di qualunque connessione DuckDB.
+os.environ.setdefault("DCL_CLIENT_NAME", f"dcl-toolkit/{__version__}")
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 

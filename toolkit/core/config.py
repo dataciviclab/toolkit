@@ -461,6 +461,12 @@ class MartTableConfig:
     # group è l'unità minima che un lettore deve scaricare, e il default
     # mette un'intera tabella in un blocco solo.
     row_group_size: int | None = None
+    # Tabella intermedia del compose: si materializza (le tabelle successive
+    # la leggono nella stessa sessione e il parquet resta in out/), ma NON
+    # entra nel contratto pubblico né nel registry. Serve a dichiarare lo
+    # staging senza gonfiare il catalogo con artefatti che nessun consumer
+    # deve leggere.
+    internal: bool = False
 
     @staticmethod
     def from_dict(d: dict) -> MartTableConfig:
@@ -472,6 +478,7 @@ class MartTableConfig:
             source_layer=d.get("source_layer", "clean"),
             source_table=d.get("source_table"),
             row_group_size=_optional_row_group_size(d.get("row_group_size")),
+            internal=bool(d.get("internal", False)),
         )
 
 

@@ -278,6 +278,7 @@ def load_manifest(yml_path: Path) -> DatasetManifest | None:
             "name": t.name,
             "sql": t.sql,
             **({"years": t.years} if t.years else {}),
+            **({"internal": True} if getattr(t, "internal", False) else {}),
         }
         for t in cfg.mart.tables
         if t.name

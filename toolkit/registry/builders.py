@@ -288,8 +288,13 @@ def build_clean_catalog(
 
         # Link ai mart (convention {dataset}__{mart})
         if manifest.mart_tables:
+            # Le tabelle `internal: true` sono staging del compose: restano in
+            # out/ per le tabelle successive, ma non sono un contratto pubblico
+            # e non vanno linkate nel catalogo (nessun oggetto su GCS).
             entry["mart_refs"] = [
-                f"{manifest.slug}__{t.get('name')}" for t in manifest.mart_tables if t.get("name")
+                f"{manifest.slug}__{t.get('name')}"
+                for t in manifest.mart_tables
+                if t.get("name") and not t.get("internal")
             ]
 
         entry["last_run"] = last_run(latest_run_record(str(manifest.yml_path))) or (
@@ -354,6 +359,9 @@ def build_mart_catalog(
         for table in manifest.mart_tables:
             name = table.get("name")
             if not name:
+                continue
+            if table.get("internal"):
+                # staging interno: niente voce `marts` (non esiste su GCS)
                 continue
             entry: dict[str, Any] = {
                 "slug": f"{manifest.slug}__{name}",

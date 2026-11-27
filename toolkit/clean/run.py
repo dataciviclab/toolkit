@@ -34,6 +34,8 @@ def load_clean_sql(
     base_dir: Path | None,
     support_cfg: list[dict[str, Any]] | None = None,
     smoke: bool = False,
+    logger: Any = None,
+    localize: bool = False,
 ) -> tuple[Path, str, dict[str, Any]]:
     sql_ref = clean_cfg.get("sql")
     if not sql_ref:
@@ -56,6 +58,8 @@ def load_clean_sql(
                 require_exists=False,
                 smoke=smoke,
                 root=Path(root) if root else None,
+                logger=logger,
+                localize=localize,
             )
             support_ctx = flatten_support_template_ctx(payloads)
         except Exception:
@@ -245,6 +249,8 @@ def run_clean(
         base_dir=base_dir,
         support_cfg=support_cfg,
         smoke=smoke,
+        logger=logger,
+        localize=True,
     )
     rendered_sql_path = _write_rendered_sql(
         out_dir,

@@ -47,6 +47,8 @@ def resolve_support_payloads(
     require_exists: bool,
     smoke: bool = False,
     root: Path | None = None,
+    logger: Any = None,
+    localize: bool = False,
 ) -> list[dict[str, Any]]:
     """Risolve gli output attesi di ogni support entry, per tipo (ADR-005).
 
@@ -75,7 +77,10 @@ def resolve_support_payloads(
         elif stype == "codelist":
             resolved.append(_resolve_codelist_entry(entry, name, require_exists, root))
         elif stype == "external":
-            resolved.append(_resolve_external_entry(entry, name, require_exists))
+            payload = _resolve_external_entry(entry, name, require_exists)
+            resolved.append(
+                _localize_external(payload, entry, smoke=smoke, localize=localize, logger=logger)
+            )
         else:  # file
             resolved.append(_resolve_file_entry(entry, name, require_exists, root))
     return resolved
@@ -537,3 +542,93 @@ def flatten_support_template_ctx(payloads: list[dict[str, Any]]) -> dict[str, An
         if payload.get("path"):
             ctx[f"support.{name}.path"] = payload["path"]
     return ctx
+
+
+def _localize_external(
+    payload: dict[str, Any],
+    entry: dict[str, Any],
+    *,
+    smoke: bool = False,
+    localize: bool = False,
+    logger: Any = None,
+) -> dict[str, Any]:
+    """Sostituisce gli URL GCS del support con file locali, via cache.
+
+    Motivo misurato: DuckDB legge i parquet remoti a blocchi da ~128 KB e da
+    alcune reti ogni richiesta costa 150–250 ms; lo stesso file da disco è
+    istantaneo. La cache è keyed sulla ``generation`` GCS (immutabile), quindi
+    non può servire dati stantii.
+
+    Attiva **solo** dove il chiamante lo chiede (``localize=True``: clean/mart
+    run) e mai in ``smoke``. Il default è spento di proposito: validazione SQL,
+    dry-run, inspect e path resolver risolvono i support solo per costruire i
+    path e non devono scaricare niente (contratto "dry-run = nessun download").
+
+    Disattivabile per singolo support (``cache: false``) o globalmente
+    (``DCL_EXTERNAL_CACHE=off``). Ogni errore (rete, oggetto assente) lascia
+    l'URL remoto: una cache non disponibile non deve rompere la pipeline.
+    """
+    if not localize or smoke:
+        return payload
+    if entry.get("cache") is False:
+        return payload
+
+    try:
+        from lab_connectors.gcs.fetch_once import cache_dir_from_env, fetch_once, gcs_target
+    except ImportError:
+        # lab-connectors senza `fetch_once` (PR non ancora in main): la cache
+        # resta disattivata e i support continuano a leggere da rete.
+        if logger is not None:
+            logger.debug("external: cache non disponibile su lab-connectors")
+        return payload
+
+    cache_dir = cache_dir_from_env()
+    if cache_dir is None:
+        return payload
+
+    stats = {"hit": 0, "miss": 0, "bytes": 0}
+    # Lo stesso URL compare in outputs/existing_outputs/clean/years_resolved:
+    # senza memo sarebbe un fetch (e un HEAD) per ogni occorrenza.
+    memo: dict[str, str] = {}
+
+    def to_local(url: str) -> str:
+        if not isinstance(url, str) or gcs_target(url) is None:
+            return url
+        if url in memo:
+            return memo[url]
+        try:
+            result = fetch_once(url, cache_dir)
+        except Exception as exc:  # cache best-effort: mai fatale
+            if logger is not None:
+                logger.warning("external: cache non disponibile per %s (%s)", url, exc)
+            return url
+        if result.cached:
+            stats["hit"] += 1
+        else:
+            stats["miss"] += 1
+            stats["bytes"] += result.bytes
+        memo[url] = str(result.path)
+        return memo[url]
+
+    outputs = [to_local(url) for url in payload.get("outputs") or []]
+    if outputs:
+        payload["outputs"] = outputs
+        payload["existing_outputs"] = list(outputs)
+    if payload.get("clean"):
+        payload["clean"] = [to_local(url) for url in payload["clean"]]
+    for year_entry in payload.get("years_resolved") or []:
+        if "path" in year_entry:
+            year_entry["path"] = to_local(year_entry["path"])
+    path = payload.get("path")
+    if isinstance(path, str) and "{year}" not in path:
+        payload["path"] = to_local(path)
+
+    if logger is not None and (stats["hit"] or stats["miss"]):
+        logger.info(
+            "external %s: cache hit %d, scaricati %d (%.1f MB)",
+            payload.get("name"),
+            stats["hit"],
+            stats["miss"],
+            stats["bytes"] / 1e6,
+        )
+    return payload

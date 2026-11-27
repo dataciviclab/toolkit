@@ -138,7 +138,12 @@ def run_mart_multi_year(
         return {"output_rows": 0, "output_bytes": 0, "tables_count": 0, "col_count": None}
 
     support_payloads = resolve_support_payloads(
-        support_cfg, require_exists=True, smoke=smoke, root=Path(root_dir)
+        support_cfg,
+        require_exists=True,
+        smoke=smoke,
+        root=Path(root_dir),
+        logger=logger,
+        localize=True,
     )
     base_ctx = build_runtime_template_ctx(
         dataset=dataset,
@@ -464,7 +469,12 @@ def run_mart(
             )
 
         support_payloads = resolve_support_payloads(
-            support_cfg, require_exists=True, smoke=smoke, root=Path(root_dir)
+            support_cfg,
+            require_exists=True,
+            smoke=smoke,
+            root=Path(root_dir),
+            logger=logger,
+            localize=True,
         )
         template_ctx = build_runtime_template_ctx(
             dataset=dataset,
